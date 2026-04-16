@@ -2,6 +2,16 @@
 
 This repository is transitioning to a unified weather workflow while preserving separate Radar and Satellite workflows.
 
+## Source Control State (2026-04-16)
+
+Project source control is now backed by a private GitHub repository.
+
+Operational implications:
+
+- Rollback path is git-native (`git restore`, `git revert`, branch rollback) rather than manual copy recovery.
+- High-risk refactors should be committed in small checkpoints to keep recovery granular.
+- PR-based merges to `main` are the preferred safety gate for structural backend changes.
+
 Canonical unified target:
 
 - weather.html

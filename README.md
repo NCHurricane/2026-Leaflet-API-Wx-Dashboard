@@ -21,6 +21,22 @@ NCHurricane Dashboard 2026 is an operational weather workstation app designed fo
 - Local caching of downloads and generated products
 - Built-in purge tooling for retention control
 
+## Source Control and Recovery
+
+- Private GitHub repository is active for this project as of 2026-04-16.
+- Default workflow is commit-first for high-risk refactors so rollback is immediate.
+- Recommended checkpoint pattern:
+  - Commit before large structural edits
+  - Use short-lived feature branches for refactors
+  - Tag known-good milestones when major phases complete
+- Preferred recovery path is now `git restore`/`git revert` instead of manual file recovery.
+
+Suggested branch protections on `main`:
+
+- Require pull request before merge
+- Require at least one passing check for merge
+- Block force-pushes and branch deletion
+
 ## Key Capabilities
 
 ### Data Workflows
