@@ -1,0 +1,46 @@
+# Scientific & Numerical Computing
+numpy>=1.24.0
+scipy>=1.10.0
+pandas>=2.0.0
+
+# Visualization & Plotting
+matplotlib>=3.7.0
+cartopy>=0.22.0
+Pillow>=9.5.0
+imageio[ffmpeg]>=2.25.0
+cmweather>=0.3.0
+
+# Geospatial & Shapefile Handling
+Shapely>=2.0.0
+pyproj>=3.4.0
+pyshp>=2.3.1
+
+# Weather & Climate Data
+metpy>=1.5.0
+siphon>=0.9.0
+arm-pyart>=1.14.0
+xarray>=2023.1.0
+netCDF4>=1.6.0
+h5py>=3.10.0
+cfgrib>=0.9.11
+eccodes>=1.7.0
+
+# HTTP & Web Framework
+requests>=2.31.0
+boto3>=1.34.0
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-dateutil>=2.8.2
+
+# Optional: Unix compress (.Z) decompression for pre-2014 NEXRAD Level 3 archives
+unlzw3>=0.2.1
+
+# Optional: Reliability and geospatial enhancements (roadmap-recommended)
+# tenacity>=8.2.0
+# geopandas>=0.14.0
+
+# Optional: For GDAL/GEOS support (advanced geospatial operations)
+# Note: On Windows, these may require pre-built wheels or system libraries
+# Uncomment if cartopy/shapely geospatial operations fail
+# rasterio>=1.3.0
+# GDAL>=3.7.0

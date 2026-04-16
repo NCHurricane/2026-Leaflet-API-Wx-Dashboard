@@ -1,0 +1,694 @@
+:root {
+    --primary: #0f172a;
+    --accent: #3b82f6;
+    --text: #e2e8f0;
+    --secondary: #1f1f3e;
+    --trinary: #352e59;
+    --highlight: #ffff00;
+    --subtext: #ff924e;
+    --select: #334155;
+    --canvas-bg: #152238;
+    --gradient-bg: linear-gradient(135deg, #b60202, #0f172a);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 20px;
+    font-family: 'Montserrat', system-ui, sans-serif;
+    text-transform: uppercase;
+    background: var(--primary);
+    color: var(--text);
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+header h1 {
+    margin: 0 0 0.75rem 0;
+    color: var(--highlight);
+    text-decoration: none;
+}
+
+header h1:hover {
+    color: var(--text);
+}
+
+.nav-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.nav-link {
+    text-decoration: none;
+    background: var(--secondary);
+    border: 1px solid #334155;
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.nav-link.active {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.page-layout {
+    display: grid;
+    grid-template-columns: repeat(2, 250px) 1fr;
+    gap: 1rem;
+    width: 100%;
+    height: 85vh;
+}
+
+.controls-panel,
+.style-panel {
+    background: var(--trinary);
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 0.8rem;
+    /* max-height: calc(100vh - 170px); */
+    /* overflow: auto; */
+}
+
+
+.display-area {
+    background: var(--canvas-bg);
+    border: 1px solid #334155;
+    border-radius: 10px;
+    min-height: 680px;
+    padding: 0.75rem;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.section-title {
+    margin: 0.8rem 0 0.4rem;
+    font-size: 0.9rem;
+    color: var(--subtext);
+    text-align: center;
+}
+
+.control-group {
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 0.6rem;
+    margin-bottom: 0.7rem;
+    background: var(--secondary);
+}
+
+.style-group {
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 0.6rem;
+    margin-bottom: 0.7rem;
+    background: var(--secondary);
+}
+
+#radar-layer-controls-note {
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.group-title {
+    margin: 0 0 0.35rem 0;
+    color: var(--subtext);
+    font-size: 0.78rem;
+    text-align: center;
+    letter-spacing: 0.03em;
+}
+
+.style-group.is-collapsible > .group-title {
+    position: relative;
+    margin-bottom: 0.45rem;
+    padding: 0.25rem 1.25rem 0.25rem 0.5rem;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.45);
+    cursor: pointer;
+    user-select: none;
+}
+
+.style-group.is-collapsible > .group-title::after {
+    content: '-';
+    position: absolute;
+    right: 0.45rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text);
+    font-size: 0.72rem;
+}
+
+.style-group.is-collapsible.is-collapsed > .group-title::after {
+    content: '+';
+}
+
+.style-group.is-collapsible.is-collapsed > :not(.group-title) {
+    display: none !important;
+}
+
+.style-group.is-collapsible > .group-title:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+label {
+    display: block;
+    margin: 0.4rem 0 0.2rem;
+    font-size: 0.75rem;
+    text-align: center;
+    font-weight: 700;
+}
+
+input,
+select,
+button {
+    width: 100%;
+    padding: 9px;
+    border-radius: 6px;
+    border: 1px solid #000;
+    background: var(--select);
+    color: var(--highlight);
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+button {
+    cursor: pointer;
+}
+
+button.primary {
+    background: var(--highlight);
+    color: #2c1a78;
+}
+
+button.secondary {
+    background: var(--select);
+    color: var(--text);
+}
+
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin: 0.35rem 0.4rem 1rem;
+}
+
+.checkbox-row label {
+    margin: 0;
+    text-align: left;
+    flex: 1;
+}
+
+.checkbox-row input[type="checkbox"] {
+    width: auto;
+    transform: scale(1.1);
+}
+
+.alert-color-legend {
+    margin: 0.5rem 0;
+    padding: 0.4rem 0.5rem;
+    background: #0a1628;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    font-size: 0.78rem;
+}
+
+.alert-legend-title {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.alert-legend-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.12rem 0;
+    color: #cbd5e1;
+}
+
+.alert-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    min-width: 14px;
+    border-radius: 2px;
+    border: 1px solid rgba(255,255,255,0.15);
+}
+
+#progress-container {
+    width: 100%;
+    display: none;
+    background: #091328;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+#progress-bar {
+    width: 0;
+    height: 14px;
+    background: linear-gradient(90deg, #2563eb, #06b6d4);
+}
+
+#progress-message {
+    display: block;
+    padding: 6px;
+    font-size: 0.72rem;
+    text-align: center;
+}
+
+#result-image,
+#result-video {
+    max-width: 100%;
+    max-height: 78vh;
+    display: none;
+}
+
+#result-layered-container {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 12 / 11;
+    display: none;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--gradient-bg);
+}
+
+
+#result-basemap-image,
+#result-product-image,
+#result-alerts-image,
+#result-radar-image,
+#result-cities-image,
+#result-counties-overlay-image,
+#result-states-overlay-image,
+#result-rings-overlay-image,
+#result-static-overlay-image,
+#result-legend-overlay-image,
+#result-legend-image,
+#result-hud-right-image,
+#result-overlay-image {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+#result-product-image,
+#result-alerts-image,
+#result-radar-image,
+#result-cities-image,
+#result-counties-overlay-image,
+#result-rings-overlay-image,
+#result-static-overlay-image,
+#result-legend-overlay-image,
+#result-legend-image,
+#result-hud-right-image,
+#result-overlay-image {
+    pointer-events: none;
+}
+
+/***********************
+ * Z-ORDER LAYERED OUTPUT *
+ ***********************/
+#result-basemap-image {
+    z-index: 10;
+}
+
+#result-product-image {
+    z-index: 15;
+}
+
+#result-radar-image {
+    z-index: 20;
+}
+
+#result-alerts-image {
+    z-index: 30;
+}
+
+#result-counties-overlay-image {
+    z-index: 40;
+}
+
+#result-states-overlay-image {
+    z-index: 50;
+}
+
+#result-rings-overlay-image {
+    z-index: 60;
+}
+
+#result-cities-image {
+    z-index: 70;
+}
+
+#result-static-overlay-image {
+    z-index: 80;
+}
+
+#result-legend-overlay-image,
+#result-legend-image {
+    z-index: 90;
+}
+
+#result-hud-right-image {
+    z-index: 100;
+}
+/***********************
+ * END Z-ORDER LAYERED OUTPUT *
+ ***********************/
+
+
+#layered-controls {
+    width: 100%;
+}
+
+#layered-scrubber {
+    width: 100%;
+}
+
+#layered-timestamp {
+    text-align: center;
+    font-size: 0.72rem;
+    color: #cbd5e1;
+    min-height: 1.1rem;
+    white-space: nowrap;
+}
+
+#layered-export-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.45rem;
+}
+
+#layered-export-row button {
+    width: 100%;
+}
+
+/* ── Satellite scrubber ── */
+
+.scrubber-container {
+    position: relative;
+    width: 100%;
+    max-width: 75%;
+    display: none;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--canvas-bg);
+}
+
+.scrubber-container img {
+    display: block;
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+.layered-controls {
+    width: 100%;
+    display: none;
+    grid-template-columns: auto 1fr auto auto auto auto;
+    gap: 0.45rem;
+    align-items: center;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 0.55rem;
+    background: #091328;
+}
+
+.scrubber-btn {
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    padding: 0.2rem 0.55rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.scrubber-btn:hover {
+    background: #334155;
+}
+
+.layered-controls input[type="range"] {
+    width: 100%;
+}
+
+.layered-timestamp {
+    text-align: center;
+    font-size: 0.72rem;
+    color: #cbd5e1;
+    min-height: 1.1rem;
+    white-space: nowrap;
+}
+
+.scrubber-action-btn {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+}
+
+#status-message {
+    width: 100%;
+    text-align: center;
+    color: #facc15;
+    font-size: 0.8rem;
+}
+
+.output-meta-row {
+    width: 100%;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    background: #091328;
+}
+
+.output-meta-label {
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+.output-meta-badge {
+    color: #e2e8f0;
+    font-size: 0.74rem;
+    font-weight: 700;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    white-space: nowrap;
+}
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 999;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    width: min(1200px, 97vw);
+    background: #0b1225;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 0.8rem;
+}
+
+#leaflet-map {
+    width: 100%;
+    height: 720px;
+    border-radius: 6px;
+}
+
+#spc-leaflet-map,
+#spc-archive-leaflet-map {
+    width: 100%;
+    height: 620px;
+    border-radius: 6px;
+}
+
+
+@media (max-width: 1200px) {
+    .page-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .controls-panel,
+    .style-panel {
+        max-height: none;
+    }
+}
+
+input[type="color"] {
+    height: 20px;
+    padding: 1px;
+    border: 1px solid #000;
+    background: var(--select);
+}
+
+input[type="range"] {
+    width: 100%;
+    padding: 0;
+}
+
+.extent-mode-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.2rem;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-weight: 700;
+    padding-bottom: 1rem;
+}
+
+.extent-custom-only {
+    display: none;
+}
+
+.extent-bounds-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem 0.6rem;
+    margin-top: 0.45rem;
+}
+
+.extent-bound-field label {
+    text-align: left;
+    margin: 0 0 0.15rem;
+}
+
+.zorder-list {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.35rem;
+}
+
+.zorder-item {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    background: #0f1a2d;
+    cursor: move;
+    user-select: none;
+}
+
+.zorder-item.dragging {
+    opacity: 0.6;
+}
+
+.zorder-item .drag-handle {
+    color: #94a3b8;
+    font-weight: 700;
+    text-align: center;
+}
+
+.zorder-item .layer-name {
+    font-size: 0.72rem;
+    color: var(--text);
+    text-transform: none;
+}
+
+.zorder-item .layer-zorder {
+    min-width: 34px;
+    text-align: right;
+    color: var(--subtext);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.zorder-hint {
+    margin: 0;
+    font-size: 0.68rem;
+    color: #94a3b8;
+    text-align: center;
+    text-transform: none;
+}
+
+/* ── Layer Control UI ── */
+
+#satellite-layer-list {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+#satellite-layer-list .zorder-hint {
+    margin: 0.25rem 0;
+}
+
+.layer-control-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    background: #0f1a2d;
+    cursor: move;
+    user-select: none;
+    font-size: 0.75rem;
+}
+
+.layer-control-row input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.layer-control-label {
+    margin: 0;
+    text-align: left;
+    text-transform: capitalize;
+    display: inline;
+}
+
+#satellite-save-layer-order {
+    font-size: 0.72rem;
+    padding: 0.35rem;
+}

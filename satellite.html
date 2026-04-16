@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Satellite — NCHurricane Dashboard</title>
+        <link rel="stylesheet" href="css/shared.css">
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    </head>
+
+    <body>
+        <header>
+            <h1><a href="index.html">NCHurricane Dashboard 2026</a></h1>
+            <nav id="main-nav"></nav>
+        </header>
+
+        <div class="page-layout">
+            <aside class="controls-panel">
+                <h2 class="section-title">Satellite Controls</h2>
+
+                <div class="style-group" id="satellite-selection-controls">
+                    <h3 class="group-title">Selection Settings</h3>
+                    <label for="satellite-sat-id">Satellite</label>
+                    <select id="satellite-sat-id">
+                        <option value="goes-east">Auto - GOES-East</option>
+                        <option value="goes-west">Auto - GOES-West</option>
+                        <option disabled>--------------------</option>
+                        <option value="goes19">GOES-19 (02/2025 - present)</option>
+                        <option value="goes18">GOES-18 (07/2022 - present)</option>
+                        <option value="goes17">GOES-17 (02/2019 - 01/2023)</option>
+                        <option value="goes16">GOES-16 (12/2017 - 01/2025)</option>
+                    </select>
+
+                    <label for="satellite-sector">Sector</label>
+                    <select id="satellite-sector">
+                        <option value="CONUS">CONUS</option>
+                        <option value="FullDisk">Full Disk</option>
+                        <option value="Meso1">Meso 1</option>
+                        <option value="Meso2">Meso 2</option>
+                    </select>
+
+                    <label for="satellite-channel">Channel</label>
+                    <select id="satellite-channel">
+                        <optgroup label="Channel 01">
+                            <option value="Channel01">Blue Visible (0.47 um)</option>
+                        </optgroup>
+                        <optgroup label="Channel 02">
+                            <option value="Channel02">Red Visible (0.64 um)</option>
+                        </optgroup>
+                        <optgroup label="Channel 03">
+                            <option value="Channel03">Veggie (Near-IR)</option>
+                        </optgroup>
+                        <optgroup label="Channel 05">
+                            <option value="Channel05">Snow/Ice (1.6 um)</option>
+                        </optgroup>
+                        <optgroup label="Channel 06">
+                            <option value="Channel06">Cloud Particle Size (2.2 um)</option>
+                        </optgroup>
+                        <optgroup label="Channel 07">
+                            <option value="Channel07">Shortwave IR (MetPy ir_bd)</option>
+                            <option value="Channel07MetPyDRGB">Shortwave IR (MetPy ir_drgb)</option>
+                            <option value="Channel07Fire">Shortwave IR (Fire Detection)</option>
+                        </optgroup>
+                        <optgroup label="Channel 08">
+                            <option value="Channel08">Upper-Level WV (SatPy water_vapors1)</option>
+                            <option value="Channel08MetPyTPC">Upper-Level WV (MetPy wv_tpc)</option>
+                            <option value="Channel08SatpyWV2">Upper-Level WV (SatPy water_vapors2)</option>
+                            <option value="Channel08RAMSDIS">Upper-Level WV (RAMSDIS)</option>
+                        </optgroup>
+                        <optgroup label="Channel 09">
+                            <option value="Channel09">Mid-Level WV (SatPy water_vapors1)</option>
+                            <option value="Channel09MetPyTPC">Mid-Level WV (MetPy wv_tpc)</option>
+                            <option value="Channel09SatpyWV2">Mid-Level WV (SatPy water_vapors2)</option>
+                            <option value="Channel09RAMSDIS">Mid-Level WV (RAMSDIS)</option>
+                        </optgroup>
+                        <optgroup label="Channel 10">
+                            <option value="Channel10">Low-Level WV (SatPy water_vapors1)</option>
+                            <option value="Channel10MetPyTPC">Low-Level WV (MetPy wv_tpc)</option>
+                            <option value="Channel10SatpyWV2">Low-Level WV (SatPy water_vapors2)</option>
+                            <option value="Channel10RAMSDIS">Low-Level WV (RAMSDIS)</option>
+                        </optgroup>
+                        <optgroup label="Channel 11">
+                            <option value="Channel11">Cloud-Top Phase (8.4 um)</option>
+                        </optgroup>
+                        <optgroup label="Channel 13">
+                            <option value="Channel13">Clean IR (Enhanced)</option>
+                            <option value="Channel13CIRAWinter">Clean IR (Winter)</option>
+                            <option value="Channel13Satpy">Clean IR (SatPy colorized_ir_clouds)</option>
+                            <option value="Channel13MetPyTPC">Clean IR (MetPy ir_tpc)</option>
+                            <option value="Channel13MetPyTV1">Clean IR (MetPy ir_tv1)</option>
+                            <option value="Channel13MetPyBD">Clean IR (MetPy ir_bd)</option>
+                            <option value="Channel13MetPyRGBV">Clean IR (MetPy ir_rgbv)</option>
+                            <option value="Channel13MetPyDRGB">Clean IR (MetPy ir_drgb)</option>
+                        </optgroup>
+                        <optgroup label="Channel 14">
+                            <option value="Channel14">Longwave IR (MetPy ir_tpc)</option>
+                            <option value="Channel14MetPyTV1">Longwave IR (MetPy ir_tv1)</option>
+                            <option value="Channel14MetPyBD">Longwave IR (MetPy ir_bd)</option>
+                            <option value="Channel14CIRA">Longwave IR (Enhanced)</option>
+                            <option value="Channel14CIRAWinter">Longwave IR (Winter)</option>
+                        </optgroup>
+                        <optgroup label="Channel 15">
+                            <option value="Channel15">Dirty Longwave Window (12.3 um)</option>
+                        </optgroup>
+                        <optgroup label="Composites">
+                            <option value="TrueColor">Natural Color / True Color</option>
+                            <option value="GeoColor">GEOColor (Day/Night Blend)</option>
+                            <option value="GeoColorBlkMar">GEOColor (Black Marble)</option>
+                            <option value="Sandwich">VIS/IR Sandwich</option>
+                        </optgroup>
+                        <optgroup label="Day RGB">
+                            <option value="DayCloudPhase">Day Cloud Phase</option>
+                            <option value="DayCloudPhaseEUMETSAT">Day Cloud Phase (EUMETSAT)</option>
+                            <option value="DayCloudConvection">Day Cloud Convection</option>
+                            <option value="DayConvection">Day Convection</option>
+                            <option value="DayLandCloud">Day Land Cloud</option>
+                            <option value="DayLandCloudFire">Day Land Cloud Fire</option>
+                            <option value="DaySnowFog">Day Snow/Fog</option>
+                        </optgroup>
+                        <optgroup label="Night / All-Day RGB">
+                            <option value="FireTemperature">Fire Temperature</option>
+                            <option value="AirMass">Air Mass</option>
+                            <option value="WaterVapor">Water Vapor (RGB)</option>
+                            <option value="DifferentialWaterVapor">Differential Water Vapor</option>
+                            <option value="NighttimeMicrophysics">Nighttime Microphysics</option>
+                            <option value="NightFogDifference">Night Fog Difference</option>
+                            <option value="Dust">Dust</option>
+                            <option value="Ash">Ash</option>
+                            <option value="SulfurDioxide">Sulfur Dioxide</option>
+                            <option value="SplitWindowDifference">Split Window Difference</option>
+                            <option value="BlowingSnow">Blowing Snow</option>
+                            <option value="SeaSpray">Sea Spray</option>
+                            <option value="RocketPlume">Rocket Plume</option>
+                        </optgroup>
+                    </select>
+
+                    <label for="satellite-source">Source</label>
+                    <select id="satellite-source">
+                        <option value="aws">AWS</option>
+                        <option value="gcp">GCP</option>
+                    </select>
+                </div>
+
+                <div class="style-group" id="satellite-lookback-controls" data-collapsed-default="false">
+                    <h3 class="group-title">Short Term Lookback</h3>
+                    <label for="satellite-quick-range">Time Window</label>
+                    <select id="satellite-quick-range">
+                        <option value="current" selected>Current (latest scan)</option>
+                        <option value="1">Last 1 hour</option>
+                        <option value="2">Last 2 hours</option>
+                        <option value="3">Last 3 hours</option>
+                        <option value="6">Last 6 hours</option>
+                        <option value="12">Last 12 hours</option>
+                        <option value="24">Last 24 hours</option>
+                        <option value="custom">Custom (set dates below)</option>
+                    </select>
+                </div>
+
+                <div class="style-group" id="satellite-time-controls" data-collapsed-default="true">
+                    <h3 class="group-title">Archive Time Settings</h3>
+                    <label for="satellite-user-tz">User Timezone</label>
+                    <input id="satellite-user-tz" type="text">
+
+                    <div class="checkbox-row">
+                        <label for="satellite-single-frame">Single Frame Only</label>
+                        <input id="satellite-single-frame" type="checkbox">
+                    </div>
+
+                    <label for="satellite-date-from">Date From (UTC)</label>
+                    <input id="satellite-date-from" type="datetime-local">
+
+                    <div id="satellite-date-to-group">
+                        <label for="satellite-date-to">Date To (UTC)</label>
+                        <input id="satellite-date-to" type="datetime-local">
+                    </div>
+
+                    <div id="satellite-utc-preview"
+                        style="font-size:11px; color:#7ecfff; padding:4px 8px; margin-top:6px; background:rgba(30,60,90,0.3); border:1px solid rgba(126,207,255,0.2); border-radius:4px;">
+                    </div>
+                </div>
+
+                <div class="style-group" id="satellite-animation-controls" data-collapsed-default="true">
+                    <h3 class="group-title">Animation Settings</h3>
+                    <label for="satellite-frames">Frames</label>
+                    <input id="satellite-frames" type="range" min="1" max="240" step="1">
+                    <label for="satellite-fps">FPS</label>
+                    <input id="satellite-fps" type="range" min="1" max="30" step="1">
+                </div>
+
+                <div class="style-group" id="satellite-extent-controls" data-collapsed-default="true">
+                    <h3 class="group-title">Map Extent</h3>
+                    <label for="satellite-extent-mode">Extent Mode</label>
+                    <input id="satellite-extent-mode" type="range" min="0" max="1" step="1">
+                    <div class="extent-mode-labels">
+                        <span>Full</span>
+                        <span>Custom</span>
+                    </div>
+
+                    <div id="satellite-extent-custom-controls" class="extent-custom-only">
+                        <button id="satellite-open-map" class="secondary" type="button">Select Extent on Map</button>
+
+                        <div class="extent-bounds-grid">
+                            <div class="extent-bound-field">
+                                <label for="satellite-n">North</label>
+                                <input id="satellite-n" type="number" step="0.01">
+                            </div>
+                            <div class="extent-bound-field">
+                                <label for="satellite-s">South</label>
+                                <input id="satellite-s" type="number" step="0.01">
+                            </div>
+                            <div class="extent-bound-field">
+                                <label for="satellite-e">East</label>
+                                <input id="satellite-e" type="number" step="0.01">
+                            </div>
+                            <div class="extent-bound-field">
+                                <label for="satellite-w">West</label>
+                                <input id="satellite-w" type="number" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="satellite-generate" class="primary" type="button">Generate</button>
+            </aside>
+
+            <aside class="style-panel">
+                <h2 class="section-title">Layer Controls</h2>
+
+                <div class="style-group" id="satellite-layer-controls">
+                    <h3 class="group-title">Layers</h3>
+                    <div id="satellite-layer-list">
+                        <p class="zorder-hint">Layer controls will appear when output is generated.</p>
+                    </div>
+                    <button id="satellite-save-layer-order" class="secondary" type="button"
+                        style="display: none; margin-top: 10px;">
+                        Save Layer Order
+                    </button>
+                </div>
+            </aside>
+
+            <main class="display-area">
+                <div id="progress-container">
+                    <div id="progress-bar"></div>
+                    <span id="progress-message"></span>
+                </div>
+                <div class="output-meta-row">
+                    <span class="output-meta-label">Last Output</span>
+                    <span id="source-badge" class="output-meta-badge">Source: --</span>
+                    <span id="data-mode-badge" class="output-meta-badge">Data Mode: --</span>
+                </div>
+                <div id="scrubber-controls" class="layered-controls" style="display: none;">
+                    <button id="scrubber-step-back" class="scrubber-btn" type="button"
+                        title="Previous frame">&larr;</button>
+                    <input id="scrubber-range" type="range" min="0" max="0" step="1" value="0">
+                    <button id="scrubber-step-fwd" class="scrubber-btn" type="button" title="Next frame">&rarr;</button>
+                    <span id="scrubber-timestamp" class="layered-timestamp"></span>
+                    <button id="scrubber-save-current" class="secondary scrubber-action-btn" type="button">Save
+                        Frame</button>
+                    <button id="scrubber-export-animation" class="secondary scrubber-action-btn" type="button">Export
+                        MP4</button>
+                </div>
+                <img id="result-image" alt="Generated satellite image">
+                <video id="result-video" controls></video>
+                <div id="result-scrubber-container" class="scrubber-container" style="display: none;">
+                    <img id="result-scrubber-image" alt="Satellite frame">
+                </div>
+                <div id="status-message"></div>
+            </main>
+        </div>
+
+        <div id="map-modal" class="modal-overlay">
+            <div class="modal-content">
+                <div id="leaflet-map"></div>
+                <button id="map-modal-close" class="secondary" type="button">Close</button>
+            </div>
+        </div>
+
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+        <script src="js/shared.js"></script>
+        <script src="js/satellite.js"></script>
+        <script>initNav('satellite');</script>
+    </body>
+
+</html>

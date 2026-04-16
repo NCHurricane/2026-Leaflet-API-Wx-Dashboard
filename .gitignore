@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+
+# Editor/OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+*.tmp
+
+# Generic caches/build artifacts
+cache/
+basemap_cache/
+surface/basemap_cache/
+
+# Generated weather/radar/satellite artifacts
+alerts/alert_data/
+alerts/alert_images/
+alerts/alerts_archive/
+mrms/mrms_images/
+radar/radar_archive/
+radar/radar_level2_images/
+radar/radar_level3_downloads/
+radar/radar_level3_images/
+satellite/satellite_archive/
+satellite/satellite_images/
+spc/spc_archive/
+spc/spc_images/
+surface/surface_archive/
+surface/surface_data/
+surface/surface_images/
+weather/weather_archive/
+weather/weather_cache/
+weather/weather_images/
+
+# Local backups/recovery artifacts
+*_recovered.py
+*.bak
+*.old
+
+# Optional large geodata artifacts (keep out of future commits unless required)
+img/BlackMarble_2016_3km_geo.tif
+shapefiles/states/
+shapefiles/counties/

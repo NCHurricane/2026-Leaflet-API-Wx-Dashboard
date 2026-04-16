@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>NCHurricane Dashboard 2026</title>
+        <link rel="stylesheet" href="css/shared.css">
+        <style>
+            .landing-wrap {
+                max-width: 1200px;
+                margin: 0 auto;
+            }
+
+            .landing-subtitle {
+                text-align: center;
+                color: var(--subtext);
+                margin-bottom: 1.5rem;
+                font-weight: 700;
+            }
+
+            .card-grid {
+                display: grid;
+                grid-template-columns: repeat(5, minmax(180px, 1fr));
+                gap: 1rem;
+                margin-bottom: 1.25rem;
+            }
+
+            .tab-card {
+                background: var(--secondary);
+                border: 1px solid #334155;
+                border-radius: 10px;
+                padding: 1rem;
+                text-align: center;
+                text-decoration: none;
+                color: var(--text);
+                font-weight: 700;
+                min-height: 120px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 0.4rem;
+            }
+
+            .tab-card:hover {
+                border-color: var(--accent);
+                background: #1b2450;
+            }
+
+            .tab-card span {
+                color: var(--subtext);
+                font-size: 0.8rem;
+            }
+
+            .purge-panel {
+                background: var(--trinary);
+                border: 1px solid #334155;
+                border-radius: 12px;
+                padding: 1rem;
+            }
+
+            .purge-title {
+                margin: 0 0 0.35rem;
+                color: var(--text);
+                font-size: 0.95rem;
+            }
+
+            .purge-subtitle {
+                margin: 0 0 0.9rem;
+                color: #94a3b8;
+                font-size: 0.75rem;
+            }
+
+            .purge-row {
+                display: flex;
+                align-items: center;
+                gap: 0.7rem;
+                flex-wrap: wrap;
+                margin-bottom: 0.85rem;
+            }
+
+            .purge-row label {
+                margin: 0;
+                text-align: left;
+                font-size: 0.72rem;
+                color: #cbd5e1;
+            }
+
+            .purge-hours {
+                width: 110px;
+                padding: 8px;
+                text-align: center;
+            }
+
+            .purge-categories {
+                display: grid;
+                grid-template-columns: repeat(6, minmax(110px, 1fr));
+                gap: 0.55rem;
+                margin-bottom: 0.85rem;
+            }
+
+            .purge-check {
+                display: flex;
+                align-items: center;
+                gap: 0.4rem;
+                color: #cbd5e1;
+                font-size: 0.72rem;
+                font-weight: 700;
+            }
+
+            .purge-check input {
+                width: auto;
+                padding: 0;
+            }
+
+            .purge-actions {
+                display: flex;
+                gap: 0.6rem;
+                flex-wrap: wrap;
+            }
+
+            .purge-actions button {
+                flex: 1;
+                min-width: 180px;
+            }
+
+            .purge-status {
+                margin-top: 0.8rem;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                background: #091328;
+                color: #94a3b8;
+                font-size: 0.74rem;
+                padding: 0.6rem 0.7rem;
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+            }
+
+            .danger {
+                background: #ef4444;
+                color: #fff;
+                border-color: #ef4444;
+            }
+
+            @media (max-width: 1100px) {
+                .card-grid {
+                    grid-template-columns: repeat(2, minmax(180px, 1fr));
+                }
+
+                .purge-categories {
+                    grid-template-columns: repeat(3, minmax(110px, 1fr));
+                }
+            }
+
+            @media (max-width: 700px) {
+                .purge-categories {
+                    grid-template-columns: repeat(2, minmax(110px, 1fr));
+                }
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="landing-wrap">
+            <header>
+                <h1><a href="index.html">NCHurricane Dashboard 2026</a></h1>
+                <p class="landing-subtitle">Select a page to open a fully isolated workflow.</p>
+            </header>
+
+            <main class="card-grid">
+                <a class="tab-card" href="weather.html" style="border-color:var(--accent);background:#1b2450;">Weather
+                    <span>Unified (Surface/Alerts/MRMS/SPC)</span></a>
+                <a class="tab-card" href="satellite.html">Satellite <span>Current + Archive</span></a>
+
+                <a class="tab-card" href="radar.html">Radar <span>Current + Archive</span></a>
+            </main>
+
+            <section class="purge-panel" aria-label="Purge old files">
+                <h2 class="purge-title">Purge Cached Files</h2>
+                <p class="purge-subtitle">Delete generated images/downloads older than a retention window.</p>
+
+                <div class="purge-row">
+                    <label for="purge-hours">Retention Window (Hours)</label>
+                    <input id="purge-hours" class="purge-hours" type="number" min="0" max="8760" step="1" value="168">
+                </div>
+
+                <div class="purge-categories">
+                    <label class="purge-check"><input id="purge-radar" type="checkbox" checked>Radar</label>
+                    <label class="purge-check"><input id="purge-satellite" type="checkbox" checked>Satellite</label>
+                    <label class="purge-check"><input id="purge-surface" type="checkbox" checked>Surface</label>
+                    <label class="purge-check"><input id="purge-alerts" type="checkbox" checked>Alerts</label>
+                    <label class="purge-check"><input id="purge-spc" type="checkbox" checked>SPC</label>
+                    <label class="purge-check"><input id="purge-mrms" type="checkbox" checked>MRMS</label>
+                </div>
+
+                <div class="purge-actions">
+                    <button id="purge-run" class="primary" type="button">Purge by Retention</button>
+                    <button id="purge-hour" class="secondary" type="button">Purge Older Than 1 Hour</button>
+                    <button id="purge-all" class="danger" type="button">Purge All Selected</button>
+                </div>
+
+                <div id="purge-status" class="purge-status">Ready.</div>
+            </section>
+        </div>
+
+        <script>
+            (function () {
+                "use strict";
+
+                const CATEGORIES = ["radar", "satellite", "surface", "alerts", "spc", "mrms"];
+                const API_ORIGIN = window.location.protocol === "file:" ? "http://127.0.0.1:8000" : "";
+
+                function byId(id) {
+                    return document.getElementById(id);
+                }
+
+                function setStatus(message, tone) {
+                    const statusEl = byId("purge-status");
+                    if (!statusEl) return;
+
+                    statusEl.textContent = message || "";
+                    if (tone === "ok") {
+                        statusEl.style.color = "#4ade80";
+                    } else if (tone === "warn") {
+                        statusEl.style.color = "#fbbf24";
+                    } else if (tone === "error") {
+                        statusEl.style.color = "#f87171";
+                    } else {
+                        statusEl.style.color = "#94a3b8";
+                    }
+                }
+
+                function selectedCategories() {
+                    return CATEGORIES.filter((cat) => {
+                        const el = byId(`purge-${cat}`);
+                        return !!el && el.checked;
+                    });
+                }
+
+                function setButtonsDisabled(disabled) {
+                    ["purge-run", "purge-hour", "purge-all"].forEach((id) => {
+                        const btn = byId(id);
+                        if (btn) btn.disabled = disabled;
+                    });
+                }
+
+                async function runPurge(hours) {
+                    if (hours < 0 || Number.isNaN(hours)) {
+                        setStatus("Hours must be 0 or greater.", "warn");
+                        return;
+                    }
+
+                    const categories = selectedCategories();
+                    if (!categories.length) {
+                        setStatus("Select at least one category.", "warn");
+                        return;
+                    }
+
+                    const params = new URLSearchParams({
+                        hours: String(hours),
+                        categories: categories.join(","),
+                    });
+
+                    setButtonsDisabled(true);
+                    setStatus(`Purging ${hours === 0 ? "all selected files" : `files older than ${hours}h`}...`);
+
+                    try {
+                        const response = await fetch(`${API_ORIGIN}/api/purge?${params.toString()}`, {
+                            method: "POST",
+                        });
+
+                        const data = await response.json();
+                        if (!response.ok) {
+                            throw new Error(data?.detail || `HTTP ${response.status}`);
+                        }
+
+                        const summary = categories
+                            .map((cat) => {
+                                const detail = data?.details?.[cat];
+                                if (!detail) return null;
+                                return `${cat}: ${detail.purged} removed${detail.errors ? ` (${detail.errors} errors)` : ""}`;
+                            })
+                            .filter(Boolean)
+                            .join(" | ");
+
+                        setStatus(
+                            `Done. ${data.total_purged} files purged${data.total_errors ? ` (${data.total_errors} errors)` : ""}. ${summary || ""}`,
+                            "ok"
+                        );
+                    } catch (error) {
+                        setStatus(`Error: ${error.message || error}`, "error");
+                    } finally {
+                        setButtonsDisabled(false);
+                    }
+                }
+
+                byId("purge-run")?.addEventListener("click", () => {
+                    const hours = Number(byId("purge-hours")?.value || 168);
+                    runPurge(hours);
+                });
+
+                byId("purge-hour")?.addEventListener("click", () => runPurge(1));
+
+                byId("purge-all")?.addEventListener("click", () => {
+                    const shouldContinue = window.confirm(
+                        "This will delete ALL selected cached files. Continue?"
+                    );
+                    if (shouldContinue) {
+                        runPurge(0);
+                    }
+                });
+            })();
+        </script>
+    </body>
+
+</html>

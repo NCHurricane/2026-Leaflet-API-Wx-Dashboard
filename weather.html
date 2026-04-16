@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Weather (Unified) — NCHurricane Dashboard</title>
+        <link rel="stylesheet" href="css/shared.css">
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+        <style>
+            #result-layered-container.weather-layered {
+                position: relative;
+                width: 100%;
+                max-width: 100%;
+                aspect-ratio: 16 / 9;
+                display: none;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                overflow: hidden;
+                background: var(--gradient-bg);
+            }
+        </style>
+    </head>
+
+    <body>
+        <header>
+            <h1><a href="index.html">NCHurricane Dashboard 2026</a></h1>
+            <nav id="main-nav"></nav>
+        </header>
+
+        <div class="page-layout">
+            <!-- ─── LEFT: Controls ─── -->
+            <aside class="controls-panel">
+                <h2 class="section-title">Unified Weather Controls</h2>
+
+                <!-- Region -->
+                <div class="style-group" id="weather-region-controls">
+                    <h3 class="group-title">Region</h3>
+                    <label for="weather-region">State / Region</label>
+                    <select id="weather-region">
+                        <option value="CONUS" selected>CONUS</option>
+                        <option value="NC">North Carolina</option>
+                        <option value="SC">South Carolina</option>
+                        <option value="VA">Virginia</option>
+                        <option value="TN">Tennessee</option>
+                        <option value="AL">Alabama</option>
+                        <option value="AK">Alaska</option>
+                        <option value="AZ">Arizona</option>
+                        <option value="AR">Arkansas</option>
+                        <option value="CA">California</option>
+                        <option value="CO">Colorado</option>
+                        <option value="CT">Connecticut</option>
+                        <option value="DE">Delaware</option>
+                        <option value="FL">Florida</option>
+                        <option value="GA">Georgia</option>
+                        <option value="HI">Hawaii</option>
+                        <option value="ID">Idaho</option>
+                        <option value="IL">Illinois</option>
+                        <option value="IN">Indiana</option>
+                        <option value="IA">Iowa</option>
+                        <option value="KS">Kansas</option>
+                        <option value="KY">Kentucky</option>
+                        <option value="LA">Louisiana</option>
+                        <option value="ME">Maine</option>
+                        <option value="MD">Maryland</option>
+                        <option value="MA">Massachusetts</option>
+                        <option value="MI">Michigan</option>
+                        <option value="MN">Minnesota</option>
+                        <option value="MS">Mississippi</option>
+                        <option value="MO">Missouri</option>
+                        <option value="MT">Montana</option>
+                        <option value="NE">Nebraska</option>
+                        <option value="NV">Nevada</option>
+                        <option value="NH">New Hampshire</option>
+                        <option value="NJ">New Jersey</option>
+                        <option value="NM">New Mexico</option>
+                        <option value="NY">New York</option>
+                        <option value="ND">North Dakota</option>
+                        <option value="OH">Ohio</option>
+                        <option value="OK">Oklahoma</option>
+                        <option value="OR">Oregon</option>
+                        <option value="PA">Pennsylvania</option>
+                        <option value="RI">Rhode Island</option>
+                        <option value="SD">South Dakota</option>
+                        <option value="TX">Texas</option>
+                        <option value="UT">Utah</option>
+                        <option value="VT">Vermont</option>
+                        <option value="WA">Washington</option>
+                        <option value="WV">West Virginia</option>
+                        <option value="WI">Wisconsin</option>
+                        <option value="WY">Wyoming</option>
+                    </select>
+                </div>
+
+                <!-- Product Group & Product -->
+                <div class="style-group" id="weather-product-controls">
+                    <h3 class="group-title">Product Selection</h3>
+
+                    <label for="weather-product-group">Product Group</label>
+                    <select id="weather-product-group">
+                        <option value="surface" selected>Current Obs</option>
+                        <option value="alerts">Alerts</option>
+                        <option value="mrms">MRMS</option>
+                        <option value="spc">SPC</option>
+                    </select>
+
+                    <!-- Surface products -->
+                    <div id="weather-surface-opts" class="weather-product-opts">
+                        <label for="weather-surface-product">Product</label>
+                        <select id="weather-surface-product">
+                            <option value="Station Plot">Station Plot</option>
+                            <optgroup label="Temperature">
+                                <option value="Temperature">Temperature</option>
+                                <option value="Temperature Gradient">Temperature Gradient</option>
+                                <option value="Temperature Gradient and Values">Temperature Gradient and Values</option>
+                                <option value="Feels Like">Feels Like</option>
+                                <option value="Feels Like Gradient">Feels Like Gradient</option>
+                                <option value="Feels Like Gradient and Values">Feels Like Gradient and Values</option>
+                            </optgroup>
+                            <optgroup label="Moisture">
+                                <option value="Dewpoint">Dewpoint</option>
+                                <option value="Relative Humidity">Relative Humidity</option>
+                            </optgroup>
+                            <optgroup label="Wind">
+                                <option value="Wind Speed">Wind Speed</option>
+                                <option value="Wind Gust">Wind Gust</option>
+                            </optgroup>
+                            <optgroup label="Pressure">
+                                <option value="Altimeter">Altimeter</option>
+                                <option value="MSLP">MSLP</option>
+                            </optgroup>
+                            <optgroup label="Other">
+                                <option value="Visibility">Visibility</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <!-- Alerts products -->
+                    <div id="weather-alerts-opts" class="weather-product-opts" style="display:none;">
+                        <label for="weather-alerts-product">Hazard Type</label>
+                        <select id="weather-alerts-product">
+                            <option value="All Alerts">All Alerts &amp; Warnings</option>
+                            <option value="Severe Weather Alerts">Severe Weather Alerts</option>
+                            <option value="Severe Weather Warnings">Severe Weather Warnings</option>
+                            <option value="Tropical Cyclone Alerts">Tropical Cyclone Alerts</option>
+                            <option value="Hydrology Alerts">Hydrology Alerts</option>
+                            <option value="Flash Flood Alerts">Flash Flood Alerts</option>
+                            <option value="Winter Alerts">Winter Alerts</option>
+                            <option value="Cold Alerts">Cold Alerts</option>
+                            <option value="Fire Alerts">Fire Alerts</option>
+                            <option value="Heat Alerts">Heat Alerts</option>
+                            <option value="Coastal Alerts">Coastal Alerts</option>
+                            <option value="Marine Alerts">Marine Alerts</option>
+                            <option value="Non-Precipitation Alerts">Non-Precipitation Alerts</option>
+                        </select>
+                    </div>
+
+                    <!-- MRMS products -->
+                    <div id="weather-mrms-opts" class="weather-product-opts" style="display:none;">
+                        <label for="weather-mrms-product">Product</label>
+                        <select id="weather-mrms-product">
+                            <optgroup label="Precipitation">
+                                <option value="PrecipRate">Precipitation Rate</option>
+                                <option value="PrecipFlag">Precipitation Type</option>
+                            </optgroup>
+                            <optgroup label="Rotation Tracks">
+                                <option value="RotationTrack">Rotation Tracks</option>
+                            </optgroup>
+                            <optgroup label="MESH / Hail">
+                                <option value="MESH">MESH (Hail Size)</option>
+                                <option value="SHI">Severe Hail Index</option>
+                                <option value="POSH">Prob. of Severe Hail</option>
+                            </optgroup>
+                            <optgroup label="Azimuthal Shear">
+                                <option value="AzShear">Azimuthal Shear</option>
+                            </optgroup>
+                            <optgroup label="Echo Top">
+                                <option value="EchoTop">Echo Top</option>
+                            </optgroup>
+                            <optgroup label="VIL">
+                                <option value="VIL">Vertically Integrated Liquid</option>
+                            </optgroup>
+                            <optgroup label="QPE Accumulation">
+                                <option value="QPE">QPE Accumulation</option>
+                            </optgroup>
+                            <optgroup label="Reflectivity">
+                                <option value="Reflectivity">Reflectivity</option>
+                            </optgroup>
+                            <optgroup label="Lightning Probability">
+                                <option value="Lightning">Lightning Probability</option>
+                            </optgroup>
+                            <optgroup label="Model / Environment">
+                                <option value="Model">Model / Environment</option>
+                            </optgroup>
+                            <optgroup label="Quality">
+                                <option value="RadarQualityIndex">Radar Quality Index</option>
+                            </optgroup>
+                        </select>
+
+                        <!-- Conditional sub-product dropdowns -->
+                        <div id="weather-mrms-rotation-group" style="display:none;">
+                            <label for="weather-mrms-rotation-level">Altitude Level</label>
+                            <select id="weather-mrms-rotation-level">
+                                <option value="LL" selected>Low Level (0-2 km)</option>
+                                <option value="ML">Mid Level (3-6 km)</option>
+                            </select>
+                            <label for="weather-mrms-rotation-time">Time Window</label>
+                            <select id="weather-mrms-rotation-time">
+                                <option value="30min">30 min</option>
+                                <option value="60min" selected>60 min</option>
+                                <option value="120min">2 hr</option>
+                                <option value="240min">4 hr</option>
+                                <option value="360min">6 hr</option>
+                                <option value="1440min">24 hr</option>
+                            </select>
+                        </div>
+
+                        <div id="weather-mrms-mesh-group" style="display:none;">
+                            <label for="weather-mrms-mesh-time">Time Window</label>
+                            <select id="weather-mrms-mesh-time">
+                                <option value="Instant" selected>Instant</option>
+                                <option value="Max_30min">Max 30 min</option>
+                                <option value="Max_60min">Max 60 min</option>
+                                <option value="Max_120min">Max 2 hr</option>
+                                <option value="Max_240min">Max 4 hr</option>
+                                <option value="Max_360min">Max 6 hr</option>
+                                <option value="Max_1440min">Max 24 hr</option>
+                            </select>
+                        </div>
+
+                        <div id="weather-mrms-azshear-group" style="display:none;">
+                            <label for="weather-mrms-azshear-level">Altitude Level</label>
+                            <select id="weather-mrms-azshear-level">
+                                <option value="Low" selected>Low Level (0-2 km)</option>
+                                <option value="Mid">Mid Level (3-6 km)</option>
+                            </select>
+                        </div>
+
+                        <div id="weather-mrms-echotop-group" style="display:none;">
+                            <label for="weather-mrms-echotop-threshold">dBZ Threshold</label>
+                            <select id="weather-mrms-echotop-threshold">
+                                <option value="18" selected>18 dBZ</option>
+                                <option value="30">30 dBZ</option>
+                                <option value="50">50 dBZ</option>
+                                <option value="60">60 dBZ</option>
+                            </select>
+                        </div>
+
+                        <div id="weather-mrms-vil-group" style="display:none;">
+                            <label for="weather-mrms-vil-type">Type</label>
+                            <select id="weather-mrms-vil-type">
+                                <option value="Instant" selected>Instant</option>
+                                <option value="Density">Density</option>
+                                <option value="Max_120min">Max 2 hr</option>
+                                <option value="Max_1440min">Max 24 hr</option>
+                            </select>
+                        </div>
+
+                        <div id="weather-mrms-qpe-group" style="display:none;">
+                            <label for="weather-mrms-qpe-source">Source</label>
+                            <select id="weather-mrms-qpe-source">
+                                <option value="MS2" selected>MultiSensor Pass2</option>
+                                <option value="MS1">MultiSensor Pass1</option>
+                                <option value="RO">Radar Only</option>
+                            </select>
+                            <label for="weather-mrms-qpe-period">Accumulation Period</label>
+                            <select id="weather-mrms-qpe-period">
+                                <option value="15M" class="qpe-ro-only">15 Minutes</option>
+                                <option value="01H" selected>1 Hour</option>
+                                <option value="03H">3 Hour</option>
+                                <option value="06H">6 Hour</option>
+                                <option value="12H">12 Hour</option>
+                                <option value="24H">24 Hour</option>
+                                <option value="48H">48 Hour</option>
+                                <option value="72H">72 Hour</option>
+                                <option value="Since12Z" class="qpe-ro-only">Since 12Z</option>
+                            </select>
+                        </div>
+
+                        <div id="weather-mrms-refl-group" style="display:none;">
+                            <label for="weather-mrms-refl-variant">Variant</label>
+                            <select id="weather-mrms-refl-variant">
+                                <option value="HSR" selected>Hybrid Scan (HSR)</option>
+                                <option value="BaseQC">Base Reflectivity (QC)</option>
+                                <option value="CompLow">Composite – Low</option>
+                                <option value="CompHigh">Composite – High</option>
+                                <option value="CompSuper">Composite – Super</option>
+                                <option value="BREF_1HR_MAX">Base Refl 1hr Max</option>
+                                <option value="CREF_1HR_MAX">Comp Refl 1hr Max</option>
+                            </select>
+                        </div>
+
+                        <div id="weather-mrms-lightning-group" style="display:none;">
+                            <label for="weather-mrms-lightning-window">Forecast Window</label>
+                            <select id="weather-mrms-lightning-window">
+                                <option value="30min" selected>Next 30 min</option>
+                                <option value="60min">Next 60 min</option>
+                            </select>
+                        </div>
+
+                        <div id="weather-mrms-model-group" style="display:none;">
+                            <label for="weather-mrms-model-field">Field</label>
+                            <select id="weather-mrms-model-field">
+                                <option value="FreezingLevel" selected>Freezing Level Height</option>
+                                <option value="SurfaceTemp">Surface Temperature</option>
+                                <option value="WetBulbTemp">Wet Bulb Temperature</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- SPC products -->
+                    <div id="weather-spc-opts" class="weather-product-opts" style="display:none;">
+                        <label for="weather-spc-day">Outlook Day</label>
+                        <select id="weather-spc-day">
+                            <option value="1" selected>Day 1</option>
+                            <option value="2">Day 2</option>
+                            <option value="3">Day 3</option>
+                            <option value="4">Day 4</option>
+                            <option value="5">Day 5</option>
+                            <option value="6">Day 6</option>
+                            <option value="7">Day 7</option>
+                            <option value="8">Day 8</option>
+                        </select>
+                        <label for="weather-spc-convective">Convective Outlooks</label>
+                        <select id="weather-spc-convective">
+                            <option value="" selected disabled>— Choose Product —</option>
+                            <option value="cat">Categorical</option>
+                            <option value="torn">Tornado</option>
+                            <option value="wind">Wind</option>
+                            <option value="hail">Hail</option>
+                            <option value="prob">Probabilistic</option>
+                        </select>
+                        <label for="weather-spc-fire">Fire Weather Outlooks</label>
+                        <select id="weather-spc-fire">
+                            <option value="" selected disabled>— Choose Product —</option>
+                            <option value="fire_windrh">Wind / RH</option>
+                            <option value="fire_dryt">Dry Thunderstorm</option>
+                        </select>
+                        <label for="weather-spc-product">Other Products</label>
+                        <select id="weather-spc-product">
+                            <option value="" selected disabled>— Choose Product —</option>
+                            <option value="watches">Watches</option>
+                            <option value="mds">Mesoscale Discussions</option>
+                            <option value="reports">Storm Reports</option>
+                        </select>
+                        <label for="weather-report-day" id="weather-report-day-label" style="display:none">Report
+                            Day</label>
+                        <select id="weather-report-day" style="display:none">
+                            <option value="today" selected>Today</option>
+                            <option value="yesterday">Yesterday</option>
+                        </select>
+                        <label for="weather-spc-item" id="weather-spc-item-label" style="display:none">Select
+                            Item</label>
+                        <select id="weather-spc-item" style="display:none">
+                            <option value="all" selected>All</option>
+                        </select>
+                    </div>
+                </div>
+
+
+                <!-- Time / Archive -->
+                <div class="style-group" id="weather-time-controls" data-collapsed-default="false">
+                    <h3 class="group-title">Time Range</h3>
+                    <label for="weather-quick-range">Quick Range</label>
+                    <select id="weather-quick-range">
+                        <option value="current" selected>Current (latest)</option>
+                        <option value="0.5">Last 30 min</option>
+                        <option value="1">Last 1 hour</option>
+                        <option value="1.5">Last 90 min</option>
+                        <option value="2">Last 2 hours</option>
+                        <option value="3">Last 3 hours</option>
+                        <option value="6">Last 6 hours</option>
+                        <option value="12">Last 12 hours</option>
+                        <option value="24">Last 24 hours</option>
+                        <option value="custom">Custom (set dates below)</option>
+                    </select>
+                    <div id="weather-custom-dates" style="display:none;">
+                        <label for="weather-date-from">Date From (UTC)</label>
+                        <input id="weather-date-from" type="datetime-local">
+                        <label for="weather-date-to">Date To (UTC)</label>
+                        <input id="weather-date-to" type="datetime-local">
+                    </div>
+                </div>
+
+                <!-- Animation settings -->
+                <div class="style-group" id="weather-animation-controls" data-collapsed-default="true">
+                    <h3 class="group-title">Animation Settings</h3>
+                    <label for="weather-fps">FPS</label>
+                    <input id="weather-fps" type="range" min="1" max="30" step="1" value="4">
+                    <label for="weather-frames">Frames</label>
+                    <input id="weather-frames" type="range" min="1" max="100" step="1" value="12">
+                </div>
+
+                <!-- Map Extent -->
+                <div class="style-group" id="weather-extent-controls" data-collapsed-default="true">
+                    <h3 class="group-title">Map Extent</h3>
+                    <label for="weather-extent-mode">Extent Mode</label>
+                    <input id="weather-extent-mode" type="range" min="0" max="1" step="1" value="0">
+                    <div class="extent-mode-labels">
+                        <span>Full</span>
+                        <span>Custom</span>
+                    </div>
+                    <div id="weather-extent-custom-controls" class="extent-custom-only" style="display:none;">
+                        <button id="weather-open-map" class="secondary" type="button">Select Extent on Map</button>
+                        <div class="extent-bounds-grid">
+                            <div class="extent-bound-field">
+                                <label for="weather-n">North</label>
+                                <input id="weather-n" type="number" step="0.01">
+                            </div>
+                            <div class="extent-bound-field">
+                                <label for="weather-s">South</label>
+                                <input id="weather-s" type="number" step="0.01">
+                            </div>
+                            <div class="extent-bound-field">
+                                <label for="weather-e">East</label>
+                                <input id="weather-e" type="number" step="0.01">
+                            </div>
+                            <div class="extent-bound-field">
+                                <label for="weather-w">West</label>
+                                <input id="weather-w" type="number" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="weather-reset-controls" class="secondary" type="button">Reset Controls</button>
+                <button id="weather-generate" class="primary" type="button">Generate</button>
+            </aside>
+
+            <!-- ─── CENTER: Layer visibility ─── -->
+            <aside class="style-panel">
+                <h2 class="section-title">Layer Controls</h2>
+
+                <div id="weather-layer-controls" style="display:none;">
+                    <div class="style-group" id="weather-layer-visibility-controls">
+                        <h3 class="group-title">Layer Visibility</h3>
+                        <div class="checkbox-row">
+                            <label for="weather-show-product">Product Layer</label>
+                            <input id="weather-show-product" type="checkbox" checked>
+                        </div>
+                        <input id="weather-opacity-product" type="range" min="0" max="1" step="0.05" value="1">
+                        <div class="checkbox-row" id="weather-legend-controls" style="display:none;">
+                            <label for="weather-show-legend">Legend</label>
+                            <input id="weather-show-legend" type="checkbox" checked>
+                        </div>
+                        <input id="weather-opacity-legend" type="range" min="0" max="1" step="0.05" value="1"
+                            style="display:none;">
+                        <div class="checkbox-row">
+                            <label for="weather-show-hud-right">Timestamp Layer</label>
+                            <input id="weather-show-hud-right" type="checkbox" checked>
+                        </div>
+                        <input id="weather-opacity-hud-right" type="range" min="0" max="1" step="0.05" value="1">
+                    </div>
+                </div>
+
+                <div id="weather-layer-controls-note">
+                    <div class="style-group">
+                        <h3 class="group-title">Layers</h3>
+                        <p>Layer controls will appear when layered output is generated.</p>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- ─── MAIN: Display area ─── -->
+            <main class="display-area">
+                <div id="progress-container">
+                    <div id="progress-bar"></div>
+                    <span id="progress-message"></span>
+                </div>
+                <div class="output-meta-row">
+                    <span class="output-meta-label">Last Output</span>
+                    <span id="source-badge" class="output-meta-badge">Source: --</span>
+                    <span id="data-mode-badge" class="output-meta-badge">Data Mode: --</span>
+                </div>
+
+                <div id="layered-controls" class="layered-controls" style="display:none;">
+                    <button id="layered-step-back" class="scrubber-btn" type="button"
+                        title="Previous frame">&larr;</button>
+                    <input id="layered-scrubber" type="range" min="0" max="0" step="1" value="0">
+                    <button id="layered-step-fwd" class="scrubber-btn" type="button" title="Next frame">&rarr;</button>
+                    <span id="layered-timestamp" class="layered-timestamp"></span>
+                    <button id="layered-save-current" class="secondary scrubber-action-btn" type="button">Save
+                        Frame</button>
+                    <button id="layered-export-animation" class="secondary scrubber-action-btn" type="button">Export
+                        MP4</button>
+                </div>
+
+                <div id="result-layered-container" class="weather-layered">
+                    <img id="result-basemap-image" alt="Basemap layer">
+                    <img id="result-product-image" alt="Product layer">
+                    <img id="result-static-overlay-image" alt="HUD and logo layer">
+                    <img id="result-legend-image" alt="Legend layer">
+                    <img id="result-hud-right-image" alt="Timestamp layer">
+                </div>
+
+                <img id="result-image" alt="Generated weather image" style="display:none;">
+                <video id="result-video" controls style="display:none;"></video>
+
+
+                <div id="status-message"></div>
+            </main>
+        </div>
+
+        <!-- Map modal for extent selection -->
+        <div id="map-modal" class="modal-overlay">
+            <div class="modal-content">
+                <div id="leaflet-map"></div>
+                <button id="map-modal-close" class="secondary" type="button">Close</button>
+            </div>
+        </div>
+
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+        <script src="js/shared.js"></script>
+        <script src="js/weather.js"></script>
+        <script>initNav('weather');</script>
+    </body>
+
+</html>

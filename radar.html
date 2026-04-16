@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Radar — NCHurricane Dashboard</title>
+        <link rel="stylesheet" href="css/shared.css">
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    </head>
+
+    <body>
+        <header>
+            <h1><a href="index.html">NCHurricane Dashboard 2026</a></h1>
+            <nav id="main-nav"></nav>
+        </header>
+
+        <div class="page-layout">
+            <aside class="controls-panel">
+                <h2 class="section-title">Archive Controls</h2>
+
+                <div class="style-group" id="radar-selection-controls">
+                    <h3 class="group-title">Selection Settings</h3>
+                    <label for="radar-site">Radar Site</label>
+                    <select id="radar-site">
+                        <optgroup label="North Carolina">
+                            <option value="KMHX">Newport/Morehead City, NC</option>
+                            <option value="KRAX">Raleigh, NC</option>
+                            <option value="KLTX">Wilmington, NC</option>
+                        </optgroup>
+                        <optgroup label="Alabama">
+                            <option value="KBMX">Birmingham, AL</option>
+                            <option value="KEOX">Ft Rucker, AL</option>
+                            <option value="KHTX">Huntsville/Hytop, AL</option>
+                            <option value="KMXX">Maxwell AFB, AL</option>
+                            <option value="KMOB">Mobile, AL</option>
+                        </optgroup>
+                        <optgroup label="Alaska">
+                            <option value="PAHG">Anchorage/Kenai, AK</option>
+                            <option value="PABC">Bethel, AK</option>
+                            <option value="PACG">Biorka Island/Sitka, AK</option>
+                            <option value="PAPD">Fairbanks/Pedro Dome, AK</option>
+                            <option value="PAKC">King Salmon, AK</option>
+                            <option value="PAIH">Middleton Island, AK</option>
+                            <option value="PAEC">Nome, AK</option>
+                        </optgroup>
+                        <optgroup label="Arizona">
+                            <option value="KFSX">Flagstaff, AZ</option>
+                            <option value="KIWA">Phoenix, AZ</option>
+                            <option value="KEMX">Tucson, AZ</option>
+                            <option value="KYUX">Yuma, AZ</option>
+                        </optgroup>
+                        <optgroup label="Arkansas">
+                            <option value="KSRX">Fort Smith, AR</option>
+                            <option value="KLZK">Little Rock, AR</option>
+                        </optgroup>
+                        <optgroup label="California">
+                            <option value="KBBX">Beale AFB, CA</option>
+                            <option value="KEYX">Edwards AFB, CA</option>
+                            <option value="KBHX">Eureka, CA</option>
+                            <option value="KVTX">Los Angeles, CA</option>
+                            <option value="KDAX">Sacramento, CA</option>
+                            <option value="KNKX">San Diego, CA</option>
+                            <option value="KMUX">San Francisco, CA</option>
+                            <option value="KHNX">San Joaquin Valley, CA</option>
+                            <option value="KSOX">Santa Ana Mountains, CA</option>
+                            <option value="KVBX">Vandenberg AFB, CA</option>
+                        </optgroup>
+                        <optgroup label="Colorado">
+                            <option value="KFTG">Denver, CO</option>
+                            <option value="KGJX">Grand Junction, CO</option>
+                            <option value="KPUX">Pueblo, CO</option>
+                        </optgroup>
+                        <optgroup label="Delaware">
+                            <option value="KDOX">Dover AFB, DE</option>
+                        </optgroup>
+                        <optgroup label="Florida">
+                            <option value="KJAX">Jacksonville, FL</option>
+                            <option value="KBYX">Key West, FL</option>
+                            <option value="KMLB">Melbourne, FL</option>
+                            <option value="KAMX">Miami, FL</option>
+                            <option value="KEVX">Northwest Florida/Eglin AFB, FL</option>
+                            <option value="KTLH">Tallahassee, FL</option>
+                            <option value="KTBW">Tampa Bay, FL</option>
+                        </optgroup>
+                        <optgroup label="Georgia">
+                            <option value="KFFC">Atlanta, GA</option>
+                            <option value="KVAX">Moody AFB, GA</option>
+                            <option value="KJGX">Robins AFB, GA</option>
+                        </optgroup>
+                        <optgroup label="Guam">
+                            <option value="PGUA">Andersen AFB, Guam</option>
+                        </optgroup>
+                        <optgroup label="Hawaii">
+                            <option value="PHKM">Kamuela/Kohala, HI</option>
+                            <option value="PHMO">Molokai, HI</option>
+                            <option value="PHKI">South Kauai, HI</option>
+                            <option value="PHWA">South Shore, HI</option>
+                        </optgroup>
+                        <optgroup label="Idaho">
+                            <option value="KCBX">Boise, ID</option>
+                            <option value="KSFX">Pocatello, ID</option>
+                        </optgroup>
+                        <optgroup label="Illinois">
+                            <option value="KLOT">Chicago, IL</option>
+                            <option value="KILX">Lincoln, IL</option>
+                        </optgroup>
+                        <optgroup label="Indiana">
+                            <option value="KVWX">Evansville, IN</option>
+                            <option value="KIND">Indianapolis, IN</option>
+                            <option value="KIWX">Northern Indiana/North Webster, IN</option>
+                        </optgroup>
+                        <optgroup label="Iowa">
+                            <option value="KDMX">Des Moines, IA</option>
+                            <option value="KDVN">Quad Cities/Davenport, IA</option>
+                        </optgroup>
+                        <optgroup label="Japan">
+                            <option value="RODN">Kadena, JP</option>
+                        </optgroup>
+                        <optgroup label="Kansas">
+                            <option value="KDDC">Dodge City, KS</option>
+                            <option value="KGLD">Goodland, KS</option>
+                            <option value="KTWX">Topeka, KS</option>
+                            <option value="KICT">Wichita, KS</option>
+                        </optgroup>
+                        <optgroup label="Kentucky">
+                            <option value="KHPX">Ft Campbell, KY</option>
+                            <option value="KJKL">Jackson, KY</option>
+                            <option value="KLVX">Louisville, KY</option>
+                            <option value="KPAH">Paducah, KY</option>
+                        </optgroup>
+                        <optgroup label="Louisiana">
+                            <option value="KPOE">Ft Polk, LA</option>
+                            <option value="KLCH">Lake Charles, LA</option>
+                            <option value="KLIX">New Orleans, LA</option>
+                            <option value="KSHV">Shreveport, LA</option>
+                        </optgroup>
+                        <optgroup label="Maine">
+                            <option value="KCBW">Caribou, ME</option>
+                            <option value="KGYX">Portland, ME</option>
+                        </optgroup>
+                        <optgroup label="Massachusetts">
+                            <option value="KBOX">Boston, MA</option>
+                        </optgroup>
+                        <optgroup label="Michigan">
+                            <option value="KDTX">Detroit, MI</option>
+                            <option value="KAPX">Gaylord, MI</option>
+                            <option value="KGRR">Grand Rapids, MI</option>
+                            <option value="KMQT">Marquette, MI</option>
+                        </optgroup>
+                        <optgroup label="Minnesota">
+                            <option value="KDLH">Duluth, MN</option>
+                            <option value="KMPX">Minneapolis, MN</option>
+                        </optgroup>
+                        <optgroup label="Mississippi">
+                            <option value="KGWX">Columbus AFB, MS</option>
+                            <option value="KDGX">Jackson, MS</option>
+                        </optgroup>
+                        <optgroup label="Missouri">
+                            <option value="KEAX">Kansas City, MO</option>
+                            <option value="KSGF">Springfield, MO</option>
+                            <option value="KLSX">St Louis, MO</option>
+                        </optgroup>
+                        <optgroup label="Montana">
+                            <option value="KBLX">Billings, MT</option>
+                            <option value="KGGW">Glasgow, MT</option>
+                            <option value="KTFX">Great Falls, MT</option>
+                            <option value="KMSX">Missoula, MT</option>
+                        </optgroup>
+                        <optgroup label="Nebraska">
+                            <option value="KUEX">Hastings, NE</option>
+                            <option value="KLNX">North Platte, NE</option>
+                            <option value="KOAX">Omaha, NE</option>
+                        </optgroup>
+                        <optgroup label="Nevada">
+                            <option value="KLRX">Elko, NV</option>
+                            <option value="KESX">Las Vegas, NV</option>
+                            <option value="KRGX">Reno, NV</option>
+                        </optgroup>
+                        <optgroup label="New Mexico">
+                            <option value="KABX">Albuquerque, NM</option>
+                            <option value="KFDX">Cannon AFB, NM</option>
+                            <option value="KHDX">Holloman AFB, NM</option>
+                        </optgroup>
+                        <optgroup label="New York">
+                            <option value="KENX">Albany, NY</option>
+                            <option value="KBGM">Binghamton, NY</option>
+                            <option value="KBUF">Buffalo, NY</option>
+                            <option value="KTYX">Montague/Ft Drum, NY</option>
+                            <option value="KOKX">New York City/Upton, NY</option>
+                        </optgroup>
+                        <optgroup label="North Dakota">
+                            <option value="KBIS">Bismarck, ND</option>
+                            <option value="KMVX">Grand Forks, ND</option>
+                            <option value="KMBX">Minot AFB, ND</option>
+                        </optgroup>
+                        <optgroup label="Ohio">
+                            <option value="KILN">Cincinnati/Wilmington, OH</option>
+                            <option value="KCLE">Cleveland, OH</option>
+                        </optgroup>
+                        <optgroup label="Oklahoma">
+                            <option value="KFDR">Frederick/Altus AFB, OK</option>
+                            <option value="KTLX">Oklahoma City, OK</option>
+                            <option value="KINX">Tulsa, OK</option>
+                            <option value="KVNX">Vance AFB, OK</option>
+                        </optgroup>
+                        <optgroup label="Oregon">
+                            <option value="KMAX">Medford, OR</option>
+                            <option value="KPDT">Pendleton, OR</option>
+                            <option value="KRTX">Portland, OR</option>
+                        </optgroup>
+                        <optgroup label="Pennsylvania">
+                            <option value="KDIX">Philadelphia, PA</option>
+                            <option value="KPBZ">Pittsburgh, PA</option>
+                            <option value="KCCX">State College, PA</option>
+                        </optgroup>
+                        <optgroup label="Puerto Rico">
+                            <option value="TJUA">San Juan, PR</option>
+                        </optgroup>
+                        <optgroup label="South Carolina">
+                            <option value="KCLX">Charleston, SC</option>
+                            <option value="KCAE">Columbia, SC</option>
+                            <option value="KGSP">Greer, SC</option>
+                        </optgroup>
+                        <optgroup label="South Dakota">
+                            <option value="KABR">Aberdeen, SD</option>
+                            <option value="KUDX">Rapid City, SD</option>
+                            <option value="KFSD">Sioux Falls, SD</option>
+                        </optgroup>
+                        <optgroup label="South Korea">
+                            <option value="RKSG">Camp Humphreys, KO</option>
+                            <option value="RKJK">Kunsan, KO</option>
+                        </optgroup>
+                        <optgroup label="Tennessee">
+                            <option value="KMRX">Knoxville/Morristown, TN</option>
+                            <option value="KNQA">Memphis, TN</option>
+                            <option value="KOHX">Nashville, TN</option>
+                        </optgroup>
+                        <optgroup label="Texas">
+                            <option value="KAMA">Amarillo, TX</option>
+                            <option value="KBRO">Brownsville, TX</option>
+                            <option value="KGRK">Central Texas/Ft Hood, TX</option>
+                            <option value="KCRP">Corpus Christi, TX</option>
+                            <option value="KDYX">Dyess AFB, TX</option>
+                            <option value="KEPZ">El Paso, TX</option>
+                            <option value="KFWS">Ft Worth, TX</option>
+                            <option value="KHGX">Houston, TX</option>
+                            <option value="KDFX">Laughlin AFB, TX</option>
+                            <option value="KLBB">Lubbock, TX</option>
+                            <option value="KMAF">Midland/Odessa, TX</option>
+                            <option value="KSJT">San Angelo, TX</option>
+                            <option value="KEWX">San Antonio, TX</option>
+                        </optgroup>
+                        <optgroup label="Utah">
+                            <option value="KICX">Cedar City, UT</option>
+                            <option value="KMTX">Salt Lake City, UT</option>
+                        </optgroup>
+                        <optgroup label="Vermont">
+                            <option value="KCXX">Burlington, VT</option>
+                        </optgroup>
+                        <optgroup label="Virginia">
+                            <option value="KFCX">Blacksburg, VA</option>
+                            <option value="KLWX">Sterling, VA</option>
+                            <option value="KAKQ">Wakefield, VA</option>
+                        </optgroup>
+                        <optgroup label="Washington">
+                            <option value="KLGX">Langley Hill, WA</option>
+                            <option value="KATX">Seattle, WA</option>
+                            <option value="KOTX">Spokane, WA</option>
+                        </optgroup>
+                        <optgroup label="West Virginia">
+                            <option value="KRLX">Charleston, WV</option>
+                        </optgroup>
+                        <optgroup label="Wisconsin">
+                            <option value="KGRB">Green Bay, WI</option>
+                            <option value="KARX">La Crosse, WI</option>
+                            <option value="KMKX">Milwaukee, WI</option>
+                        </optgroup>
+                        <optgroup label="Wyoming">
+                            <option value="KCYS">Cheyenne, WY</option>
+                            <option value="KRIW">Riverton, WY</option>
+                        </optgroup>
+                    </select>
+
+                    <label for="radar-level">Level</label>
+                    <select id="radar-level">
+                        <option value="Level 3">Level 3</option>
+                        <option value="Level 2">Level 2</option>
+                    </select>
+
+                    <label for="radar-product-l3">Product</label>
+                    <select id="radar-product-l3">
+                        <option value="N0B">Super-Res Base Reflectivity</option>
+                        <option value="N0G">Super-Res Base Velocity</option>
+                        <option value="N0M">Correlation Coefficient</option>
+                        <option value="NBU">Differential Reflectivity</option>
+                        <option value="N0H">Hydrometeor Classification</option>
+                        <option value="DVL">Vertically Integrated Liquid</option>
+                        <option value="NET">Echo Tops</option>
+                        <option value="DHR">1-Hour Precipitation</option>
+                        <option value="DPA">Digital Precipitation Array</option>
+                        <option value="DTA">Storm Total Precipitation</option>
+                    </select>
+                    <select id="radar-product-l2" style="display:none;">
+                        <option value="reflectivity">Reflectivity</option>
+                        <option value="velocity">Velocity</option>
+                        <option value="cross_correlation_ratio">Correlation Coeff</option>
+                    </select>
+
+                    <div id="radar-sm-inline-controls" style="display:none;">
+                        <label for="radar-storm-motion-controls" style="padding-top: 0.5rem;">Storm Relative
+                            Velocity Adjustment</label>
+                        <label for="radar-sm-speed">Speed</label>
+                        <input id="radar-sm-speed" type="range" min="0" max="120" step="1">
+                        <label for="radar-sm-dir">Direction</label>
+                        <input id="radar-sm-dir" type="range" min="0" max="359" step="1">
+                    </div>
+
+                    <label for="radar-source">Source</label>
+                    <select id="radar-source">
+                        <option value="aws">AWS</option>
+                        <option value="gcp">GCP</option>
+                        <option value="thredds">THREDDS</option>
+                    </select>
+                </div>
+
+                <div class="style-group" id="radar-lookback-controls" data-collapsed-default="false">
+                    <h3 class="group-title">Short Term Lookback</h3>
+                    <label for="radar-quick-range">Time Window</label>
+                    <select id="radar-quick-range">
+                        <option value="current" selected>Current (latest scan)</option>
+                        <option value="0.5">Last 30 min</option>
+                        <option value="1">Last 1 hour</option>
+                        <option value="1.5">Last 90 min</option>
+                        <option value="2">Last 2 hours</option>
+                        <option value="3">Last 3 hours</option>
+                        <option value="custom">Custom (set dates below)</option>
+                    </select>
+                </div>
+
+                <div class="style-group" id="radar-time-controls" data-collapsed-default="true">
+                    <h3 class="group-title">Archive Time Settings</h3>
+                    <label for="radar-user-tz">User Timezone</label>
+                    <input id="radar-user-tz" type="text">
+
+                    <div class="checkbox-row">
+                        <label for="radar-single-frame">Single Frame Only</label>
+                        <input id="radar-single-frame" type="checkbox">
+                    </div>
+
+                    <label for="radar-date-from">Date From (UTC)</label>
+                    <input id="radar-date-from" type="datetime-local">
+
+                    <div id="radar-date-to-group">
+                        <label for="radar-date-to">Date To (UTC)</label>
+                        <input id="radar-date-to" type="datetime-local">
+                    </div>
+
+                    <div id="radar-utc-preview"
+                        style="font-size:11px; color:#7ecfff; padding:4px 8px; margin-top:6px; background:rgba(30,60,90,0.3); border:1px solid rgba(126,207,255,0.2); border-radius:4px;">
+                    </div>
+                </div>
+
+                <div class="style-group" id="radar-animation-controls" data-collapsed-default="true">
+                    <h3 class="group-title">Animation Settings</h3>
+                    <label for="radar-frames">Frames</label>
+                    <input id="radar-frames" type="range" min="1" max="150" step="1">
+                    <label for="radar-fps">FPS</label>
+                    <input id="radar-fps" type="range" min="1" max="30" step="1">
+                </div>
+
+
+
+                <div class="style-group" id="radar-extent-controls" data-collapsed-default="true">
+                    <h3 class="group-title">Map Extent</h3>
+                    <label for="radar-extent-mode">Extent Mode</label>
+                    <input id="radar-extent-mode" type="range" min="0" max="1" step="1">
+                    <div class="extent-mode-labels">
+                        <span>Full</span>
+                        <span>Custom</span>
+                    </div>
+
+                    <div id="radar-extent-custom-controls" class="extent-custom-only">
+                        <button id="radar-open-map" class="secondary" type="button">Select Extent on
+                            Map</button>
+
+                        <div class="extent-bounds-grid">
+                            <div class="extent-bound-field">
+                                <label for="radar-n">North</label>
+                                <input id="radar-n" type="number" step="0.01">
+                            </div>
+                            <div class="extent-bound-field">
+                                <label for="radar-s">South</label>
+                                <input id="radar-s" type="number" step="0.01">
+                            </div>
+                            <div class="extent-bound-field">
+                                <label for="radar-e">East</label>
+                                <input id="radar-e" type="number" step="0.01">
+                            </div>
+                            <div class="extent-bound-field">
+                                <label for="radar-w">West</label>
+                                <input id="radar-w" type="number" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="radar-generate" class="primary" type="button">Generate Archive</button>
+            </aside>
+
+            <aside class="style-panel">
+                <h2 class="section-title">Layer Controls</h2>
+
+                <div id="layered-layer-controls" style="display:none;">
+                    <div class="style-group" id="radar-layer-visibility-controls">
+                        <h3 class="group-title">Layer Visibility</h3>
+                        <div class="checkbox-row"><label for="layered-show-radar">Radar Layer</label><input
+                                id="layered-show-radar" type="checkbox" checked></div>
+                        <input id="layered-opacity-radar" type="range" min="0" max="1" step="0.05" value="1">
+                        <div class="checkbox-row"><label for="layered-show-alerts">Alerts Layer</label><input
+                                id="layered-show-alerts" type="checkbox" checked></div>
+                        <input id="layered-opacity-alerts" type="range" min="0" max="1" step="0.05" value="0.9">
+                        <div class="checkbox-row"><label for="layered-show-cities">Cities Layer</label><input
+                                id="layered-show-cities" type="checkbox" checked></div>
+                        <input id="layered-opacity-cities" type="range" min="0" max="1" step="0.05" value="1">
+                        <div class="checkbox-row"><label for="layered-show-counties">County Lines Layer</label><input
+                                id="layered-show-counties" type="checkbox" checked></div>
+                        <input id="layered-opacity-counties" type="range" min="0" max="1" step="0.05" value="1">
+                        <div class="checkbox-row"><label for="layered-show-states">State Outlines Layer</label><input
+                                id="layered-show-states" type="checkbox" checked></div>
+                        <input id="layered-opacity-states" type="range" min="0" max="1" step="0.05" value="1">
+                        <div class="checkbox-row"><label for="layered-show-rings">Range Rings Layer</label><input
+                                id="layered-show-rings" type="checkbox" checked></div>
+                        <input id="layered-opacity-rings" type="range" min="0" max="1" step="0.05" value="1">
+                    </div>
+                </div>
+
+                <div class="style-group" id="radar-layer-controls-note">
+                    <h3 class="group-title">Layers</h3>
+                    <p>Layer controls will appear when output is generated.</p>
+                </div>
+            </aside>
+
+            <main class="display-area">
+                <div id="progress-container">
+                    <div id="progress-bar"></div>
+                    <span id="progress-message"></span>
+                </div>
+                <div class="output-meta-row">
+                    <span class="output-meta-label">Last Output</span>
+                    <span id="source-badge" class="output-meta-badge">Source: --</span>
+                    <span id="data-mode-badge" class="output-meta-badge">Data Mode: --</span>
+                </div>
+                <div id="layered-controls" class="layered-controls" style="display:none;">
+                    <button id="layered-step-back" class="scrubber-btn" type="button"
+                        title="Previous frame">&larr;</button>
+                    <input id="layered-scrubber" type="range" min="0" max="0" step="1" value="0">
+                    <button id="layered-step-fwd" class="scrubber-btn" type="button" title="Next frame">&rarr;</button>
+                    <span id="layered-timestamp" class="layered-timestamp"></span>
+                    <button id="layered-save-current" class="secondary scrubber-action-btn" type="button">Save
+                        Frame</button>
+                    <button id="layered-export-animation" class="secondary scrubber-action-btn" type="button">Export
+                        MP4</button>
+                </div>
+
+                <div id="result-layered-container">
+                    <img id="result-basemap-image" alt="Radar archive basemap">
+                    <img id="result-radar-image" alt="Radar archive radar frame">
+                    <img id="result-alerts-image" alt="Radar archive alerts frame">
+                    <img id="result-cities-image" alt="Radar archive cities frame">
+                    <img id="result-rings-overlay-image" alt="Radar archive range rings overlay frame">
+                    <img id="result-counties-overlay-image" alt="Radar archive county lines overlay frame">
+                    <img id="result-states-overlay-image" alt="Radar archive state outlines overlay frame">
+                    <img id="result-static-overlay-image" alt="Radar archive static overlay frame">
+                    <img id="result-legend-overlay-image" alt="Radar archive legend overlay frame">
+                    <img id="result-hud-right-image" alt="Radar archive timestamp overlay frame">
+                </div>
+                <img id="result-image" alt="Generated radar archive image">
+                <video id="result-video" controls></video>
+
+                <div id="status-message"></div>
+            </main>
+        </div>
+
+        <div id="map-modal" class="modal-overlay">
+            <div class="modal-content">
+                <div id="leaflet-map"></div>
+                <button id="map-modal-close" class="secondary" type="button">Close</button>
+            </div>
+        </div>
+
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+        <script src="js/shared.js"></script>
+        <script src="js/radar.js"></script>
+        <script>initNav('radar');</script>
+    </body>
+
+</html>
