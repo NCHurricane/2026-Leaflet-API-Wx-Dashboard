@@ -1,769 +1,700 @@
 (function () {
     'use strict';
 
-    // ── State ────────────────────────────────────────────────────────────────
-    let currentData = null;        // last API response
-    let currentFrames = [];        // frames[] array
-    let currentLayersPath = '';    // session layers_path
-    let _spcLastTouched = 'convective'; // which SPC dropdown was last changed
-    let _spcItemBoundsMap = {};    // { itemId: {w,e,s,n} } from spc-items API
-
     const byId = (id) => document.getElementById(id);
 
-    // ── MRMS sub-product dropdown helpers ────────────────────────────────────
-    const _MRMS_SUB_GROUPS = {
-        'RotationTrack': ['weather-mrms-rotation-group'],
-        'MESH':          ['weather-mrms-mesh-group'],
-        'AzShear':       ['weather-mrms-azshear-group'],
-        'EchoTop':       ['weather-mrms-echotop-group'],
-        'VIL':           ['weather-mrms-vil-group'],
-        'QPE':           ['weather-mrms-qpe-group'],
-        'Reflectivity':  ['weather-mrms-refl-group'],
-        'Lightning':     ['weather-mrms-lightning-group'],
-        'Model':         ['weather-mrms-model-group'],
+    // ── State Bounds [west, east, south, north] from geo_config.py ──────────
+    // Leaflet fitBounds expects [[south, west], [north, east]]
+    const STATE_BOUNDS = {
+        CONUS: [-125, -70, 21, 52],
+        AL: [-89.0, -84.4, 29.8, 35.7], AK: [-179.5, -129.6, 50.8, 71.8],
+        AZ: [-115.8, -107.7, 29.7, 38.3], AR: [-95.0, -89.3, 32.7, 36.9],
+        CA: [-124.9, -113.8, 32.2, 42.4], CO: [-109.4, -101.7, 36.6, 41.4],
+        CT: [-74.1, -71.4, 40.6, 42.4],  DE: [-76.1, -74.7, 38.1, 40.2],
+        FL: [-88.0, -79.6, 24.0, 31.4],  GA: [-86.0, -80.4, 30.0, 35.4],
+        HI: [-160.6, -154.2, 18.2, 22.8], ID: [-117.6, -110.7, 41.6, 49.4],
+        IL: [-91.9, -87.1, 36.6, 42.9],  IN: [-88.4, -84.4, 37.4, 42.1],
+        IA: [-97.0, -89.8, 40.0, 43.9],  KS: [-102.4, -94.2, 36.6, 40.4],
+        KY: [-89.9, -81.6, 36.1, 39.5],  LA: [-94.4, -88.4, 28.5, 33.4],
+        ME: [-71.4, -66.5, 42.7, 47.8],  MD: [-79.8, -74.7, 37.5, 40.1],
+        MA: [-73.9, -69.5, 40.8, 43.2],  MI: [-90.8, -82.0, 41.3, 48.7],
+        MN: [-97.6, -89.1, 43.1, 49.7],  MS: [-92.0, -87.7, 29.8, 35.4],
+        MO: [-96.1, -88.7, 35.6, 41.0],  MT: [-116.4, -103.7, 44.0, 49.4],
+        NE: [-104.4, -94.9, 39.6, 43.4], NV: [-120.4, -113.7, 34.7, 42.4],
+        NH: [-72.9, -70.3, 42.3, 45.7],  NJ: [-75.9, -73.5, 38.6, 41.7],
+        NM: [-109.4, -102.7, 31.0, 37.4], NY: [-80.1, -71.4, 40.1, 45.4],
+        NC: [-84.8, -74.7, 33.2, 37.3],  ND: [-104.4, -96.2, 45.6, 49.4],
+        OH: [-85.2, -80.2, 38.1, 42.3],  OK: [-103.4, -94.1, 33.3, 37.4],
+        OR: [-124.9, -116.1, 41.6, 46.6], PA: [-80.9, -74.3, 39.4, 42.6],
+        RI: [-72.2, -70.8, 40.8, 42.4],  SC: [-83.7, -78.1, 31.7, 35.6],
+        SD: [-104.4, -96.1, 42.1, 46.3], TN: [-90.7, -81.3, 34.6, 37.0],
+        TX: [-107.0, -93.1, 25.5, 36.9], UT: [-114.4, -108.7, 36.6, 42.4],
+        VT: [-73.8, -71.1, 42.4, 45.4],  VA: [-84.0, -74.8, 36.2, 39.8],
+        WA: [-125.2, -116.6, 45.2, 49.4], WV: [-83.0, -77.4, 36.8, 41.0],
+        WI: [-93.2, -86.4, 42.1, 47.4],  WY: [-111.4, -103.7, 40.6, 45.4],
     };
-    const _ALL_MRMS_SUB_GROUPS = Object.values(_MRMS_SUB_GROUPS).flat();
 
-    function updateMrmsSubControls() {
-        const family = byId('weather-mrms-product')?.value || '';
-        const activeGroups = _MRMS_SUB_GROUPS[family] || [];
-        _ALL_MRMS_SUB_GROUPS.forEach((id) => {
-            const el = byId(id);
-            if (el) el.style.display = activeGroups.includes(id) ? '' : 'none';
-        });
-        // QPE: show/hide RadarOnly-specific period options
-        const qpePeriod = byId('weather-mrms-qpe-period');
-        const isRO = (byId('weather-mrms-qpe-source')?.value || '') === 'RO';
-        if (qpePeriod) {
-            for (const opt of qpePeriod.options) {
-                if (opt.value === '15M' || opt.value === 'Since12Z') {
-                    opt.style.display = isRO ? '' : 'none';
-                    opt.disabled = !isRO;
-                }
-            }
-            if (!isRO && (qpePeriod.value === '15M' || qpePeriod.value === 'Since12Z')) {
-                qpePeriod.value = '01H';
-            }
+    function leafletBounds(code) {
+        const b = STATE_BOUNDS[code];
+        if (!b) return null;
+        return [[b[2], b[0]], [b[3], b[1]]]; // [[south, west], [north, east]]
+    }
+
+    // ── SPC risk colors ──────────────────────────────────────────────────────
+    const SPC_CAT_COLORS = {
+        TSTM: { fill: '#b5dcb3', stroke: '#5a9e61' },
+        MRGL: { fill: '#69bb6d', stroke: '#2d7a32' },
+        SLGT: { fill: '#f5dd72', stroke: '#c8a000' },
+        ENH:  { fill: '#ff9d2e', stroke: '#c85a00' },
+        MDT:  { fill: '#ff4f4f', stroke: '#a00000' },
+        HIGH: { fill: '#ff66ff', stroke: '#880088' },
+    };
+
+    const SPC_PROB_COLORS = {
+        '2':  { fill: '#b5dcb3', stroke: '#5a9e61' },
+        '5':  { fill: '#69bb6d', stroke: '#2d7a32' },
+        '10': { fill: '#f5dd72', stroke: '#c8a000' },
+        '15': { fill: '#ff9d2e', stroke: '#c85a00' },
+        '30': { fill: '#ff4f4f', stroke: '#a00000' },
+        '45': { fill: '#ff66ff', stroke: '#880088' },
+        '60': { fill: '#ff00ff', stroke: '#880088' },
+    };
+
+    const SPC_FIRE_COLORS = {
+        'Elevated':            { fill: '#FFBF80', stroke: '#FF7F00' },
+        'Critical':            { fill: '#FF8080', stroke: '#FF0000' },
+        'Extremely Critical':  { fill: '#FF80FF', stroke: '#FF00FF' },
+        'Isolated':            { fill: '#FFBF80', stroke: '#FF7F00' },
+        'Scattered':           { fill: '#FF8080', stroke: '#FF0000' },
+    };
+
+    // ── Alert colors (key event types) ──────────────────────────────────────
+    const ALERT_COLORS = {
+        'Tornado Warning':            '#FF0000',
+        'Tornado Watch':              '#FFFF00',
+        'Severe Thunderstorm Warning':'#FFA500',
+        'Severe Thunderstorm Watch':  '#DB7093',
+        'Flash Flood Warning':        '#8B0000',
+        'Flash Flood Watch':          '#2E8B57',
+        'Flood Warning':              '#00FF00',
+        'Flash Flood Statement':      '#8B0000',
+        'Winter Storm Warning':       '#FF69B4',
+        'Blizzard Warning':           '#FF4500',
+        'Ice Storm Warning':          '#8B008B',
+        'Winter Weather Advisory':    '#7B68EE',
+        'Hurricane Warning':          '#DC143C',
+        'Hurricane Watch':            '#FF00FF',
+        'Tropical Storm Warning':     '#B22222',
+        'Tropical Storm Watch':       '#F08080',
+        'Storm Surge Warning':        '#B524F7',
+        'High Wind Warning':          '#DAA520',
+        'Wind Advisory':              '#D2B48C',
+        'Red Flag Warning':           '#FF1493',
+        'Extreme Heat Warning':       '#C71585',
+        'Heat Advisory':              '#FF7F50',
+        'Dense Fog Advisory':         '#708090',
+        'Freeze Warning':             '#483D8B',
+        'Special Marine Warning':     '#FFA500',
+        'Gale Warning':               '#DDA0DD',
+    };
+    const ALERT_DEFAULT = '#6699cc';
+
+    // ── Alert category filter map ────────────────────────────────────────────
+    const ALERT_CATEGORIES = {
+        'Severe Weather Alerts':    ['Tornado Warning','Tornado Watch','Severe Thunderstorm Warning','Severe Thunderstorm Watch'],
+        'Severe Weather Warnings':  ['Tornado Warning','Severe Thunderstorm Warning','Flash Flood Warning'],
+        'Tropical Cyclone Alerts':  ['Hurricane Warning','Hurricane Watch','Tropical Storm Warning','Tropical Storm Watch','Storm Surge Warning'],
+        'Hydrology Alerts':         ['Flood Warning','Flash Flood Warning','Flash Flood Watch','Flash Flood Statement'],
+        'Flash Flood Alerts':       ['Flash Flood Warning','Flash Flood Watch','Flash Flood Statement'],
+        'Winter Alerts':            ['Winter Storm Warning','Blizzard Warning','Ice Storm Warning','Winter Weather Advisory','Lake Effect Snow Warning'],
+        'Cold Alerts':              ['Extreme Cold Warning','Freeze Warning','Frost Advisory','Cold Weather Advisory'],
+        'Fire Alerts':              ['Red Flag Warning','Fire Warning'],
+        'Heat Alerts':              ['Extreme Heat Warning','Heat Advisory'],
+        'Coastal Alerts':           ['Storm Surge Warning','Storm Surge Watch','High Surf Warning','Coastal Flood Warning'],
+        'Marine Alerts':            ['Special Marine Warning','Gale Warning','Storm Warning','Hazardous Seas Warning'],
+        'Non-Precipitation Alerts': ['High Wind Warning','Wind Advisory','Dense Fog Advisory','Extreme Wind Warning'],
+    };
+
+    function matchesCategory(feat, category) {
+        if (!category || category === 'All Alerts') return true;
+        const events = ALERT_CATEGORIES[category];
+        return events ? events.includes(feat?.properties?.event || '') : true;
+    }
+
+    // ── Map init ─────────────────────────────────────────────────────────────
+    const tileOptions = {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19,
+    };
+    const tilesDark  = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', tileOptions);
+    const tilesLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', tileOptions);
+
+    const map = L.map('weather-map', { layers: [tilesDark] });
+    map.fitBounds([[21, -125], [52, -70]]);
+
+    L.control.layers({ 'Dark': tilesDark, 'Light': tilesLight }, {}, { position: 'topright' }).addTo(map);
+
+    // ── Layer state ──────────────────────────────────────────────────────────
+    let alertsLayer  = null;
+    let spcLayer     = null;
+    let legendCtrl   = null;
+    let alertsOpacity = 0.75;
+    let spcOpacity    = 0.60;
+
+    // ── Style functions ──────────────────────────────────────────────────────
+    function alertStyle(feat) {
+        const color = ALERT_COLORS[feat?.properties?.event || ''] || ALERT_DEFAULT;
+        return { color, weight: 1.5, fillColor: color, fillOpacity: alertsOpacity * 0.5, opacity: 0.9 };
+    }
+
+    function spcCatStyle(feat) {
+        const label = (feat?.properties?.LABEL || feat?.properties?.label || '').toUpperCase();
+        const c = SPC_CAT_COLORS[label] || { fill: '#aaaaaa', stroke: '#555' };
+        return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: 1 };
+    }
+
+    function spcFireStyle(feat) {
+        const label = feat?.properties?.LABEL || feat?.properties?.label || '';
+        const c = SPC_FIRE_COLORS[label] || { fill: '#aaaaaa', stroke: '#555' };
+        return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: 1 };
+    }
+
+    function spcProbStyle(feat) {
+        const dn = String(feat?.properties?.dn || feat?.properties?.DN || '');
+        const label = (feat?.properties?.LABEL || '').replace('%', '');
+        const key = dn || label;
+        const c = SPC_PROB_COLORS[key] || { fill: '#aaaaaa', stroke: '#555' };
+        return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: 1 };
+    }
+
+    // ── Popup builders ───────────────────────────────────────────────────────
+    function alertPopup(feat) {
+        const p = feat.properties || {};
+        const event    = p.event    || 'Unknown Alert';
+        const headline = p.headline || '';
+        const expires  = p.expires  ? new Date(p.expires).toLocaleString() : '';
+        const area     = p.areaDesc || '';
+        return `<strong>${event}</strong><br>${headline}${expires ? '<br><em>Expires: ' + expires + '</em>' : ''}<br><small>${area}</small>`;
+    }
+
+    function spcPopup(feat) {
+        const p     = feat.properties || {};
+        const label = p.LABEL2 || p.label2 || p.LABEL || p.label || p.dn || '';
+        return `<strong>${label}</strong>`;
+    }
+
+    // ── Legend helpers ───────────────────────────────────────────────────────
+    function setLegend(html) {
+        if (legendCtrl) { map.removeControl(legendCtrl); legendCtrl = null; }
+        if (!html) return;
+        legendCtrl = L.control({ position: 'bottomright' });
+        legendCtrl.onAdd = () => {
+            const div = L.DomUtil.create('div', 'map-legend');
+            div.innerHTML = html;
+            L.DomEvent.disableScrollPropagation(div);
+            return div;
+        };
+        legendCtrl.addTo(map);
+    }
+
+    function swatch(color, label) {
+        return `<div class="legend-row"><span class="legend-swatch" style="background:${color}"></span>${label}</div>`;
+    }
+
+    function buildAlertsLegend(features) {
+        const events = [...new Set(features.map(f => f.properties?.event).filter(Boolean))];
+        if (!events.length) { setLegend(null); return; }
+        const rows = events.map(e => swatch(ALERT_COLORS[e] || ALERT_DEFAULT, e)).join('');
+        setLegend('<h4>Active Alerts</h4>' + rows);
+    }
+
+    function buildSpcCatLegend() {
+        const rows = [
+            ['#ff66ff','High'], ['#ff4f4f','Moderate'], ['#ff9d2e','Enhanced'],
+            ['#f5dd72','Slight'], ['#69bb6d','Marginal'], ['#b5dcb3','T-Storms'],
+        ].map(([c, l]) => swatch(c, l)).join('');
+        setLegend('<h4>SPC Categorical</h4>' + rows);
+    }
+
+    function buildSpcFireLegend(hazard) {
+        if (hazard === 'dryt') {
+            const rows = [swatch('#FF8080','Scattered Dry T-Storm'), swatch('#FFBF80','Isolated Dry T-Storm')].join('');
+            setLegend('<h4>SPC Fire Wx (Dry T-Storm)</h4>' + rows);
+        } else {
+            const rows = [swatch('#FF80FF','Extremely Critical'), swatch('#FF8080','Critical'), swatch('#FFBF80','Elevated')].join('');
+            setLegend('<h4>SPC Fire Wx (Wind/RH)</h4>' + rows);
         }
     }
 
-    function composeMrmsProductKey() {
-        const family = byId('weather-mrms-product')?.value || '';
-        switch (family) {
-            case 'RotationTrack':
-                return `RotationTrack_${byId('weather-mrms-rotation-level')?.value || 'LL'}_${byId('weather-mrms-rotation-time')?.value || '60min'}`;
-            case 'MESH':
-                return `MESH_${byId('weather-mrms-mesh-time')?.value || 'Instant'}`;
-            case 'AzShear':
-                return `AzShear_${byId('weather-mrms-azshear-level')?.value || 'Low'}`;
-            case 'EchoTop':
-                return `EchoTop_${byId('weather-mrms-echotop-threshold')?.value || '18'}`;
-            case 'VIL':
-                return `VIL_${byId('weather-mrms-vil-type')?.value || 'Instant'}`;
-            case 'QPE':
-                return `QPE_${byId('weather-mrms-qpe-source')?.value || 'MS2'}_${byId('weather-mrms-qpe-period')?.value || '01H'}`;
-            case 'Reflectivity':
-                return `Refl_${byId('weather-mrms-refl-variant')?.value || 'HSR'}`;
-            case 'Lightning':
-                return `Lightning_${byId('weather-mrms-lightning-window')?.value || '30min'}`;
-            case 'Model':
-                return `Model_${byId('weather-mrms-model-field')?.value || 'FreezingLevel'}`;
-            default:
-                return family; // standalone products (PrecipRate, PrecipFlag, SHI, POSH, RadarQualityIndex)
+    // ── Data loaders ─────────────────────────────────────────────────────────
+    function setStatus(msg) {
+        const el = byId('weather-map-status');
+        if (el) el.textContent = msg;
+    }
+
+    async function loadAlerts(category) {
+        if (alertsLayer) { map.removeLayer(alertsLayer); alertsLayer = null; }
+        setStatus('Loading alerts...');
+        try {
+            const resp = await fetch(apiUrl('/api/data/alerts'));
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const geojson = await resp.json();
+
+            let features = (geojson.features || []).filter(f => matchesCategory(f, category));
+            alertsLayer = L.geoJSON({ type: 'FeatureCollection', features }, {
+                style: alertStyle,
+                onEachFeature: (feat, layer) => layer.bindPopup(alertPopup(feat)),
+            });
+
+            if (byId('weather-show-alerts')?.checked !== false) alertsLayer.addTo(map);
+            buildAlertsLegend(features);
+
+            const countEl = byId('weather-alerts-count');
+            if (countEl) countEl.textContent = `${features.length} active alert(s)`;
+            setStatus(`Alerts updated — ${new Date().toLocaleTimeString()}`);
+        } catch (err) {
+            console.error('[alerts] Load error:', err);
+            setStatus(`Alerts error: ${err.message}`);
         }
+    }
+
+    async function loadSpc(day, hazard) {
+        if (spcLayer) { map.removeLayer(spcLayer); spcLayer = null; }
+        const isFireHazard = hazard === 'windrh' || hazard === 'dryt';
+        setStatus(`Loading SPC Day ${day} ${hazard}...`);
+        try {
+            const resp = await fetch(apiUrl(`/api/data/spc?day=${day}&hazard=${hazard}`));
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const geojson = await resp.json();
+
+            const styleFn = isFireHazard ? spcFireStyle
+                          : hazard === 'prob' ? spcProbStyle
+                          : spcCatStyle;
+
+            spcLayer = L.geoJSON(geojson, {
+                style: styleFn,
+                filter: (feat) => isFireHazard
+                    ? feat.properties?.dn !== 0
+                    : true,
+                onEachFeature: (feat, layer) => layer.bindPopup(spcPopup(feat)),
+            });
+
+            if (byId('weather-show-spc')?.checked !== false) spcLayer.addTo(map);
+
+            if (isFireHazard) buildSpcFireLegend(hazard);
+            else if (hazard === 'cat') buildSpcCatLegend();
+            else setLegend(null);
+
+            const count = (geojson.features || []).length;
+            const countEl = byId('weather-spc-count');
+            if (countEl) countEl.textContent = `${count} feature(s)`;
+            setStatus(`SPC Day ${day} ${hazard} updated — ${new Date().toLocaleTimeString()}`);
+        } catch (err) {
+            console.error('[spc] Load error:', err);
+            setStatus(`SPC error: ${err.message}`);
+        }
+    }
+
+    // ── Region → fitBounds ───────────────────────────────────────────────────
+    function fitRegion(code) {
+        const b = leafletBounds((code || 'CONUS').toUpperCase());
+        if (b) map.fitBounds(b);
     }
 
     // ── Product group switching ──────────────────────────────────────────────
     function updateProductOpts() {
-        const group = byId('weather-product-group').value;
-        document.querySelectorAll('.weather-product-opts').forEach((el) => {
-            el.style.display = 'none';
-        });
+        const group = byId('weather-product-group')?.value || 'alerts';
+        document.querySelectorAll('.weather-product-opts').forEach(el => { el.style.display = 'none'; });
         const target = byId(`weather-${group}-opts`);
-        if (target) {
-            target.style.display = '';
-        }
-        updateSpcConvective();
-        if (typeof updateReportDayVisibility === 'function') updateReportDayVisibility();
+        if (target) target.style.display = '';
     }
 
-    function getSelectedProduct() {
-        const group = byId('weather-product-group').value;
-        if (group === 'spc') {
-            // SPC has three dropdowns; use whichever was last touched
-            if (_spcLastTouched === 'other') {
-                return byId('weather-spc-product')?.value || '';
-            }
-            if (_spcLastTouched === 'fire') {
-                return byId('weather-spc-fire')?.value || '';
-            }
-            return byId('weather-spc-convective')?.value || '';
+    function refreshActiveLayers() {
+        const group = byId('weather-product-group')?.value || 'alerts';
+        if (group === 'alerts') {
+            const cat = byId('weather-alerts-product')?.value || 'All Alerts';
+            loadAlerts(cat);
+        } else if (group === 'spc') {
+            refreshSpc();
+        } else if (group === 'surface') {
+            const region = byId('weather-region')?.value || 'NC';
+            const product = byId('weather-surface-product')?.value || 'temperature';
+            loadSurface(region, product);
+        } else if (group === 'mrms') {
+            loadMrms();
         }
-        if (group === 'mrms') {
-            return composeMrmsProductKey();
-        }
-        const sel = byId(`weather-${group}-product`);
-        return sel ? sel.value : '';
     }
 
-    // ── SPC day-driven convective outlook filtering ────────────────────────
-    // Day determines which convective outlooks are available:
-    //   Day 1-2: cat, torn, wind, hail
-    //   Day 3:   cat, prob
-    //   Day 4-8: cat only
-    // Watches/MDs/Reports are in a separate dropdown, visible only on Day 1.
-    const _SPC_CONVECTIVE_BY_DAY = {
-        1: ['cat', 'torn', 'wind', 'hail'],
-        2: ['cat', 'torn', 'wind', 'hail'],
-        3: ['cat', 'prob'],
-    };
-    for (let d = 4; d <= 8; d++) {
-        _SPC_CONVECTIVE_BY_DAY[d] = ['cat'];
-    }
+    // SPC: determine which dropdown was last used
+    let _spcLastTouched = 'convective';
 
-    const _SPC_CONVECTIVE_LABELS = {
-        cat: 'Categorical',
-        torn: 'Tornado',
-        wind: 'Wind',
-        hail: 'Hail',
-        prob: 'Probabilistic',
-    };
-
-    function updateSpcConvective() {
-        const sel = byId('weather-spc-convective');
-        const daySel = byId('weather-spc-day');
-        if (!sel || !daySel) return;
-
-        const day = parseInt(daySel.value, 10) || 1;
-        const allowed = _SPC_CONVECTIVE_BY_DAY[day] || ['cat'];
-        const currentVal = sel.value;
-
-        sel.innerHTML = '';
-        // Always add placeholder first
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = '\u2014 Choose Product \u2014';
-        placeholder.disabled = true;
-        sel.appendChild(placeholder);
-        allowed.forEach((val) => {
-            const opt = document.createElement('option');
-            opt.value = val;
-            opt.textContent = _SPC_CONVECTIVE_LABELS[val] || val;
-            sel.appendChild(opt);
-        });
-
-        if (allowed.includes(currentVal)) {
-            sel.value = currentVal;
+    function refreshSpc() {
+        const day = parseInt(byId('weather-spc-day')?.value || '1', 10);
+        let hazard;
+        if (_spcLastTouched === 'fire') {
+            hazard = byId('weather-spc-fire')?.value;
         } else {
-            sel.value = '';
+            hazard = byId('weather-spc-convective')?.value;
         }
-
-        // Other Products (watches/mds/reports) only visible on Day 1
-        const otherSel = byId('weather-spc-product');
-        const otherLabel = otherSel?.previousElementSibling;
-        const showOther = day === 1;
-        if (otherSel) otherSel.style.display = showOther ? '' : 'none';
-        if (otherLabel && otherLabel.tagName === 'LABEL') {
-            otherLabel.style.display = showOther ? '' : 'none';
-        }
-        // If hiding other products, ensure last-touched falls back to convective
-        // and hide any secondary sub-controls (report day, item selector)
-        if (!showOther && _spcLastTouched === 'other') {
-            _spcLastTouched = 'convective';
-            if (otherSel) otherSel.value = '';
-            updateSpcSubControls();
-        }
-
-        // Fire Weather Outlooks – available Day 1-8
-        // (Day 1-2 via SPC static GeoJSON, Day 3-8 via NWS MapServer)
+        if (hazard) loadSpc(day, hazard);
     }
 
-    // ── Quick-range / custom date toggling ───────────────────────────────────
-    function updateDateVisibility() {
-        const quickRange = byId('weather-quick-range').value;
-        const customDates = byId('weather-custom-dates');
-        if (customDates) {
-            customDates.style.display = quickRange === 'custom' ? '' : 'none';
+    // ── Opacity helpers ──────────────────────────────────────────────────────
+    function applyAlertsOpacity(val) {
+        alertsOpacity = parseFloat(val);
+        if (alertsLayer) {
+            alertsLayer.setStyle((feat) => alertStyle(feat));
         }
     }
 
-    // ── Extent mode ──────────────────────────────────────────────────────────
-    function updateExtentVisibility() {
-        const mode = Number(byId('weather-extent-mode')?.value || 0);
-        const custom = byId('weather-extent-custom-controls');
-        if (custom) {
-            custom.style.display = mode === 1 ? 'block' : 'none';
+    function applySpcOpacity(val) {
+        spcOpacity = parseFloat(val);
+        if (spcLayer) {
+            const group = byId('weather-product-group')?.value || '';
+            const hazard = _spcLastTouched === 'fire'
+                ? byId('weather-spc-fire')?.value || ''
+                : byId('weather-spc-convective')?.value || '';
+            const isFireHazard = hazard === 'windrh' || hazard === 'dryt';
+            const styleFn = isFireHazard ? spcFireStyle
+                          : hazard === 'prob' ? spcProbStyle
+                          : spcCatStyle;
+            spcLayer.setStyle(styleFn);
         }
     }
 
-    // ── Build request params ─────────────────────────────────────────────────
-    function buildParams(requestId) {
-        const group = byId('weather-product-group').value;
-        const product = getSelectedProduct();
-        const region = byId('weather-region').value;
-        const quickRange = byId('weather-quick-range').value;
-        const fps = byId('weather-fps')?.value || '4';
-        const frames = byId('weather-frames')?.value || '12';
+    // ── Surface layer state ───────────────────────────────────────────────────
+    let surfaceLayer = null;
+    let surfaceOpacity = 0.9;
+    let _surfaceStations = [];   // full unfiltered station list for re-thinning on zoom
 
-        const params = new URLSearchParams();
-        params.set('request_id', requestId);
-        params.set('product_group', group);
-        params.set('product', product);
-        params.set('region', region);
-        params.set('fps', fps);
-        params.set('frames', frames);
-        params.set('view_mode', 'layers');
-
-        // SPC day parameter
-        if (group === 'spc') {
-            const day = byId('weather-spc-day')?.value || '1';
-            params.set('day', day);
-            if (product === 'reports') {
-                params.set('report_day', byId('weather-report-day')?.value || 'today');
-            }
-            // Item selection for watches/mds
-            if (product === 'watches' || product === 'mds') {
-                const itemId = byId('weather-spc-item')?.value || 'all';
-                if (itemId && itemId !== 'all' && itemId !== 'none') {
-                    params.set('item_id', itemId);
-                    // Auto-set custom extent from stored bounds + 1.5° padding
-                    const bounds = _spcItemBoundsMap[itemId];
-                    if (bounds) {
-                        const pad = 1.5;
-                        params.set('n', String(bounds.n + pad));
-                        params.set('s', String(bounds.s - pad));
-                        params.set('e', String(bounds.e + pad));
-                        params.set('w', String(bounds.w - pad));
-                    }
-                }
-            }
-        }
-
-        // Timezone
-        try {
-            params.set('user_tz', Intl.DateTimeFormat().resolvedOptions().timeZone);
-        } catch (_) { /* ignore */ }
-
-        // Date range
-        if (quickRange === 'custom') {
-            const dateFrom = byId('weather-date-from')?.value;
-            const dateTo = byId('weather-date-to')?.value;
-            if (dateFrom) params.set('date_from', dateFrom);
-            if (dateTo) params.set('date_to', dateTo);
-        } else if (quickRange !== 'current') {
-            const hoursBack = parseFloat(quickRange);
-            if (hoursBack > 0) {
-                const now = new Date();
-                const from = new Date(now.getTime() - hoursBack * 3600_000);
-                params.set('date_from', from.toISOString().slice(0, 16));
-                params.set('date_to', now.toISOString().slice(0, 16));
-            }
-        }
-
-        // Custom extent
-        const extentMode = Number(byId('weather-extent-mode')?.value || 0);
-        if (extentMode === 1) {
-            const n = byId('weather-n')?.value;
-            const s = byId('weather-s')?.value;
-            const e = byId('weather-e')?.value;
-            const w = byId('weather-w')?.value;
-            if (n) params.set('n', n);
-            if (s) params.set('s', s);
-            if (e) params.set('e', e);
-            if (w) params.set('w', w);
-        }
-
-        return params;
-    }
-
-    // ── Layer visibility helpers ─────────────────────────────────────────────
-    function applyLayerVisibility() {
-        const layers = [
-            { imgId: 'result-product-image', checkId: 'weather-show-product', opacityId: 'weather-opacity-product' },
-            { imgId: 'result-legend-image', checkId: 'weather-show-legend', opacityId: 'weather-opacity-legend' },
-            { imgId: 'result-hud-right-image', checkId: 'weather-show-hud-right', opacityId: 'weather-opacity-hud-right' },
-        ];
-
-        layers.forEach(({ imgId, checkId, opacityId }) => {
-            const img = byId(imgId);
-            const check = byId(checkId);
-            const opacity = byId(opacityId);
-            if (!img) return;
-            if (check) {
-                img.style.display = check.checked ? '' : 'none';
-            }
-            if (opacity) {
-                img.style.opacity = opacity.value;
-            }
+    function surfaceMarkerIcon(value, color, unit, opacity) {
+        const label = unit === '°F' || unit === '%' || unit === 'kt'
+            ? Math.round(value)
+            : value.toFixed(1);
+        const alpha = Math.round(opacity * 255).toString(16).padStart(2, '0');
+        return L.divIcon({
+            className: '',
+            html: `<div class="sfc-marker" style="background:${color}${alpha}">${label}</div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
         });
     }
 
-    function bindLayerControls() {
-        ['weather-show-product', 'weather-show-legend', 'weather-show-hud-right'].forEach((id) => {
-            byId(id)?.addEventListener('change', applyLayerVisibility);
-        });
-        ['weather-opacity-product', 'weather-opacity-legend', 'weather-opacity-hud-right'].forEach((id) => {
-            byId(id)?.addEventListener('input', applyLayerVisibility);
-        });
+    function _thinStations(stations) {
+        const zoom = map.getZoom();
+        if (zoom >= 8) return stations;
+        if (zoom >= 6) return stations.filter((_, i) => i % 2 === 0);
+        return stations.filter((_, i) => i % 4 === 0);
     }
 
-    // ── Scrubber ─────────────────────────────────────────────────────────────
-    function updateScrubberFrame(index) {
-        if (!currentFrames.length) return;
-        const frameIndex = Math.max(0, Math.min(index, currentFrames.length - 1));
-        const frame = currentFrames[frameIndex];
+    function _renderSurfaceMarkers(stations) {
+        if (surfaceLayer) { map.removeLayer(surfaceLayer); surfaceLayer = null; }
+        if (!stations.length) return;
 
-        const productImg = byId('result-product-image');
-        const staticOverlayImg = byId('result-static-overlay-image');
-        const hudImg = byId('result-hud-right-image');
-        const legendImg = byId('result-legend-image');
-        const tsLabel = byId('layered-timestamp');
-
-        if (productImg && frame.product_url) {
-            productImg.src = apiUrl(frame.product_url) + '?_ts=' + Date.now();
-        }
-        if (staticOverlayImg) {
-            if (frame.static_overlay_url) {
-                staticOverlayImg.src = apiUrl(frame.static_overlay_url) + '?_ts=' + Date.now();
-                staticOverlayImg.style.display = '';
-            } else {
-                staticOverlayImg.src = '';
-                staticOverlayImg.style.display = 'none';
-            }
-        }
-        if (hudImg && frame.hud_right_url) {
-            hudImg.src = apiUrl(frame.hud_right_url) + '?_ts=' + Date.now();
-        }
-        if (legendImg) {
-            if (frame.legend_url) {
-                legendImg.src = apiUrl(frame.legend_url) + '?_ts=' + Date.now();
-                legendImg.style.display = '';
-            } else {
-                legendImg.src = '';
-                legendImg.style.display = 'none';
-            }
-        }
-        if (tsLabel) {
-            tsLabel.textContent = frame.timestamp_local || frame.timestamp_utc || '';
-        }
+        const thin = _thinStations(stations);
+        surfaceLayer = L.layerGroup(
+            thin.map(s => {
+                const icon = surfaceMarkerIcon(s.value, s.color, s.unit, surfaceOpacity);
+                const m = L.marker([s.lat, s.lon], { icon });
+                const wdir = s.wind_dir != null ? `${Math.round(s.wind_dir)}°` : '—';
+                const wspd = s.wind_speed != null ? `${Math.round(s.wind_speed)} kt` : '—';
+                const gust = s.wind_gust != null ? ` G${Math.round(s.wind_gust)}` : '';
+                const vis  = s.visibility != null ? `${s.visibility} mi` : '—';
+                m.bindPopup(
+                    `<strong>${s.id}</strong><br>` +
+                    `Temp: ${s.temperature != null ? s.temperature + '°F' : '—'}<br>` +
+                    `Feels Like: ${s.feels_like != null ? s.feels_like + '°F' : '—'}<br>` +
+                    `Dew Point: ${s.dew_point != null ? s.dew_point + '°F' : '—'}<br>` +
+                    `RH: ${s.rh != null ? s.rh + '%' : '—'}<br>` +
+                    `Wind: ${wdir} @ ${wspd}${gust}<br>` +
+                    `Visibility: ${vis}`
+                );
+                return m;
+            })
+        );
+        if (byId('weather-show-surface')?.checked !== false) surfaceLayer.addTo(map);
     }
 
-    // ── Display layered result ───────────────────────────────────────────────
-    function showLayeredResult(data) {
-        currentData = data;
-        currentFrames = data.frames || [];
-        currentLayersPath = data.layers_path || '';
-
-        // Hide flat image/video, show layered container
-        const flatImg = byId('result-image');
-        const flatVideo = byId('result-video');
-        if (flatImg) flatImg.style.display = 'none';
-        if (flatVideo) flatVideo.style.display = 'none';
-
-        const container = byId('result-layered-container');
-        if (container) container.style.display = 'block';
-
-        // Basemap
-        const basemapImg = byId('result-basemap-image');
-        if (basemapImg && data.basemap_url) {
-            basemapImg.src = apiUrl(data.basemap_url) + '?_ts=' + Date.now();
-            basemapImg.style.display = '';
-        }
-
-        const staticOverlayImg = byId('result-static-overlay-image');
-        if (staticOverlayImg) {
-            staticOverlayImg.src = '';
-            staticOverlayImg.style.display = 'none';
-        }
-
-        // Layer controls
-        const layerControls = byId('weather-layer-controls');
-        const layerNote = byId('weather-layer-controls-note');
-        if (layerControls) layerControls.style.display = '';
-        if (layerNote) layerNote.style.display = 'none';
-
-        // Show/hide legend controls based on layer_defs
-        const hasLegend = (data.layer_defs || []).some((d) => d.id === 'legend');
-        const legendControlsRow = byId('weather-legend-controls');
-        const legendOpacity = byId('weather-opacity-legend');
-        if (legendControlsRow) legendControlsRow.style.display = hasLegend ? '' : 'none';
-        if (legendOpacity) legendOpacity.style.display = hasLegend ? '' : 'none';
-
-        // Scrubber
-        const scrubber = byId('layered-scrubber');
-        const scrubberControls = byId('layered-controls');
-        if (currentFrames.length > 0) {
-            if (scrubber) {
-                scrubber.max = String(currentFrames.length - 1);
-                scrubber.value = '0';
-            }
-            if (scrubberControls) scrubberControls.style.display = 'grid';
-            updateScrubberFrame(0);
-        } else {
-            if (scrubberControls) scrubberControls.style.display = 'none';
-        }
-
-        applyLayerVisibility();
-    }
-
-    // ── Generate ─────────────────────────────────────────────────────────────
-    async function generate() {
-        const requestId = crypto.randomUUID();
-        const params = buildParams(requestId);
-
-        // Validate that a product is selected
-        const product = params.get('product');
-        if (!product) {
-            setStatus('Please choose a product before generating.');
-            return;
-        }
-
-        setStatus('');
-        setOutputMeta({ state: 'running' });
-        showProgress(0, 'Starting...');
-
-        // Start progress polling
-        const progressPromise = pollProgress(requestId, (progress) => {
-            showProgress(progress.percent || 0, progress.message || '');
-        });
-
-        let response;
+    async function loadSurface(region, product) {
+        setStatus(`Loading ${product} for ${region}...`);
         try {
-            response = await fetch(apiUrl(`/api/weather?${params.toString()}`));
-        } catch (err) {
-            hideProgress();
-            setStatus(`Request failed: ${err.message}`);
-            setOutputMeta({ state: 'unavailable' });
-            return;
-        }
-
-        // Wait for progress polling to finish
-        await progressPromise;
-        hideProgress();
-
-        let data;
-        try {
-            data = await response.json();
-        } catch (err) {
-            setStatus('Failed to parse response.');
-            setOutputMeta({ state: 'unavailable' });
-            return;
-        }
-
-        if (!response.ok) {
-            const errMsg = data?.detail?.error || data?.error || data?.message || 'Unknown error';
-            setStatus(`Error: ${errMsg}`);
-            setOutputMeta({ state: 'unavailable' });
-            return;
-        }
-
-        setOutputMetaFromResponse(data);
-
-        if (data.status === 'warning') {
-            setStatus(data.message || 'No output generated.');
-            return;
-        }
-
-        if (data.output_mode === 'layers') {
-            showLayeredResult(data);
-            setStatus(data.message || 'Done.');
-        } else if (data.image_url) {
-            displayImage(data.image_url);
-            setStatus(data.message || 'Done.');
-        } else {
-            setStatus(data.message || 'No output.');
-        }
-    }
-
-    // ── Export frame ─────────────────────────────────────────────────────────
-    async function exportCurrentFrame() {
-        if (!currentLayersPath) {
-            setStatus('No active session for export.');
-            return;
-        }
-        const scrubber = byId('layered-scrubber');
-        const frameIndex = scrubber ? parseInt(scrubber.value, 10) : 0;
-
-        setStatus('Exporting frame...');
-        try {
-            const params = new URLSearchParams({
-                layers_path: currentLayersPath,
-                frame_index: String(frameIndex),
-            });
-            const response = await fetch(apiUrl(`/api/weather/export-frame?${params.toString()}`));
-            const data = await response.json();
-
-            if (data.status === 'warning' || !data.image_url) {
-                setStatus(data.message || 'Export failed.');
-                return;
-            }
-
-            // Open exported image in new tab
-            window.open(apiUrl(data.image_url), '_blank');
-            setStatus('Frame exported.');
-        } catch (err) {
-            setStatus(`Export failed: ${err.message}`);
-        }
-    }
-
-    // ── Export animation ─────────────────────────────────────────────────────
-    async function exportAnimation() {
-        if (!currentLayersPath) {
-            setStatus('No active session for export.');
-            return;
-        }
-
-        const fps = byId('weather-fps')?.value || '4';
-        setStatus('Exporting animation...');
-        try {
-            const params = new URLSearchParams({
-                layers_path: currentLayersPath,
-                fps: fps,
-            });
-            const response = await fetch(apiUrl(`/api/weather/export-animation?${params.toString()}`));
-            const data = await response.json();
-
-            if (data.status === 'warning' || !data.image_url) {
-                setStatus(data.message || 'Export failed.');
-                return;
-            }
-
-            displayVideo(data.image_url);
-            setStatus('Animation exported.');
-        } catch (err) {
-            setStatus(`Export failed: ${err.message}`);
-        }
-    }
-
-    // ── Reset ────────────────────────────────────────────────────────────────
-    function resetControls() {
-        byId('weather-product-group').value = 'surface';
-        updateProductOpts();
-
-        byId('weather-surface-product').value = 'Station Plot';
-        byId('weather-region').value = 'CONUS';
-        byId('weather-quick-range').value = 'current';
-        updateDateVisibility();
-
-        const daySel = byId('weather-spc-day');
-        if (daySel) daySel.value = '1';
-        _spcLastTouched = 'convective';
-        const otherSel = byId('weather-spc-product');
-        if (otherSel) otherSel.value = '';
-        const fireSel = byId('weather-spc-fire');
-        if (fireSel) fireSel.value = '';
-        const reportDaySel = byId('weather-report-day');
-        if (reportDaySel) reportDaySel.value = 'today';
-        const itemSel = byId('weather-spc-item');
-        if (itemSel) { itemSel.innerHTML = '<option value="all" selected>All</option>'; itemSel.style.display = 'none'; }
-        const itemLabel = byId('weather-spc-item-label');
-        if (itemLabel) itemLabel.style.display = 'none';
-        _spcItemBoundsMap = {};
-        updateSpcConvective();
-        updateSpcSubControls();
-
-        const fps = byId('weather-fps');
-        if (fps) fps.value = '4';
-        const frames = byId('weather-frames');
-        if (frames) frames.value = '12';
-
-        const extentMode = byId('weather-extent-mode');
-        if (extentMode) extentMode.value = '0';
-        updateExtentVisibility();
-
-        ['weather-n', 'weather-s', 'weather-e', 'weather-w'].forEach((id) => {
-            const el = byId(id);
-            if (el) el.value = '';
-        });
-
-        if (typeof bindRangeValueLabels === 'function') {
-            bindRangeValueLabels();
-        }
-    }
-
-    // ── Extent modal ─────────────────────────────────────────────────────────
-    function initExtentModal() {
-        if (typeof createExtentSelectorModal !== 'function') return;
-
-        const modal = createExtentSelectorModal({
-            modalId: 'map-modal',
-            mapId: 'leaflet-map',
-            closeButtonId: 'map-modal-close',
-            initialCenter: [35.5, -79.0],
-            initialZoom: 6,
-            onBoundsSelected: (bounds) => {
-                byId('weather-n').value = bounds.getNorth().toFixed(2);
-                byId('weather-s').value = bounds.getSouth().toFixed(2);
-                byId('weather-e').value = bounds.getEast().toFixed(2);
-                byId('weather-w').value = bounds.getWest().toFixed(2);
-            },
-            onOpen: (map) => {
-                if (typeof refreshExtentSelectorOverlays === 'function') {
-                    refreshExtentSelectorOverlays(map, {
-                        region: byId('weather-region')?.value || 'CONUS',
-                    });
-                }
-            },
-        });
-
-        byId('weather-open-map')?.addEventListener('click', () => modal.open());
-    }
-
-    // ── SPC sub-control visibility (report day + item selector) ───────────
-    function updateReportDayVisibility() { updateSpcSubControls(); }
-
-    async function updateSpcSubControls() {
-        const group = byId('weather-product-group')?.value;
-        const otherSel = byId('weather-spc-product');
-        const product = otherSel?.value || '';
-
-        // Report Day – visible only when reports selected
-        const showReport = group === 'spc' && product === 'reports';
-        const reportDaySel = byId('weather-report-day');
-        const reportDayLabel = byId('weather-report-day-label');
-        if (reportDaySel) reportDaySel.style.display = showReport ? '' : 'none';
-        if (reportDayLabel) reportDayLabel.style.display = showReport ? '' : 'none';
-
-        // Item selector – visible only when watches or mds selected
-        const itemSel = byId('weather-spc-item');
-        const itemLabel = byId('weather-spc-item-label');
-        const showItem = group === 'spc' && (product === 'watches' || product === 'mds');
-
-        if (!showItem) {
-            if (itemSel) itemSel.style.display = 'none';
-            if (itemLabel) itemLabel.style.display = 'none';
-            _spcItemBoundsMap = {};
-            return;
-        }
-
-        // Show and populate
-        if (itemLabel) {
-            itemLabel.style.display = '';
-            itemLabel.textContent = product === 'watches' ? 'Select Watch' : 'Select MD';
-        }
-        if (itemSel) itemSel.style.display = '';
-
-        // Fetch items from API
-        try {
-            const resp = await fetch(apiUrl(`/api/weather/spc-items?product=${encodeURIComponent(product)}`));
+            const url = apiUrl(`/api/data/surface?region=${encodeURIComponent(region)}&product=${encodeURIComponent(product)}`);
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
-            const items = data.items || [];
 
-            _spcItemBoundsMap = {};
-            if (itemSel) {
-                itemSel.innerHTML = '';
-                const allOpt = document.createElement('option');
-                allOpt.value = 'all';
-                allOpt.textContent = 'All';
-                allOpt.selected = true;
-                itemSel.appendChild(allOpt);
+            _surfaceStations = data.stations || [];
+            _renderSurfaceMarkers(_surfaceStations);
 
-                if (items.length === 0) {
-                    const noneOpt = document.createElement('option');
-                    noneOpt.value = 'none';
-                    noneOpt.textContent = product === 'watches'
-                        ? 'No active watches' : 'No active MDs';
-                    noneOpt.disabled = true;
-                    itemSel.appendChild(noneOpt);
-                } else {
-                    items.forEach((item) => {
-                        const opt = document.createElement('option');
-                        opt.value = item.id;
-                        opt.textContent = item.label || `#${item.id}`;
-                        itemSel.appendChild(opt);
-                        if (item.bounds) {
-                            _spcItemBoundsMap[String(item.id)] = item.bounds;
-                        }
-                    });
-                }
-            }
+            // Legend
+            const anchors = _SURFACE_COLORMAPS[product] || _SURFACE_COLORMAPS['temperature'];
+            buildSurfaceLegend(data.unit || '°F', anchors, product);
+
+            const countEl = byId('weather-surface-count');
+            if (countEl) countEl.textContent = `${_surfaceStations.length} station(s)`;
+            setStatus(`${product} updated — ${new Date().toLocaleTimeString()}`);
         } catch (err) {
-            console.warn('Failed to fetch SPC items:', err);
+            console.error('[surface] Load error:', err);
+            setStatus(`Surface error: ${err.message}`);
         }
     }
+
+    // Client-side colormap anchors for the legend (mirror of server-side _SURFACE_PRODUCTS)
+    const _SURFACE_COLORMAPS = {
+        temperature:       [[-60,'#00352C'],[-20,'#c4c4d4'],[0,'#570057'],[32,'#0000ff'],[50,'#c4c403'],[80,'#c20303'],[130,'#000000']],
+        feels_like:        [[-60,'#00352C'],[-20,'#c4c4d4'],[0,'#570057'],[32,'#0000ff'],[50,'#c4c403'],[80,'#c20303'],[130,'#000000']],
+        dew_point:         [[-60,'#00352C'],[-20,'#c4c4d4'],[0,'#570057'],[32,'#0000ff'],[50,'#c4c403'],[80,'#c20303'],[130,'#000000']],
+        relative_humidity: [[0,'#c8a000'],[20,'#f5dd72'],[40,'#69bb6d'],[60,'#0099cc'],[80,'#0055aa'],[100,'#003377']],
+        wind_speed:        [[0,'#b0d4f0'],[10,'#70b0e0'],[20,'#3090d0'],[30,'#f5dd72'],[45,'#ff9d2e'],[60,'#ff4f4f']],
+        wind_gust:         [[0,'#b0d4f0'],[10,'#70b0e0'],[20,'#3090d0'],[30,'#f5dd72'],[45,'#ff9d2e'],[60,'#ff4f4f']],
+    };
+
+    function buildSurfaceLegend(unit, anchors, product) {
+        const label = product.replace(/_/g, ' ');
+        const rows = [...anchors].reverse().map(([v, c]) => swatch(c, `${v}${unit}`)).join('');
+        setLegend(`<h4>Surface: ${label}</h4>${rows}`);
+    }
+
+    function applySurfaceOpacity(val) {
+        surfaceOpacity = parseFloat(val);
+        // Re-render markers with new opacity baked into icon color
+        if (_surfaceStations.length) _renderSurfaceMarkers(_surfaceStations);
+    }
+
+    // Re-thin on zoom change if surface layer is active
+    map.on('zoomend', () => {
+        if (_surfaceStations.length && byId('weather-product-group')?.value === 'surface') {
+            _renderSurfaceMarkers(_surfaceStations);
+        }
+    });
+
+    // ── MRMS layer ────────────────────────────────────────────────────────────
+    let mrmsOverlay = null;
+    let mrmsOpacity = 0.8;
+
+    // composeMrmsProductKey: mirrors Python MRMS_PRODUCTS key structure
+    function composeMrmsProductKey() {
+        const family = byId('weather-mrms-family')?.value || 'PrecipRate';
+        // Standalone products (no sub-selector)
+        const standalone = ['PrecipRate', 'PrecipFlag', 'SHI', 'POSH', 'RadarQualityIndex'];
+        if (standalone.includes(family)) return family;
+
+        if (family === 'QPE') {
+            const src = byId('mrms-qpe-source')?.value || 'MS2';
+            const per = byId('mrms-qpe-period')?.value || '01H';
+            return `QPE_${src}_${per}`;
+        }
+        if (family === 'RotationTrack') {
+            const lvl  = byId('mrms-rotation-level')?.value || 'LL';
+            const time = byId('mrms-rotation-time')?.value  || '60min';
+            return `RotationTrack_${lvl}_${time}`;
+        }
+        if (family === 'MESH') {
+            const t = byId('mrms-mesh-time')?.value || 'Instant';
+            return t === 'Instant' ? 'MESH_Instant' : `MESH_${t}`;
+        }
+        if (family === 'AzShear') {
+            const lvl = byId('mrms-azshear-level')?.value || 'Low';
+            return `AzShear_${lvl}`;
+        }
+        if (family === 'EchoTop') {
+            const thr = byId('mrms-echotop-threshold')?.value || '18';
+            return `EchoTop_${thr}`;
+        }
+        if (family === 'VIL') {
+            const t = byId('mrms-vil-type')?.value || 'Instant';
+            return t === 'Instant' ? 'VIL' : `VIL_${t}`;
+        }
+        if (family === 'Reflectivity') {
+            const v = byId('mrms-refl-variant')?.value || 'HSR';
+            return `Reflectivity_${v}`;
+        }
+        if (family === 'Lightning') {
+            const w = byId('mrms-lightning-window')?.value || '30min';
+            return `LightningProbability_${w}`;
+        }
+        if (family === 'Model') {
+            const f = byId('mrms-model-field')?.value || 'FreezingLevel';
+            return `Model_${f}`;
+        }
+        return family;
+    }
+
+    // Show/hide sub-selectors for the selected MRMS family
+    function updateMrmsSubControls() {
+        const family = byId('weather-mrms-family')?.value || 'PrecipRate';
+        const subMap = {
+            QPE: 'mrms-sub-qpe', RotationTrack: 'mrms-sub-rotation',
+            MESH: 'mrms-sub-mesh', AzShear: 'mrms-sub-azshear',
+            EchoTop: 'mrms-sub-echotop', VIL: 'mrms-sub-vil',
+            Reflectivity: 'mrms-sub-reflectivity', Lightning: 'mrms-sub-lightning',
+            Model: 'mrms-sub-model',
+        };
+        document.querySelectorAll('.mrms-sub').forEach(el => { el.style.display = 'none'; });
+        const subId = subMap[family];
+        if (subId) {
+            const sub = byId(subId);
+            if (sub) sub.style.display = '';
+        }
+    }
+
+    async function loadMrms() {
+        const product = composeMrmsProductKey();
+        const bounds  = map.getBounds();
+        const s = bounds.getSouth().toFixed(4);
+        const w = bounds.getWest().toFixed(4);
+        const n = bounds.getNorth().toFixed(4);
+        const e = bounds.getEast().toFixed(4);
+
+        const statusEl = byId('weather-mrms-status');
+        if (statusEl) statusEl.textContent = `Loading ${product}…`;
+        setStatus(`Loading MRMS ${product}…`);
+
+        try {
+            const url = apiUrl(`/api/data/mrms?product=${encodeURIComponent(product)}&south=${s}&west=${w}&north=${n}&east=${e}`);
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || resp.statusText);
+            }
+            const data = await resp.json();
+
+            if (mrmsOverlay) { map.removeLayer(mrmsOverlay); mrmsOverlay = null; }
+
+            // Leaflet imageOverlay: [[south, west], [north, east]]
+            const b = data.bounds; // [west, east, south, north]
+            const leafletBounds = [[b[2], b[0]], [b[3], b[1]]];
+            mrmsOverlay = L.imageOverlay(data.image_url, leafletBounds, { opacity: mrmsOpacity });
+            if (byId('weather-show-mrms')?.checked !== false) mrmsOverlay.addTo(map);
+
+            buildMrmsLegend(data);
+
+            if (statusEl) statusEl.textContent = `${data.full_name} — ${new Date().toLocaleTimeString()}`;
+            setStatus(`MRMS ${product} updated — ${new Date().toLocaleTimeString()}`);
+        } catch (err) {
+            console.error('[mrms] Load error:', err);
+            if (statusEl) statusEl.textContent = `Error: ${err.message}`;
+            setStatus(`MRMS error: ${err.message}`);
+        }
+    }
+
+    function buildMrmsLegend(data) {
+        // Simple min/max legend bar; colormap-specific entries added in Phase 4
+        const rows = [
+            swatch('#b0d4f0', `≤ ${data.vmin} ${data.units}`),
+            swatch('#ff4f4f', `≥ ${data.vmax} ${data.units}`),
+        ].join('');
+        setLegend(`<h4>${data.full_name}</h4>${rows}`);
+    }
+
+    function applyMrmsOpacity(val) {
+        mrmsOpacity = parseFloat(val);
+        if (mrmsOverlay) mrmsOverlay.setOpacity(mrmsOpacity);
+    }
+
+    // ── Event wiring ─────────────────────────────────────────────────────────
+    byId('weather-region')?.addEventListener('change', (e) => {
+        fitRegion(e.target.value);
+        refreshActiveLayers();
+    });
+
+    byId('weather-product-group')?.addEventListener('change', () => {
+        updateProductOpts();
+        refreshActiveLayers();
+    });
+
+    byId('weather-alerts-product')?.addEventListener('change', () => {
+        if ((byId('weather-product-group')?.value || '') === 'alerts') {
+            loadAlerts(byId('weather-alerts-product').value);
+        }
+    });
+
+    byId('weather-spc-day')?.addEventListener('change', refreshSpc);
+
+    byId('weather-spc-convective')?.addEventListener('change', () => {
+        _spcLastTouched = 'convective';
+        if (byId('weather-spc-fire')) byId('weather-spc-fire').value = '';
+        refreshSpc();
+    });
+
+    byId('weather-spc-fire')?.addEventListener('change', () => {
+        _spcLastTouched = 'fire';
+        if (byId('weather-spc-convective')) byId('weather-spc-convective').value = '';
+        refreshSpc();
+    });
+
+    byId('weather-surface-product')?.addEventListener('change', () => {
+        if ((byId('weather-product-group')?.value || '') === 'surface') {
+            const region = byId('weather-region')?.value || 'NC';
+            const product = byId('weather-surface-product')?.value || 'temperature';
+            loadSurface(region, product);
+        }
+    });
+
+    byId('weather-show-alerts')?.addEventListener('change', (e) => {
+        if (!alertsLayer) return;
+        e.target.checked ? alertsLayer.addTo(map) : map.removeLayer(alertsLayer);
+    });
+
+    byId('weather-show-spc')?.addEventListener('change', (e) => {
+        if (!spcLayer) return;
+        e.target.checked ? spcLayer.addTo(map) : map.removeLayer(spcLayer);
+    });
+
+    byId('weather-show-surface')?.addEventListener('change', (e) => {
+        if (!surfaceLayer) return;
+        e.target.checked ? surfaceLayer.addTo(map) : map.removeLayer(surfaceLayer);
+    });
+
+    byId('weather-opacity-alerts')?.addEventListener('input', (e) => applyAlertsOpacity(e.target.value));
+    byId('weather-opacity-spc')?.addEventListener('input', (e) => applySpcOpacity(e.target.value));
+    byId('weather-opacity-surface')?.addEventListener('input', (e) => applySurfaceOpacity(e.target.value));
+    byId('weather-opacity-mrms')?.addEventListener('input', (e) => applyMrmsOpacity(e.target.value));
+
+    byId('weather-show-mrms')?.addEventListener('change', (e) => {
+        if (!mrmsOverlay) return;
+        e.target.checked ? mrmsOverlay.addTo(map) : map.removeLayer(mrmsOverlay);
+    });
+
+    byId('weather-mrms-family')?.addEventListener('change', () => {
+        updateMrmsSubControls();
+        if ((byId('weather-product-group')?.value || '') === 'mrms') loadMrms();
+    });
+
+    // Wire all MRMS sub-selectors to reload on change
+    ['mrms-qpe-source','mrms-qpe-period','mrms-rotation-level','mrms-rotation-time',
+     'mrms-mesh-time','mrms-azshear-level','mrms-echotop-threshold','mrms-vil-type',
+     'mrms-refl-variant','mrms-lightning-window','mrms-model-field'].forEach(id => {
+        byId(id)?.addEventListener('change', () => {
+            if ((byId('weather-product-group')?.value || '') === 'mrms') loadMrms();
+        });
+    });
+
+    byId('weather-refresh-mrms')?.addEventListener('click', loadMrms);
+
+    byId('weather-refresh-alerts')?.addEventListener('click', () => {
+        const cat = byId('weather-alerts-product')?.value || 'All Alerts';
+        loadAlerts(cat);
+    });
+
+    byId('weather-refresh-spc')?.addEventListener('click', refreshSpc);
+
+    byId('weather-refresh-surface')?.addEventListener('click', () => {
+        const region = byId('weather-region')?.value || 'NC';
+        const product = byId('weather-surface-product')?.value || 'temperature';
+        loadSurface(region, product);
+    });
 
     // ── Init ─────────────────────────────────────────────────────────────────
     function init() {
-        // Product group switching
-        byId('weather-product-group')?.addEventListener('change', updateProductOpts);
         updateProductOpts();
-
-        // MRMS sub-product controls
-        byId('weather-mrms-product')?.addEventListener('change', updateMrmsSubControls);
-        byId('weather-mrms-qpe-source')?.addEventListener('change', updateMrmsSubControls);
         updateMrmsSubControls();
-
-        // SPC day change updates convective outlook list
-        byId('weather-spc-day')?.addEventListener('change', updateSpcConvective);
-
-        // SPC last-touched tracking: selecting one dropdown resets the others
-        // to the placeholder so only one has an active selection at a time.
-        byId('weather-spc-convective')?.addEventListener('change', () => {
-            _spcLastTouched = 'convective';
-            const otherSel = byId('weather-spc-product');
-            if (otherSel) otherSel.value = '';
-            const fireSel = byId('weather-spc-fire');
-            if (fireSel) fireSel.value = '';
-            updateSpcSubControls();
-        });
-        byId('weather-spc-fire')?.addEventListener('change', () => {
-            _spcLastTouched = 'fire';
-            const convSel = byId('weather-spc-convective');
-            if (convSel) convSel.value = '';
-            const otherSel = byId('weather-spc-product');
-            if (otherSel) otherSel.value = '';
-            updateSpcSubControls();
-        });
-        byId('weather-spc-product')?.addEventListener('change', () => {
-            _spcLastTouched = 'other';
-            const convSel = byId('weather-spc-convective');
-            if (convSel) convSel.value = '';
-            const fireSel = byId('weather-spc-fire');
-            if (fireSel) fireSel.value = '';
-            updateSpcSubControls();
-        });
-
-        // Quick range / date toggling
-        byId('weather-quick-range')?.addEventListener('change', updateDateVisibility);
-        updateDateVisibility();
-
-        // Extent mode
-        byId('weather-extent-mode')?.addEventListener('input', updateExtentVisibility);
-        updateExtentVisibility();
-
-        // Layer controls
-        bindLayerControls();
-
-        // Scrubber
-        byId('layered-scrubber')?.addEventListener('input', (e) => {
-            updateScrubberFrame(parseInt(e.target.value, 10));
-        });
-        byId('layered-step-back')?.addEventListener('click', () => {
-            const scrubber = byId('layered-scrubber');
-            if (!scrubber) return;
-            const current = parseInt(scrubber.value || '0', 10);
-            updateScrubberFrame(Math.max(0, current - 1));
-        });
-        byId('layered-step-fwd')?.addEventListener('click', () => {
-            const scrubber = byId('layered-scrubber');
-            if (!scrubber || !currentFrames.length) return;
-            const current = parseInt(scrubber.value || '0', 10);
-            updateScrubberFrame(Math.min(currentFrames.length - 1, current + 1));
-        });
-
-        // Buttons
-        byId('weather-generate')?.addEventListener('click', generate);
-        byId('weather-reset-controls')?.addEventListener('click', resetControls);
-        byId('layered-save-current')?.addEventListener('click', exportCurrentFrame);
-        byId('layered-export-animation')?.addEventListener('click', exportAnimation);
-
-        // Extent modal
-        initExtentModal();
+        loadAlerts(null);
+        loadSpc(1, 'cat');
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init, { once: true });
-    } else {
-        init();
-    }
-})();
+    init();
+
+}());
+

@@ -1,200 +1,118 @@
 # Coding Patterns
 
-This document defines active implementation patterns for the unified weather migration.
+## Cache-First Data Pattern
 
-## Endpoint and Progress Pattern
-
-Endpoints are synchronous and block until completion.
-
-Do not use BackgroundTasks or asyncio for rendering jobs.
+All weather data endpoints read from a local GeoJSON cache before hitting external APIs.
 
 Pattern:
+1. Check if cache file exists and is fresh.
+2. If missing: trigger synchronous worker run inline, then read.
+3. Return GeoJSON + `count` metadata field.
 
-1. Frontend generates request_id.
-2. Frontend polls /api/progress/{request_id} before invoking endpoint.
-3. Endpoint writes progress into active_tasks[request_id].
-4. Endpoint removes task entry in finally blocks.
+Used by: `/api/data/alerts`, `/api/data/spc`.
 
-## Response Shape Pattern
+## Worker / Scheduler Pattern
 
-Prefer success_payload()/error_payload() for new endpoints.
+Background workers run on APScheduler `BackgroundScheduler`. Each worker:
+- Has a fixed interval (alerts: 2 min, SPC: 30 min).
+- Writes a single cache file per product per run.
+- Is called synchronously on cold-cache miss from an endpoint.
 
-Typical success fields:
+Startup: `start_scheduler()` registers jobs and triggers an immediate first run.
+Shutdown: `stop_scheduler()` shuts down gracefully.
 
-- status
-- message
-- image_url
-- source
-- data_mode
-- request_id (when available)
+Guard pattern — import is wrapped in try/except so app starts without APScheduler if it is not installed:
 
-No-output archive outcomes should return warning success payloads where appropriate.
+```python
+try:
+    from workers.scheduler import start_scheduler, stop_scheduler
+    _SCHEDULER_AVAILABLE = True
+except ImportError:
+    _SCHEDULER_AVAILABLE = False
+```
 
-## Unified Weather Endpoint Pattern
+## Endpoint Progress Pattern
 
-Use /api/weather for both current and archive.
+Progress tracking (`active_tasks`, `/api/progress/{request_id}`) applies only to Radar and Satellite render endpoints.
 
-Mode inference:
+Weather data endpoints (`/api/data/*`) are lightweight reads — no progress tracking needed.
 
-- no date_from/date_to => current
-- paired date_from/date_to => archive
-- single date provided => 400 validation error
+Archive and export endpoints retain progress tracking where render time is non-trivial.
 
-Archive output default should be layered and scrubber-ready.
+## Two-Tier Dropdown Pattern
 
-## Layered Session Pattern
+SPC controls use a three-way dropdown (convective / fire / other). Track which was last changed with `_spcLastTouched` to determine which product to load:
 
-Layered responses should include:
+```js
+let _spcLastTouched = 'convective';
 
-- basemap_url
-- frames[]
-- layers_path
-- session_expires_utc
-- optional static layer URLs
+convectiveSelect.addEventListener('change', () => {
+    _spcLastTouched = 'convective';
+    fireSelect.value = '';
+    refreshSpc();
+});
 
-Each frame should include:
+fireSelect.addEventListener('change', () => {
+    _spcLastTouched = 'fire';
+    convectiveSelect.value = '';
+    refreshSpc();
+});
+```
 
-- index
-- timestamp_utc
-- timestamp_local
-- product layer URL
-- hud_right_url
-- legend_url (when legend varies per frame, e.g. alerts, MRMS MESH/RotationTrack products)
-- compatibility image_url
+## Leaflet Layer Pattern
 
-Static legend (when legend does not change per frame):
+All weather vector data is rendered via `L.geoJSON`. Layer lifecycle:
 
-- legend_url at top level of response (surface colorbar, static MRMS colorbar, SPC)
-- For station plots: legend_url points to static img/station_plot_legend.png
+1. Remove old layer from map (`map.removeLayer(layer); layer = null`).
+2. Fetch fresh GeoJSON from `/api/data/*`.
+3. Create new `L.geoJSON` with `style` and `onEachFeature` callbacks.
+4. Add to map if visibility checkbox is checked.
+5. Update legend control via `setLegend(html)`.
 
-Session lifecycle:
+Opacity is applied via `layer.setStyle(styleFn)` — not a CSS filter.
 
-1. Persist manifest metadata (created/updated/last_access/expires).
-2. Apply TTL cleanup.
-3. Enforce max-session cap.
-4. Refresh last_access on export endpoints.
+## Region Bounds Pattern
 
-## Export Pattern
+`STATE_BOUNDS` in `js/weather.js` stores `[west, east, south, north]` for each state (matching Python `geo_config.py` layout).
 
-Use dedicated endpoints:
+Convert to Leaflet before calling `fitBounds`:
 
-- /api/weather/export-frame
-- /api/weather/export-animation
-
-Both export paths must validate layers_path and reject traversal/absolute paths.
-
-Animation export composes existing layers into MP4 and should avoid source rerendering when possible.
-
-Export compositing must append the legend image below the map composite when
-generating flat PNG or MP4 output (increasing canvas height to fit).
+```js
+// geo_config format: [west, east, south, north]
+// Leaflet fitBounds: [[south, west], [north, east]]
+function leafletBounds(code) {
+    const b = STATE_BOUNDS[code];
+    return [[b[2], b[0]], [b[3], b[1]]];
+}
+```
 
 ## Projection Pattern
 
-Unified weather uses Lambert-only rendering.
+- Weather page (Leaflet): Web Mercator (EPSG:3857), tile-based, vector overlays
+- Radar / Satellite (server-side): Lambert conformal conic, Matplotlib, PNG output
 
-Rules:
+Do not mix projections. GeoJSON overlays on the Leaflet map must use WGS-84 coordinates (EPSG:4326). SPC and NWS GeoJSON from the API natively provides WGS-84.
 
-1. Compute one extent/projection contract per frame.
-2. Keep basemap and overlay layers geospatially locked.
-3. Preserve projection aspect to prevent distortion.
+## Response Shape Pattern
 
-## Style Config Pattern
+Use `success_payload()` / `error_payload()` helpers for render endpoints.
 
-Use config/style_config.py as canonical style source.
-
-Endpoint behavior:
-
-- accept style_config as Optional[str]
-- parse and normalize with shared helper
-- pass dict to renderer/utilities
-
-Renderer behavior:
-
-- read values via style_config.get(key, default)
-
-## Cache-First Pattern
-
-Before network fetch:
-
-- return cached artifact when valid
-- otherwise download and cache
-
-Avoid duplicate downloads and duplicate frame rendering.
+Data endpoints (`/api/data/*`) return raw GeoJSON with an extra `count` top-level field. No wrapper envelope needed for client-side Leaflet consumption.
 
 ## Animation Encoding Pattern
 
-All workflows must use video_utils.save_animation().
+Animation encoding applies to Radar and Satellite export endpoints only. Weather page does not produce animations.
 
-Do not add new direct imageio.mimsave() calls.
-
-## Two-Tier Dropdown Pattern (MRMS)
-
-Used for product families with multiple sub-parameters (level, time, source, etc.).
-
-HTML structure:
-
-- Primary `<select>` with family-level `<option>` values.
-- Multiple `<div>` groups (one per family) with `style="display:none;"`.
-- Each group contains family-specific sub-dropdowns.
-
-JS pattern:
-
-- `SUB_PRODUCT_GROUPS` map: family key → array of group div IDs.
-- `updateSubControls()`: hides all groups, shows active family's groups.
-- `composeProductKey()`: switch on family, concatenates sub-values.
-- Event listeners on primary dropdown and source-dependent sub-dropdowns.
-- Initial call to `updateSubControls()` on page load.
-
-See js/weather.js `composeMrmsProductKey()` and `updateMrmsSubControls()`.
-
-## Legacy Migration Pattern
-
-For unified weather implementation:
-
-- legacy surface/alerts/mrms/spc HTML and JS are archived in legacy/
-- legacy Python backend modules remain in use for data fetching
-- do not chain runtime calls into legacy workflow endpoints
-- retain Radar/Satellite workflows as separate exceptions
-
-## SPC Legend Pattern
-
-SPC torn/wind/hail products use a two-row legend:
-
-- Row 1: probability swatches with category labels.
-- Row 2: CIG (Conditional Intensity Group) intensity swatches.
-  CIG 1 = dashed diagonals, CIG 2 = solid backslash, CIG 3 = cross-hatch.
-  Hail shows CIG 1-2 only; tornado/wind show CIG 1-3.
-- cat product keeps single-row layout (no CIG row).
-
-Map hatching in spc_utils.py uses matching patterns for consistency.
-
-## SPC Fire Weather Legend Pattern (2026-04-06)
-
-Fire weather products have dedicated legends distinct from convective outlooks:
-
-- fire_windrh: Elevated (#FFBF80/#FF7F00), Critical (#FF8080/#FF0000),
-  Extremely Critical (#FF80FF/#FF00FF). Matches SPC wind/RH risk categories.
-- fire_dryt: Isolated Dry T-Storm (#FFBF80/#FF7F00),
-  Scattered Dry T-Storm (#FF8080/#FF0000). Matches SPC dry thunderstorm
-  risk categories.
-
-Both use swatch + label layout in the legend footer, same structure as
-convective categorical legend but with fire-specific risk levels and colors.
-
-## SPC Three-Way Dropdown Pattern (2026-04-06)
-
-SPC product group uses three mutually exclusive dropdowns in the frontend:
-
-1. Convective Outlooks (cat/torn/wind/hail/prob) — filtered by day.
-2. Fire Weather Outlooks (fire_windrh/fire_dryt) — visible for all days (1-8).
-3. Other Products (watches/mds/reports) — visible Day 1 only.
-
-`_spcLastTouched` tracks which was last selected (`'convective'`, `'fire'`,
-`'other'`). Selecting one resets the other two to placeholder. Fire weather
-data: Day 1-2 from SPC static GeoJSON, Day 3-8 from NWS MapServer query.
+Radar/Satellite: H.264 via FFmpeg, `/api/radar/export-animation`, `/api/satellite/export-animation`.
 
 ## Date Validation Pattern
 
-Use shared datetime parsing/range validation helpers from main.py for archive logic.
+For archive endpoints: `date_from`/`date_to` must both be provided or both omitted. Single-date requests return HTTP 400.
 
-Enforce category-specific archive span limits.
+Not applicable to `/api/data/*` (current data only in Phase 1).
+
+## Style Config Pattern
+
+Color values for alerts and SPC risk categories are defined as constants in the frontend JS (`ALERT_COLORS`, `SPC_CAT_COLORS`, `SPC_FIRE_COLORS` in `js/weather.js`). These mirror the Python-side `config/alerts_config.py` values.
+
+Do not fetch color config from the backend at runtime — embed as JS constants.

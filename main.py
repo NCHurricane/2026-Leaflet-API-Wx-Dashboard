@@ -60,6 +60,14 @@ except Exception as weather_err:
     weather_utils = None
     print(f"[WARN] Unified weather module unavailable: {weather_err}")
 
+# Background workers (APScheduler)
+try:
+    from workers.scheduler import start_scheduler, stop_scheduler
+    _SCHEDULER_AVAILABLE = True
+except Exception as sched_err:
+    _SCHEDULER_AVAILABLE = False
+    print(f"[WARN] Background workers unavailable: {sched_err}")
+
 # --- GLOBAL TASK STORE ---
 active_tasks = {}
 
@@ -121,6 +129,26 @@ def _warm_radar_render_assets():
             radar_archive_utils.warm_radar_cartopy_cache()
     except Exception as e:
         print(f"[WARN] Radar archive warmup skipped: {e}")
+
+
+@app.on_event("startup")
+def _start_background_workers():
+    """Start APScheduler background workers for alerts and SPC pre-caching."""
+    if _SCHEDULER_AVAILABLE:
+        try:
+            start_scheduler()
+        except Exception as e:
+            print(f"[WARN] Background worker startup failed: {e}")
+
+
+@app.on_event("shutdown")
+def _stop_background_workers():
+    """Shut down the APScheduler scheduler on app exit."""
+    if _SCHEDULER_AVAILABLE:
+        try:
+            stop_scheduler()
+        except Exception:
+            pass
 
 
 app.add_middleware(
@@ -219,6 +247,15 @@ app.mount(
     StaticFiles(directory=os.path.join(BASE_DIR, "basemap_cache")),
     name="basemap_cache",
 )
+
+# Cache directory — worker-written GeoJSON artifacts (gitignored)
+_CACHE_ROOT = os.path.join(BASE_DIR, "cache")
+os.makedirs(os.path.join(_CACHE_ROOT, "alerts"), exist_ok=True)
+os.makedirs(os.path.join(_CACHE_ROOT, "spc"), exist_ok=True)
+os.makedirs(os.path.join(_CACHE_ROOT, "surface"), exist_ok=True)
+os.makedirs(os.path.join(_CACHE_ROOT, "mrms"), exist_ok=True)
+app.mount("/cache", StaticFiles(directory=_CACHE_ROOT), name="cache")
+
 app.mount("/css", StaticFiles(directory=os.path.join(BASE_DIR, "css")), name="css")
 app.mount("/js", StaticFiles(directory=os.path.join(BASE_DIR, "js")), name="js")
 
@@ -616,7 +653,493 @@ def read_status():
     }
 
 
-@app.get("/index.html")
+# ── MRMS app state (Phase 3) ─────────────────────────────────────────────────
+# Tracks which MRMS product the worker is actively refreshing.
+# Mutated by /api/mrms/set-product; read by the mrms_worker.
+_active_mrms_product: str = "PrecipRate"
+
+# ── MRMS app state (Phase 3) ─────────────────────────────────────────────────
+# Tracks which MRMS product the worker is actively refreshing.
+# Mutated by /api/mrms/set-product; read by the mrms_worker.
+_active_mrms_product: str = "PrecipRate"
+
+# ── Surface color helpers (Phase 2) ─────────────────────────────────────────
+try:
+    from config.surface_config import TEMPERATURE_GRADIENT_ANCHORS as _TEMP_ANCHORS
+except Exception:
+    _TEMP_ANCHORS = [
+        (-60, "#00352C"), (-20, "#c4c4d4"), (0, "#570057"), (32, "#0000ff"),
+        (50, "#c4c403"), (80, "#c20303"), (130, "#000000"),
+    ]
+
+_WIND_ANCHORS = [
+    (0, "#b0d4f0"), (10, "#70b0e0"), (20, "#3090d0"),
+    (30, "#f5dd72"), (45, "#ff9d2e"), (60, "#ff4f4f"),
+]
+_RH_ANCHORS = [
+    (0, "#c8a000"), (20, "#f5dd72"), (40, "#69bb6d"),
+    (60, "#0099cc"), (80, "#0055aa"), (100, "#003377"),
+]
+
+_SURFACE_PRODUCTS = {
+    "temperature":       {"col": "air_temperature",       "unit": "\u00b0F", "anchors": "temp"},
+    "feels_like":        {"col": "feels_like",             "unit": "\u00b0F", "anchors": "temp"},
+    "dew_point":         {"col": "dew_point_temperature",  "unit": "\u00b0F", "anchors": "temp"},
+    "relative_humidity": {"col": "relative_humidity",      "unit": "%",      "anchors": "rh"},
+    "wind_speed":        {"col": "wind_speed",             "unit": "kt",     "anchors": "wind"},
+    "wind_gust":         {"col": "peak_wind",              "unit": "kt",     "anchors": "wind"},
+}
+
+
+def _interpolate_color(anchors: list, value: float) -> str:
+    """Map a numeric value to a hex color via piecewise linear interpolation."""
+    if not anchors:
+        return "#aaaaaa"
+    if value <= anchors[0][0]:
+        return anchors[0][1]
+    if value >= anchors[-1][0]:
+        return anchors[-1][1]
+    for i in range(len(anchors) - 1):
+        v0, c0 = anchors[i]
+        v1, c1 = anchors[i + 1]
+        if v0 <= value <= v1:
+            frac = (value - v0) / (v1 - v0)
+            r0, g0, b0 = int(c0[1:3], 16), int(c0[3:5], 16), int(c0[5:7], 16)
+            r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
+            r = int(r0 + (r1 - r0) * frac)
+            g = int(g0 + (g1 - g0) * frac)
+            b = int(b0 + (b1 - b0) * frac)
+            return f"#{r:02x}{g:02x}{b:02x}"
+    return "#aaaaaa"
+
+
+def _build_surface_stations(df, product: str) -> list:
+    """Serialize a surface DataFrame to a JSON-safe station list with per-station colors."""
+    import math
+    meta = _SURFACE_PRODUCTS.get(product)
+    if meta is None or df is None or df.empty:
+        return []
+    col = meta["col"]
+    anchors_key = meta["anchors"]
+    if anchors_key == "temp":
+        anchors = _TEMP_ANCHORS
+    elif anchors_key == "wind":
+        anchors = _WIND_ANCHORS
+    else:
+        anchors = _RH_ANCHORS
+
+    if col not in df.columns:
+        return []
+
+    stations = []
+    for _, row in df.iterrows():
+        raw_val = row.get(col)
+        if raw_val is None or (isinstance(raw_val, float) and math.isnan(raw_val)):
+            continue
+        val = float(raw_val)
+        color = _interpolate_color(anchors, val)
+        station = {
+            "id":          str(row.get("station_id", "")),
+            "lat":         float(row.get("latitude", 0)),
+            "lon":         float(row.get("longitude", 0)),
+            "value":       round(val, 1),
+            "color":       color,
+            "unit":        meta["unit"],
+            "temperature": _safe_float(row, "air_temperature"),
+            "dew_point":   _safe_float(row, "dew_point_temperature"),
+            "feels_like":  _safe_float(row, "feels_like"),
+            "rh":          _safe_float(row, "relative_humidity"),
+            "wind_speed":  _safe_float(row, "wind_speed"),
+            "wind_dir":    _safe_float(row, "wind_dir"),
+            "wind_gust":   _safe_float(row, "peak_wind"),
+            "visibility":  _safe_float(row, "visibility"),
+        }
+        stations.append(station)
+    return stations
+
+
+def _safe_float(row, col: str):
+    import math
+    val = row.get(col)
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        return None if math.isnan(f) else round(f, 1)
+    except (TypeError, ValueError):
+        return None
+
+
+# ── Phase 1: Data Endpoints (served from worker cache) ───────────────────────
+
+
+@app.get("/api/data/alerts")
+def get_data_alerts(state: Optional[str] = None):
+    """Return national alerts GeoJSON from worker cache, optionally filtered by state."""
+    cache_file = os.path.join(_CACHE_ROOT, "alerts", "national.geojson")
+
+    if not os.path.exists(cache_file):
+        # Cold cache: trigger a synchronous worker run
+        try:
+            from workers.alerts_worker import run_alerts_worker
+            run_alerts_worker()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Alerts cache not yet available: {exc}",
+            )
+
+    try:
+        with open(cache_file, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    features = data.get("features", [])
+
+    if state:
+        state_upper = state.upper().strip()
+
+        def _matches(feat: dict) -> bool:
+            props = feat.get("properties") or {}
+            for zone in props.get("affectedZones") or []:
+                if f"/{state_upper}" in str(zone):
+                    return True
+            return state_upper in str(props.get("areaDesc") or "")
+
+        features = [f for f in features if _matches(f)]
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "_source": data.get("_source", "NWS"),
+        "_updated": data.get("_updated"),
+        "count": len(features),
+    }
+
+
+@app.get("/api/data/spc")
+def get_data_spc(day: int = 1, hazard: str = "cat"):
+    """Return SPC outlook GeoJSON from worker cache."""
+    hazard_lower = hazard.strip().lower()
+    is_fire = hazard_lower in {"windrh", "dryt"}
+    cache_name = f"fire_{day}_{hazard_lower}" if is_fire else f"{day}_{hazard_lower}"
+    cache_file = os.path.join(_CACHE_ROOT, "spc", f"{cache_name}.geojson")
+
+    if not os.path.exists(cache_file):
+        # Cold cache: trigger a synchronous SPC worker run
+        try:
+            from workers.spc_worker import run_spc_worker
+            run_spc_worker()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"SPC cache not yet available: {exc}",
+            )
+
+    if not os.path.exists(cache_file):
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "_source": "SPC",
+            "_updated": None,
+            "count": 0,
+        }
+
+    try:
+        with open(cache_file, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    data["count"] = len(data.get("features") or [])
+    return data
+
+
+@app.get("/api/data/surface")
+def get_data_surface(region: str = "NC", product: str = "temperature"):
+    """Return surface observations JSON with per-station colors, lazy-cached 5 min."""
+    region_upper = region.upper().strip()
+    product_lower = product.lower().strip()
+    if product_lower not in _SURFACE_PRODUCTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown product '{product}'. Valid: {list(_SURFACE_PRODUCTS.keys())}",
+        )
+
+    surface_cache_dir = os.path.join(_CACHE_ROOT, "surface")
+    os.makedirs(surface_cache_dir, exist_ok=True)
+    cache_file = os.path.join(
+        surface_cache_dir, f"{region_upper}_{product_lower}.json")
+
+    if os.path.exists(cache_file):
+        age = _time.time() - os.path.getmtime(cache_file)
+        if age < 300:
+            try:
+                with open(cache_file, "r", encoding="utf-8") as fh:
+                    return json.load(fh)
+            except Exception:
+                pass
+
+    try:
+        df = surface_utils.fetch_metar_data(region_upper)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail=f"Surface data unavailable: {exc}")
+
+    stations = _build_surface_stations(df, product_lower)
+    result = {
+        "stations": stations,
+        "product": product_lower,
+        "unit": _SURFACE_PRODUCTS[product_lower]["unit"],
+        "region": region_upper,
+        "count": len(stations),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        with open(cache_file, "w", encoding="utf-8") as fh:
+            json.dump(result, fh)
+    except Exception:
+        pass
+
+    return result
+
+
+@app.get("/api/data/colormap")
+def get_colormap(product: str = "temperature"):
+    """Return colormap anchor points for a given surface product."""
+    product_lower = product.lower().strip()
+    if product_lower not in _SURFACE_PRODUCTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown product '{product}'. Valid: {list(_SURFACE_PRODUCTS.keys())}",
+        )
+    meta = _SURFACE_PRODUCTS[product_lower]
+    if meta["anchors"] == "temp":
+        anchors = _TEMP_ANCHORS
+    elif meta["anchors"] == "wind":
+        anchors = _WIND_ANCHORS
+    else:
+        anchors = _RH_ANCHORS
+    return {
+        "product": product_lower,
+        "unit": meta["unit"],
+        "anchors": [{"value": a[0], "color": a[1]} for a in anchors],
+    }
+
+
+# ── Phase 3: MRMS Endpoints ──────────────────────────────────────────────────
+
+@app.get("/api/mrms/set-product")
+def mrms_set_product(product: str):
+    """Switch the active MRMS product the worker will refresh."""
+    global _active_mrms_product
+    from config.mrms_config import MRMS_PRODUCTS
+    if product not in MRMS_PRODUCTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown MRMS product '{product}'.",
+        )
+    _active_mrms_product = product
+    # Also update the worker module's state so the scheduler picks it up
+    try:
+        from workers.mrms_worker import set_active_product
+        set_active_product(product)
+    except Exception:
+        pass
+    return {"active_product": product}
+
+
+@app.get("/api/data/mrms")
+def get_data_mrms(
+    product: str = "PrecipRate",
+    south: float = 21.0,
+    west: float = -130.0,
+    north: float = 52.0,
+    east: float = -60.0,
+):
+    """
+    Return an MRMS PNG overlay for the given product and viewport bounds.
+    Reads the cached CONUS GRIB2, crops to bounds, applies colormap,
+    writes a transparent PNG, and returns its URL + georef bounds.
+    On cold cache: triggers a synchronous download (~3-5s first time).
+    """
+    global _active_mrms_product
+    from config.mrms_config import MRMS_PRODUCTS
+
+    if product not in MRMS_PRODUCTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown MRMS product '{product}'.",
+        )
+
+    # Switching product → update active so worker starts refreshing it
+    if product != _active_mrms_product:
+        _active_mrms_product = product
+        try:
+            from workers.mrms_worker import set_active_product
+            set_active_product(product)
+        except Exception:
+            pass
+
+    product_cache_dir = os.path.join(_CACHE_ROOT, "mrms", product)
+    os.makedirs(product_cache_dir, exist_ok=True)
+    grib_path = os.path.join(product_cache_dir, "conus.grib2.gz")
+
+    # Cold-cache: download now (blocking, first request only)
+    if not os.path.exists(grib_path):
+        try:
+            from workers.mrms_worker import run_mrms_worker, set_active_product
+            set_active_product(product)
+            run_mrms_worker()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"MRMS data for '{product}' not yet available: {exc}",
+            )
+
+    if not os.path.exists(grib_path):
+        raise HTTPException(
+            status_code=503,
+            detail=f"MRMS cache file missing after fetch attempt for '{product}'.",
+        )
+
+    # Check if a recent PNG crop is already cached for this product + bounds
+    import hashlib
+    bounds_key = hashlib.md5(
+        f"{product}_{south:.2f}_{west:.2f}_{north:.2f}_{east:.2f}".encode()).hexdigest()[:10]
+    png_path = os.path.join(product_cache_dir, f"overlay_{bounds_key}.png")
+    grib_mtime = os.path.getmtime(grib_path)
+    png_stale = not os.path.exists(
+        png_path) or os.path.getmtime(png_path) < grib_mtime
+
+    if png_stale:
+        try:
+            png_path, actual_bounds = _render_mrms_png(
+                grib_path, product, [west, east, south, north], png_path
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"MRMS render error: {exc}")
+    else:
+        # Read bounds from sidecar file
+        sidecar = png_path.replace(".png", "_bounds.json")
+        if os.path.exists(sidecar):
+            with open(sidecar, "r") as f:
+                actual_bounds = json.load(f)
+        else:
+            actual_bounds = [west, east, south, north]
+
+    # Build URL relative to /cache mount
+    rel = os.path.relpath(png_path, _CACHE_ROOT).replace("\\", "/")
+    image_url = f"/cache/{rel}"
+
+    prod_info = MRMS_PRODUCTS[product]
+    return {
+        "image_url": image_url,
+        "bounds": actual_bounds,
+        "product": product,
+        "full_name": prod_info.get("full_name", product),
+        "units": prod_info.get("units", ""),
+        "colormap": prod_info.get("colormap", ""),
+        "vmin": prod_info.get("vmin", 0),
+        "vmax": prod_info.get("vmax", 100),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _render_mrms_png(
+    grib_path: str,
+    product: str,
+    crop_extent: list,
+    out_path: str,
+) -> tuple:
+    """
+    Read MRMS GRIB2, crop to extent, apply colormap, save as transparent PNG.
+    Returns (png_path, [west, east, south, north] actual bounds).
+    """
+    import numpy as np
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.colors as mcolors
+
+    from mrms.mrms_utils import read_mrms_grib2, decompress_grib2_gz
+    from config.mrms_config import MRMS_PRODUCTS, MRMS_COLORMAPS
+
+    prod_info = MRMS_PRODUCTS[product]
+    cmap_key = prod_info.get("colormap", "precip_rate")
+    vmin = prod_info.get("vmin", 0)
+    vmax = prod_info.get("vmax", 100)
+    missing_value = prod_info.get("missing_value", -1)
+    no_coverage = prod_info.get("no_coverage", -3)
+
+    west, east, south, north = crop_extent
+
+    data, meta = read_mrms_grib2(grib_path, product, crop_extent=crop_extent)
+
+    # Mask fill/missing values
+    data = np.where(
+        (data == missing_value) | (data == no_coverage) | (data < vmin),
+        np.nan,
+        data,
+    )
+
+    lat = meta.get("latitude")
+    lon = meta.get("longitude")
+    if lat is None or lon is None:
+        raise ValueError("GRIB2 read did not return lat/lon metadata")
+
+    # Compute actual rendered bounds
+    actual_west = float(np.min(lon))
+    actual_east = float(np.max(lon))
+    actual_south = float(np.min(lat))
+    actual_north = float(np.max(lat))
+    actual_bounds = [actual_west, actual_east, actual_south, actual_north]
+
+    # Build colormap
+    cmap_obj = MRMS_COLORMAPS.get(cmap_key)
+    if isinstance(cmap_obj, tuple):
+        cmap, norm = cmap_obj[0], cmap_obj[1] if len(
+            cmap_obj) > 1 else mcolors.Normalize(vmin=vmin, vmax=vmax)
+    elif cmap_obj is not None:
+        cmap = cmap_obj
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    else:
+        cmap = plt.get_cmap("viridis")
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+    # Render to RGBA PNG (transparent where masked)
+    h, w = data.shape
+    dpi = 100
+    fig_w = w / dpi
+    fig_h = h / dpi
+    fig, ax = plt.subplots(1, 1, figsize=(fig_w, fig_h), dpi=dpi)
+    ax.set_position([0, 0, 1, 1])
+    ax.set_axis_off()
+    ax.imshow(
+        data,
+        origin="upper",
+        cmap=cmap,
+        norm=norm,
+        aspect="auto",
+        interpolation="nearest",
+    )
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
+    fig.savefig(out_path, dpi=dpi, bbox_inches=None,
+                transparent=True, format="png")
+    plt.close(fig)
+
+    # Write bounds sidecar
+    sidecar = out_path.replace(".png", "_bounds.json")
+    with open(sidecar, "w") as f:
+        json.dump(actual_bounds, f)
+
+    return out_path, actual_bounds
+
+
 def read_index_page():
     return _serve_page("index.html")
 

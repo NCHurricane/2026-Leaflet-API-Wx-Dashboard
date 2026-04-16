@@ -1,183 +1,103 @@
 # System Architecture
 
-This repository is transitioning to a unified weather workflow while preserving separate Radar and Satellite workflows.
+## Source Control (2026-04-16)
 
-## Source Control State (2026-04-16)
+Private GitHub repository. Rollback via `git restore`/`git revert`. High-risk refactors should be committed in small checkpoints. PR-based merges to `main` are the preferred gate for structural backend changes.
 
-Project source control is now backed by a private GitHub repository.
+## Phase 1 State (Leaflet Map)
 
-Operational implications:
+Unified weather page now serves a live Leaflet map with vector GeoJSON overlays. No image rendering or scrubber in weather.html.
 
-- Rollback path is git-native (`git restore`, `git revert`, branch rollback) rather than manual copy recovery.
-- High-risk refactors should be committed in small checkpoints to keep recovery granular.
-- PR-based merges to `main` are the preferred safety gate for structural backend changes.
+Active pages and their JS:
+- `weather.html` / `js/weather.js` — Leaflet map, alerts + SPC GeoJSON layers
+- `radar.html` / `js/radar.js` — independent radar workflow (unchanged)
+- `satellite.html` / `js/satellite.js` — independent satellite workflow (unchanged)
 
-Canonical unified target:
+Removed in Phase 0:
+- `legacy/` pages and JS are retained but unrouted
+- Legacy API render endpoints removed from main.py
 
-- weather.html
-- js/weather.js
-- /api/weather
-- /api/weather/export-frame
-- /api/weather/export-animation
+## Backend Workers (APScheduler)
 
-Retained independent workflows:
+Two background workers poll external APIs and write GeoJSON cache files:
 
-- Radar (radar.html + js/radar.js)
-- Satellite (satellite.html + js/satellite.js)
-- Satellite Archive (satellite-archive.html + js/satellite-archive.js)
+| Worker | Interval | Cache Path |
+|---|---|---|
+| alerts_worker | 2 min | `cache/alerts/national.geojson` |
+| spc_worker | 30 min | `cache/spc/{day}_{hazard}.geojson`, `cache/spc/fire_{day}_{hazard}.geojson` |
 
-## Legacy Archival (2026-04-04)
+Workers start on `startup` event and stop on `shutdown`. First run is triggered immediately at startup to warm the cache. Implemented in `workers/scheduler.py`, `workers/alerts_worker.py`, `workers/spc_worker.py`.
 
-Legacy frontend pages and JS have been moved to `legacy/`:
+If APScheduler import fails, the app starts with `_SCHEDULER_AVAILABLE = False` and workers are simply skipped (cache files are populated on first request via cold-cache fallback).
 
-- surface.html, alerts.html, mrms.html, spc.html, spc-archive.html
-- js/surface.js, js/alerts.js, js/mrms.js, js/spc.js, js/spc-archive.js
+## Data Endpoints
 
-Legacy page routes removed from main.py. Legacy API endpoints retained.
+```
+GET /api/data/alerts?state={STATE}   # optional state filter
+GET /api/data/spc?day={1-8}&hazard={cat|torn|wind|hail|prob|windrh|dryt}
+```
 
-Python backend modules (surface/, alerts/, mrms/, spc/) remain in use —
-weather_utils.py imports data-fetching functions from them at render time.
+Both endpoints:
+1. Read from the corresponding cache file.
+2. If cache is missing (cold start), trigger a synchronous worker run inline.
+3. Return GeoJSON with an added `count` field.
 
-Navigation: Weather, Radar, Satellite, Satellite Archive only.
+Cache served as static files via `/cache` mount (StaticFiles).
 
-Lightning is omitted from active roadmap direction.
+## Frontend Architecture
 
-## Request Flow
+`js/weather.js` — IIFE, no framework, ES6+, async/await.
 
-Frontend UI -> FastAPI endpoint -> synchronous render pipeline -> output image/video
+Responsibilities:
+- Leaflet map init with CartoDB Dark/Light basemap toggle
+- `loadAlerts(category)` — fetches `/api/data/alerts`, renders `L.geoJSON`, builds legend
+- `loadSpc(day, hazard)` — fetches `/api/data/spc`, renders `L.geoJSON`, builds legend
+- Region → `fitBounds` mapping (all 50 states + CONUS)
+- Layer visibility and opacity sliders (no page reload)
+- SPC three-way dropdown: convective / fire / other (tracks `_spcLastTouched`)
+- Alert category filter applied client-side against `properties.event`
 
-Progress model:
-
-1. Frontend creates request_id.
-2. Frontend starts polling /api/progress/{request_id}.
-3. Endpoint runs synchronously and updates active_tasks[request_id].
-4. Endpoint returns payload and removes active_tasks entry.
-
-Do not use BackgroundTasks or asyncio for rendering jobs.
+`js/shared.js` — exports `window.apiUrl`, `window.initNav`, and progress/output helpers (progress helpers are no-ops for the weather page since weather no longer uses the render pipeline).
 
 ## Pipeline Separation
 
-All workflows follow:
+Weather workflow: data-only endpoints, Leaflet client rendering, no server-side image generation.
 
-download -> cache -> parse -> render -> output
+Radar/Satellite workflows: unchanged — synchronous render pipeline, Lambert projection, server-side image generation, layered PNG scrubber.
 
-Keep network I/O out of rendering functions.
+## Cache Layout
 
-Keep encoding out of per-frame rendering functions.
+```
+cache/
+  alerts/
+    national.geojson
+  spc/
+    1_cat.geojson
+    1_torn.geojson
+    ...
+    fire_1_windrh.geojson
+    fire_1_dryt.geojson
+    ...
+```
 
-## Unified Weather Contract
+## Python Module Map
 
-### Endpoint
+| Module | Role |
+|---|---|
+| `main.py` | FastAPI app, routing, lifecycle events |
+| `workers/scheduler.py` | APScheduler setup and lifecycle |
+| `workers/alerts_worker.py` | NWS alerts fetch → cache |
+| `workers/spc_worker.py` | SPC outlook fetch → cache |
+| `alerts/alerts_utils.py` | `fetch_active_alerts_with_source()` |
+| `spc/spc_utils.py` | `fetch_outlook_geojson()`, `fetch_fire_wx_geojson()` |
+| `config/geo_config.py` | `STATE_BOUNDS` dict (used in weather.js) |
+| `config/alerts_config.py` | `ALERT_COLORS` dict |
 
-- /api/weather handles current and archive modes.
-- Mode inferred from paired date_from/date_to values.
+## Radar / Satellite Exception
 
-### Export
-
-- /api/weather/export-frame exports selected scrubber frame as PNG.
-- /api/weather/export-animation exports MP4 from existing layered artifacts.
-
-### Layered Archive
-
-Layered responses should include:
-
-- basemap_url
-- frames[]
-- layers_path
-- session_expires_utc
-- optional static layer URLs
-
-Exports must compose from layered artifacts and avoid rerendering source data when possible.
-
-## Projection
-
-Unified weather rendering uses Lambert-only policy.
-
-Rules:
-
-1. Use one computed extent/projection contract per frame for all layers.
-2. Preserve aspect ratio and avoid layer drift/stretch.
-3. Apply identical framing assumptions to basemap and overlays.
-
-## Caching
-
-Use cache-first behavior for all downloads.
-
-Layered sessions should include manifest metadata with TTL and max-session cleanup.
-
-Touch session access metadata on export calls.
-
-## Shared Utilities
-
-Prefer existing shared modules:
-
-- video_utils.py
-- geo_utils.py
-- city_utils.py
-- font_utils.py
-- listing_cache.py
-- s3_utils.py
-
-## MRMS Two-Tier Dropdown Architecture (2026-04-04)
-
-MRMS product selection uses a two-tier dropdown pattern:
-
-1. Primary dropdown selects product family (RotationTrack, MESH, QPE, etc.).
-2. Conditional sub-dropdowns appear for family-specific parameters
-   (level, time window, threshold, source, variant).
-3. JS `composeMrmsProductKey()` composes the final API product key
-   (e.g. `RotationTrack_LL_60min`, `QPE_MS2_01H`).
-
-Config: `config/mrms_config.py` defines 69 products across 11 families.
-Backend: `weather_utils.py` PRODUCT_GROUPS["mrms"] lists all 69 keys.
-Backend: `mrms_utils.py` uses `product.startswith("MESH")` for MESH checks.
-Defaults: main.py endpoints default to `QPE_MS2_01H`.
-
-## SPC Legend Architecture (2026-04-04)
-
-SPC torn/wind/hail legends render two rows: probability + CIG intensity.
-CIG patterns match map hatching in spc_utils.py:
-
-- CIG 1: dashed diagonals
-- CIG 2: solid backslash hatching
-- CIG 3: cross-hatch
-  Hail shows CIG 1-2 only.
-
-## SPC Fire Weather Outlook Architecture (2026-04-06)
-
-Fire Weather Outlooks added as SPC sub-products (`fire_windrh`, `fire_dryt`).
-
-Data sources:
-
-- Day 1-2: SPC static GeoJSON (`spc.noaa.gov/products/fire_wx/day{1,2}fw_{dryt,windrh}.nolyr.geojson`)
-- Day 3-8: NWS MapServer GeoJSON query
-  (`mapservices.weather.noaa.gov/.../SPC_firewx/MapServer/{layer_id}/query?where=1%3D1&outFields=*&f=geojson`)
-
-Layer ID mapping in `spc/spc_utils.py` `_FIRE_WX_LAYER_IDS`:
-Day 3 DryT=7/WindRH=8, Day 4 DryT=10/WindRH=11, ... Day 8 DryT=22/WindRH=23.
-
-Features with `dn=0` ("Probability Too Low") are filtered out during rendering.
-
-Frontend: Three-way mutual exclusion across convective / fire / other SPC dropdowns.
-Fire dropdown visible for all days (1-8).
-
-Legends:
-
-- Wind/RH: Elevated (#FFBF80), Critical (#FF8080), Extremely Critical (#FF80FF)
-- Dry Thunderstorm: Isolated (#FFBF80), Scattered (#FF8080)
-
-## Radar and Satellite Exception
-
-Radar and Satellite remain separate from unified weather migration.
-
-Keep existing Radar/Satellite source fallback and endpoint behavior intact unless explicitly requested.
-
-## Static Output Serving
-
-Generated outputs are served via /img/... static mounts.
-
-Use mapped output roots from main.py constants; avoid hardcoded ad-hoc directories.
-
-## Basemap Cache Protection
-
-Purge behavior must continue protecting basemap_cache/.
+Radar and Satellite workflows are not affected by Phase 1 changes. They retain:
+- Synchronous render pipeline
+- Lambert conformal conic projection
+- Layered PNG scrubber
+- `/api/radar`, `/api/satellite` endpoints
+- `active_tasks` progress tracking
