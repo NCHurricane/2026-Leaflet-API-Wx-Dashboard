@@ -658,11 +658,6 @@ def read_status():
 # Mutated by /api/mrms/set-product; read by the mrms_worker.
 _active_mrms_product: str = "PrecipRate"
 
-# ── MRMS app state (Phase 3) ─────────────────────────────────────────────────
-# Tracks which MRMS product the worker is actively refreshing.
-# Mutated by /api/mrms/set-product; read by the mrms_worker.
-_active_mrms_product: str = "PrecipRate"
-
 # ── Surface color helpers (Phase 2) ─────────────────────────────────────────
 try:
     from config.surface_config import TEMPERATURE_GRADIENT_ANCHORS as _TEMP_ANCHORS
