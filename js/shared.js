@@ -275,6 +275,10 @@
         if (!input || !input.id) {
             return;
         }
+        // Weather density sliders are formatted by weather.js in km based on zoom.
+        if (input.id === 'weather-obs-density' || input.id === 'weather-cities-density') {
+            return;
+        }
         const label = getLabelForInput(input.id);
         if (!label) {
             return;
@@ -660,6 +664,87 @@
         };
     }
 
+    // ── Shared Screenshot Utilities ──────────────────────────────────────────
+    /**
+     * Downloads a canvas as PNG with automatic timestamped filename
+     * @param {HTMLCanvasElement} canvas - The canvas to download
+     * @param {string} [prefix='screenshot'] - Filename prefix (default: 'screenshot')
+     * @param {string} [product=''] - Product name for filename (default: '')
+     */
+    function downloadCanvasAsPng(canvas, prefix = 'screenshot', product = '') {
+        const dataUrl = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = product
+            ? `${product}_${prefix}_${stamp}.png`
+            : `${prefix}_${stamp}.png`;
+        a.href = dataUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    /**
+     * Creates a Leaflet map screenshot using leaflet-image plugin
+     * @param {L.Map} map - Leaflet map instance
+     * @param {Object} [options={}] - Options for screenshot
+     * @param {Array<L.Layer>} [options.excludeLayers=[]] - Layers to temporarily exclude from screenshot
+     * @returns {Promise<HTMLCanvasElement>} Promise that resolves to the screenshot canvas
+     */
+    function captureLeafletMap(map, options = {}) {
+        const { excludeLayers = [] } = options;
+        return new Promise((resolve, reject) => {
+            if (typeof window.leafletImage !== 'function') {
+                reject(new Error('leaflet-image plugin is not available'));
+                return;
+            }
+
+            let done = false;
+            const timeoutId = setTimeout(() => {
+                if (done) return;
+                done = true;
+                excludeLayers.forEach(layer => {
+                    if (layer && map.hasLayer(layer)) {
+                        layer.addTo(map);
+                    }
+                });
+                reject(new Error('Map capture timed out'));
+            }, 12000);
+
+            const removedLayers = [];
+            excludeLayers.forEach(layer => {
+                if (layer && map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                    removedLayers.push(layer);
+                }
+            });
+
+            try {
+                window.leafletImage(map, (err, canvas) => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timeoutId);
+
+                    removedLayers.forEach(layer => layer.addTo(map));
+
+                    if (err || !canvas) {
+                        reject(new Error(err ? (err.message || String(err)) : 'Unknown rendering error'));
+                        return;
+                    }
+
+                    resolve(canvas);
+                });
+            } catch (err) {
+                if (done) return;
+                done = true;
+                clearTimeout(timeoutId);
+                removedLayers.forEach(layer => layer.addTo(map));
+                reject(new Error(err?.message || String(err)));
+            }
+        });
+    }
+
     window.initNav = initNav;
     window.showProgress = showProgress;
     window.hideProgress = hideProgress;
@@ -676,6 +761,8 @@
     window.refreshExtentSelectorOverlays = refreshExtentSelectorOverlays;
     window.createExtentSelectorModal = createExtentSelectorModal;
     window.populateAlertWfoSelect = populateAlertWfoSelect;
+    window.downloadCanvasAsPng = downloadCanvasAsPng;
+    window.captureLeafletMap = captureLeafletMap;
 
     function initSharedUi() {
         initRangeValueLabels();

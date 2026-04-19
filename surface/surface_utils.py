@@ -1,5 +1,4 @@
 from config.style_config import (
-    SURFACE_FIXED_STYLE_CONFIG,
     resolve_surface_style_config,
 )
 from config.geo_config import STATES_FULL, STATE_BOUNDS
@@ -17,7 +16,9 @@ from metpy.units import units
 from metpy.calc import reduce_point_density, wind_components
 from metpy.plots import StationPlot, USCOUNTIES, sky_cover, current_weather
 from dateutil import tz
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from io import StringIO
+from urllib.parse import urlencode
 import cartopy.feature as cfeature
 import cartopy.crs as ccrs
 from matplotlib.colors import LinearSegmentedColormap
@@ -33,7 +34,9 @@ from geo_utils import (
 )
 import os
 import json
+import gzip
 import time
+import re
 import requests
 import pandas as pd
 import numpy as np
@@ -68,6 +71,10 @@ BASEMAP_CACHE_DIR = os.path.join(
 )
 os.makedirs(BASEMAP_CACHE_DIR, exist_ok=True)
 BASEMAP_CACHE_VERSION = "nomask_v1"
+SURFACE_NETWORK_TYPES = ("ASOS", "COOP", "DCP", "RWIS")
+_WORLD_STATION_NAME_CACHE = {}
+_WORLD_STATION_NAME_CACHE_TS = 0.0
+_WORLD_STATION_NAME_CACHE_TTL_SECONDS = 12 * 3600
 
 
 def get_basemap_path(state_code: str, style_config: dict = None) -> str:
@@ -274,9 +281,203 @@ def is_cache_valid(file_path, minutes=30):
     return False
 
 
+def _get_station_names(network_id):
+    """
+    Fetch station metadata from IEM to get station names.
+    Returns a dict mapping station_id -> name.
+    """
+    try:
+        url = f"https://mesonet.agron.iastate.edu/json/raob.py?ts=2000010100&station=_ALL_&network={network_id}"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        station_names = {}
+        if "profiles" in data:
+            for profile in data["profiles"]:
+                sid = profile.get("station_id", "").strip()
+                sname = profile.get("station_name", "").strip()
+                if sid and sname:
+                    station_names[sid] = sname
+        return station_names
+    except Exception:
+        return {}
+
+
+def _fetch_single_network(state_code, network_type):
+    """
+    Fetch data from a single network for a state.
+    Returns DataFrame with data from that network, tagged with network_type.
+    network_type should be one of: ASOS, COOP, DCP, RWIS
+    """
+    try:
+        network_id = f"{state_code.upper()}_{network_type}"
+        api_url = f"https://mesonet.agron.iastate.edu/api/1/currents.json?network={network_id}"
+
+        resp = requests.get(api_url, timeout=20)
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+
+        if not data:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(data)
+        df["network"] = network_type  # Tag with network type
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+def _fetch_all_networks_parallel(state_code):
+    """
+    Fetch current observations from all supported network types in parallel.
+    Returns combined DataFrame with network field populated.
+    """
+    networks = list(SURFACE_NETWORK_TYPES)
+    all_dfs = []
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {
+            executor.submit(_fetch_single_network, state_code, net): net
+            for net in networks
+        }
+        for future in as_completed(futures):
+            try:
+                df = future.result()
+                if not df.empty:
+                    all_dfs.append(df)
+            except Exception:
+                pass
+
+    if not all_dfs:
+        return pd.DataFrame()
+
+    return pd.concat(all_dfs, ignore_index=True)
+
+
+def _to_float_mi(value):
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return np.nan
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    text = str(value).strip()
+    if not text:
+        return np.nan
+
+    # Common METAR visibility strings include suffixes like "+" (for 6+). Extract leading numeric portion.
+    match = re.search(r"[-+]?\d*\.?\d+", text)
+    if match:
+        try:
+            return float(match.group(0))
+        except Exception:
+            return np.nan
+    return np.nan
+
+
+def _get_world_station_name_map(force_refresh=False):
+    """Return cached WORLD station-id -> placename mapping from Aviation Weather."""
+    global _WORLD_STATION_NAME_CACHE, _WORLD_STATION_NAME_CACHE_TS
+
+    now = time.time()
+    if (
+        not force_refresh
+        and _WORLD_STATION_NAME_CACHE
+        and (now - _WORLD_STATION_NAME_CACHE_TS) < _WORLD_STATION_NAME_CACHE_TTL_SECONDS
+    ):
+        return _WORLD_STATION_NAME_CACHE
+
+    url = "https://aviationweather.gov/data/cache/stations.cache.json.gz"
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        raw = gzip.decompress(resp.content).decode("utf-8", errors="replace")
+        payload = json.loads(raw)
+    except Exception as e:
+        print(f"[WARN] WORLD station-name metadata fetch failed: {e}")
+        return _WORLD_STATION_NAME_CACHE
+
+    rows = payload if isinstance(payload, list) else payload.get("features", [])
+    mapping = {}
+    for row in rows:
+        props = row.get("properties", {}) if isinstance(row, dict) else {}
+        if not props and isinstance(row, dict):
+            props = row
+        if not isinstance(props, dict):
+            continue
+
+        site_name = str(props.get("site") or "").strip()
+        if not site_name:
+            continue
+
+        for raw_id in (props.get("icaoId"), props.get("faaId"), props.get("wmoId")):
+            sid = str(raw_id or "").strip().upper()
+            if sid and sid not in mapping:
+                mapping[sid] = site_name
+
+    if mapping:
+        _WORLD_STATION_NAME_CACHE = mapping
+        _WORLD_STATION_NAME_CACHE_TS = now
+
+    return _WORLD_STATION_NAME_CACHE
+
+
+def _fetch_world_current_observations():
+    """Fetch current global METAR observations from Aviation Weather cache feed."""
+    url = "https://aviationweather.gov/data/cache/metars.cache.csv.gz"
+    try:
+        df = pd.read_csv(url, compression="gzip")
+    except Exception as e:
+        print(f"[WARN] WORLD METAR fetch failed: {e}")
+        return pd.DataFrame()
+
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    station_ids = df.get("station_id", "").astype(str).str.strip()
+    station_name_map = _get_world_station_name_map()
+
+    out = pd.DataFrame()
+    out["station_id"] = station_ids
+    out["name"] = station_ids.str.upper().map(station_name_map).fillna(station_ids)
+    out["valid"] = df.get("observation_time")
+    out["latitude"] = pd.to_numeric(df.get("latitude"), errors="coerce")
+    out["longitude"] = pd.to_numeric(df.get("longitude"), errors="coerce")
+
+    temp_c = pd.to_numeric(df.get("temp_c"), errors="coerce")
+    dew_c = pd.to_numeric(df.get("dewpoint_c"), errors="coerce")
+    out["air_temperature"] = (temp_c * 9.0 / 5.0) + 32.0
+    out["dew_point_temperature"] = (dew_c * 9.0 / 5.0) + 32.0
+
+    out["wind_speed"] = pd.to_numeric(df.get("wind_speed_kt"), errors="coerce")
+    out["wind_dir"] = pd.to_numeric(df.get("wind_dir_degrees"), errors="coerce")
+    out["wind_gust"] = pd.to_numeric(df.get("wind_gust_kt"), errors="coerce")
+    out["altimeter"] = pd.to_numeric(df.get("altim_in_hg"), errors="coerce")
+    out["mean_sea_level_pressure"] = pd.to_numeric(
+        df.get("sea_level_pressure_mb"), errors="coerce"
+    )
+    out["visibility"] = df.get("visibility_statute_mi", np.nan).apply(_to_float_mi)
+    out["wxcodes"] = df.get("wx_string", np.nan)
+
+    # Keep network taxonomy aligned with the existing frontend filters.
+    out["network"] = "ASOS"
+
+    return out
+
+
+def _filter_supported_network_rows(df):
+    if df is None or df.empty or "network" not in df.columns:
+        return df
+    return df[df["network"].isin(SURFACE_NETWORK_TYPES)].copy()
+
+
 def process_dataframe(df, state_code):
     rename_map = {
         "station": "station_id",
+        "name": "name",
+        "site_name": "name",
+        "station_name": "name",
+        "location": "name",
         "lat": "latitude",
         "lon": "longitude",
         "tmpf": "air_temperature",
@@ -339,8 +540,7 @@ def process_dataframe(df, state_code):
         else:
             df["relative_humidity"] = 50
 
-    df["heat_index"] = calc_heat_index(
-        df["air_temperature"], df["relative_humidity"])
+    df["heat_index"] = calc_heat_index(df["air_temperature"], df["relative_humidity"])
 
     wspd_mph = wspd_safe * 1.15078
     cond_cold = (df["air_temperature"] <= 50) & (wspd_mph >= 3)
@@ -380,12 +580,12 @@ def fetch_nws_current_observations(state_code):
         gridpoint_data = resp.json()
 
         # Extract grid point ID for observations
-        if 'properties' not in gridpoint_data:
+        if "properties" not in gridpoint_data:
             return pd.DataFrame()
 
-        grid_id = gridpoint_data['properties'].get('gridId')
-        grid_x = gridpoint_data['properties'].get('gridX')
-        grid_y = gridpoint_data['properties'].get('gridY')
+        grid_id = gridpoint_data["properties"].get("gridId")
+        grid_x = gridpoint_data["properties"].get("gridX")
+        grid_y = gridpoint_data["properties"].get("gridY")
 
         if not (grid_id and grid_x is not None and grid_y is not None):
             return pd.DataFrame()
@@ -396,32 +596,33 @@ def fetch_nws_current_observations(state_code):
         obs_resp.raise_for_status()
         obs_data = obs_resp.json()
 
-        if 'features' not in obs_data or not obs_data['features']:
+        if "features" not in obs_data or not obs_data["features"]:
             return pd.DataFrame()
 
         # Convert NWS format to METAR-like format for compatibility
         records = []
-        for feature in obs_data['features']:
-            props = feature.get('properties', {})
+        for feature in obs_data["features"]:
+            props = feature.get("properties", {})
             if not props:
                 continue
 
             # Extract key fields and standardize names
             record = {
-                'station': props.get('station', '').split('/')[-1],
-                'tmpf': props.get('temperature'),
-                'dwpf': props.get('dewpoint'),
-                'relh': props.get('relativeHumidity'),
-                'drct': props.get('windDirection'),
-                'sknt': props.get('windSpeed'),
-                'vsby': props.get('visibility'),
-                'alti': props.get('seaLevelPressure'),
-                'mslp': props.get('seaLevelPressure'),
-                'gust': props.get('windGust'),
-                'valid': props.get('timestamp'),
+                "station": props.get("station", "").split("/")[-1],
+                "name": props.get("name", ""),  # NWS may include station name
+                "tmpf": props.get("temperature"),
+                "dwpf": props.get("dewpoint"),
+                "relh": props.get("relativeHumidity"),
+                "drct": props.get("windDirection"),
+                "sknt": props.get("windSpeed"),
+                "vsby": props.get("visibility"),
+                "alti": props.get("seaLevelPressure"),
+                "mslp": props.get("seaLevelPressure"),
+                "gust": props.get("windGust"),
+                "valid": props.get("timestamp"),
             }
-            if pd.notna(record['tmpf']) and pd.notna(record['dwpf']):
-                record['feelsx'] = record['tmpf']
+            if pd.notna(record["tmpf"]) and pd.notna(record["dwpf"]):
+                record["feelsx"] = record["tmpf"]
             records.append(record)
 
         if not records:
@@ -441,39 +642,63 @@ def fetch_metar_data(state_code, use_nws_first=False):
     Uses IEM by default. When use_nws_first=True, tries NWS first for
     current-mode flows, then falls back to IEM.
     """
+    state_upper = str(state_code or "").upper().strip() or "NC"
+
+    # WORLD current-mode: use global METAR cache feed.
+    if state_upper == "WORLD":
+        cache_dir, cache_file = get_cache_path(state_upper)
+        if is_cache_valid(cache_file, minutes=15):
+            try:
+                df_cached = pd.read_csv(cache_file)
+                if not df_cached.empty:
+                    return process_dataframe(df_cached, state_upper)
+            except Exception:
+                pass
+
+        try:
+            df_world_raw = _fetch_world_current_observations()
+            if df_world_raw.empty:
+                return pd.DataFrame()
+            df_world = process_dataframe(df_world_raw, state_upper)
+            if not df_world.empty:
+                df_world.to_csv(cache_file, index=False)
+            return df_world
+        except Exception as e:
+            print(f"API Error WORLD: {e}")
+            return pd.DataFrame()
+
     # Try NWS first for current data
     if use_nws_first:
         try:
-            df_nws = fetch_nws_current_observations(state_code)
+            df_nws = fetch_nws_current_observations(state_upper)
             if not df_nws.empty and len(df_nws) > 5:
                 return df_nws
         except Exception:
             pass
 
     # Fall back to IEM
-    cache_dir, cache_file = get_cache_path(state_code)
+    cache_dir, cache_file = get_cache_path(state_upper)
     base_path = os.path.dirname(os.path.abspath(__file__))
-    legacy_cache_file = os.path.join(
-        base_path, "surface_data", state_code.upper(), "data.csv"
-    )
+    legacy_cache_file = os.path.join(base_path, "surface_data", state_upper, "data.csv")
 
     for candidate in (cache_file, legacy_cache_file):
         if is_cache_valid(candidate, minutes=15):
             try:
                 df = pd.read_csv(candidate)
                 if not df.empty:
+                    df = _filter_supported_network_rows(df)
                     if candidate != cache_file:
                         try:
                             df.to_csv(cache_file, index=False)
                         except Exception:
                             pass
-                    return process_dataframe(df, state_code)
+                    return process_dataframe(df, state_upper)
                 else:
                     os.remove(candidate)
             except Exception:
                 pass
 
-    if state_code.upper() == "CONUS":
+    if state_upper == "CONUS":
         all_dfs = []
         states = [
             state for state in STATES_FULL.keys() if state not in ["AK", "HI", "CONUS"]
@@ -499,31 +724,210 @@ def fetch_metar_data(state_code, use_nws_first=False):
         combined_df.to_csv(cache_file, index=False)
         return combined_df
 
-    network_id = f"{state_code.upper()}_ASOS"
-    api_url = (
-        f"https://mesonet.agron.iastate.edu/api/1/currents.json?network={network_id}"
-    )
+    # Fetch from all supported network types in parallel
     try:
-        resp = requests.get(api_url, timeout=20)
-        resp.raise_for_status()
-        data = resp.json().get("data", [])
-        if not data:
+        df_raw = _fetch_all_networks_parallel(state_upper)
+        if df_raw.empty:
             return pd.DataFrame()
 
-        df_processed = process_dataframe(pd.DataFrame(data), state_code)
+        df_processed = process_dataframe(df_raw, state_upper)
+
+        # Enrich station names for each network
+        if not df_processed.empty and "network" in df_processed.columns:
+            for network_type in SURFACE_NETWORK_TYPES:
+                network_id = f"{state_upper}_{network_type}"
+                station_names = _get_station_names(network_id)
+                if station_names:
+                    # Fill missing names for this network
+                    mask = (df_processed["network"] == network_type) & (
+                        (df_processed["name"].isna()) | (df_processed["name"] == "")
+                    )
+                    df_processed.loc[mask, "name"] = df_processed.loc[
+                        mask, "station_id"
+                    ].map(
+                        lambda x: station_names.get(
+                            x.strip() if isinstance(x, str) else x, ""
+                        )
+                    )
+
         if not df_processed.empty:
             df_processed.to_csv(cache_file, index=False)
         return df_processed
     except Exception as e:
-        print(f"API Error {state_code}: {e}")
+        print(f"API Error {state_upper}: {e}")
         return pd.DataFrame()
+
+
+def fetch_metar_data_at_time(state_code, valid_time_utc, source="iem"):
+    """Fetch station observations nearest a target UTC time (IEM-first for archive flows)."""
+    source_key = str(source or "iem").strip().lower()
+    target_dt = valid_time_utc or datetime.now(timezone.utc)
+    if target_dt.tzinfo is None:
+        target_dt = target_dt.replace(tzinfo=timezone.utc)
+    else:
+        target_dt = target_dt.astimezone(timezone.utc)
+
+    # NWS and aviationweather are near-real-time sources; use NWS opportunistically
+    # for recent targets, then fall back to IEM.
+    if source_key in {"nws", "aviationweather", "auto"}:
+        age_seconds = abs((datetime.now(timezone.utc) - target_dt).total_seconds())
+        if age_seconds <= 2 * 3600:
+            try:
+                df_nws = fetch_nws_current_observations(state_code)
+                if df_nws is not None and not df_nws.empty and len(df_nws) > 5:
+                    return df_nws
+            except Exception:
+                pass
+
+    state = str(state_code or "").upper().strip() or "NC"
+
+    if state == "WORLD":
+        try:
+            df_world_raw = _fetch_world_current_observations()
+            if df_world_raw.empty:
+                return pd.DataFrame()
+            df = process_dataframe(df_world_raw, state)
+        except Exception:
+            return pd.DataFrame()
+
+        if (
+            df is None
+            or df.empty
+            or "valid" not in df.columns
+            or "station_id" not in df.columns
+        ):
+            return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
+
+        ts = pd.to_datetime(df["valid"], utc=True, errors="coerce")
+        df = df.assign(_valid_ts=ts).dropna(subset=["_valid_ts", "station_id"])
+        if df.empty:
+            return pd.DataFrame()
+
+        target_ts = pd.Timestamp(target_dt)
+        df["_delta_seconds"] = (df["_valid_ts"] - target_ts).abs().dt.total_seconds()
+        df = (
+            df.sort_values(["station_id", "_delta_seconds"])
+            .groupby("station_id", as_index=False)
+            .first()
+        )
+        df = df[df["_delta_seconds"] <= 75 * 60]
+        if df.empty:
+            return pd.DataFrame()
+
+        return df.drop(columns=["_valid_ts", "_delta_seconds"], errors="ignore")
+
+    if state == "CONUS":
+        all_dfs = []
+        states = [s for s in STATES_FULL.keys() if s not in ["AK", "HI", "CONUS"]]
+        max_workers = min(10, max(4, len(states)))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_state = {
+                executor.submit(fetch_metar_data_at_time, s, target_dt, "iem"): s
+                for s in states
+            }
+            for future in as_completed(future_to_state):
+                try:
+                    df_state = future.result()
+                    if df_state is not None and not df_state.empty:
+                        all_dfs.append(df_state)
+                except Exception:
+                    pass
+        if not all_dfs:
+            return pd.DataFrame()
+        return pd.concat(all_dfs, ignore_index=True)
+
+    # Pull a narrow archive window centered on the requested timestamp.
+    start = target_dt - timedelta(minutes=40)
+    end = target_dt + timedelta(minutes=20)
+    network_id = f"{state}_ASOS"
+    fields = [
+        "station",
+        "valid",
+        "lon",
+        "lat",
+        "tmpf",
+        "dwpf",
+        "sknt",
+        "drct",
+        "relh",
+        "alti",
+        "vsby",
+        "gust",
+        "mslp",
+        "wxcodes",
+    ]
+    params = [
+        ("network", network_id),
+        ("tz", "Etc/UTC"),
+        ("format", "onlycomma"),
+        ("latlon", "yes"),
+        ("direct", "no"),
+        ("report_type", "1"),
+        ("report_type", "2"),
+        ("year1", str(start.year)),
+        ("month1", str(start.month)),
+        ("day1", str(start.day)),
+        ("hour1", str(start.hour)),
+        ("minute1", str(start.minute)),
+        ("year2", str(end.year)),
+        ("month2", str(end.month)),
+        ("day2", str(end.day)),
+        ("hour2", str(end.hour)),
+        ("minute2", str(end.minute)),
+    ]
+    params.extend(("data", field) for field in fields)
+
+    url = "https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py"
+    try:
+        resp = requests.get(f"{url}?{urlencode(params, doseq=True)}", timeout=30)
+        resp.raise_for_status()
+        if not (resp.text or "").strip():
+            return pd.DataFrame()
+        df_raw = pd.read_csv(StringIO(resp.text))
+    except Exception:
+        return pd.DataFrame()
+
+    if df_raw is None or df_raw.empty:
+        return pd.DataFrame()
+
+    try:
+        df = process_dataframe(df_raw, state)
+    except Exception:
+        return pd.DataFrame()
+
+    if (
+        df is None
+        or df.empty
+        or "valid" not in df.columns
+        or "station_id" not in df.columns
+    ):
+        return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
+
+    ts = pd.to_datetime(df["valid"], utc=True, errors="coerce")
+    df = df.assign(_valid_ts=ts).dropna(subset=["_valid_ts", "station_id"])
+    if df.empty:
+        return pd.DataFrame()
+
+    target_ts = pd.Timestamp(target_dt)
+    df["_delta_seconds"] = (df["_valid_ts"] - target_ts).abs().dt.total_seconds()
+    df = (
+        df.sort_values(["station_id", "_delta_seconds"])
+        .groupby("station_id", as_index=False)
+        .first()
+    )
+
+    # Keep only stations that are reasonably close to the requested frame time.
+    df = df[df["_delta_seconds"] <= 75 * 60]
+    if df.empty:
+        return pd.DataFrame()
+
+    return df.drop(columns=["_valid_ts", "_delta_seconds"], errors="ignore")
 
 
 def get_weather_symbol_index(wx_code):
     if pd.isna(wx_code) or not wx_code:
         return 0
-    search_str = " ".join(wx_code) if isinstance(
-        wx_code, list) else str(wx_code)
+    search_str = " ".join(wx_code) if isinstance(wx_code, list) else str(wx_code)
 
     mapping = {
         "FC": 99,
@@ -653,8 +1057,7 @@ def plot_cities(
                 ),
             )
             txt.set_path_effects(
-                [PathEffects.withStroke(
-                    linewidth=halo_width, foreground=halo_color)]
+                [PathEffects.withStroke(linewidth=halo_width, foreground=halo_color)]
             )
             drawn_bboxes.append((cx_min, cx_max, cy_min, cy_max))
 
@@ -718,8 +1121,7 @@ def generate_surface_map(
         dot_size = int(style_config.get("dot_size", 500))
         density_km = float(
             style_config.get(
-                "density_km", 330 -
-                (int(style_config.get("station_density", 5)) * 30)
+                "density_km", 330 - (int(style_config.get("station_density", 5)) * 30)
             )
         )
         city_text_size = int(style_config.get("city_text_size", 10))
@@ -739,10 +1141,8 @@ def generate_surface_map(
         show_country = style_config.get("show_country", True)
         if isinstance(show_country, str):
             show_country = show_country.lower() not in ("false", "0", "no")
-        country_border_width = float(
-            style_config.get("country_border_width", 0.8))
-        country_border_color = style_config.get(
-            "country_border_color", "black")
+        country_border_width = float(style_config.get("country_border_width", 0.8))
+        country_border_color = style_config.get("country_border_color", "black")
 
         # State Styling
         show_states = style_config.get("show_states", True)
@@ -789,13 +1189,11 @@ def generate_surface_map(
         # HUD Colors
         hud_left_text_color = style_config.get("hud_left_text_color", "white")
         hud_left_bg_color = style_config.get("hud_left_bg_color", "black")
-        hud_left_edge_color = style_config.get(
-            "hud_left_edge_color", "#555555")
+        hud_left_edge_color = style_config.get("hud_left_edge_color", "#555555")
         hud_left_opacity = float(style_config.get("hud_left_opacity", 0.7))
         hud_right_text_color = style_config.get("hud_right_text_color", "gold")
         hud_right_bg_color = style_config.get("hud_right_bg_color", "black")
-        hud_right_edge_color = style_config.get(
-            "hud_right_edge_color", "#555555")
+        hud_right_edge_color = style_config.get("hud_right_edge_color", "#555555")
         hud_right_opacity = float(style_config.get("hud_right_opacity", 0.7))
 
         output_time_utc = datetime.now(timezone.utc)
@@ -887,11 +1285,14 @@ def generate_surface_map(
         fig_height = 7.2
         # Precompute margins so we can size the figure for the axes area
         left_margin = float(style_config.get("figure_left_margin", 0.02))
-        bottom_margin = float(style_config.get(
-            "figure_bottom_margin_station" if parameter == "Station Plot"
-            else "figure_bottom_margin_other",
-            0.20 if parameter == "Station Plot" else 0.12,
-        ))
+        bottom_margin = float(
+            style_config.get(
+                "figure_bottom_margin_station"
+                if parameter == "Station Plot"
+                else "figure_bottom_margin_other",
+                0.20 if parameter == "Station Plot" else 0.12,
+            )
+        )
         right_margin = float(style_config.get("figure_right_margin", 0.02))
         top_margin = float(style_config.get("figure_top_margin", 0.02))
         ax_width = 1.0 - left_margin - right_margin
@@ -906,8 +1307,7 @@ def generate_surface_map(
         city_text_size = int(city_text_size * scale_factor)
         font_size = int(font_size * scale_factor)
         # Smaller for station plots (many fields per station)
-        station_font_scale = float(
-            style_config.get("station_font_scale", 0.55))
+        station_font_scale = float(style_config.get("station_font_scale", 0.55))
         station_font_size = max(7, int(font_size * station_font_scale))
         dot_size = int(dot_size * scale_factor)
 
@@ -938,10 +1338,8 @@ def generate_surface_map(
             ax.patch.set_alpha(0)  # Let basemap show through axes background
             _perf_log(perf, "load_basemap", t_base)
         else:
-            ax.add_feature(cfeature.LAND, facecolor=land_color,
-                           zorder=zo["land"])
-            ax.add_feature(cfeature.OCEAN, facecolor=ocean_color,
-                           zorder=zo["land"])
+            ax.add_feature(cfeature.LAND, facecolor=land_color, zorder=zo["land"])
+            ax.add_feature(cfeature.OCEAN, facecolor=ocean_color, zorder=zo["land"])
             ax.add_feature(
                 cfeature.COASTLINE.with_scale("10m"),
                 linewidth=coastline_width,
@@ -1009,8 +1407,7 @@ def generate_surface_map(
                     pass
             _perf_log(perf, "draw_base_features", t_base)
 
-        ax.set_extent([ext_lon0, ext_lon1, ext_lat0, ext_lat1],
-                      crs=ccrs.PlateCarree())
+        ax.set_extent([ext_lon0, ext_lon1, ext_lat0, ext_lat1], crs=ccrs.PlateCarree())
         x_min, x_max = ax.get_xlim()
         y_min, y_max = ax.get_ylim()
         x_span = x_max - x_min
@@ -1020,10 +1417,8 @@ def generate_surface_map(
         expand_left = float(style_config.get("map_margin_left", 0.0))
         expand_right = float(style_config.get("map_margin_right", 0.0))
 
-        ax.set_xlim(x_min - x_span * expand_left,
-                    x_max + x_span * expand_right)
-        ax.set_ylim(y_min - y_span * expand_bottom,
-                    y_max + y_span * expand_top)
+        ax.set_xlim(x_min - x_span * expand_left, x_max + x_span * expand_right)
+        ax.set_ylim(y_min - y_span * expand_bottom, y_max + y_span * expand_top)
 
         # Data processing
         xy = proj.transform_points(
@@ -1046,8 +1441,7 @@ def generate_surface_map(
             # ... (Standard Station Plot Logic) ...
             df_plot["wx_idx"] = 0
             if "wxcodes" in df_plot.columns:
-                df_plot["wx_idx"] = df_plot["wxcodes"].apply(
-                    get_weather_symbol_index)
+                df_plot["wx_idx"] = df_plot["wxcodes"].apply(get_weather_symbol_index)
 
             sky_vals = np.zeros(len(df_plot))
             if "relative_humidity" in df_plot.columns:
@@ -1059,8 +1453,7 @@ def generate_surface_map(
                     .values
                 )
 
-            station_spacing = float(style_config.get(
-                "station_spacing_factor", 1.2))
+            station_spacing = float(style_config.get("station_spacing_factor", 1.2))
             sp = StationPlot(
                 ax,
                 df_plot["longitude"].values,
@@ -1074,12 +1467,12 @@ def generate_surface_map(
 
             stn_halo_w = int(style_config.get("station_text_halo_width", 2))
             stn_halo_c = style_config.get("station_text_halo_color", "white")
-            halo = [PathEffects.withStroke(
-                linewidth=stn_halo_w, foreground=stn_halo_c)]
+            halo = [PathEffects.withStroke(linewidth=stn_halo_w, foreground=stn_halo_c)]
 
             stn_weight = style_config.get("station_text_weight", "bold")
             sp.plot_parameter(
-                "NW", df_plot["air_temperature"].values,
+                "NW",
+                df_plot["air_temperature"].values,
                 color=style_config.get("station_temp_color", "#D32F2F"),
                 weight=stn_weight,
             ).set_path_effects(halo)
@@ -1104,13 +1497,14 @@ def generate_surface_map(
                 sp.plot_parameter(
                     "E",
                     df_plot["visibility"].values,
-                    color=style_config.get(
-                        "station_visibility_color", "purple"),
+                    color=style_config.get("station_visibility_color", "purple"),
                     formatter=lambda v: f"{v:.0f}" if not pd.isna(v) else "",
                 ).set_path_effects(halo)
             sp.plot_symbol("C", sky_vals, sky_cover)
             sp.plot_symbol(
-                "W", df_plot["wx_idx"].values, current_weather,
+                "W",
+                df_plot["wx_idx"].values,
+                current_weather,
                 color=style_config.get("station_weather_color", "#1976D2"),
             )
             sp.plot_barb(
@@ -1224,8 +1618,7 @@ def generate_surface_map(
                 grid_points,
                 method="nearest",
             )
-            temp_linear[np.isnan(temp_linear)
-                        ] = temp_nearest[np.isnan(temp_linear)]
+            temp_linear[np.isnan(temp_linear)] = temp_nearest[np.isnan(temp_linear)]
             temp_grid = temp_linear.reshape(lon_mesh.shape)
 
             if use_smoothing:
@@ -1270,25 +1663,30 @@ def generate_surface_map(
 
             if not _draw_gradient_values:
                 # If Clean Mode, just add contour labels
-                cl = ax.clabel(contours, fmt="%d",
-                               fontsize=int(style_config.get(
-                                   "contour_label_size", 9)),
-                               inline=True)
+                cl = ax.clabel(
+                    contours,
+                    fmt="%d",
+                    fontsize=int(style_config.get("contour_label_size", 9)),
+                    inline=True,
+                )
                 for txt in cl:
                     txt.set_fontname(font_family)
-                    txt.set_fontweight(style_config.get(
-                        "contour_label_weight", "black"))
+                    txt.set_fontweight(
+                        style_config.get("contour_label_weight", "black")
+                    )
                     txt.set_zorder(zo["contour_labels"])
 
             # Fill masking disabled by request; keep unmasked gradient rendering.
 
             # Colorbar
-            cbar_ax = fig.add_axes([
-                float(style_config.get("cbar_left", 0.2)),
-                float(style_config.get("cbar_bottom", 0.05)),
-                float(style_config.get("cbar_width", 0.6)),
-                float(style_config.get("cbar_height", 0.03)),
-            ])
+            cbar_ax = fig.add_axes(
+                [
+                    float(style_config.get("cbar_left", 0.2)),
+                    float(style_config.get("cbar_bottom", 0.05)),
+                    float(style_config.get("cbar_width", 0.6)),
+                    float(style_config.get("cbar_height", 0.03)),
+                ]
+            )
             cb = plt.colorbar(contourf, cax=cbar_ax, orientation="horizontal")
             tick_values = np.arange(-60, 131, 2)
             cb.set_ticks(tick_values)
@@ -1298,13 +1696,11 @@ def generate_surface_map(
                 else 10
             )
             cb.set_ticklabels(
-                [str(t) if t % temp_label_step ==
-                 0 else "" for t in tick_values]
+                [str(t) if t % temp_label_step == 0 else "" for t in tick_values]
             )
             for tick in cb.ax.get_xticklabels():
                 tick.set_fontname(font_family)
-                tick.set_fontweight(style_config.get(
-                    "cbar_tick_weight", "bold"))
+                tick.set_fontweight(style_config.get("cbar_tick_weight", "bold"))
 
             # --- DEFERRED: OVERLAY VALUES (drawn after masks so they're on top) ---
             if _draw_gradient_values:
@@ -1323,8 +1719,7 @@ def generate_surface_map(
                         transform=ccrs.PlateCarree(),
                         fontsize=font_size,
                         fontname=font_family,
-                        fontweight=style_config.get(
-                            "value_text_weight", "black"),
+                        fontweight=style_config.get("value_text_weight", "black"),
                         color=style_config.get("value_text_color", "white"),
                         ha="center",
                         va="center",
@@ -1332,10 +1727,16 @@ def generate_surface_map(
                         clip_on=True,
                     )
                     txt.set_path_effects(
-                        [PathEffects.withStroke(
-                            linewidth=int(style_config.get(
-                                "value_text_halo_width", 2)),
-                            foreground=style_config.get("value_text_halo_color", "black"))]
+                        [
+                            PathEffects.withStroke(
+                                linewidth=int(
+                                    style_config.get("value_text_halo_width", 2)
+                                ),
+                                foreground=style_config.get(
+                                    "value_text_halo_color", "black"
+                                ),
+                            )
+                        ]
                     )
 
             _perf_log(perf, "render_gradient", t_gradient)
@@ -1421,10 +1822,14 @@ def generate_surface_map(
                     clip_on=True,
                 )
                 txt.set_path_effects(
-                    [PathEffects.withStroke(
-                        linewidth=int(style_config.get(
-                            "value_text_halo_width", 2)),
-                        foreground=style_config.get("value_text_halo_color", "black"))]
+                    [
+                        PathEffects.withStroke(
+                            linewidth=int(style_config.get("value_text_halo_width", 2)),
+                            foreground=style_config.get(
+                                "value_text_halo_color", "black"
+                            ),
+                        )
+                    ]
                 )
 
             # Add wind arrows for Wind Speed parameter
@@ -1443,25 +1848,24 @@ def generate_surface_map(
                     color=style_config.get("wind_arrow_color", "black"),
                     scale=float(style_config.get("wind_arrow_scale", 25)),
                     width=float(style_config.get("wind_arrow_width", 0.004)),
-                    headwidth=float(style_config.get(
-                        "wind_arrow_headwidth", 4)),
-                    headlength=float(style_config.get(
-                        "wind_arrow_headlength", 5)),
+                    headwidth=float(style_config.get("wind_arrow_headwidth", 4)),
+                    headlength=float(style_config.get("wind_arrow_headlength", 5)),
                     zorder=zo["scatter"] - 1,
                     clip_on=False,
                 )
 
-            cbar_ax = fig.add_axes([
-                float(style_config.get("cbar_left", 0.2)),
-                float(style_config.get("cbar_bottom", 0.05)),
-                float(style_config.get("cbar_width", 0.6)),
-                float(style_config.get("cbar_height", 0.03)),
-            ])
+            cbar_ax = fig.add_axes(
+                [
+                    float(style_config.get("cbar_left", 0.2)),
+                    float(style_config.get("cbar_bottom", 0.05)),
+                    float(style_config.get("cbar_width", 0.6)),
+                    float(style_config.get("cbar_height", 0.03)),
+                ]
+            )
             cb = plt.colorbar(sc, cax=cbar_ax, orientation="horizontal")
             for tick in cb.ax.get_xticklabels():
                 tick.set_fontname(font_family)
-                tick.set_fontweight(style_config.get(
-                    "cbar_tick_weight", "bold"))
+                tick.set_fontweight(style_config.get("cbar_tick_weight", "bold"))
             _perf_log(perf, f"render_parameter:{parameter}", t_param)
 
         # --- REGION BORDER (selected state outline only) ---
@@ -1475,14 +1879,12 @@ def generate_surface_map(
                     vx0, vx1, vy0, vy1 = ax.get_extent(crs=ccrs.PlateCarree())
 
                     # Always draw border live so sel_border_color/width are respected
-                    simplified_border = _REGION_MASK_CACHE.get(
-                        (code, "border"))
+                    simplified_border = _REGION_MASK_CACHE.get((code, "border"))
                     if simplified_border is None:
                         simplified_border = selected_geom.simplify(
                             0.02, preserve_topology=True
                         )
-                        _REGION_MASK_CACHE[(code, "border")
-                                           ] = simplified_border
+                        _REGION_MASK_CACHE[(code, "border")] = simplified_border
                     border_path_key = (
                         code,
                         round(vx0, 2),
@@ -1531,8 +1933,7 @@ def generate_surface_map(
             _perf_log(perf, "plot_cities", t_cities)
 
         # HUD
-        dt_local = datetime.now(timezone.utc).astimezone(
-            tz.gettz("America/New_York"))
+        dt_local = datetime.now(timezone.utc).astimezone(tz.gettz("America/New_York"))
         hud_box = style_config.get("hud_box_style", "round,pad=0.5")
         text_style_left = dict(
             boxstyle=hud_box,
@@ -1547,8 +1948,7 @@ def generate_surface_map(
             alpha=hud_right_opacity,
         )
 
-        hud_left_size = int(float(style_config.get(
-            "hud_left_size", 15)) * scale_factor)
+        hud_left_size = int(float(style_config.get("hud_left_size", 15)) * scale_factor)
         hud_right_size = int(
             float(style_config.get("hud_right_size", 15)) * scale_factor
         )
@@ -1602,8 +2002,7 @@ def generate_surface_map(
         if os.path.exists(logo_file):
             try:
                 logo_size = (
-                    float(style_config.get("logo_user_size", 0.08)) *
-                    scale_factor
+                    float(style_config.get("logo_user_size", 0.08)) * scale_factor
                 )
                 logo_x = float(style_config.get("logo_user_x", 0.98))
                 logo_y = float(style_config.get("logo_user_y", 0.01))
@@ -1674,8 +2073,7 @@ def generate_surface_current_layers(
     # Create request-scoped layer directory
     timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     session_key = request_id or f"current_{timestamp_str}_{int(time_module.time())}"
-    layer_dir = os.path.join(
-        output_dir, state_code.upper(), parameter, session_key)
+    layer_dir = os.path.join(output_dir, state_code.upper(), parameter, session_key)
 
     if os.path.isdir(layer_dir):
         shutil.rmtree(layer_dir, ignore_errors=True)

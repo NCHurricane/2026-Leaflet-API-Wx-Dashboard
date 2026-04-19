@@ -1,6 +1,7 @@
 # Canonical geographic bounds and state-name lookups used across all modules.
 
 STATE_BOUNDS = {
+    "WORLD": [-179.9, 179.9, -85.0, 85.0],
     "CONUS": [-125, -70, 21, 52],
     "AL": [-89.0, -84.4, 29.8, 35.7],
     "AK": [-179.5, -129.6, 50.8, 71.8],

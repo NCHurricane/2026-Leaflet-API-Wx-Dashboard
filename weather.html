@@ -8,37 +8,386 @@
         <link rel="stylesheet" href="css/shared.css">
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <style>
-            .display-area.map-area {
-                padding: 0;
+            :root {
+                --wx-navy: #0a1230;
+                --wx-panel: rgba(10, 18, 48, 0.92);
+                --wx-cyan: #22e8ff;
+                --wx-yellow: #f7f81b;
+                --wx-line: #b7d2df;
+                --wx-text: #f4f7fb;
+                --wx-muted: #a9c2cf;
+            }
+
+            .weather-shell {
+                display: grid;
+                grid-template-rows: auto 1fr;
+                gap: 0;
+                min-height: calc(100vh - 150px);
+                background: var(--wx-navy);
+            }
+
+            .weather-top-types {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                align-items: center;
+                justify-content: center;
+                padding: 8px 14px;
+                border-top: 2px solid #1b2e63;
+                border-bottom: 2px solid var(--wx-line);
+                background: #0c1538;
+            }
+
+            .weather-type-pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                color: var(--wx-text);
+                font-size: 0.92rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.02em;
+            }
+
+            .weather-type-pill input {
+                accent-color: var(--wx-cyan);
+                width: 14px;
+                height: 14px;
+            }
+
+            .weather-map-wrap {
+                position: relative;
+                min-height: 700px;
+                background: #030812;
                 overflow: hidden;
+                --wx-side-top: 6rem;
+                --wx-side-width: 350px;
+                --wx-side-inset: 5px;
+                --wx-side-visible-collapsed: 5px;
+                --wx-side-handle-gap: 6px;
             }
 
             #weather-map {
                 width: 100%;
                 height: 100%;
-                min-height: 600px;
-                border-radius: 10px;
+                min-height: 680px;
             }
 
-            .map-legend {
-                background: rgba(15, 23, 42, 0.92);
-                border: 1px solid #334155;
-                border-radius: 8px;
-                padding: 8px 12px;
-                color: #e2e8f0;
-                font-family: 'Montserrat', system-ui, sans-serif;
-                font-size: 0.7rem;
-                max-height: 320px;
+            .weather-side {
+                position: absolute;
+                top: var(--wx-side-top);
+                width: var(--wx-side-width);
+                max-height: calc(100% - 90px);
+                overflow-x: hidden;
                 overflow-y: auto;
-                min-width: 170px;
+                background: var(--wx-panel);
+                border: 1px solid #274276;
+                padding: 10px 12px;
+                z-index: 500;
+                color: var(--wx-text);
+                transition: transform 180ms ease;
+                will-change: transform;
             }
 
-            .map-legend h4 {
-                margin: 0 0 6px;
-                font-size: 0.68rem;
+            .weather-side-left {
+                left: var(--wx-side-inset);
+                border-right: 3px solid var(--wx-yellow);
+            }
+
+            .weather-side-right {
+                right: var(--wx-side-inset);
+                border-left: 3px solid var(--wx-yellow);
+            }
+
+            .weather-side.collapsed.weather-side-left {
+                transform: translateX(calc(-100% + 5px));
+            }
+
+            .weather-side.collapsed.weather-side-right {
+                transform: translateX(calc(100% - 5px));
+            }
+
+            .weather-side-toggle {
+                position: absolute;
+                top: calc(var(--wx-side-top) + 12px);
+                width: 30px;
+                height: 100px;
+                border: 1px solid #274276;
+                background: rgba(45, 79, 204, 0.95);
+                color: var(--wx-yellow);
+                font-size: 2rem;
+                font-weight: 900;
+                line-height: 1;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                z-index: 520;
+            }
+
+            .weather-side-toggle-left {
+                left: calc(var(--wx-side-inset) + var(--wx-side-width) + var(--wx-side-handle-gap));
+                border-radius: 6px;
+            }
+
+            .weather-side-toggle-right {
+                right: calc(var(--wx-side-inset) + var(--wx-side-width) + var(--wx-side-handle-gap));
+                border-radius: 6px;
+            }
+
+            #weather-side-left.collapsed+.weather-side-toggle-left {
+                left: calc(var(--wx-side-inset) + var(--wx-side-visible-collapsed) + var(--wx-side-handle-gap));
+            }
+
+            #weather-side-right.collapsed+.weather-side-toggle-right {
+                right: calc(var(--wx-side-inset) + var(--wx-side-visible-collapsed) + var(--wx-side-handle-gap));
+            }
+
+            .weather-side h3 {
+                margin: 0 0 10px;
+                font-size: 1.05rem;
                 text-transform: uppercase;
-                color: #ffff00;
-                letter-spacing: 0.05em;
+                color: var(--wx-yellow);
+                letter-spacing: 0.02em;
+            }
+
+            .wx-block {
+                border-top: 1px solid rgba(183, 210, 223, 0.2);
+                padding-top: 8px;
+                margin-top: 8px;
+            }
+
+            .wx-block:first-of-type {
+                border-top: 0;
+                padding-top: 0;
+                margin-top: 0;
+            }
+
+            .wx-check-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                font-size: 0.82rem;
+                font-weight: 700;
+                text-transform: uppercase;
+            }
+
+            .wx-check-row input[type="checkbox"] {
+                accent-color: var(--wx-cyan);
+            }
+
+            .wx-side-group h4 {
+                margin: 0 0 8px;
+                font-size: 0.8rem;
+                color: var(--wx-cyan);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+
+            #wx-side-group-current .wx-check-row {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 2px 0;
+                justify-content: flex-start;
+            }
+
+            #wx-side-group-current .wx-check-row span {
+                order: 2;
+                flex: 1 1 auto;
+                text-align: right;
+            }
+
+            #wx-side-group-current .wx-check-row input[type="checkbox"] {
+                order: 1;
+                flex: 0 0 auto;
+                width: 18px;
+                height: 18px;
+                margin: 0;
+            }
+
+            .weather-side-right .wx-cities-density {
+                margin-top: 6px;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .weather-side-right .wx-cities-density-head {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                font-size: 0.7rem;
+                color: var(--wx-muted);
+                text-transform: uppercase;
+                text-align: center;
+            }
+
+            .weather-side-right .wx-cities-density-value {
+                color: inherit;
+                font-weight: inherit;
+            }
+
+            .weather-side-right .wx-cities-density input[type="range"] {
+                width: 100%;
+                margin-top: 0;
+                background: transparent;
+                border: 0;
+                padding: 0;
+            }
+
+            #weather-surface-opts {
+                margin-top: 4px;
+            }
+
+            #weather-surface-opts>.wx-check-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 20px auto 20px;
+                align-items: center;
+                gap: 12px;
+                padding: 2px 0;
+                font-size: 0.8rem;
+                line-height: 1.08;
+            }
+
+            .wx-gradient-label {
+                font-size: 0.7rem;
+                opacity: 0.65;
+                white-space: nowrap;
+            }
+
+            #weather-surface-opts>.wx-check-row span {
+                display: block;
+            }
+
+            #weather-surface-opts>.wx-check-row input[type="checkbox"] {
+                width: 18px;
+                height: 18px;
+                margin: 0;
+                justify-self: end;
+            }
+
+            .wx-obs-density {
+                margin-top: 6px;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .wx-obs-density-head {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                font-size: 0.7rem;
+                color: var(--wx-muted);
+                text-transform: uppercase;
+                text-align: center;
+            }
+
+            .wx-obs-density-value {
+                color: inherit;
+                font-weight: inherit;
+            }
+
+            .wx-obs-density input[type="range"] {
+                width: 100%;
+                margin-top: 0;
+                background: transparent;
+                border: 0;
+                padding: 0;
+            }
+
+            .wx-block label {
+                display: block;
+                margin-top: 6px;
+                font-size: 0.7rem;
+                color: var(--wx-muted);
+                text-transform: uppercase;
+            }
+
+            .wx-block select,
+            .wx-block input[type="range"],
+            .wx-block input[type="number"] {
+                width: 100%;
+                margin-top: 4px;
+                background: #0f1c45;
+                color: var(--wx-text);
+                border: 1px solid #35538b;
+                border-radius: 4px;
+                font-size: 0.74rem;
+                padding: 4px 6px;
+            }
+
+            .wx-inline {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+            }
+
+            .wx-small {
+                font-size: 0.68rem;
+                color: var(--wx-muted);
+            }
+
+            .wx-alert-list {
+                margin-top: 6px;
+                max-height: 140px;
+                overflow: auto;
+                border: 1px solid #35538b;
+                border-radius: 4px;
+                padding: 6px;
+                font-size: 0.68rem;
+                background: rgba(7, 13, 35, 0.7);
+            }
+
+            .wx-alert-item {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin-bottom: 4px;
+            }
+
+            .wx-alert-item:last-child {
+                margin-bottom: 0;
+            }
+
+            .wx-dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 2px;
+                flex-shrink: 0;
+            }
+
+            #weather-map-status {
+                margin-top: 6px;
+                font-size: 0.72rem;
+                color: #ffb86b;
+                line-height: 1.3;
+            }
+
+            .weather-colorbar {
+                position: absolute;
+                left: 50%;
+                transform: translateX(-50%);
+                bottom: 2rem;
+                z-index: 520;
+                min-width: 575px;
+                max-width: 725px;
+                background: rgba(245, 248, 252, 0.95);
+                border: 2px solid #1a1a1a;
+                border-radius: 14px;
+                padding: 8px 10px;
+                color: #121212;
+            }
+
+            .weather-colorbar h4 {
+                margin: 0 0 6px;
+                font-size: 0.72rem;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
             }
 
             .legend-row {
@@ -46,8 +395,7 @@
                 align-items: center;
                 gap: 6px;
                 margin-bottom: 3px;
-                font-size: 0.65rem;
-                text-transform: none;
+                font-size: 0.68rem;
             }
 
             .legend-swatch {
@@ -55,81 +403,131 @@
                 width: 14px;
                 height: 14px;
                 border-radius: 2px;
+                border: 1px solid rgba(0, 0, 0, 0.4);
                 flex-shrink: 0;
-                border: 1px solid rgba(255, 255, 255, 0.25);
+            }
+
+            .surface-colorbar {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .surface-colorbar-bar {
+                height: 20px;
+                border: 1px solid rgba(0, 0, 0, 0.35);
+                border-radius: 3px;
+                box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+            }
+
+            .surface-colorbar-ticks {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 6px;
+                font-size: 0.64rem;
+                color: #303030;
+            }
+
+            .surface-colorbar-ticks span {
+                position: relative;
+                display: inline-flex;
+                flex-direction: column;
+                align-items: center;
+                min-width: 0;
+                flex: 1 1 0;
+                text-align: center;
+            }
+
+            .surface-colorbar-ticks span::before {
+                content: '';
+                width: 1px;
+                height: 6px;
+                background: rgba(0, 0, 0, 0.55);
+                margin-bottom: 3px;
+            }
+
+            .surface-colorbar-label {
+                font-size: 0.7rem;
+                font-weight: 700;
+                text-align: center;
             }
 
             .leaflet-control-layers {
                 background: rgba(15, 23, 42, 0.92) !important;
                 border: 1px solid #334155 !important;
-                border-radius: 8px !important;
                 color: #e2e8f0 !important;
             }
 
-            .leaflet-control-layers label,
-            .leaflet-control-layers-base label {
-                color: #e2e8f0 !important;
-                font-family: 'Montserrat', system-ui, sans-serif;
-                font-size: 0.72rem;
-                text-transform: uppercase;
+            .leaflet-control-logo {
+                bottom: 1rem !important;
+                right: 3.2rem !important;
             }
 
-            .leaflet-bar a {
-                background-color: #1f1f3e !important;
-                color: #e2e8f0 !important;
-                border-color: #334155 !important;
+            .leaflet-control-attribution {
+                background: rgba(10, 18, 48, 0.78) !important;
+                color: #dce8f1 !important;
+                border-top-left-radius: 6px;
+                z-index: 550 !important;
+                bottom: 25px !important;
+                right: 4rem !important;
             }
 
-            .leaflet-bar a:hover {
-                background-color: #3b82f6 !important;
+            .leaflet-control-attribution a {
+                color: #dce8f1 !important;
             }
 
             .leaflet-popup-content-wrapper {
                 background: rgba(15, 23, 42, 0.97);
                 color: #e2e8f0;
                 border: 1px solid #334155;
-                border-radius: 8px;
-                font-family: 'Montserrat', system-ui, sans-serif;
-                font-size: 0.75rem;
             }
 
             .leaflet-popup-tip {
                 background: #0f172a;
             }
 
-            #weather-alerts-count,
-            #weather-spc-count,
-            #weather-surface-count {
-                font-size: 0.65rem;
-                color: #ff924e;
-                margin-top: 4px;
+            .leaflet-tooltip.city-name-label {
+                background: transparent;
+                border: 0;
+                box-shadow: none;
+                color: #d8f1ff;
+                font-size: 0.57rem;
+                font-weight: 700;
+                letter-spacing: 0.01em;
+                padding: 0;
+                text-shadow: 0 0 2px rgba(0, 0, 0, 0.95);
+                pointer-events: none;
+                white-space: nowrap;
+            }
+
+            .leaflet-tooltip-right.city-name-label::before,
+            .leaflet-tooltip-left.city-name-label::before,
+            .leaflet-tooltip-top.city-name-label::before,
+            .leaflet-tooltip-bottom.city-name-label::before,
+            .leaflet-tooltip-center.city-name-label::before {
+                border: 0;
+            }
+
+            .city-name-tag {
+                background: transparent;
+                border: 0;
+                box-shadow: none;
+                pointer-events: none;
+            }
+
+            .city-name-tag span {
                 display: block;
+                color: #d8f1ff;
+                font-size: 0.57rem;
+                font-weight: 700;
+                letter-spacing: 0.01em;
+                line-height: 1;
+                text-align: center;
+                white-space: nowrap;
+                text-shadow: 0 0 2px rgba(0, 0, 0, 0.95);
             }
 
-            .layer-opacity-row {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                margin-top: 4px;
-            }
-
-            .layer-opacity-row label {
-                font-size: 0.65rem;
-                min-width: 55px;
-            }
-
-            .layer-opacity-row input[type="range"] {
-                flex: 1;
-            }
-
-            .refresh-btn {
-                margin-top: 6px;
-                width: 100%;
-                padding: 4px;
-                font-size: 0.65rem;
-            }
-
-            /* Surface observation markers */
             .sfc-marker {
                 display: flex;
                 align-items: center;
@@ -147,361 +545,810 @@
                 cursor: pointer;
             }
 
-            .sfc-marker.large {
-                width: 38px;
-                height: 38px;
+            #weather-archive-bar {
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(15, 23, 42, 0.96);
+                border-top: 1px solid #334155;
+                padding: 7px 10px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                z-index: 530;
+            }
+
+            .wx-sidebar-label {
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
                 font-size: 0.68rem;
+                color: #94a3b8;
+                margin-bottom: 6px;
+            }
+
+            .wx-sidebar-select,
+            .wx-sidebar-input {
+                width: 100%;
+                background: #1e293b;
+                border: 1px solid #475569;
+                border-radius: 4px;
+                color: #e2e8f0;
+                font-size: 0.68rem;
+                padding: 3px 5px;
+            }
+
+            .wx-sidebar-select,
+            .wx-sidebar-input,
+            .archive-export-label input {
+                background: #1e293b;
+                border: 1px solid #475569;
+                border-radius: 4px;
+                color: #e2e8f0;
+                font-size: 0.68rem;
+                padding: 2px 4px;
+            }
+
+            #archive-progress-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            #archive-progress-track {
+                flex: 1;
+                height: 6px;
+                background: #1e293b;
+                border-radius: 3px;
+                overflow: hidden;
+                border: 1px solid #334155;
+            }
+
+            #archive-progress-fill {
+                height: 100%;
+                width: 0%;
+                background: #3b82f6;
+                transition: width 0.3s ease;
+            }
+
+            #archive-progress-text {
+                font-size: 0.65rem;
+                color: #94a3b8;
+            }
+
+            #archive-scrubber-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            #archive-scrubber-row button {
+                width: auto;
+                flex: 0 0 auto;
+                min-width: 32px;
+                line-height: 1;
+                padding: 4px 8px;
+            }
+
+            #archive-scrubber-row button,
+            #archive-export-row button,
+            #weather-archive-toggle {
+                background: #1e293b;
+                border: 1px solid #475569;
+                border-radius: 4px;
+                color: #e2e8f0;
+                font-size: 0.7rem;
+                padding: 3px 8px;
+                cursor: pointer;
+            }
+
+            #archive-scrubber-row button:hover,
+            #archive-export-row button:hover,
+            #weather-archive-toggle:hover {
+                background: #3b82f6;
+                border-color: #3b82f6;
+            }
+
+            #scrubber-slider {
+                flex: 1;
+                width: auto;
+                min-width: 220px;
+                margin: 0;
+                padding: 0;
+                border: 0;
+                background: transparent;
+                accent-color: #22e8ff;
+                cursor: pointer;
+                height: 20px;
+            }
+
+            #scrubber-slider::-webkit-slider-runnable-track {
+                height: 6px;
+                border-radius: 999px;
+                background: linear-gradient(90deg, #1e3a8a, #22e8ff);
+                border: 1px solid #1d4e89;
+            }
+
+            #scrubber-slider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                margin-top: -5px;
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                background: #f7f81b;
+                border: 1px solid #0f172a;
+                box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
+            }
+
+            #scrubber-slider::-moz-range-track {
+                height: 6px;
+                border-radius: 999px;
+                background: linear-gradient(90deg, #1e3a8a, #22e8ff);
+                border: 1px solid #1d4e89;
+            }
+
+            #scrubber-slider::-moz-range-thumb {
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                background: #f7f81b;
+                border: 1px solid #0f172a;
+                box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
+            }
+
+            #scrubber-timestamp {
+                font-size: 0.7rem;
+                color: #e2e8f0;
+                font-weight: 700;
+                min-width: 176px;
+                text-align: right;
+                white-space: nowrap;
+            }
+
+            #scrubber-frame-count {
+                font-size: 0.65rem;
+                color: #64748b;
+            }
+
+            #archive-export-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+                padding-top: 2px;
+                border-top: 1px dashed rgba(71, 85, 105, 0.45);
+            }
+
+            .weather-side-right #archive-export-row {
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+                padding-top: 0;
+                border-top: 0;
+            }
+
+            #archive-export-row button:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+            }
+
+            .weather-side-right #archive-export-row button {
+                width: 100%;
+                text-align: center;
+            }
+
+            .archive-export-label {
+                font-size: 0.66rem;
+                color: #94a3b8;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+            }
+
+            .weather-side-right .archive-export-controls {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 6px;
+            }
+
+            .weather-side-right .archive-export-label {
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 3px;
+                font-size: 0.64rem;
+            }
+
+            .archive-export-label input {
+                width: 62px;
+            }
+
+            .weather-side-right .archive-export-label input {
+                width: 100%;
+            }
+
+            #archive-export-status {
+                font-size: 0.65rem;
+                color: #94a3b8;
+                white-space: normal;
+                flex: 1 1 280px;
+                min-width: 180px;
+                line-height: 1.25;
+            }
+
+            .weather-side-right #archive-export-status {
+                min-width: 0;
+                flex: 0 0 auto;
+            }
+
+            #archive-export-link {
+                font-size: 0.65rem;
+                color: #7dd3fc;
+                text-decoration: none;
+            }
+
+            #archive-export-hint {
+                font-size: 0.62rem;
+                color: #64748b;
+                width: 100%;
+                margin-top: -2px;
+            }
+
+            @media (max-width: 1180px) {
+                .weather-side {
+                    width: 220px;
+                }
+            }
+
+            @media (max-width: 980px) {
+                .weather-map-wrap {
+                    min-height: 760px;
+                }
+
+                .weather-side {
+                    position: static;
+                    width: auto;
+                    max-height: none;
+                    margin: 8px;
+                    transform: none !important;
+                }
+
+                .weather-side-toggle {
+                    display: none;
+                }
+
+                .weather-colorbar {
+                    left: 8px;
+                    right: 8px;
+                    transform: none;
+                    min-width: 0;
+                    max-width: none;
+                    bottom: 210px;
+                }
+
+                .weather-side-right .archive-export-controls {
+                    grid-template-columns: 1fr;
+                }
+
+                #weather-map {
+                    min-height: 520px;
+                }
+
+                #weather-archive-bar {
+                    position: static;
+                }
             }
         </style>
     </head>
 
-    <body>
+    <body data-weather-export-enabled="1" data-weather-export-animation-enabled="1">
         <header>
-            <h1><a href="index.html">NCHurricane Dashboard 2026</a></h1>
-            <nav id="main-nav"></nav>
+            <img src="img/nchurricane_logo.png" class="banner-logo" alt="NCHurricane.com Logo">
+            <h1><a href="index.html">Weather Graphics Dashboard 2026</a></h1>
         </header>
 
-        <div class="page-layout">
+        <div class="weather-shell">
+            <div class="weather-top-types">
+                <label class="weather-type-pill"><span>Current</span><input id="weather-type-current" type="checkbox"
+                        checked></label>
+                <label class="weather-type-pill"><span>Alerts</span><input id="weather-type-alerts"
+                        type="checkbox"></label>
+                <label class="weather-type-pill"><span>Radar</span><input id="weather-type-radar"
+                        type="checkbox"></label>
+                <label class="weather-type-pill"><span>Satellite</span><input id="weather-type-satellite"
+                        type="checkbox"></label>
+                <label class="weather-type-pill"><span>SPC</span><input id="weather-type-spc" type="checkbox"></label>
+                <label class="weather-type-pill"><span>RTMA</span><input id="weather-type-rtma" type="checkbox"></label>
+                <label class="weather-type-pill"><span>MRMS</span><input id="weather-type-mrms" type="checkbox"></label>
+                <label class="weather-type-pill"><span>Drought</span><input id="weather-type-drought"
+                        type="checkbox"></label>
+                <label class="weather-type-pill"><span>Tropical</span><input id="weather-type-tropical"
+                        type="checkbox"></label>
+            </div>
 
-            <!-- LEFT: Controls -->
-            <aside class="controls-panel">
-                <h2 class="section-title">Weather Controls</h2>
-
-                <div class="style-group">
-                    <h3 class="group-title">Region</h3>
-                    <label for="weather-region">State / Region</label>
-                    <select id="weather-region">
-                        <option value="CONUS" selected>CONUS</option>
-                        <option value="NC">North Carolina</option>
-                        <option value="SC">South Carolina</option>
-                        <option value="VA">Virginia</option>
-                        <option value="TN">Tennessee</option>
-                        <option value="AL">Alabama</option>
-                        <option value="AK">Alaska</option>
-                        <option value="AZ">Arizona</option>
-                        <option value="AR">Arkansas</option>
-                        <option value="CA">California</option>
-                        <option value="CO">Colorado</option>
-                        <option value="CT">Connecticut</option>
-                        <option value="DE">Delaware</option>
-                        <option value="FL">Florida</option>
-                        <option value="GA">Georgia</option>
-                        <option value="HI">Hawaii</option>
-                        <option value="ID">Idaho</option>
-                        <option value="IL">Illinois</option>
-                        <option value="IN">Indiana</option>
-                        <option value="IA">Iowa</option>
-                        <option value="KS">Kansas</option>
-                        <option value="KY">Kentucky</option>
-                        <option value="LA">Louisiana</option>
-                        <option value="ME">Maine</option>
-                        <option value="MD">Maryland</option>
-                        <option value="MA">Massachusetts</option>
-                        <option value="MI">Michigan</option>
-                        <option value="MN">Minnesota</option>
-                        <option value="MS">Mississippi</option>
-                        <option value="MO">Missouri</option>
-                        <option value="MT">Montana</option>
-                        <option value="NE">Nebraska</option>
-                        <option value="NV">Nevada</option>
-                        <option value="NH">New Hampshire</option>
-                        <option value="NJ">New Jersey</option>
-                        <option value="NM">New Mexico</option>
-                        <option value="NY">New York</option>
-                        <option value="ND">North Dakota</option>
-                        <option value="OH">Ohio</option>
-                        <option value="OK">Oklahoma</option>
-                        <option value="OR">Oregon</option>
-                        <option value="PA">Pennsylvania</option>
-                        <option value="RI">Rhode Island</option>
-                        <option value="SD">South Dakota</option>
-                        <option value="TX">Texas</option>
-                        <option value="UT">Utah</option>
-                        <option value="VT">Vermont</option>
-                        <option value="WA">Washington</option>
-                        <option value="WV">West Virginia</option>
-                        <option value="WI">Wisconsin</option>
-                        <option value="WY">Wyoming</option>
-                    </select>
-                </div>
-
-                <div class="style-group">
-                    <h3 class="group-title">Product</h3>
-                    <label for="weather-product-group">Product Group</label>
-                    <select id="weather-product-group">
-                        <option value="alerts" selected>Alerts</option>
-                        <option value="spc">SPC Outlooks</option>
-                        <option value="surface">Current Obs</option>
-                        <option value="mrms">MRMS</option>
-                    </select>
-
-                    <div id="weather-alerts-opts" class="weather-product-opts">
-                        <label for="weather-alerts-product">Hazard Type</label>
-                        <select id="weather-alerts-product">
-                            <option value="All Alerts">All Alerts &amp; Warnings</option>
-                            <option value="Severe Weather Alerts">Severe Weather Alerts</option>
-                            <option value="Severe Weather Warnings">Severe Weather Warnings</option>
-                            <option value="Tropical Cyclone Alerts">Tropical Cyclone Alerts</option>
-                            <option value="Hydrology Alerts">Hydrology Alerts</option>
-                            <option value="Flash Flood Alerts">Flash Flood Alerts</option>
-                            <option value="Winter Alerts">Winter Alerts</option>
-                            <option value="Cold Alerts">Cold Alerts</option>
-                            <option value="Fire Alerts">Fire Alerts</option>
-                            <option value="Heat Alerts">Heat Alerts</option>
-                            <option value="Coastal Alerts">Coastal Alerts</option>
-                            <option value="Marine Alerts">Marine Alerts</option>
-                            <option value="Non-Precipitation Alerts">Non-Precipitation Alerts</option>
-                        </select>
-                        <span id="weather-alerts-count"></span>
-                    </div>
-
-                    <div id="weather-spc-opts" class="weather-product-opts" style="display:none;">
-                        <label for="weather-spc-day">Outlook Day</label>
-                        <select id="weather-spc-day">
-                            <option value="1" selected>Day 1</option>
-                            <option value="2">Day 2</option>
-                            <option value="3">Day 3</option>
-                            <option value="4">Day 4</option>
-                            <option value="5">Day 5</option>
-                            <option value="6">Day 6</option>
-                            <option value="7">Day 7</option>
-                            <option value="8">Day 8</option>
-                        </select>
-                        <label for="weather-spc-convective">Convective Outlooks</label>
-                        <select id="weather-spc-convective">
-                            <option value="" disabled>-- Choose Product --</option>
-                            <option value="cat" selected>Categorical</option>
-                            <option value="torn">Tornado</option>
-                            <option value="wind">Wind</option>
-                            <option value="hail">Hail</option>
-                            <option value="prob">Probabilistic</option>
-                        </select>
-                        <label for="weather-spc-fire">Fire Weather Outlooks</label>
-                        <select id="weather-spc-fire">
-                            <option value="" selected disabled>-- Choose Product --</option>
-                            <option value="windrh">Wind / RH</option>
-                            <option value="dryt">Dry Thunderstorm</option>
-                        </select>
-                        <span id="weather-spc-count"></span>
-                    </div>
-
-                    <div id="weather-surface-opts" class="weather-product-opts" style="display:none;">
-                        <label for="weather-surface-product">Observation Type</label>
-                        <select id="weather-surface-product">
-                            <option value="temperature" selected>Temperature (&deg;F)</option>
-                            <option value="feels_like">Feels Like (&deg;F)</option>
-                            <option value="dew_point">Dew Point (&deg;F)</option>
-                            <option value="relative_humidity">Relative Humidity (%)</option>
-                            <option value="wind_speed">Wind Speed (kt)</option>
-                            <option value="wind_gust">Wind Gust (kt)</option>
-                        </select>
-                        <span id="weather-surface-count"></span>
-                    </div>
-
-                    <div id="weather-mrms-opts" class="weather-product-opts" style="display:none;">
-                        <label for="weather-mrms-family">Product Family</label>
-                        <select id="weather-mrms-family">
-                            <option value="PrecipRate" selected>Precipitation Rate</option>
-                            <option value="PrecipFlag">Surface Precip Type</option>
-                            <option value="QPE">QPE Accumulation</option>
-                            <option value="Reflectivity">Reflectivity</option>
-                            <option value="RotationTrack">Rotation Tracks</option>
-                            <option value="MESH">MESH / Hail</option>
-                            <option value="AzShear">Azimuthal Shear</option>
-                            <option value="EchoTop">Echo Top</option>
-                            <option value="VIL">VIL</option>
-                            <option value="SHI">SHI</option>
-                            <option value="POSH">POSH</option>
-                            <option value="Lightning">Lightning Probability</option>
-                            <option value="Model">Model / Environment</option>
-                            <option value="RadarQualityIndex">Radar Quality Index</option>
-                        </select>
-
-                        <!-- Sub-selectors — shown/hidden by JS based on family -->
-                        <div id="mrms-sub-qpe" class="mrms-sub" style="display:none;">
-                            <label for="mrms-qpe-source">Source</label>
-                            <select id="mrms-qpe-source">
-                                <option value="MS2" selected>MultiSensor Pass2</option>
-                                <option value="MS1">MultiSensor Pass1</option>
-                                <option value="RO">Radar Only</option>
-                            </select>
-                            <label for="mrms-qpe-period">Period</label>
-                            <select id="mrms-qpe-period">
-                                <option value="01H" selected>1 Hour</option>
-                                <option value="03H">3 Hour</option>
-                                <option value="06H">6 Hour</option>
-                                <option value="12H">12 Hour</option>
-                                <option value="24H">24 Hour</option>
-                                <option value="48H">48 Hour</option>
-                                <option value="72H">72 Hour</option>
-                            </select>
-                        </div>
-
-                        <div id="mrms-sub-rotation" class="mrms-sub" style="display:none;">
-                            <label for="mrms-rotation-level">Level</label>
-                            <select id="mrms-rotation-level">
-                                <option value="LL" selected>Low Level (0-2 km)</option>
-                                <option value="ML">Mid Level (3-6 km)</option>
-                            </select>
-                            <label for="mrms-rotation-time">Window</label>
-                            <select id="mrms-rotation-time">
-                                <option value="30min">30 min</option>
-                                <option value="60min" selected>60 min</option>
-                                <option value="120min">2 hr</option>
-                                <option value="240min">4 hr</option>
-                                <option value="360min">6 hr</option>
-                                <option value="1440min">24 hr</option>
-                            </select>
-                        </div>
-
-                        <div id="mrms-sub-mesh" class="mrms-sub" style="display:none;">
-                            <label for="mrms-mesh-time">Window</label>
-                            <select id="mrms-mesh-time">
-                                <option value="Instant" selected>Instant</option>
-                                <option value="Max_30min">Max 30 min</option>
-                                <option value="Max_60min">Max 60 min</option>
-                                <option value="Max_120min">Max 2 hr</option>
-                                <option value="Max_240min">Max 4 hr</option>
-                                <option value="Max_360min">Max 6 hr</option>
-                                <option value="Max_1440min">Max 24 hr</option>
-                            </select>
-                        </div>
-
-                        <div id="mrms-sub-azshear" class="mrms-sub" style="display:none;">
-                            <label for="mrms-azshear-level">Level</label>
-                            <select id="mrms-azshear-level">
-                                <option value="Low" selected>Low Level (0-2 km)</option>
-                                <option value="Mid">Mid Level (3-6 km)</option>
-                            </select>
-                        </div>
-
-                        <div id="mrms-sub-echotop" class="mrms-sub" style="display:none;">
-                            <label for="mrms-echotop-threshold">dBZ Threshold</label>
-                            <select id="mrms-echotop-threshold">
-                                <option value="18" selected>18 dBZ</option>
-                                <option value="30">30 dBZ</option>
-                                <option value="50">50 dBZ</option>
-                                <option value="60">60 dBZ</option>
-                            </select>
-                        </div>
-
-                        <div id="mrms-sub-vil" class="mrms-sub" style="display:none;">
-                            <label for="mrms-vil-type">Type</label>
-                            <select id="mrms-vil-type">
-                                <option value="Instant" selected>Instant</option>
-                                <option value="Density">Density</option>
-                                <option value="Max_120min">Max 2 hr</option>
-                                <option value="Max_1440min">Max 24 hr</option>
-                            </select>
-                        </div>
-
-                        <div id="mrms-sub-reflectivity" class="mrms-sub" style="display:none;">
-                            <label for="mrms-refl-variant">Variant</label>
-                            <select id="mrms-refl-variant">
-                                <option value="HSR" selected>Hybrid Scan (HSR)</option>
-                                <option value="BaseQC">Base Reflectivity (QC)</option>
-                                <option value="CompLow">Composite &ndash; Low</option>
-                                <option value="CompHigh">Composite &ndash; High</option>
-                                <option value="CompSuper">Composite &ndash; Super</option>
-                                <option value="BREF_1HR_MAX">Base Refl 1hr Max</option>
-                                <option value="CREF_1HR_MAX">Comp Refl 1hr Max</option>
-                            </select>
-                        </div>
-
-                        <div id="mrms-sub-lightning" class="mrms-sub" style="display:none;">
-                            <label for="mrms-lightning-window">Window</label>
-                            <select id="mrms-lightning-window">
-                                <option value="30min" selected>Next 30 min</option>
-                                <option value="60min">Next 60 min</option>
-                            </select>
-                        </div>
-
-                        <div id="mrms-sub-model" class="mrms-sub" style="display:none;">
-                            <label for="mrms-model-field">Field</label>
-                            <select id="mrms-model-field">
-                                <option value="FreezingLevel" selected>Freezing Level Height</option>
-                                <option value="SurfaceTemp">Surface Temperature</option>
-                                <option value="WetBulbTemp">Wet Bulb Temperature</option>
-                            </select>
-                        </div>
-
-                        <span id="weather-mrms-status"></span>
-                    </div>
-                </div>
-            </aside>
-
-            <!-- CENTER: Layer controls -->
-            <aside class="style-panel">
-                <h2 class="section-title">Layer Controls</h2>
-
-                <div class="style-group">
-                    <h3 class="group-title">Alerts Layer</h3>
-                    <div class="checkbox-row">
-                        <label for="weather-show-alerts">Show Alerts</label>
-                        <input id="weather-show-alerts" type="checkbox" checked>
-                    </div>
-                    <div class="layer-opacity-row">
-                        <label for="weather-opacity-alerts">Opacity</label>
-                        <input id="weather-opacity-alerts" type="range" min="0.1" max="1" step="0.05" value="0.75">
-                    </div>
-                    <button id="weather-refresh-alerts" class="secondary refresh-btn" type="button">Refresh
-                        Alerts</button>
-                </div>
-
-                <div class="style-group">
-                    <h3 class="group-title">SPC Outlook Layer</h3>
-                    <div class="checkbox-row">
-                        <label for="weather-show-spc">Show SPC</label>
-                        <input id="weather-show-spc" type="checkbox" checked>
-                    </div>
-                    <div class="layer-opacity-row">
-                        <label for="weather-opacity-spc">Opacity</label>
-                        <input id="weather-opacity-spc" type="range" min="0.1" max="1" step="0.05" value="0.6">
-                    </div>
-                    <button id="weather-refresh-spc" class="secondary refresh-btn" type="button">Refresh SPC</button>
-                </div>
-
-                <div class="style-group">
-                    <h3 class="group-title">Surface Obs Layer</h3>
-                    <div class="checkbox-row">
-                        <label for="weather-show-surface">Show Obs</label>
-                        <input id="weather-show-surface" type="checkbox" checked>
-                    </div>
-                    <div class="layer-opacity-row">
-                        <label for="weather-opacity-surface">Opacity</label>
-                        <input id="weather-opacity-surface" type="range" min="0.1" max="1" step="0.05" value="0.9">
-                    </div>
-                    <button id="weather-refresh-surface" class="secondary refresh-btn" type="button">Refresh
-                        Obs</button>
-                </div>
-
-                <div class="style-group">
-                    <h3 class="group-title">MRMS Layer</h3>
-                    <div class="checkbox-row">
-                        <label for="weather-show-mrms">Show MRMS</label>
-                        <input id="weather-show-mrms" type="checkbox" checked>
-                    </div>
-                    <div class="layer-opacity-row">
-                        <label for="weather-opacity-mrms">Opacity</label>
-                        <input id="weather-opacity-mrms" type="range" min="0.1" max="1" step="0.05" value="0.8">
-                    </div>
-                    <button id="weather-refresh-mrms" class="secondary refresh-btn" type="button">Refresh MRMS</button>
-                </div>
-
-                <div class="style-group">
-                    <h3 class="group-title">Map Info</h3>
-                    <div id="weather-map-status" style="font-size:0.65rem; color:#ff924e;"></div>
-                </div>
-            </aside>
-
-            <!-- MAIN: Leaflet map -->
-            <main class="display-area map-area">
+            <div class="weather-map-wrap">
                 <div id="weather-map"></div>
-            </main>
 
+                <aside class="weather-side weather-side-left" id="weather-side-left">
+                    <h3>Data Point</h3>
+
+                    <div class="wx-block">
+                        <label for="weather-region">Region</label>
+                        <select id="weather-region">
+                            <option value="CONUS" selected>CONUS</option>
+                            <option value="WORLD">World</option>
+                            <option value="NC">North Carolina</option>
+                            <option value="SC">South Carolina</option>
+                            <option value="VA">Virginia</option>
+                            <option value="TN">Tennessee</option>
+                            <option value="AL">Alabama</option>
+                            <option value="AK">Alaska</option>
+                            <option value="AZ">Arizona</option>
+                            <option value="AR">Arkansas</option>
+                            <option value="CA">California</option>
+                            <option value="CO">Colorado</option>
+                            <option value="CT">Connecticut</option>
+                            <option value="DE">Delaware</option>
+                            <option value="FL">Florida</option>
+                            <option value="GA">Georgia</option>
+                            <option value="HI">Hawaii</option>
+                            <option value="ID">Idaho</option>
+                            <option value="IL">Illinois</option>
+                            <option value="IN">Indiana</option>
+                            <option value="IA">Iowa</option>
+                            <option value="KS">Kansas</option>
+                            <option value="KY">Kentucky</option>
+                            <option value="LA">Louisiana</option>
+                            <option value="ME">Maine</option>
+                            <option value="MD">Maryland</option>
+                            <option value="MA">Massachusetts</option>
+                            <option value="MI">Michigan</option>
+                            <option value="MN">Minnesota</option>
+                            <option value="MS">Mississippi</option>
+                            <option value="MO">Missouri</option>
+                            <option value="MT">Montana</option>
+                            <option value="NE">Nebraska</option>
+                            <option value="NV">Nevada</option>
+                            <option value="NH">New Hampshire</option>
+                            <option value="NJ">New Jersey</option>
+                            <option value="NM">New Mexico</option>
+                            <option value="NY">New York</option>
+                            <option value="ND">North Dakota</option>
+                            <option value="OH">Ohio</option>
+                            <option value="OK">Oklahoma</option>
+                            <option value="OR">Oregon</option>
+                            <option value="PA">Pennsylvania</option>
+                            <option value="RI">Rhode Island</option>
+                            <option value="SD">South Dakota</option>
+                            <option value="TX">Texas</option>
+                            <option value="UT">Utah</option>
+                            <option value="VT">Vermont</option>
+                            <option value="WA">Washington</option>
+                            <option value="WV">West Virginia</option>
+                            <option value="WI">Wisconsin</option>
+                            <option value="WY">Wyoming</option>
+                        </select>
+                    </div>
+
+                    <div class="wx-block">
+                        <label>Networks</label>
+                        <div id="weather-network-filters" style="display: flex; flex-wrap: wrap; gap: 12px;">
+                            <label
+                                style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer;">
+                                <input type="checkbox" class="weather-network-filter" value="ASOS" checked> ASOS
+                            </label>
+                            <label
+                                style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer;">
+                                <input type="checkbox" class="weather-network-filter" value="COOP" checked> COOP
+                            </label>
+                            <label
+                                style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer;">
+                                <input type="checkbox" class="weather-network-filter" value="DCP" checked> DCP
+                            </label>
+                            <label
+                                style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer;">
+                                <input type="checkbox" class="weather-network-filter" value="RWIS" checked> RWIS
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="wx-section-current" class="wx-block" data-type="current">
+
+                        <div id="weather-surface-opts">
+                            <div class="wx-check-row"><span>Temperature</span><input class="weather-surface-product"
+                                    type="checkbox" value="temperature" checked>
+                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
+                                    type="checkbox" data-product="temperature">
+                            </div>
+                            <div class="wx-check-row"><span>Feels Like</span><input class="weather-surface-product"
+                                    type="checkbox" value="feels_like">
+                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
+                                    type="checkbox" data-product="feels_like">
+                            </div>
+                            <div class="wx-check-row"><span>Dew Point</span><input class="weather-surface-product"
+                                    type="checkbox" value="dew_point">
+                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
+                                    type="checkbox" data-product="dew_point">
+                            </div>
+                            <div class="wx-check-row"><span>Relative Humidity</span><input
+                                    class="weather-surface-product" type="checkbox" value="relative_humidity">
+                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
+                                    type="checkbox" data-product="relative_humidity">
+                            </div>
+                            <div class="wx-check-row"><span>Wind Speed</span><input class="weather-surface-product"
+                                    type="checkbox" value="wind_speed">
+                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
+                                    type="checkbox" data-product="wind_speed">
+                            </div>
+                            <div class="wx-check-row"><span>Wind Gust</span><input class="weather-surface-product"
+                                    type="checkbox" value="wind_gust">
+                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
+                                    type="checkbox" data-product="wind_gust">
+                            </div>
+                            <div class="wx-check-row"><span>Altimeter</span><input class="weather-surface-product"
+                                    type="checkbox" value="altimeter">
+                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
+                                    type="checkbox" data-product="altimeter">
+                            </div>
+                            <div class="wx-check-row"><span>MSLP</span><input class="weather-surface-product"
+                                    type="checkbox" value="mslp">
+                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
+                                    type="checkbox" data-product="mslp">
+                            </div>
+                            <div class="wx-check-row"><span>Visibility</span><input class="weather-surface-product"
+                                    type="checkbox" value="visibility">
+                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
+                                    type="checkbox" data-product="visibility">
+                            </div>
+                            <div class="wx-block">
+                                <div class="wx-obs-density-head">
+                                    <label for="weather-obs-density">Station Density</label>
+                                </div>
+                                <input id="weather-obs-density" type="range" min="0.01" max="1" step="0.005" value="1">
+                            </div>
+                            <div class="wx-block" style="display:none;">
+                                <label for="weather-opacity-surface">Data Opacity (Legacy)</label>
+                                <input id="weather-opacity-surface" type="range" min="0.1" max="1" step="0.05"
+                                    value="0.9">
+                            </div>
+                            <div class="wx-block wx-small">Station Count:
+                                <span id="weather-surface-count"></span>
+                            </div>
+                            <div class="wx-block">
+                                <div id="weather-map-status"></div>
+                            </div>
+                            <div class="wx-block">
+                                <button id="weather-refresh-surface" type="button">Refresh</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="wx-section-alerts" class="wx-block" data-type="alerts" style="display:none;">
+                        <div class="wx-check-row"><span>Alerts</span><input id="weather-show-alerts" type="checkbox"
+                                checked></div>
+                        <div id="weather-alerts-opts">
+                            <label for="weather-alerts-product">Category</label>
+                            <select id="weather-alerts-product">
+                                <option value="All Alerts">All Alerts and Warnings</option>
+                                <option value="Severe Weather Alerts">Severe Weather Alerts</option>
+                                <option value="Severe Weather Warnings">Severe Weather Warnings</option>
+                                <option value="Tropical Cyclone Alerts">Tropical Cyclone Alerts</option>
+                                <option value="Hydrology Alerts">Hydrology Alerts</option>
+                                <option value="Flash Flood Alerts">Flash Flood Alerts</option>
+                                <option value="Winter Alerts">Winter Alerts</option>
+                                <option value="Cold Alerts">Cold Alerts</option>
+                                <option value="Fire Alerts">Fire Alerts</option>
+                                <option value="Heat Alerts">Heat Alerts</option>
+                                <option value="Coastal Alerts">Coastal Alerts</option>
+                                <option value="Marine Alerts">Marine Alerts</option>
+                                <option value="Non-Precipitation Alerts">Non-Precipitation Alerts</option>
+                            </select>
+                            <label for="weather-opacity-alerts">Opacity</label>
+                            <input id="weather-opacity-alerts" type="range" min="0.1" max="1" step="0.05" value="0.75">
+                            <span id="weather-alerts-count" class="wx-small"></span>
+                            <button id="weather-refresh-alerts" type="button">Refresh</button>
+                            <div id="weather-alert-types-in-extent" class="wx-alert-list" style="margin-top:8px;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="wx-section-spc" class="wx-block" data-type="spc" style="display:none;">
+                        <div class="wx-check-row"><span>SPC</span><input id="weather-show-spc" type="checkbox" checked>
+                        </div>
+                        <div id="weather-spc-opts">
+                            <label for="weather-spc-day">Outlook Day</label>
+                            <select id="weather-spc-day">
+                                <option value="1" selected>Day 1</option>
+                                <option value="2">Day 2</option>
+                                <option value="3">Day 3</option>
+                                <option value="4">Day 4</option>
+                                <option value="5">Day 5</option>
+                                <option value="6">Day 6</option>
+                                <option value="7">Day 7</option>
+                                <option value="8">Day 8</option>
+                            </select>
+                            <label for="weather-spc-convective">Convective</label>
+                            <select id="weather-spc-convective">
+                                <option value="cat" selected>Categorical</option>
+                                <option value="torn">Tornado</option>
+                                <option value="wind">Wind</option>
+                                <option value="hail">Hail</option>
+                                <option value="prob">Probabilistic</option>
+                            </select>
+                            <label for="weather-spc-fire">Fire Weather</label>
+                            <select id="weather-spc-fire">
+                                <option value="" selected disabled>Choose Product</option>
+                                <option value="windrh">Wind / RH</option>
+                                <option value="dryt">Dry Thunderstorm</option>
+                            </select>
+                            <label for="weather-opacity-spc">Opacity</label>
+                            <input id="weather-opacity-spc" type="range" min="0.1" max="1" step="0.05" value="0.6">
+                            <span id="weather-spc-count" class="wx-small"></span>
+                            <button id="weather-refresh-spc" type="button">Refresh</button>
+                        </div>
+                    </div>
+
+                    <div id="wx-section-mrms" class="wx-block" data-type="mrms" style="display:none;">
+                        <div class="wx-check-row"><span>MRMS</span><input id="weather-show-mrms" type="checkbox"
+                                checked></div>
+                        <div id="weather-mrms-opts">
+                            <label for="weather-mrms-family">Product Family</label>
+                            <select id="weather-mrms-family">
+                                <option value="PrecipFlag" selected>Surface Precip Type</option>
+                                <option value="PrecipRate">Precipitation Rate</option>
+                                <option value="QPE">QPE Accumulation</option>
+                                <option value="Reflectivity">Reflectivity</option>
+                                <option value="RotationTrack">Rotation Tracks</option>
+                                <option value="MESH">MESH / Hail</option>
+                                <option value="AzShear">Azimuthal Shear</option>
+                                <option value="EchoTop">Echo Top</option>
+                                <option value="VIL">VIL</option>
+                                <option value="SHI">SHI</option>
+                                <option value="POSH">POSH</option>
+                                <option value="Lightning">Lightning Probability</option>
+                                <option value="Model">Model / Environment</option>
+                                <option value="RadarQualityIndex">Radar Quality Index</option>
+                            </select>
+
+                            <div id="mrms-sub-qpe" class="mrms-sub" style="display:none;">
+                                <label for="mrms-qpe-source">Source</label>
+                                <select id="mrms-qpe-source">
+                                    <option value="MS2" selected>MultiSensor Pass2</option>
+                                    <option value="MS1">MultiSensor Pass1</option>
+                                    <option value="RO">Radar Only</option>
+                                </select>
+                                <label for="mrms-qpe-period">Period</label>
+                                <select id="mrms-qpe-period">
+                                    <option value="01H" selected>1 Hour</option>
+                                    <option value="03H">3 Hour</option>
+                                    <option value="06H">6 Hour</option>
+                                    <option value="12H">12 Hour</option>
+                                    <option value="24H">24 Hour</option>
+                                    <option value="48H">48 Hour</option>
+                                    <option value="72H">72 Hour</option>
+                                </select>
+                            </div>
+
+                            <div id="mrms-sub-rotation" class="mrms-sub" style="display:none;">
+                                <label for="mrms-rotation-level">Level</label>
+                                <select id="mrms-rotation-level">
+                                    <option value="LL" selected>Low Level (0-2 km)</option>
+                                    <option value="ML">Mid Level (3-6 km)</option>
+                                </select>
+                                <label for="mrms-rotation-time">Window</label>
+                                <select id="mrms-rotation-time">
+                                    <option value="30min">30 min</option>
+                                    <option value="60min" selected>60 min</option>
+                                    <option value="120min">2 hr</option>
+                                    <option value="240min">4 hr</option>
+                                    <option value="360min">6 hr</option>
+                                    <option value="1440min">24 hr</option>
+                                </select>
+                            </div>
+
+                            <div id="mrms-sub-mesh" class="mrms-sub" style="display:none;">
+                                <label for="mrms-mesh-time">Window</label>
+                                <select id="mrms-mesh-time">
+                                    <option value="Instant" selected>Instant</option>
+                                    <option value="Max_30min">Max 30 min</option>
+                                    <option value="Max_60min">Max 60 min</option>
+                                    <option value="Max_120min">Max 2 hr</option>
+                                    <option value="Max_240min">Max 4 hr</option>
+                                    <option value="Max_360min">Max 6 hr</option>
+                                    <option value="Max_1440min">Max 24 hr</option>
+                                </select>
+                            </div>
+
+                            <div id="mrms-sub-azshear" class="mrms-sub" style="display:none;">
+                                <label for="mrms-azshear-level">Level</label>
+                                <select id="mrms-azshear-level">
+                                    <option value="Low" selected>Low Level (0-2 km)</option>
+                                    <option value="Mid">Mid Level (3-6 km)</option>
+                                </select>
+                            </div>
+
+                            <div id="mrms-sub-echotop" class="mrms-sub" style="display:none;">
+                                <label for="mrms-echotop-threshold">dBZ Threshold</label>
+                                <select id="mrms-echotop-threshold">
+                                    <option value="18" selected>18 dBZ</option>
+                                    <option value="30">30 dBZ</option>
+                                    <option value="50">50 dBZ</option>
+                                    <option value="60">60 dBZ</option>
+                                </select>
+                            </div>
+
+                            <div id="mrms-sub-vil" class="mrms-sub" style="display:none;">
+                                <label for="mrms-vil-type">Type</label>
+                                <select id="mrms-vil-type">
+                                    <option value="Instant" selected>Instant</option>
+                                    <option value="Density">Density</option>
+                                    <option value="Max_120min">Max 2 hr</option>
+                                    <option value="Max_1440min">Max 24 hr</option>
+                                </select>
+                            </div>
+
+                            <div id="mrms-sub-reflectivity" class="mrms-sub" style="display:none;">
+                                <label for="mrms-refl-variant">Variant</label>
+                                <select id="mrms-refl-variant">
+                                    <option value="HSR" selected>Hybrid Scan (HSR)</option>
+                                    <option value="BaseQC">Base Reflectivity (QC)</option>
+                                    <option value="CompLow">Composite - Low</option>
+                                    <option value="CompHigh">Composite - High</option>
+                                    <option value="CompSuper">Composite - Super</option>
+                                    <option value="BREF_1HR_MAX">Base Refl 1hr Max</option>
+                                    <option value="CREF_1HR_MAX">Comp Refl 1hr Max</option>
+                                </select>
+                            </div>
+
+                            <div id="mrms-sub-lightning" class="mrms-sub" style="display:none;">
+                                <label for="mrms-lightning-window">Window</label>
+                                <select id="mrms-lightning-window">
+                                    <option value="30min" selected>Next 30 min</option>
+                                    <option value="60min">Next 60 min</option>
+                                </select>
+                            </div>
+
+                            <div id="mrms-sub-model" class="mrms-sub" style="display:none;">
+                                <label for="mrms-model-field">Field</label>
+                                <select id="mrms-model-field">
+                                    <option value="FreezingLevel" selected>Freezing Level Height</option>
+                                    <option value="SurfaceTemp">Surface Temperature</option>
+                                    <option value="WetBulbTemp">Wet Bulb Temperature</option>
+                                </select>
+                            </div>
+
+                            <label for="weather-opacity-mrms">Opacity</label>
+                            <input id="weather-opacity-mrms" type="range" min="0.1" max="1" step="0.05" value="0.8">
+                            <span id="weather-mrms-status" class="wx-small"></span>
+                            <button id="weather-refresh-mrms" type="button">Refresh</button>
+                        </div>
+                    </div>
+
+                    <div class="wx-block">
+                        <button id="weather-archive-toggle" type="button">Archive Mode</button>
+                        <div id="wx-archive-actions" style="display:none; margin-top:8px;">
+                            <label class="wx-sidebar-label">From
+                                <input type="datetime-local" id="archive-from" class="wx-sidebar-input">
+                            </label>
+                            <label class="wx-sidebar-label">To
+                                <input type="datetime-local" id="archive-to" class="wx-sidebar-input">
+                            </label>
+                            <button id="archive-load-btn" class="primary" type="button"
+                                style="width:100%; margin-top:6px;">Load</button>
+                            <button id="archive-exit-btn" class="secondary" type="button"
+                                style="width:100%; margin-top:4px;">Live Mode</button>
+                        </div>
+                    </div>
+                </aside>
+                <button id="weather-side-toggle-left" class="weather-side-toggle weather-side-toggle-left" type="button"
+                    aria-label="Collapse left sidebar" aria-expanded="true">‹</button>
+
+                <aside class="weather-side weather-side-right" id="weather-side-right">
+                    <h3>Layers</h3>
+                    <div id="wx-side-groups-empty" class="wx-block wx-small" style="display:none;">
+                        Enable a product group to see style controls.
+                    </div>
+                    <div id="wx-side-group-current" class="wx-block wx-side-group" data-type="current">
+                        <h4>Current</h4>
+                        <div class="wx-check-row"><span>Cities</span><input id="weather-toggle-cities" type="checkbox">
+                        </div>
+                        <div class="wx-cities-density">
+                            <div class="wx-cities-density-head">
+                                <label for="weather-cities-density">City Density</label>
+                            </div>
+                            <input id="weather-cities-density" type="range" min="0.01" max="1" step="0.005" value="1">
+                        </div>
+                        <div class="wx-check-row"><span>State Borders</span><input id="weather-toggle-states"
+                                type="checkbox" checked></div>
+                        <div class="wx-check-row"><span>Country Borders</span><input id="weather-toggle-countries"
+                                type="checkbox" checked></div>
+                        <div class="wx-check-row"><span>County Borders</span><input id="weather-toggle-counties"
+                                type="checkbox"></div>
+                        <div id="weather-gradient-blur-wrap" class="wx-block" style="display:none;">
+                            <div class="wx-obs-density-head">
+                                <label for="weather-gradient-blur">Gradient Blur</label>
+                            </div>
+                            <input id="weather-gradient-blur" type="range" min="0" max="2" step="0.05" value="0.35">
+                        </div>
+                        <div class="wx-block">
+                            <label for="weather-opacity-surface-values">Value Opacity</label>
+                            <input id="weather-opacity-surface-values" type="range" min="0.1" max="1" step="0.05"
+                                value="0.9">
+                        </div>
+                        <div class="wx-block">
+                            <label for="weather-opacity-surface-gradient">Gradient Opacity</label>
+                            <input id="weather-opacity-surface-gradient" type="range" min="0.1" max="1" step="0.05"
+                                value="0.9">
+                        </div>
+                    </div>
+                    <div id="wx-side-group-alerts" class="wx-block wx-side-group" data-type="alerts"
+                        style="display:none;">
+                        <h4>Alerts</h4>
+                        <div class="wx-small">Product-specific style controls will be added here.</div>
+                    </div>
+                    <div id="wx-side-group-spc" class="wx-block wx-side-group" data-type="spc" style="display:none;">
+                        <h4>SPC</h4>
+                        <div class="wx-small">Product-specific style controls will be added here.</div>
+                    </div>
+                    <div id="wx-side-group-mrms" class="wx-block wx-side-group" data-type="mrms" style="display:none;">
+                        <h4>MRMS</h4>
+                        <div class="wx-small">Product-specific style controls will be added here.</div>
+                    </div>
+                    <div class="wx-block">
+                        <h3>Export</h3>
+                        <div id="archive-export-row">
+                            <button id="archive-screenshot" class="secondary" type="button">Screenshot PNG</button>
+                            <button id="archive-export-frame" class="secondary" type="button">Export Frame PNG</button>
+                            <button id="archive-export-animation" class="secondary" type="button">Export HD MP4</button>
+                            <div class="archive-export-controls">
+                                <label class="archive-export-label">Start <input id="archive-export-start" type="number"
+                                        min="0" step="1" value="0"></label>
+                                <label class="archive-export-label">End <input id="archive-export-end" type="number"
+                                        min="0" step="1" value="0"></label>
+                                <label class="archive-export-label">FPS <input id="archive-export-fps" type="number"
+                                        min="1" max="24" step="1" value="4"></label>
+                            </div>
+                            <span id="archive-export-status" role="status" aria-live="polite"></span>
+                            <a id="archive-export-link" href="#" target="_blank" rel="noopener"
+                                style="display:none;">Open
+                                Export</a>
+                            <span id="archive-export-hint">Frame export supports Weather archive products. MP4 export
+                                currently uses server rendering for MRMS archive.</span>
+                        </div>
+                    </div>
+                </aside>
+                <button id="weather-side-toggle-right" class="weather-side-toggle weather-side-toggle-right"
+                    type="button" aria-label="Collapse right sidebar" aria-expanded="true">›</button>
+
+                <div id="weather-colorbar" class="weather-colorbar" style="display:none;"></div>
+
+                <div id="weather-archive-bar">
+                    <div id="archive-progress-row" style="display:none;">
+                        <div id="archive-progress-track">
+                            <div id="archive-progress-fill"></div>
+                        </div>
+                        <span id="archive-progress-text"></span>
+                    </div>
+                    <div id="archive-scrubber-row" style="display:none;">
+                        <button id="scrubber-step-back" type="button" title="Previous frame">&#9664;</button>
+                        <button id="scrubber-play" type="button" title="Play/Pause">&#9654;</button>
+                        <button id="scrubber-step-fwd" type="button" title="Next frame">&#9654;&#9654;</button>
+                        <input type="range" id="scrubber-slider" min="0" max="0" value="0" step="1">
+                        <span id="scrubber-timestamp">--</span>
+                        <span id="scrubber-frame-count"></span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script
+            src="https://cdn.jsdelivr.net/npm/leaflet.layergroup.collision@0.1.6/dist/leaflet.layergroup.collision.js"></script>
+        <script src="https://unpkg.com/leaflet-image@0.4.0/leaflet-image.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
         <script src="js/shared.js"></script>
         <script src="js/weather.js"></script>
         <script>initNav('weather');</script>

@@ -9,14 +9,14 @@ Only ONE product is refreshed at a time (active product pivots on user request).
 
 import os
 import shutil
-from datetime import datetime
 
-_CACHE_ROOT = os.path.join(os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__))), "cache")
+_CACHE_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache"
+)
 _MRMS_CACHE = os.path.join(_CACHE_ROOT, "mrms")
 
 # Module-level active product state (also mirrored in app.state for API access)
-_active_product: str = "PrecipRate"
+_active_product: str = "PrecipFlag"
 
 
 def set_active_product(product: str) -> None:
@@ -44,7 +44,8 @@ def run_mrms_worker() -> None:
 
     try:
         result = get_latest_mrms_file(
-            product, lookback_minutes=30, local_dir=product_cache_dir)
+            product, lookback_minutes=30, local_dir=product_cache_dir
+        )
         if result is None:
             print(f"[mrms_worker] No files found for {product}")
             return
@@ -61,6 +62,7 @@ def run_mrms_worker() -> None:
             os.rename(tmp, dest)
 
         print(
-            f"[mrms_worker] {product} cached at {file_dt.strftime('%Y-%m-%d %H:%M UTC')}")
+            f"[mrms_worker] {product} cached at {file_dt.strftime('%Y-%m-%d %H:%M UTC')}"
+        )
     except Exception as exc:
         print(f"[mrms_worker] Error fetching {product}: {exc}")

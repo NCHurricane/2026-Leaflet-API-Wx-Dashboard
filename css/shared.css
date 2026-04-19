@@ -1,3 +1,27 @@
+@font-face {
+    font-family: 'Montserrat';
+    src: url('../fonts/Montserrat-VariableFont_wght.ttf') format('truetype');
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Montserrat';
+    src: url('../fonts/Montserrat-Italic-VariableFont_wght.ttf') format('truetype');
+    font-style: italic;
+    font-weight: 100 900;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Montserrat-ExtraBold';
+    src: url('../fonts/Montserrat-ExtraBold.ttf') format('truetype');
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+}
+
 :root {
     --primary: #0f172a;
     --accent: #3b82f6;
@@ -35,6 +59,7 @@ header {
 }
 
 header h1 {
+    font-size: 1rem;
     margin: 0 0 0.75rem 0;
     color: var(--highlight);
     text-decoration: none;
@@ -42,6 +67,11 @@ header h1 {
 
 header h1:hover {
     color: var(--text);
+}
+
+.banner-logo {
+    width: 400px;
+    height: auto;
 }
 
 .nav-bar {
