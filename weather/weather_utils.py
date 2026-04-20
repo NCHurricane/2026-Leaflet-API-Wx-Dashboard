@@ -8,13 +8,9 @@ Does NOT import or chain into legacy surface/alerts/mrms/spc endpoint code.
 Uses the same pipeline pattern: download -> cache -> parse -> render -> output.
 """
 
-from video_utils import save_animation, OUTPUT_DPI, FIGSIZE_16x9
+from video_utils import OUTPUT_DPI, FIGSIZE_16x9
 from font_utils import register_montserrat_fonts
 from config.style_config import (
-    SURFACE_FIXED_STYLE_CONFIG,
-    ALERTS_FIXED_STYLE_CONFIG,
-    MRMS_FIXED_STYLE_CONFIG,
-    SPC_FIXED_STYLE_CONFIG,
     resolve_weather_group_style_config,
 )
 from config.surface_config import (
@@ -30,17 +26,16 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import os
 import json
-import time
 import uuid
 import shutil
 import hashlib
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from config.geo_config import STATES_FULL
 
 import numpy as np
 import matplotlib
+
 matplotlib.use("Agg")
 register_montserrat_fonts()
 
@@ -78,8 +73,11 @@ BASEMAP_CACHE = os.path.join(_PROJECT_ROOT, "basemap_cache")
 WEATHER_BASEMAP_CACHE = os.path.join(BASEMAP_CACHE, "weather")
 
 for _d in [
-    WEATHER_ROOT, WEATHER_IMAGES, WEATHER_CACHE,
-    WEATHER_ARCHIVE, WEATHER_ARCHIVE_LAYERS,
+    WEATHER_ROOT,
+    WEATHER_IMAGES,
+    WEATHER_CACHE,
+    WEATHER_ARCHIVE,
+    WEATHER_ARCHIVE_LAYERS,
     WEATHER_BASEMAP_CACHE,
 ]:
     os.makedirs(_d, exist_ok=True)
@@ -91,61 +89,130 @@ MAX_SESSIONS = 50
 # ── Product group map ────────────────────────────────────────────────────────
 PRODUCT_GROUPS = {
     "surface": [
-        "Station Plot", "Temperature", "Temperature Gradient",
-        "Temperature Gradient and Values", "Feels Like",
-        "Feels Like Gradient", "Feels Like Gradient and Values",
-        "Dewpoint", "Relative Humidity", "Wind Speed", "Wind Gust",
-        "Altimeter", "MSLP", "Visibility",
+        "Station Plot",
+        "Temperature",
+        "Temperature Gradient",
+        "Temperature Gradient and Values",
+        "Feels Like",
+        "Feels Like Gradient",
+        "Feels Like Gradient and Values",
+        "Dewpoint",
+        "Relative Humidity",
+        "Wind Speed",
+        "Wind Gust",
+        "Altimeter",
+        "MSLP",
+        "Visibility",
     ],
     "alerts": [
-        "All Alerts", "Severe Weather Alerts",
-        "Severe Weather Warnings", "Tropical Cyclone Alerts",
-        "Hydrology Alerts", "Flash Flood Alerts",
-        "Winter Alerts", "Cold Alerts", "Fire Alerts",
-        "Heat Alerts", "Coastal Alerts", "Marine Alerts",
+        "All Alerts",
+        "Severe Weather Alerts",
+        "Severe Weather Warnings",
+        "Tropical Cyclone Alerts",
+        "Hydrology Alerts",
+        "Flash Flood Alerts",
+        "Winter Alerts",
+        "Cold Alerts",
+        "Fire Alerts",
+        "Heat Alerts",
+        "Coastal Alerts",
+        "Marine Alerts",
         "Non-Precipitation Alerts",
     ],
     "mrms": [
         # Rotation tracks
-        "RotationTrack_LL_30min", "RotationTrack_LL_60min",
-        "RotationTrack_LL_120min", "RotationTrack_LL_240min",
-        "RotationTrack_LL_360min", "RotationTrack_LL_1440min",
-        "RotationTrack_ML_30min", "RotationTrack_ML_60min",
-        "RotationTrack_ML_120min", "RotationTrack_ML_240min",
-        "RotationTrack_ML_360min", "RotationTrack_ML_1440min",
+        "RotationTrack_LL_30min",
+        "RotationTrack_LL_60min",
+        "RotationTrack_LL_120min",
+        "RotationTrack_LL_240min",
+        "RotationTrack_LL_360min",
+        "RotationTrack_LL_1440min",
+        "RotationTrack_ML_30min",
+        "RotationTrack_ML_60min",
+        "RotationTrack_ML_120min",
+        "RotationTrack_ML_240min",
+        "RotationTrack_ML_360min",
+        "RotationTrack_ML_1440min",
         # MESH / hail
-        "MESH_Instant", "MESH_Max_30min", "MESH_Max_60min",
-        "MESH_Max_120min", "MESH_Max_240min", "MESH_Max_360min",
-        "MESH_Max_1440min", "SHI", "POSH",
+        "MESH_Instant",
+        "MESH_Max_30min",
+        "MESH_Max_60min",
+        "MESH_Max_120min",
+        "MESH_Max_240min",
+        "MESH_Max_360min",
+        "MESH_Max_1440min",
+        "SHI",
+        "POSH",
         # Azimuthal shear
-        "AzShear_Low", "AzShear_Mid",
+        "AzShear_Low",
+        "AzShear_Mid",
         # Echo top
-        "EchoTop_18", "EchoTop_30", "EchoTop_50", "EchoTop_60",
+        "EchoTop_18",
+        "EchoTop_30",
+        "EchoTop_50",
+        "EchoTop_60",
         # VIL
-        "VIL_Instant", "VIL_Density", "VIL_Max_120min", "VIL_Max_1440min",
+        "VIL_Instant",
+        "VIL_Density",
+        "VIL_Max_120min",
+        "VIL_Max_1440min",
         # QPE – MultiSensor Pass 2
-        "QPE_MS2_01H", "QPE_MS2_03H", "QPE_MS2_06H", "QPE_MS2_12H",
-        "QPE_MS2_24H", "QPE_MS2_48H", "QPE_MS2_72H",
+        "QPE_MS2_01H",
+        "QPE_MS2_03H",
+        "QPE_MS2_06H",
+        "QPE_MS2_12H",
+        "QPE_MS2_24H",
+        "QPE_MS2_48H",
+        "QPE_MS2_72H",
         # QPE – MultiSensor Pass 1
-        "QPE_MS1_01H", "QPE_MS1_03H", "QPE_MS1_06H", "QPE_MS1_12H",
-        "QPE_MS1_24H", "QPE_MS1_48H", "QPE_MS1_72H",
+        "QPE_MS1_01H",
+        "QPE_MS1_03H",
+        "QPE_MS1_06H",
+        "QPE_MS1_12H",
+        "QPE_MS1_24H",
+        "QPE_MS1_48H",
+        "QPE_MS1_72H",
         # QPE – Radar Only
-        "QPE_RO_15M", "QPE_RO_01H", "QPE_RO_03H", "QPE_RO_06H",
-        "QPE_RO_12H", "QPE_RO_24H", "QPE_RO_48H", "QPE_RO_72H",
+        "QPE_RO_15M",
+        "QPE_RO_01H",
+        "QPE_RO_03H",
+        "QPE_RO_06H",
+        "QPE_RO_12H",
+        "QPE_RO_24H",
+        "QPE_RO_48H",
+        "QPE_RO_72H",
         "QPE_RO_Since12Z",
         # Reflectivity
-        "Refl_HSR", "Refl_BaseQC", "Refl_CompLow", "Refl_CompHigh",
-        "Refl_CompSuper", "Refl_BREF_1HR_MAX", "Refl_CREF_1HR_MAX",
+        "Refl_HSR",
+        "Refl_BaseQC",
+        "Refl_CompLow",
+        "Refl_CompHigh",
+        "Refl_CompSuper",
+        "Refl_BREF_1HR_MAX",
+        "Refl_CREF_1HR_MAX",
         # Lightning
-        "Lightning_30min", "Lightning_60min",
+        "Lightning_30min",
+        "Lightning_60min",
         # Model / environment
-        "Model_FreezingLevel", "Model_SurfaceTemp", "Model_WetBulbTemp",
+        "Model_FreezingLevel",
+        "Model_SurfaceTemp",
+        "Model_WetBulbTemp",
         # Standalone
-        "PrecipFlag", "PrecipRate", "RadarQualityIndex",
+        "PrecipFlag",
+        "PrecipRate",
+        "RadarQualityIndex",
     ],
     "spc": [
-        "cat", "torn", "wind", "hail", "prob", "watches", "mds", "reports",
-        "fire_windrh", "fire_dryt",
+        "cat",
+        "torn",
+        "wind",
+        "hail",
+        "prob",
+        "watches",
+        "mds",
+        "reports",
+        "fire_windrh",
+        "fire_dryt",
     ],
 }
 
@@ -160,14 +227,18 @@ MAX_ARCHIVE_SPAN = {
 # ── Layout fractions (header / footer / map area) ───────────────────────────
 # All layers share the same figure dimensions.  The map content lives in the
 # middle band; the header holds the timestamp, and the footer holds the legend.
-LAYOUT_HEADER_FRAC = 0.055          # top 4.5 % of figure
-LAYOUT_FOOTER_FRAC = 0.20           # bottom 10 % of figure
-LAYOUT_SIDE_FRAC = 0.025          # left/right margin matching header
+LAYOUT_HEADER_FRAC = 0.055  # top 4.5 % of figure
+LAYOUT_FOOTER_FRAC = 0.20  # bottom 10 % of figure
+LAYOUT_SIDE_FRAC = 0.025  # left/right margin matching header
 LAYOUT_MAP_BOTTOM = LAYOUT_FOOTER_FRAC
 LAYOUT_MAP_HEIGHT = 1.0 - LAYOUT_HEADER_FRAC - LAYOUT_FOOTER_FRAC
 # axes rect for map layers:  [left, bottom, width, height]
-LAYOUT_MAP_RECT = [LAYOUT_SIDE_FRAC, LAYOUT_MAP_BOTTOM,
-                   1.0 - 2 * LAYOUT_SIDE_FRAC, LAYOUT_MAP_HEIGHT]
+LAYOUT_MAP_RECT = [
+    LAYOUT_SIDE_FRAC,
+    LAYOUT_MAP_BOTTOM,
+    1.0 - 2 * LAYOUT_SIDE_FRAC,
+    LAYOUT_MAP_HEIGHT,
+]
 
 
 def validate_product_group(product_group: str, product: str):
@@ -189,6 +260,7 @@ def validate_product_group(product_group: str, product: str):
 # ═════════════════════════════════════════════════════════════════════════════
 # PROJECTION
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 def compute_lambert_params(region: str, custom_extent: tuple = None):
     """Compute consistent Lambert projection parameters for a region.
@@ -223,9 +295,9 @@ def compute_lambert_params(region: str, custom_extent: tuple = None):
     src = ccrs.PlateCarree()
     sample_lons = [w, e, w, e, center_lon, center_lon, w, e]
     sample_lats = [s, s, n, n, s, n, center_lat, center_lat]
-    proj_coords = projection.transform_points(src,
-                                              np.array(sample_lons),
-                                              np.array(sample_lats))
+    proj_coords = projection.transform_points(
+        src, np.array(sample_lons), np.array(sample_lats)
+    )
     px = proj_coords[:, 0]
     py = proj_coords[:, 1]
     proj_width = px.max() - px.min()
@@ -234,7 +306,7 @@ def compute_lambert_params(region: str, custom_extent: tuple = None):
 
     # The map band occupies (1 - header - footer) of figure height
     # and (1 - 2*side) of figure width.
-    map_frac = LAYOUT_MAP_HEIGHT          # vertical fraction for map
+    map_frac = LAYOUT_MAP_HEIGHT  # vertical fraction for map
     map_w_frac = 1.0 - 2 * LAYOUT_SIDE_FRAC  # horizontal fraction for map
     fig_h = FIGSIZE_16x9[1]
     # map_band_height = fig_h * map_frac
@@ -253,6 +325,7 @@ def compute_lambert_params(region: str, custom_extent: tuple = None):
 # BASEMAP GENERATION (land + ocean only)
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 def _basemap_cache_key(region: str, custom_extent: tuple, style_config: dict):
     """Generate a stable cache key for basemap files.
 
@@ -264,7 +337,7 @@ def _basemap_cache_key(region: str, custom_extent: tuple, style_config: dict):
 
     land = style_config.get("land_color", _DEFAULT_LAND).lower()
     ocean = style_config.get("ocean_color", _DEFAULT_OCEAN).lower()
-    is_default_colors = (land == _DEFAULT_LAND and ocean == _DEFAULT_OCEAN)
+    is_default_colors = land == _DEFAULT_LAND and ocean == _DEFAULT_OCEAN
 
     if custom_extent is None and is_default_colors:
         return region.upper()
@@ -272,7 +345,8 @@ def _basemap_cache_key(region: str, custom_extent: tuple, style_config: dict):
     parts = [region.upper()]
     if custom_extent:
         parts.append(
-            f"{custom_extent[0]:.2f}_{custom_extent[1]:.2f}_{custom_extent[2]:.2f}_{custom_extent[3]:.2f}")
+            f"{custom_extent[0]:.2f}_{custom_extent[1]:.2f}_{custom_extent[2]:.2f}_{custom_extent[3]:.2f}"
+        )
     parts.append(f"land_{land}_ocean_{ocean}")
     parts.append("layout_v3")
 
@@ -280,7 +354,7 @@ def _basemap_cache_key(region: str, custom_extent: tuple, style_config: dict):
     return hashlib.md5(key_str.encode()).hexdigest()[:16]
 
 
-_MARGIN_BG = "#f5f5f5"   # solid background for header / footer margins
+_MARGIN_BG = "#f5f5f5"  # solid background for header / footer margins
 _MARGIN_FG = "#1a1a1a"  # text colour for content in margins
 
 
@@ -298,14 +372,12 @@ def generate_basemap(
     """
     style_config = style_config or {}
     cache_key = _basemap_cache_key(region, custom_extent, style_config)
-    cache_path = os.path.join(WEATHER_BASEMAP_CACHE,
-                              f"basemap_{cache_key}.png")
+    cache_path = os.path.join(WEATHER_BASEMAP_CACHE, f"basemap_{cache_key}.png")
 
     if not force and os.path.exists(cache_path):
         return cache_path
 
-    projection, extent, fig_w, fig_h = compute_lambert_params(
-        region, custom_extent)
+    projection, extent, fig_w, fig_h = compute_lambert_params(region, custom_extent)
     land_color = style_config.get("land_color", "#5c5c5c")
     ocean_color = style_config.get("ocean_color", "#152238")
 
@@ -321,7 +393,9 @@ def generate_basemap(
     # Land fill only - no edgecolor, no coastlines
     ax.add_feature(
         cfeature.NaturalEarthFeature(
-            "physical", "land", "10m",
+            "physical",
+            "land",
+            "10m",
             facecolor=land_color,
             edgecolor="none",
         ),
@@ -349,6 +423,7 @@ def generate_basemap(
 # SESSION MANAGEMENT
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 def _session_dir(session_id: str):
     return os.path.join(WEATHER_ARCHIVE_LAYERS, session_id)
 
@@ -357,20 +432,31 @@ def _manifest_path(session_id: str):
     return os.path.join(_session_dir(session_id), "manifest.json")
 
 
-def create_session(product_group: str, product: str, region: str,
-                   custom_extent: tuple = None):
+def create_session(
+    product_group: str, product: str, region: str, custom_extent: tuple = None
+):
     """Create a new layered session directory with manifest."""
     session_id = f"{product_group}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
     session_path = _session_dir(session_id)
 
-    subdirs = ["basemap", "product", "cities", "counties", "states",
-               "static_overlay", "hud_right", "legend", "exports"]
+    subdirs = [
+        "basemap",
+        "product",
+        "cities",
+        "counties",
+        "states",
+        "static_overlay",
+        "hud_right",
+        "legend",
+        "exports",
+    ]
     for sub in subdirs:
         os.makedirs(os.path.join(session_path, sub), exist_ok=True)
 
     now_utc = datetime.now(timezone.utc).isoformat()
-    expires_utc = (datetime.now(timezone.utc) +
-                   timedelta(hours=SESSION_TTL_HOURS)).isoformat()
+    expires_utc = (
+        datetime.now(timezone.utc) + timedelta(hours=SESSION_TTL_HOURS)
+    ).isoformat()
 
     extent_sig = ""
     if custom_extent:
@@ -510,6 +596,7 @@ def validate_layers_path(layers_path: str):
 # TRANSPARENT FIGURE HELPERS
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 def _create_transparent_axes(projection, extent, fig_w, fig_h):
     """Create a transparent figure + cartopy axes matching the basemap geometry.
 
@@ -518,8 +605,7 @@ def _create_transparent_axes(projection, extent, fig_w, fig_h):
     """
     fig = plt.figure(figsize=(fig_w, fig_h), dpi=OUTPUT_DPI)
     ax = fig.add_axes(LAYOUT_MAP_RECT, projection=projection)
-    ax.set_extent([extent[0], extent[1], extent[2], extent[3]],
-                  crs=ccrs.PlateCarree())
+    ax.set_extent([extent[0], extent[1], extent[2], extent[3]], crs=ccrs.PlateCarree())
     ax.set_facecolor("none")
     fig.patch.set_alpha(0.0)
     ax.set_frame_on(False)
@@ -569,8 +655,9 @@ def _format_weather_product_line(
         if p in {"fire_windrh", "fire_dryt"}:
             return f"Fire Weather Outlook Day {max(1, int(day or 1))}"
         if p == "reports":
-            suffix = "Yesterday" if str(
-                report_day or "").lower() == "yesterday" else "Today"
+            suffix = (
+                "Yesterday" if str(report_day or "").lower() == "yesterday" else "Today"
+            )
             return f"Storm Reports ({suffix})"
         if p == "watches":
             return "SPC Watches"
@@ -632,7 +719,8 @@ def _render_hud_left_logo(
 ):
     """Render left HUD text + logo in map-space, matching radar/satellite styling."""
     overlay_path = os.path.join(
-        session_path, "static_overlay", f"frame_{frame_index:04d}.png")
+        session_path, "static_overlay", f"frame_{frame_index:04d}.png"
+    )
 
     fig, ax = _create_transparent_axes(projection, extent, fig_w, fig_h)
 
@@ -647,8 +735,7 @@ def _render_hud_left_logo(
     hud_left_bg_color = style_config.get("hud_left_bg_color", "#000000")
     hud_left_edge_color = style_config.get("hud_left_edge_color", "#555555")
     hud_left_alpha = float(style_config.get("hud_left_alpha", 0.7))
-    hud_left_box_style = style_config.get(
-        "hud_left_box_style", "round,pad=0.5")
+    hud_left_box_style = style_config.get("hud_left_box_style", "round,pad=0.5")
 
     logo_user_size = float(style_config.get("logo_user_size", 0.08))
     logo_user_x = float(style_config.get("logo_user_x", 0.98))
@@ -656,7 +743,8 @@ def _render_hud_left_logo(
 
     group_line = get_weather_group_label(product_group)
     product_line = _format_weather_product_line(
-        product_group, product, day=day, report_day=report_day)
+        product_group, product, day=day, report_day=report_day
+    )
     region_line = _format_weather_region_label(region, custom_extent)
     hud_stacked = f"{group_line}\n{product_line}\n{region_line}"
 
@@ -704,11 +792,21 @@ def _render_hud_left_logo(
 # HUD RIGHT RENDERER
 # ═════════════════════════════════════════════════════════════════════════════
 
-def _render_hud_right(session_path, frame_index, fig_w, fig_h,
-                      timestamp_str, style_config, projection, extent):
+
+def _render_hud_right(
+    session_path,
+    frame_index,
+    fig_w,
+    fig_h,
+    timestamp_str,
+    style_config,
+    projection,
+    extent,
+):
     """Render right HUD timestamp in map-space, matching radar/satellite placement."""
     hud_right_path = os.path.join(
-        session_path, "hud_right", f"frame_{frame_index:04d}.png")
+        session_path, "hud_right", f"frame_{frame_index:04d}.png"
+    )
 
     fig, ax = _create_transparent_axes(projection, extent, fig_w, fig_h)
 
@@ -723,8 +821,7 @@ def _render_hud_right(session_path, frame_index, fig_w, fig_h,
     hud_right_bg_color = style_config.get("hud_right_bg_color", "#000000")
     hud_right_edge_color = style_config.get("hud_right_edge_color", "#555555")
     hud_right_alpha = float(style_config.get("hud_right_alpha", 0.7))
-    hud_right_box_style = style_config.get(
-        "hud_right_box_style", "round,pad=0.4")
+    hud_right_box_style = style_config.get("hud_right_box_style", "round,pad=0.4")
 
     ax.annotate(
         hud_text,
@@ -754,28 +851,37 @@ def _render_hud_right(session_path, frame_index, fig_w, fig_h,
 # ALERTS PRODUCT RENDERER
 # ═════════════════════════════════════════════════════════════════════════════
 
-def _render_alerts_product(session_path, frame_index, product, region,
-                           projection, extent, fig_w, fig_h, style_config,
-                           custom_extent=None):
+
+def _render_alerts_product(
+    session_path,
+    frame_index,
+    product,
+    region,
+    projection,
+    extent,
+    fig_w,
+    fig_h,
+    style_config,
+    custom_extent=None,
+):
     """Render alerts product layer with real NWS/IEM data."""
     from alerts.alerts_utils import fetch_active_alerts_with_source, process_alerts
     from cartopy.feature import ShapelyFeature
     from matplotlib.colors import to_rgba
 
-    product_path = os.path.join(
-        session_path, "product", f"frame_{frame_index:04d}.png")
+    product_path = os.path.join(session_path, "product", f"frame_{frame_index:04d}.png")
     fig, ax = _create_transparent_axes(projection, extent, fig_w, fig_h)
     active_types = []
 
     try:
         state_param = None if region.upper() == "CONUS" else region.upper()
-        features, _ = fetch_active_alerts_with_source(
-            state=state_param, source="iem")
+        features, _ = fetch_active_alerts_with_source(state=state_param, source="iem")
 
         w, e, s, n = extent
         bbox = (s, n, w, e)
         alerts_data = process_alerts(
-            features, category_filter_name=product, bbox_filter=bbox)
+            features, category_filter_name=product, bbox_filter=bbox
+        )
 
         fill_alpha = float(style_config.get("alert_fill_alpha", 0.35))
         line_width = float(style_config.get("alert_line_width", 1.1))
@@ -785,9 +891,11 @@ def _render_alerts_product(session_path, frame_index, product, region,
         seen_types = set()
         for item in alerts_data:
             shape = ShapelyFeature(
-                [item["geometry"]], ccrs.PlateCarree(),
+                [item["geometry"]],
+                ccrs.PlateCarree(),
                 facecolor=to_rgba(item["color"], alpha=fill_alpha),
-                edgecolor=item["color"], linewidth=line_width,
+                edgecolor=item["color"],
+                linewidth=line_width,
             )
             ax.add_feature(shape, zorder=30)
             event_name = item.get("event", "Unknown")
@@ -797,11 +905,20 @@ def _render_alerts_product(session_path, frame_index, product, region,
 
     except Exception as exc:
         import traceback
+
         traceback.print_exc()
-        ax.text(0.5, 0.5, f"Alerts data unavailable:\n{exc}",
-                transform=ax.transAxes, fontsize=10, color="red",
-                ha="center", va="center",
-                bbox=dict(facecolor="black", alpha=0.7), zorder=100)
+        ax.text(
+            0.5,
+            0.5,
+            f"Alerts data unavailable:\n{exc}",
+            transform=ax.transAxes,
+            fontsize=10,
+            color="red",
+            ha="center",
+            va="center",
+            bbox=dict(facecolor="black", alpha=0.7),
+            zorder=100,
+        )
 
     _save_transparent(fig, product_path)
     legend_data = {"active_types": active_types} if active_types else None
@@ -813,7 +930,12 @@ def _render_alerts_product(session_path, frame_index, product, region,
 # ═════════════════════════════════════════════════════════════════════════════
 
 _SURFACE_PARAM_MAP = {
-    "Temperature": ("air_temperature", TEMPERATURE_COLORMAP, TEMPERATURE_MIN_F, TEMPERATURE_MAX_F),
+    "Temperature": (
+        "air_temperature",
+        TEMPERATURE_COLORMAP,
+        TEMPERATURE_MIN_F,
+        TEMPERATURE_MAX_F,
+    ),
     "Dewpoint": ("dew_point_temperature", "BuGn", -20, 80),
     "Relative Humidity": ("relative_humidity", "YlGnBu", 0, 100),
     "Wind Speed": ("wind_speed", "YlOrRd", 0, 130),
@@ -821,11 +943,36 @@ _SURFACE_PARAM_MAP = {
     "Altimeter": ("altimeter", "coolwarm", 29.5, 30.8),
     "MSLP": ("mean_sea_level_pressure", "coolwarm", 990, 1040),
     "Visibility": ("visibility", "YlGn_r", 0, 10),
-    "Feels Like": ("feels_like", TEMPERATURE_COLORMAP, TEMPERATURE_MIN_F, TEMPERATURE_MAX_F),
-    "Temperature Gradient": ("air_temperature", TEMPERATURE_COLORMAP, TEMPERATURE_MIN_F, TEMPERATURE_MAX_F),
-    "Temperature Gradient and Values": ("air_temperature", TEMPERATURE_COLORMAP, TEMPERATURE_MIN_F, TEMPERATURE_MAX_F),
-    "Feels Like Gradient": ("feels_like", TEMPERATURE_COLORMAP, TEMPERATURE_MIN_F, TEMPERATURE_MAX_F),
-    "Feels Like Gradient and Values": ("feels_like", TEMPERATURE_COLORMAP, TEMPERATURE_MIN_F, TEMPERATURE_MAX_F),
+    "Feels Like": (
+        "feels_like",
+        TEMPERATURE_COLORMAP,
+        TEMPERATURE_MIN_F,
+        TEMPERATURE_MAX_F,
+    ),
+    "Temperature Gradient": (
+        "air_temperature",
+        TEMPERATURE_COLORMAP,
+        TEMPERATURE_MIN_F,
+        TEMPERATURE_MAX_F,
+    ),
+    "Temperature Gradient and Values": (
+        "air_temperature",
+        TEMPERATURE_COLORMAP,
+        TEMPERATURE_MIN_F,
+        TEMPERATURE_MAX_F,
+    ),
+    "Feels Like Gradient": (
+        "feels_like",
+        TEMPERATURE_COLORMAP,
+        TEMPERATURE_MIN_F,
+        TEMPERATURE_MAX_F,
+    ),
+    "Feels Like Gradient and Values": (
+        "feels_like",
+        TEMPERATURE_COLORMAP,
+        TEMPERATURE_MIN_F,
+        TEMPERATURE_MAX_F,
+    ),
 }
 
 
@@ -841,17 +988,25 @@ def _thin_surface_stations(df, projection, extent, density_km=30):
     return df[mask].copy()
 
 
-def _render_surface_product(session_path, frame_index, product, region,
-                            projection, extent, fig_w, fig_h, style_config,
-                            custom_extent=None):
+def _render_surface_product(
+    session_path,
+    frame_index,
+    product,
+    region,
+    projection,
+    extent,
+    fig_w,
+    fig_h,
+    style_config,
+    custom_extent=None,
+):
     """Render surface observation product layer with real IEM data."""
     from surface.surface_utils import fetch_metar_data, get_weather_symbol_index
     from metpy.plots import StationPlot, sky_cover, current_weather
     from matplotlib.patheffects import withStroke
     import pandas as pd
 
-    product_path = os.path.join(
-        session_path, "product", f"frame_{frame_index:04d}.png")
+    product_path = os.path.join(session_path, "product", f"frame_{frame_index:04d}.png")
     fig, ax = _create_transparent_axes(projection, extent, fig_w, fig_h)
 
     try:
@@ -860,8 +1015,12 @@ def _render_surface_product(session_path, frame_index, product, region,
 
         if df is not None and not df.empty:
             w, e, s, n = extent
-            mask = ((df["latitude"] >= s) & (df["latitude"] <= n) &
-                    (df["longitude"] >= w) & (df["longitude"] <= e))
+            mask = (
+                (df["latitude"] >= s)
+                & (df["latitude"] <= n)
+                & (df["longitude"] >= w)
+                & (df["longitude"] <= e)
+            )
             df = df[mask].copy()
 
         if df is not None and not df.empty:
@@ -870,8 +1029,7 @@ def _render_surface_product(session_path, frame_index, product, region,
             if product == "Station Plot":
                 # Full MetPy StationPlot glyph model
                 density_km = int(style_config.get("station_density_km", 30))
-                df_plot = _thin_surface_stations(
-                    df, projection, extent, density_km)
+                df_plot = _thin_surface_stations(df, projection, extent, density_km)
 
                 if df_plot.empty:
                     _save_transparent(fig, product_path)
@@ -881,20 +1039,22 @@ def _render_surface_product(session_path, frame_index, product, region,
                 df_plot["wx_idx"] = 0
                 if "wxcodes" in df_plot.columns:
                     df_plot["wx_idx"] = df_plot["wxcodes"].apply(
-                        get_weather_symbol_index)
+                        get_weather_symbol_index
+                    )
 
                 # Derive sky cover from relative humidity (0-8 scale)
                 sky_vals = np.zeros(len(df_plot))
                 if "relative_humidity" in df_plot.columns:
                     sky_vals = (
                         (df_plot["relative_humidity"].fillna(0) / 12.5)
-                        .clip(0, 8).round().astype(int).values
+                        .clip(0, 8)
+                        .round()
+                        .astype(int)
+                        .values
                     )
 
-                station_font_size = int(style_config.get(
-                    "station_font_size", 8))
-                station_spacing = float(style_config.get(
-                    "station_spacing_factor", 1.2))
+                station_font_size = int(style_config.get("station_font_size", 8))
+                station_spacing = float(style_config.get("station_spacing_factor", 1.2))
 
                 sp = StationPlot(
                     ax,
@@ -914,16 +1074,17 @@ def _render_surface_product(session_path, frame_index, product, region,
 
                 # NW: Temperature
                 sp.plot_parameter(
-                    "NW", df_plot["air_temperature"].values,
+                    "NW",
+                    df_plot["air_temperature"].values,
                     color=style_config.get("station_temp_color", "#D32F2F"),
                     weight=stn_weight,
                 ).set_path_effects(halo)
 
                 # SW: Dewpoint
                 sp.plot_parameter(
-                    "SW", df_plot["dew_point_temperature"].values,
-                    color=style_config.get(
-                        "station_dewpoint_color", "#00796B"),
+                    "SW",
+                    df_plot["dew_point_temperature"].values,
+                    color=style_config.get("station_dewpoint_color", "#00796B"),
                     weight=stn_weight,
                 ).set_path_effects(halo)
 
@@ -932,8 +1093,7 @@ def _render_surface_product(session_path, frame_index, product, region,
                     sp.plot_parameter(
                         "NE",
                         df_plot["mean_sea_level_pressure"].values,
-                        color=style_config.get(
-                            "station_mslp_color", "black"),
+                        color=style_config.get("station_mslp_color", "black"),
                         formatter=lambda v: (
                             f"{int((v - 1000) * 10)}"
                             if v >= 1000
@@ -946,10 +1106,8 @@ def _render_surface_product(session_path, frame_index, product, region,
                     sp.plot_parameter(
                         "E",
                         df_plot["visibility"].values,
-                        color=style_config.get(
-                            "station_visibility_color", "purple"),
-                        formatter=lambda v: (
-                            f"{v:.0f}" if not pd.isna(v) else ""),
+                        color=style_config.get("station_visibility_color", "purple"),
+                        formatter=lambda v: f"{v:.0f}" if not pd.isna(v) else "",
                     ).set_path_effects(halo)
 
                 # C: Sky cover symbol
@@ -957,17 +1115,17 @@ def _render_surface_product(session_path, frame_index, product, region,
 
                 # W: Present weather symbol
                 sp.plot_symbol(
-                    "W", df_plot["wx_idx"].values, current_weather,
-                    color=style_config.get(
-                        "station_weather_color", "#1976D2"),
+                    "W",
+                    df_plot["wx_idx"].values,
+                    current_weather,
+                    color=style_config.get("station_weather_color", "#1976D2"),
                 )
 
                 # Wind barbs
                 sp.plot_barb(
                     df_plot["u"].fillna(0).values,
                     df_plot["v"].fillna(0).values,
-                    color=style_config.get(
-                        "station_wind_color", "#1976D2"),
+                    color=style_config.get("station_wind_color", "#1976D2"),
                     length=int(style_config.get("wind_barb_length", 5)),
                 )
 
@@ -985,37 +1143,47 @@ def _render_surface_product(session_path, frame_index, product, region,
                     grid_x = np.linspace(w, e, 200)
                     grid_y = np.linspace(s, n, 200)
                     gx, gy = np.meshgrid(grid_x, grid_y)
-                    grid_z = _griddata(
-                        (lons, lats), vals, (gx, gy), method="linear")
+                    grid_z = _griddata((lons, lats), vals, (gx, gy), method="linear")
                     grid_z = _gaussian(
-                        np.nan_to_num(grid_z, nan=np.nanmean(vals)), sigma=2)
+                        np.nan_to_num(grid_z, nan=np.nanmean(vals)), sigma=2
+                    )
 
                     ax.contourf(
-                        gx, gy, grid_z, levels=15,
-                        cmap=cmap_name, vmin=vmin, vmax=vmax,
-                        alpha=0.6, transform=ccrs.PlateCarree(), zorder=25,
+                        gx,
+                        gy,
+                        grid_z,
+                        levels=15,
+                        cmap=cmap_name,
+                        vmin=vmin,
+                        vmax=vmax,
+                        alpha=0.6,
+                        transform=ccrs.PlateCarree(),
+                        zorder=25,
                     )
 
                     if "Values" in product:
                         # Thin stations for value labels
-                        density_km = int(style_config.get(
-                            "station_density_km", 30))
+                        density_km = int(style_config.get("station_density_km", 30))
                         thinned = _thin_surface_stations(
-                            valid, projection, extent, density_km)
+                            valid, projection, extent, density_km
+                        )
                         if not thinned.empty:
                             for _, row in thinned.iterrows():
                                 val = row[col]
                                 if pd.notna(val):
                                     ax.text(
-                                        row["longitude"], row["latitude"],
+                                        row["longitude"],
+                                        row["latitude"],
                                         f"{val:.0f}",
                                         transform=ccrs.PlateCarree(),
-                                        fontsize=7, color="white",
+                                        fontsize=7,
+                                        color="white",
                                         fontweight="bold",
-                                        ha="center", va="center",
-                                        path_effects=[withStroke(
-                                            linewidth=2,
-                                            foreground="black")],
+                                        ha="center",
+                                        va="center",
+                                        path_effects=[
+                                            withStroke(linewidth=2, foreground="black")
+                                        ],
                                         zorder=31,
                                     )
 
@@ -1024,50 +1192,75 @@ def _render_surface_product(session_path, frame_index, product, region,
                 col, cmap_name, vmin, vmax = param_info
                 valid = df.dropna(subset=[col, "latitude", "longitude"])
                 if not valid.empty:
-                    density_km = int(style_config.get(
-                        "station_density_km", 30))
+                    density_km = int(style_config.get("station_density_km", 30))
                     thinned = _thin_surface_stations(
-                        valid, projection, extent, density_km)
+                        valid, projection, extent, density_km
+                    )
                     if not thinned.empty:
                         ax.scatter(
                             thinned["longitude"].values,
                             thinned["latitude"].values,
-                            c=thinned[col].values, cmap=cmap_name,
-                            vmin=vmin, vmax=vmax,
-                            s=18, alpha=0.85,
-                            edgecolors="black", linewidths=0.3,
-                            transform=ccrs.PlateCarree(), zorder=30,
+                            c=thinned[col].values,
+                            cmap=cmap_name,
+                            vmin=vmin,
+                            vmax=vmax,
+                            s=18,
+                            alpha=0.85,
+                            edgecolors="black",
+                            linewidths=0.3,
+                            transform=ccrs.PlateCarree(),
+                            zorder=30,
                         )
                         # Number value labels
-                        fmt = ".1f" if col in (
-                            "altimeter", "visibility") else ".0f"
+                        fmt = ".1f" if col in ("altimeter", "visibility") else ".0f"
                         for _, row in thinned.iterrows():
                             val = row[col]
                             if pd.notna(val):
                                 ax.text(
-                                    row["longitude"], row["latitude"],
+                                    row["longitude"],
+                                    row["latitude"],
                                     f"{val:{fmt}}",
                                     transform=ccrs.PlateCarree(),
-                                    fontsize=6, color="white",
+                                    fontsize=6,
+                                    color="white",
                                     fontweight="bold",
-                                    ha="center", va="bottom",
-                                    path_effects=[withStroke(
-                                        linewidth=2, foreground="black")],
+                                    ha="center",
+                                    va="bottom",
+                                    path_effects=[
+                                        withStroke(linewidth=2, foreground="black")
+                                    ],
                                     zorder=31,
                                 )
         else:
-            ax.text(0.5, 0.5, "No surface observations available",
-                    transform=ax.transAxes, fontsize=10, color="yellow",
-                    ha="center", va="center",
-                    bbox=dict(facecolor="black", alpha=0.6), zorder=100)
+            ax.text(
+                0.5,
+                0.5,
+                "No surface observations available",
+                transform=ax.transAxes,
+                fontsize=10,
+                color="yellow",
+                ha="center",
+                va="center",
+                bbox=dict(facecolor="black", alpha=0.6),
+                zorder=100,
+            )
 
     except Exception as exc:
         import traceback
+
         traceback.print_exc()
-        ax.text(0.5, 0.5, f"Surface data unavailable:\n{exc}",
-                transform=ax.transAxes, fontsize=10, color="red",
-                ha="center", va="center",
-                bbox=dict(facecolor="black", alpha=0.7), zorder=100)
+        ax.text(
+            0.5,
+            0.5,
+            f"Surface data unavailable:\n{exc}",
+            transform=ax.transAxes,
+            fontsize=10,
+            color="red",
+            ha="center",
+            va="center",
+            bbox=dict(facecolor="black", alpha=0.7),
+            zorder=100,
+        )
 
     _save_transparent(fig, product_path)
     return {"product_path": product_path, "legend_data": None}
@@ -1077,16 +1270,25 @@ def _render_surface_product(session_path, frame_index, product, region,
 # MRMS PRODUCT RENDERER
 # ═════════════════════════════════════════════════════════════════════════════
 
-def _render_mrms_product(session_path, frame_index, product, region,
-                         projection, extent, fig_w, fig_h, style_config,
-                         custom_extent=None):
+
+def _render_mrms_product(
+    session_path,
+    frame_index,
+    product,
+    region,
+    projection,
+    extent,
+    fig_w,
+    fig_h,
+    style_config,
+    custom_extent=None,
+):
     """Render MRMS product layer with real NODD S3 data."""
     from mrms.mrms_nodd_utils import get_latest_mrms_file
     from mrms.mrms_utils import read_mrms_grib2
     from config.mrms_config import MRMS_PRODUCTS, MRMS_COLORMAPS
 
-    product_path = os.path.join(
-        session_path, "product", f"frame_{frame_index:04d}.png")
+    product_path = os.path.join(session_path, "product", f"frame_{frame_index:04d}.png")
     fig, ax = _create_transparent_axes(projection, extent, fig_w, fig_h)
     mrms_legend_data = None
 
@@ -1111,7 +1313,8 @@ def _render_mrms_product(session_path, frame_index, product, region,
             lookback = 60
 
         result = get_latest_mrms_file(
-            product, lookback_minutes=lookback, local_dir=download_dir)
+            product, lookback_minutes=lookback, local_dir=download_dir
+        )
 
         if result is None:
             raise ValueError(f"No recent MRMS {product} data available")
@@ -1121,8 +1324,7 @@ def _render_mrms_product(session_path, frame_index, product, region,
         # Read GRIB2 data
         w, e, s, n = extent
         crop_extent = [w, e, s, n]
-        data, metadata = read_mrms_grib2(
-            file_path, product, crop_extent=crop_extent)
+        data, metadata = read_mrms_grib2(file_path, product, crop_extent=crop_extent)
 
         # Get colormap
         cmap_key = product_info.get("colormap", "qpe")
@@ -1158,20 +1360,28 @@ def _render_mrms_product(session_path, frame_index, product, region,
         # Plot data
         if is_categorical and cat_norm is not None:
             ax.imshow(
-                data_masked, cmap=cmap, norm=cat_norm,
+                data_masked,
+                cmap=cmap,
+                norm=cat_norm,
                 extent=img_extent,
                 origin="upper" if lat_descending else "lower",
                 transform=ccrs.PlateCarree(),
-                interpolation="nearest", alpha=0.85, zorder=25,
+                interpolation="nearest",
+                alpha=0.85,
+                zorder=25,
             )
         else:
             ax.imshow(
-                data_masked, cmap=cmap,
+                data_masked,
+                cmap=cmap,
                 extent=img_extent,
                 origin="upper" if lat_descending else "lower",
                 transform=ccrs.PlateCarree(),
-                interpolation="nearest", alpha=0.85,
-                vmin=vmin, vmax=vmax, zorder=25,
+                interpolation="nearest",
+                alpha=0.85,
+                vmin=vmin,
+                vmax=vmax,
+                zorder=25,
             )
 
         # Re-enforce extent after imshow
@@ -1190,11 +1400,20 @@ def _render_mrms_product(session_path, frame_index, product, region,
 
     except Exception as exc:
         import traceback
+
         traceback.print_exc()
-        ax.text(0.5, 0.5, f"MRMS data unavailable:\n{exc}",
-                transform=ax.transAxes, fontsize=10, color="red",
-                ha="center", va="center",
-                bbox=dict(facecolor="black", alpha=0.7), zorder=100)
+        ax.text(
+            0.5,
+            0.5,
+            f"MRMS data unavailable:\n{exc}",
+            transform=ax.transAxes,
+            fontsize=10,
+            color="red",
+            ha="center",
+            va="center",
+            bbox=dict(facecolor="black", alpha=0.7),
+            zorder=100,
+        )
 
     _save_transparent(fig, product_path)
     return {"product_path": product_path, "legend_data": mrms_legend_data}
@@ -1204,18 +1423,32 @@ def _render_mrms_product(session_path, frame_index, product, region,
 # SPC PRODUCT RENDERER
 # ═════════════════════════════════════════════════════════════════════════════
 
-def _render_spc_product(session_path, frame_index, product, region,
-                        projection, extent, fig_w, fig_h, style_config,
-                        custom_extent=None, day=1, report_day="today",
-                        item_id=None):
+
+def _render_spc_product(
+    session_path,
+    frame_index,
+    product,
+    region,
+    projection,
+    extent,
+    fig_w,
+    fig_h,
+    style_config,
+    custom_extent=None,
+    day=1,
+    report_day="today",
+    item_id=None,
+):
     """Render SPC outlook product layer with real SPC data."""
     from spc.spc_utils import (
-        fetch_outlook_geojson, fetch_active_watch_items, fetch_active_md_items,
-        fetch_reports_rows, fetch_fire_wx_geojson,
+        fetch_outlook_geojson,
+        fetch_active_watch_items,
+        fetch_active_md_items,
+        fetch_reports_rows,
+        fetch_fire_wx_geojson,
     )
 
-    product_path = os.path.join(
-        session_path, "product", f"frame_{frame_index:04d}.png")
+    product_path = os.path.join(session_path, "product", f"frame_{frame_index:04d}.png")
     fig, ax = _create_transparent_axes(projection, extent, fig_w, fig_h)
 
     try:
@@ -1229,34 +1462,44 @@ def _render_spc_product(session_path, frame_index, product, region,
             if item_id and item_id != "all":
                 items = [w for w in items if str(w.get("id")) == str(item_id)]
             if not items:
-                ax.text(0.5, 0.5, "No active watches",
-                        transform=ax.transAxes,
-                        fontsize=int(style_config.get(
-                            "no_items_font_size", 16)),
-                        color=style_config.get("no_items_color", "white"),
-                        ha="center", va="center",
-                        bbox=dict(facecolor="black",
-                                  alpha=float(style_config.get(
-                                      "no_items_bg_alpha", 0.6)),
-                                  pad=10),
-                        zorder=100)
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No active watches",
+                    transform=ax.transAxes,
+                    fontsize=int(style_config.get("no_items_font_size", 16)),
+                    color=style_config.get("no_items_color", "white"),
+                    ha="center",
+                    va="center",
+                    bbox=dict(
+                        facecolor="black",
+                        alpha=float(style_config.get("no_items_bg_alpha", 0.6)),
+                        pad=10,
+                    ),
+                    zorder=100,
+                )
             for watch in items:
                 polygon_coords = watch.get("polygon")
                 if not polygon_coords or len(polygon_coords) < 3:
                     continue
                 from shapely.geometry import Polygon as ShapelyPolygon
+
                 try:
                     poly = ShapelyPolygon(polygon_coords)
                 except Exception:
                     continue
                 label = (watch.get("title", "") or "").lower()
-                color = style_config.get("watch_tornado_color", "#FFFF00") \
-                    if "tornado" in label \
+                color = (
+                    style_config.get("watch_tornado_color", "#FFFF00")
+                    if "tornado" in label
                     else style_config.get("watch_severe_color", "#FFA500")
+                )
                 fill_alpha = float(style_config.get("watch_fill_alpha", 0.25))
                 from cartopy.feature import ShapelyFeature
+
                 feat = ShapelyFeature(
-                    [poly], ccrs.PlateCarree(),
+                    [poly],
+                    ccrs.PlateCarree(),
                     facecolor=(*matplotlib.colors.to_rgb(color), fill_alpha),
                     edgecolor=color,
                     linewidth=float(style_config.get("watch_line_width", 1.5)),
@@ -1271,22 +1514,28 @@ def _render_spc_product(session_path, frame_index, product, region,
             if item_id and item_id != "all":
                 items = [m for m in items if str(m.get("id")) == str(item_id)]
             if not items:
-                ax.text(0.5, 0.5, "No active mesoscale discussions",
-                        transform=ax.transAxes,
-                        fontsize=int(style_config.get(
-                            "no_items_font_size", 16)),
-                        color=style_config.get("no_items_color", "white"),
-                        ha="center", va="center",
-                        bbox=dict(facecolor="black",
-                                  alpha=float(style_config.get(
-                                      "no_items_bg_alpha", 0.6)),
-                                  pad=10),
-                        zorder=100)
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No active mesoscale discussions",
+                    transform=ax.transAxes,
+                    fontsize=int(style_config.get("no_items_font_size", 16)),
+                    color=style_config.get("no_items_color", "white"),
+                    ha="center",
+                    va="center",
+                    bbox=dict(
+                        facecolor="black",
+                        alpha=float(style_config.get("no_items_bg_alpha", 0.6)),
+                        pad=10,
+                    ),
+                    zorder=100,
+                )
             for md in items:
                 polygon_coords = md.get("polygon")
                 if not polygon_coords or len(polygon_coords) < 3:
                     continue
                 from shapely.geometry import Polygon as ShapelyPolygon
+
                 try:
                     poly = ShapelyPolygon(polygon_coords)
                 except Exception:
@@ -1296,8 +1545,10 @@ def _render_spc_product(session_path, frame_index, product, region,
                 md_g = float(style_config.get("md_fill_color_g", 0.8))
                 md_b = float(style_config.get("md_fill_color_b", 1.0))
                 from cartopy.feature import ShapelyFeature
+
                 feat = ShapelyFeature(
-                    [poly], ccrs.PlateCarree(),
+                    [poly],
+                    ccrs.PlateCarree(),
                     facecolor=(md_r, md_g, md_b, md_fill_alpha),
                     edgecolor=style_config.get("md_edge_color", "#66CCFF"),
                     linewidth=float(style_config.get("md_line_width", 1.5)),
@@ -1312,16 +1563,15 @@ def _render_spc_product(session_path, frame_index, product, region,
             else:
                 target_date = now
             rows, _ = fetch_reports_rows(
-                report_date_utc=target_date, report_mode="filtered",
-                report_type="all")
+                report_date_utc=target_date, report_mode="filtered", report_type="all"
+            )
             if rows:
                 report_colors = {
                     "tornado": style_config.get("report_tornado_color", "#FF0000"),
                     "hail": style_config.get("report_hail_color", "#00FF00"),
                     "wind": style_config.get("report_wind_color", "#0088FF"),
                 }
-                default_color = style_config.get(
-                    "report_default_color", "#FFFFFF")
+                default_color = style_config.get("report_default_color", "#FFFFFF")
                 marker_size = int(style_config.get("report_marker_size", 4))
                 report_alpha = float(style_config.get("report_alpha", 0.8))
                 for row in rows:
@@ -1331,9 +1581,14 @@ def _render_spc_product(session_path, frame_index, product, region,
                     if lat is not None and lon is not None:
                         color = report_colors.get(rtype, default_color)
                         ax.plot(
-                            lon, lat, marker="o", markersize=marker_size,
-                            color=color, alpha=report_alpha,
-                            transform=ccrs.PlateCarree(), zorder=35,
+                            lon,
+                            lat,
+                            marker="o",
+                            markersize=marker_size,
+                            color=color,
+                            alpha=report_alpha,
+                            transform=ccrs.PlateCarree(),
+                            zorder=35,
                         )
 
         elif hazard.startswith("fire_"):
@@ -1358,8 +1613,7 @@ def _render_spc_product(session_path, frame_index, product, region,
 
                 fill_color = (props.get("fill") or "").strip() or "#ffd700"
                 edge_color = (props.get("stroke") or "").strip() or "#ffd700"
-                poly_alpha = float(style_config.get(
-                    "outlook_fill_alpha", 0.45))
+                poly_alpha = float(style_config.get("outlook_fill_alpha", 0.45))
                 line_width = float(style_config.get("outlook_line_width", 1.0))
 
                 def _plot_fire_rings(ax, coord_rings, fc, ec, a, lw):
@@ -1369,19 +1623,30 @@ def _render_spc_product(session_path, frame_index, product, region,
                         xs = [p[0] for p in ring]
                         ys = [p[1] for p in ring]
                         ax.fill(
-                            xs, ys,
-                            facecolor=fc, edgecolor=ec,
-                            linewidth=lw, alpha=a,
-                            transform=ccrs.PlateCarree(), zorder=30,
+                            xs,
+                            ys,
+                            facecolor=fc,
+                            edgecolor=ec,
+                            linewidth=lw,
+                            alpha=a,
+                            transform=ccrs.PlateCarree(),
+                            zorder=30,
                         )
 
                 if gtype == "Polygon":
-                    _plot_fire_rings(ax, coords, fill_color,
-                                     edge_color, poly_alpha, line_width)
+                    _plot_fire_rings(
+                        ax, coords, fill_color, edge_color, poly_alpha, line_width
+                    )
                 elif gtype == "MultiPolygon":
                     for polygon_coords in coords:
-                        _plot_fire_rings(ax, polygon_coords, fill_color,
-                                         edge_color, poly_alpha, line_width)
+                        _plot_fire_rings(
+                            ax,
+                            polygon_coords,
+                            fill_color,
+                            edge_color,
+                            poly_alpha,
+                            line_width,
+                        )
 
         else:
             # Categorical/probabilistic outlook: cat, torn, wind, hail
@@ -1396,8 +1661,7 @@ def _render_spc_product(session_path, frame_index, product, region,
 
                 fill_color = props.get("fill") or "#ffd700"
                 edge_color = props.get("stroke") or "#ffd700"
-                poly_alpha = float(style_config.get(
-                    "outlook_fill_alpha", 0.45))
+                poly_alpha = float(style_config.get("outlook_fill_alpha", 0.45))
                 line_width = float(style_config.get("outlook_line_width", 1.0))
 
                 def _plot_rings(ax, coord_rings, fc, ec, a, lw):
@@ -1407,27 +1671,47 @@ def _render_spc_product(session_path, frame_index, product, region,
                         xs = [p[0] for p in ring]
                         ys = [p[1] for p in ring]
                         ax.fill(
-                            xs, ys,
-                            facecolor=fc, edgecolor=ec,
-                            linewidth=lw, alpha=a,
-                            transform=ccrs.PlateCarree(), zorder=30,
+                            xs,
+                            ys,
+                            facecolor=fc,
+                            edgecolor=ec,
+                            linewidth=lw,
+                            alpha=a,
+                            transform=ccrs.PlateCarree(),
+                            zorder=30,
                         )
 
                 if gtype == "Polygon":
-                    _plot_rings(ax, coords, fill_color,
-                                edge_color, poly_alpha, line_width)
+                    _plot_rings(
+                        ax, coords, fill_color, edge_color, poly_alpha, line_width
+                    )
                 elif gtype == "MultiPolygon":
                     for polygon_coords in coords:
-                        _plot_rings(ax, polygon_coords, fill_color,
-                                    edge_color, poly_alpha, line_width)
+                        _plot_rings(
+                            ax,
+                            polygon_coords,
+                            fill_color,
+                            edge_color,
+                            poly_alpha,
+                            line_width,
+                        )
 
     except Exception as exc:
         import traceback
+
         traceback.print_exc()
-        ax.text(0.5, 0.5, f"SPC data unavailable:\n{exc}",
-                transform=ax.transAxes, fontsize=10, color="red",
-                ha="center", va="center",
-                bbox=dict(facecolor="black", alpha=0.7), zorder=100)
+        ax.text(
+            0.5,
+            0.5,
+            f"SPC data unavailable:\n{exc}",
+            transform=ax.transAxes,
+            fontsize=10,
+            color="red",
+            ha="center",
+            va="center",
+            bbox=dict(facecolor="black", alpha=0.7),
+            zorder=100,
+        )
 
     _save_transparent(fig, product_path)
     return {"product_path": product_path, "legend_data": None}
@@ -1437,8 +1721,17 @@ def _render_spc_product(session_path, frame_index, product, region,
 # LEGEND RENDERERS
 # ═════════════════════════════════════════════════════════════════════════════
 
-def _render_legend(session_path, frame_index, product_group, product,
-                   style_config, fig_w=None, fig_h=None, legend_data=None):
+
+def _render_legend(
+    session_path,
+    frame_index,
+    product_group,
+    product,
+    style_config,
+    fig_w=None,
+    fig_h=None,
+    legend_data=None,
+):
     """Render a legend PNG for the given product group.
 
     Returns the legend image path, or None if no legend is appropriate.
@@ -1450,16 +1743,20 @@ def _render_legend(session_path, frame_index, product_group, product,
     group = product_group.lower()
     if group == "surface":
         return _render_surface_legend(
-            session_path, frame_index, product, style_config, fw, fh, legend_data)
+            session_path, frame_index, product, style_config, fw, fh, legend_data
+        )
     elif group == "alerts":
         return _render_alerts_legend(
-            session_path, frame_index, product, style_config, fw, fh, legend_data)
+            session_path, frame_index, product, style_config, fw, fh, legend_data
+        )
     elif group == "mrms":
         return _render_mrms_legend(
-            session_path, frame_index, product, style_config, fw, fh, legend_data)
+            session_path, frame_index, product, style_config, fw, fh, legend_data
+        )
     elif group == "spc":
         return _render_spc_legend(
-            session_path, frame_index, product, style_config, fw, fh, legend_data)
+            session_path, frame_index, product, style_config, fw, fh, legend_data
+        )
     return None
 
 
@@ -1476,22 +1773,22 @@ def _legend_fig(fig_w, fig_h):
 
 def _save_legend(fig, path):
     """Save a legend figure as a transparent PNG and close it."""
-    fig.savefig(path, dpi=OUTPUT_DPI, transparent=True,
-                pad_inches=0)
+    fig.savefig(path, dpi=OUTPUT_DPI, transparent=True, pad_inches=0)
     plt.close(fig)
 
 
 # ── Surface legend ──────────────────────────────────────────────────────────
 
-def _render_surface_legend(session_path, frame_index, product, style_config,
-                           fig_w, fig_h, legend_data=None):
+
+def _render_surface_legend(
+    session_path, frame_index, product, style_config, fig_w, fig_h, legend_data=None
+):
     """Render legend for surface products in the footer margin.
 
     Station Plot -> static station-model key.
     Gradient / Scatter -> horizontal colorbar.
     """
-    legend_path = os.path.join(
-        session_path, "legend", f"frame_{frame_index:04d}.png")
+    legend_path = os.path.join(session_path, "legend", f"frame_{frame_index:04d}.png")
 
     ftr = LAYOUT_FOOTER_FRAC
     param_info = _SURFACE_PARAM_MAP.get(product)
@@ -1499,8 +1796,8 @@ def _render_surface_legend(session_path, frame_index, product, style_config,
     if product == "Station Plot":
         # Use the static station-model reference image
         static_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "img", "station_plot_legend.png")
+            os.path.dirname(os.path.dirname(__file__)), "img", "station_plot_legend.png"
+        )
         if not os.path.exists(static_path):
             return None
 
@@ -1542,8 +1839,11 @@ def _render_surface_legend(session_path, frame_index, product, style_config,
         cb.ax.tick_params(labelsize=8, colors=_MARGIN_FG)
         cb.outline.set_edgecolor("#cccccc")
 
-        unit = "°F" if col in ("air_temperature", "feels_like",
-                               "dew_point_temperature") else ""
+        unit = (
+            "°F"
+            if col in ("air_temperature", "feels_like", "dew_point_temperature")
+            else ""
+        )
         if col == "relative_humidity":
             unit = "%"
         elif col == "visibility":
@@ -1563,11 +1863,12 @@ def _render_surface_legend(session_path, frame_index, product, style_config,
 
 # ── Alerts legend ───────────────────────────────────────────────────────────
 
-def _render_alerts_legend(session_path, frame_index, product, style_config,
-                          fig_w, fig_h, legend_data=None):
+
+def _render_alerts_legend(
+    session_path, frame_index, product, style_config, fig_w, fig_h, legend_data=None
+):
     """Render legend for alerts showing active hazard type colors."""
-    legend_path = os.path.join(
-        session_path, "legend", f"frame_{frame_index:04d}.png")
+    legend_path = os.path.join(session_path, "legend", f"frame_{frame_index:04d}.png")
 
     active_types = (legend_data or {}).get("active_types", [])
     if not active_types:
@@ -1601,11 +1902,28 @@ def _render_alerts_legend(session_path, frame_index, product, style_config,
         col_i = idx % per_row
         x = x_start + col_i * spacing
         y = top_y - row_i * row_spacing
-        ax.add_patch(plt.Rectangle(
-            (x, y - swatch_h / 2), 0.25, swatch_h, facecolor=color,
-            edgecolor="#999999", linewidth=0.4, zorder=3))
-        ax.text(x + 0.35, y + 0.03, name, fontsize=font_sz, color=_MARGIN_FG,
-                va="center", ha="left", fontweight="bold", zorder=5)
+        ax.add_patch(
+            plt.Rectangle(
+                (x, y - swatch_h / 2),
+                0.25,
+                swatch_h,
+                facecolor=color,
+                edgecolor="#999999",
+                linewidth=0.4,
+                zorder=3,
+            )
+        )
+        ax.text(
+            x + 0.35,
+            y + 0.03,
+            name,
+            fontsize=font_sz,
+            color=_MARGIN_FG,
+            va="center",
+            ha="left",
+            fontweight="bold",
+            zorder=5,
+        )
 
     _save_legend(fig, legend_path)
     return legend_path
@@ -1613,14 +1931,15 @@ def _render_alerts_legend(session_path, frame_index, product, style_config,
 
 # ── MRMS legend ─────────────────────────────────────────────────────────────
 
-def _render_mrms_legend(session_path, frame_index, product, style_config,
-                        fig_w, fig_h, legend_data=None):
+
+def _render_mrms_legend(
+    session_path, frame_index, product, style_config, fig_w, fig_h, legend_data=None
+):
     """Render colorbar legend for MRMS products in the footer margin.
 
     For MESH Track and Rotation Track, adds a per-frame max-value indicator.
     """
-    legend_path = os.path.join(
-        session_path, "legend", f"frame_{frame_index:04d}.png")
+    legend_path = os.path.join(session_path, "legend", f"frame_{frame_index:04d}.png")
 
     ld = legend_data or {}
     cmap = ld.get("cmap")
@@ -1646,8 +1965,7 @@ def _render_mrms_legend(session_path, frame_index, product, style_config,
         categories = product_info.get("categories", {})
         if categories:
             bounds = cat_norm.boundaries
-            mids = [(bounds[i] + bounds[i + 1]) / 2
-                    for i in range(len(bounds) - 1)]
+            mids = [(bounds[i] + bounds[i + 1]) / 2 for i in range(len(bounds) - 1)]
             cat_labels = [categories.get(int(m), str(int(m))) for m in mids]
             cb.set_ticks(mids)
             cb.set_ticklabels(cat_labels)
@@ -1673,33 +1991,52 @@ def _render_mrms_legend(session_path, frame_index, product, style_config,
         product_key = product_info.get("key", product)
 
         if "MESH" in product_key.upper() or "MESH" in product.upper():
-            cb.set_label("Max Estimated Hail Size (mm)",
-                         fontsize=9, color=_MARGIN_FG, fontweight="bold")
+            cb.set_label(
+                "Max Estimated Hail Size (mm)",
+                fontsize=9,
+                color=_MARGIN_FG,
+                fontweight="bold",
+            )
             if data_masked is not None and np.ma.count(data_masked) > 0:
                 from mrms.mrms_utils import _nws_hail_size_reference
+
                 # Use 99.9th percentile to ignore isolated artifact pixels
                 compressed = data_masked.compressed()
                 max_mm = float(np.percentile(compressed, 99.9))
                 clamped = max(float(vmin), min(float(vmax), max_mm))
                 max_in = max_mm / 25.4
                 nws_label, _ = _nws_hail_size_reference(max_in)
-                cb.ax.axvline(clamped, color="#ff0000", linewidth=2.0,
-                              alpha=0.95)
+                cb.ax.axvline(clamped, color="#ff0000", linewidth=2.0, alpha=0.95)
                 cb.ax.text(
-                    clamped, 1.15,
+                    clamped,
+                    1.15,
                     f"{max_mm:.1f} mm ({max_in:.2f} in) - {nws_label}",
                     transform=cb.ax.get_xaxis_transform(),
-                    ha="center", va="bottom", color="#000000",
-                    fontsize=8, fontweight="bold")
+                    ha="center",
+                    va="bottom",
+                    color="#000000",
+                    fontsize=8,
+                    fontweight="bold",
+                )
 
         elif "Rotation" in product or "rotation" in product_key:
-            cb.set_label("Rotation Track (s⁻¹ × 1000)",
-                         fontsize=9, color=_MARGIN_FG, fontweight="bold")
+            cb.set_label(
+                "Rotation Track (s⁻¹ × 1000)",
+                fontsize=9,
+                color=_MARGIN_FG,
+                fontweight="bold",
+            )
             base_ticks = np.array([0, 2, 4, 6, 8, 10], dtype=float)
             mask = (base_ticks >= vmin) & (base_ticks <= vmax)
             ticks = base_ticks[mask]
-            labels_map = {0: "0\nNone", 2: "2\nWeak", 4: "4\nMod",
-                          6: "6\nStrong", 8: "8\nV.Strong", 10: "10\nExtreme"}
+            labels_map = {
+                0: "0\nNone",
+                2: "2\nWeak",
+                4: "4\nMod",
+                6: "6\nStrong",
+                8: "8\nV.Strong",
+                10: "10\nExtreme",
+            }
             labels = [labels_map.get(int(t), f"{t:g}") for t in ticks]
             cb.set_ticks(ticks)
             cb.set_ticklabels(labels)
@@ -1707,8 +2044,7 @@ def _render_mrms_legend(session_path, frame_index, product, style_config,
             unit = product_info.get("units", "")
             display_name = product_info.get("full_name", product)
             label = f"{display_name} ({unit})" if unit else display_name
-            cb.set_label(label, fontsize=9,
-                         color=_MARGIN_FG, fontweight="bold")
+            cb.set_label(label, fontsize=9, color=_MARGIN_FG, fontweight="bold")
 
     _save_legend(fig, legend_path)
     return legend_path
@@ -1716,11 +2052,12 @@ def _render_mrms_legend(session_path, frame_index, product, style_config,
 
 # ── SPC legend ──────────────────────────────────────────────────────────────
 
-def _render_spc_legend(session_path, frame_index, product, style_config,
-                       fig_w, fig_h, legend_data=None):
+
+def _render_spc_legend(
+    session_path, frame_index, product, style_config, fig_w, fig_h, legend_data=None
+):
     """Render legend for SPC products in the footer margin."""
-    legend_path = os.path.join(
-        session_path, "legend", f"frame_{frame_index:04d}.png")
+    legend_path = os.path.join(session_path, "legend", f"frame_{frame_index:04d}.png")
 
     hazard = product.lower()
     ftr = LAYOUT_FOOTER_FRAC
@@ -1731,15 +2068,19 @@ def _render_spc_legend(session_path, frame_index, product, style_config,
     ax.set_ylim(0, 1.2)
     ax.axis("off")
 
-    lbl_kw = dict(fontsize=7.5, color=_MARGIN_FG, fontweight="bold",
-                  va="center", ha="left", zorder=5)
+    lbl_kw = dict(
+        fontsize=7.5,
+        color=_MARGIN_FG,
+        fontweight="bold",
+        va="center",
+        ha="left",
+        zorder=5,
+    )
 
     if hazard == "watches":
         items = [
-            ("Tornado Watch", style_config.get(
-                "watch_tornado_color", "#FFFF00")),
-            ("Severe T-Storm Watch", style_config.get(
-                "watch_severe_color", "#FFA500")),
+            ("Tornado Watch", style_config.get("watch_tornado_color", "#FFFF00")),
+            ("Severe T-Storm Watch", style_config.get("watch_severe_color", "#FFA500")),
         ]
         spacing = 5.5
         item_w = 1.15  # swatch(0.5) + gap(0.15) + ~label
@@ -1747,24 +2088,40 @@ def _render_spc_legend(session_path, frame_index, product, style_config,
         x_start = (10 - total_span) / 2.0
         for i, (name, color) in enumerate(items):
             x = x_start + i * spacing
-            ax.add_patch(plt.Rectangle(
-                (x, 0.40), 0.5, 0.35, facecolor=color,
-                edgecolor="#999999", linewidth=0.5,
-                alpha=float(style_config.get("watch_fill_alpha", 0.25)),
-                zorder=3))
+            ax.add_patch(
+                plt.Rectangle(
+                    (x, 0.40),
+                    0.5,
+                    0.35,
+                    facecolor=color,
+                    edgecolor="#999999",
+                    linewidth=0.5,
+                    alpha=float(style_config.get("watch_fill_alpha", 0.25)),
+                    zorder=3,
+                )
+            )
             ax.text(x + 0.65, 0.57, name, **lbl_kw)
 
     elif hazard == "mds":
-        color = (float(style_config.get("md_fill_color_r", 0.4)),
-                 float(style_config.get("md_fill_color_g", 0.8)),
-                 float(style_config.get("md_fill_color_b", 1.0)),
-                 float(style_config.get("md_fill_alpha", 0.2)))
+        color = (
+            float(style_config.get("md_fill_color_r", 0.4)),
+            float(style_config.get("md_fill_color_g", 0.8)),
+            float(style_config.get("md_fill_color_b", 1.0)),
+            float(style_config.get("md_fill_alpha", 0.2)),
+        )
         item_w = 2.5  # swatch + label
         x_start = (10 - item_w) / 2.0
-        ax.add_patch(plt.Rectangle(
-            (x_start, 0.40), 0.5, 0.35, facecolor=color,
-            edgecolor=style_config.get("md_edge_color", "#66CCFF"),
-            linewidth=1.0, zorder=3))
+        ax.add_patch(
+            plt.Rectangle(
+                (x_start, 0.40),
+                0.5,
+                0.35,
+                facecolor=color,
+                edgecolor=style_config.get("md_edge_color", "#66CCFF"),
+                linewidth=1.0,
+                zorder=3,
+            )
+        )
         ax.text(x_start + 0.65, 0.57, "Mesoscale Discussion", **lbl_kw)
 
     elif hazard == "reports":
@@ -1779,10 +2136,14 @@ def _render_spc_legend(session_path, frame_index, product, style_config,
         x_start = (10 - total_span) / 2.0
         for i, (name, color) in enumerate(items):
             x = x_start + i * spacing
-            ax.plot(x + 0.15, 0.57, "o",
-                    color=color,
-                    markersize=int(style_config.get("report_marker_size", 4)),
-                    zorder=3)
+            ax.plot(
+                x + 0.15,
+                0.57,
+                "o",
+                color=color,
+                markersize=int(style_config.get("report_marker_size", 4)),
+                zorder=3,
+            )
             ax.text(x + 0.4, 0.57, name, **lbl_kw)
 
     elif hazard == "fire_windrh":
@@ -1799,10 +2160,18 @@ def _render_spc_legend(session_path, frame_index, product, style_config,
         poly_alpha = float(style_config.get("outlook_fill_alpha", 0.45))
         for i, (name, fill, stroke) in enumerate(items):
             x = x_start + i * spacing
-            ax.add_patch(plt.Rectangle(
-                (x, 0.40), 0.35, 0.35, facecolor=fill,
-                edgecolor=stroke, linewidth=0.8,
-                alpha=poly_alpha, zorder=3))
+            ax.add_patch(
+                plt.Rectangle(
+                    (x, 0.40),
+                    0.35,
+                    0.35,
+                    facecolor=fill,
+                    edgecolor=stroke,
+                    linewidth=0.8,
+                    alpha=poly_alpha,
+                    zorder=3,
+                )
+            )
             ax.text(x + 0.45, 0.57, name, **lbl_kw)
 
     elif hazard == "fire_dryt":
@@ -1818,18 +2187,29 @@ def _render_spc_legend(session_path, frame_index, product, style_config,
         poly_alpha = float(style_config.get("outlook_fill_alpha", 0.45))
         for i, (name, fill, stroke) in enumerate(items):
             x = x_start + i * spacing
-            ax.add_patch(plt.Rectangle(
-                (x, 0.40), 0.35, 0.35, facecolor=fill,
-                edgecolor=stroke, linewidth=0.8,
-                alpha=poly_alpha, zorder=3))
+            ax.add_patch(
+                plt.Rectangle(
+                    (x, 0.40),
+                    0.35,
+                    0.35,
+                    facecolor=fill,
+                    edgecolor=stroke,
+                    linewidth=0.8,
+                    alpha=poly_alpha,
+                    zorder=3,
+                )
+            )
             ax.text(x + 0.45, 0.57, name, **lbl_kw)
 
     else:
         # Convective outlooks (cat/torn/wind/hail/prob)
         cat_colors = [
-            ("Gen T-Storms", "#C0E8C0"), ("Marginal", "#66A366"),
-            ("Slight", "#FFE066"), ("Enhanced", "#FFA500"),
-            ("Moderate", "#FF0000"), ("High", "#FF00FF"),
+            ("Gen T-Storms", "#C0E8C0"),
+            ("Marginal", "#66A366"),
+            ("Slight", "#FFE066"),
+            ("Enhanced", "#FFA500"),
+            ("Moderate", "#FF0000"),
+            ("High", "#FF00FF"),
         ]
 
         # CIG levels apply to torn/wind/hail individual hazard outlooks
@@ -1856,54 +2236,92 @@ def _render_spc_legend(session_path, frame_index, product, style_config,
         x_start = (10 - total_span) / 2.0
         for i, (name, color) in enumerate(cat_colors):
             x = x_start + i * spacing
-            ax.add_patch(plt.Rectangle(
-                (x, cat_y), 0.35, 0.35, facecolor=color,
-                edgecolor="#999999", linewidth=0.4,
-                alpha=float(style_config.get("outlook_fill_alpha", 0.45)),
-                zorder=3))
+            ax.add_patch(
+                plt.Rectangle(
+                    (x, cat_y),
+                    0.35,
+                    0.35,
+                    facecolor=color,
+                    edgecolor="#999999",
+                    linewidth=0.4,
+                    alpha=float(style_config.get("outlook_fill_alpha", 0.45)),
+                    zorder=3,
+                )
+            )
             ax.text(x + 0.45, cat_text_y, name, **lbl_kw)
 
         if show_cig:
             # CIG intensity swatches matching SPC official style
             from matplotlib.patches import Rectangle as MplRect
+
             cig_spacing = 2.2 if len(cig_levels) == 3 else 2.8
             total_cig = 1.2 + (len(cig_levels) - 1) * cig_spacing + 0.80
             cig_x_start = (10 - total_cig) / 2.0
-            ax.text(cig_x_start + 0.1, cig_text_y, "Intensity",
-                    fontsize=8, color=_MARGIN_FG, fontweight="bold",
-                    va="center", ha="left", zorder=5)
+            ax.text(
+                cig_x_start + 0.1,
+                cig_text_y,
+                "Intensity",
+                fontsize=8,
+                color=_MARGIN_FG,
+                fontweight="bold",
+                va="center",
+                ha="left",
+                zorder=5,
+            )
             swatch_x0 = cig_x_start + 1.4
             cig_hatch_color = style_config.get("cig_hatch_color", "#000000")
             sw = 0.35
             for i, (num_label, hatch_pat, border_w) in enumerate(cig_levels):
                 x = swatch_x0 + i * cig_spacing
                 # White background swatch with border weight per level
-                ax.add_patch(plt.Rectangle(
-                    (x, cig_y), sw, sw, facecolor="#ffffff",
-                    edgecolor="#000000", linewidth=border_w,
-                    zorder=3))
+                ax.add_patch(
+                    plt.Rectangle(
+                        (x, cig_y),
+                        sw,
+                        sw,
+                        facecolor="#ffffff",
+                        edgecolor="#000000",
+                        linewidth=border_w,
+                        zorder=3,
+                    )
+                )
                 if num_label == "1":
                     # CIG1: dashed diagonal lines (/ direction)
                     clip_rect = MplRect(
-                        (x, cig_y), sw, sw,
-                        transform=ax.transData, fill=False,
-                        edgecolor="none")
+                        (x, cig_y),
+                        sw,
+                        sw,
+                        transform=ax.transData,
+                        fill=False,
+                        edgecolor="none",
+                    )
                     ax.add_patch(clip_rect)
                     offsets = [-0.15, -0.05, 0.05, 0.15, 0.25, 0.35, 0.45]
                     for off in offsets:
-                        ln, = ax.plot(
+                        (ln,) = ax.plot(
                             [x + off, x + off + sw],
                             [cig_y, cig_y + sw],
-                            color=cig_hatch_color, linewidth=0.7,
-                            linestyle=(0, (2, 2)), zorder=5,
-                            clip_on=True)
+                            color=cig_hatch_color,
+                            linewidth=0.7,
+                            linestyle=(0, (2, 2)),
+                            zorder=5,
+                            clip_on=True,
+                        )
                         ln.set_clip_path(clip_rect)
                 else:
                     # CIG2/3: standard matplotlib hatching
-                    ax.add_patch(plt.Rectangle(
-                        (x, cig_y), sw, sw, facecolor="none",
-                        edgecolor=cig_hatch_color, linewidth=0.0,
-                        hatch=hatch_pat, zorder=4))
+                    ax.add_patch(
+                        plt.Rectangle(
+                            (x, cig_y),
+                            sw,
+                            sw,
+                            facecolor="none",
+                            edgecolor=cig_hatch_color,
+                            linewidth=0.0,
+                            hatch=hatch_pat,
+                            zorder=4,
+                        )
+                    )
                 ax.text(x + 0.45, cig_text_y, num_label, **lbl_kw)
 
     _save_legend(fig, legend_path)
@@ -1913,6 +2331,7 @@ def _render_spc_legend(session_path, frame_index, product, style_config,
 # ═════════════════════════════════════════════════════════════════════════════
 # PRODUCT FRAME DISPATCHER
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 def _render_product_frame(
     session_path,
@@ -1941,31 +2360,77 @@ def _render_product_frame(
     # Dispatch to product-specific renderer (returns dict)
     if group == "alerts":
         render_result = _render_alerts_product(
-            session_path, frame_index, product, region,
-            projection, extent, fig_w, fig_h, style_config, custom_extent)
+            session_path,
+            frame_index,
+            product,
+            region,
+            projection,
+            extent,
+            fig_w,
+            fig_h,
+            style_config,
+            custom_extent,
+        )
     elif group == "surface":
         render_result = _render_surface_product(
-            session_path, frame_index, product, region,
-            projection, extent, fig_w, fig_h, style_config, custom_extent)
+            session_path,
+            frame_index,
+            product,
+            region,
+            projection,
+            extent,
+            fig_w,
+            fig_h,
+            style_config,
+            custom_extent,
+        )
     elif group == "mrms":
         render_result = _render_mrms_product(
-            session_path, frame_index, product, region,
-            projection, extent, fig_w, fig_h, style_config, custom_extent)
+            session_path,
+            frame_index,
+            product,
+            region,
+            projection,
+            extent,
+            fig_w,
+            fig_h,
+            style_config,
+            custom_extent,
+        )
     elif group == "spc":
         render_result = _render_spc_product(
-            session_path, frame_index, product, region,
-            projection, extent, fig_w, fig_h, style_config, custom_extent,
-            day=day, report_day=report_day, item_id=item_id)
+            session_path,
+            frame_index,
+            product,
+            region,
+            projection,
+            extent,
+            fig_w,
+            fig_h,
+            style_config,
+            custom_extent,
+            day=day,
+            report_day=report_day,
+            item_id=item_id,
+        )
     else:
         # Fallback: render a label-only placeholder
         fallback_path = os.path.join(
-            session_path, "product", f"frame_{frame_index:04d}.png")
+            session_path, "product", f"frame_{frame_index:04d}.png"
+        )
         fig, ax = _create_transparent_axes(projection, extent, fig_w, fig_h)
-        ax.text(0.5, 0.5,
-                f"{product_group.upper()}: {product}\n{timestamp_local or timestamp_utc}",
-                transform=ax.transAxes, fontsize=14, color="white",
-                ha="center", va="center",
-                bbox=dict(facecolor="black", alpha=0.5), zorder=100)
+        ax.text(
+            0.5,
+            0.5,
+            f"{product_group.upper()}: {product}\n{timestamp_local or timestamp_utc}",
+            transform=ax.transAxes,
+            fontsize=14,
+            color="white",
+            ha="center",
+            va="center",
+            bbox=dict(facecolor="black", alpha=0.5),
+            zorder=100,
+        )
         _save_transparent(fig, fallback_path)
         render_result = {"product_path": fallback_path, "legend_data": None}
 
@@ -1974,8 +2439,15 @@ def _render_product_frame(
 
     # Render legend
     legend_path = _render_legend(
-        session_path, frame_index, product_group, product,
-        style_config, fig_w, fig_h, legend_data)
+        session_path,
+        frame_index,
+        product_group,
+        product,
+        style_config,
+        fig_w,
+        fig_h,
+        legend_data,
+    )
 
     # Render static overlay (left HUD + logo)
     static_overlay_path = _render_hud_left_logo(
@@ -1997,9 +2469,15 @@ def _render_product_frame(
 
     # Render HUD right (timestamp)
     hud_right_path = _render_hud_right(
-        session_path, frame_index, fig_w, fig_h,
-        timestamp_local or timestamp_utc, style_config,
-        projection, extent)
+        session_path,
+        frame_index,
+        fig_w,
+        fig_h,
+        timestamp_local or timestamp_utc,
+        style_config,
+        projection,
+        extent,
+    )
 
     return {
         "product_path": product_path,
@@ -2031,8 +2509,7 @@ def generate_weather_layers(
     Returns a dict with session metadata and frame info, or None on failure.
     """
     # Merge: WEATHER base → per-group defaults → user overrides
-    style_config = resolve_weather_group_style_config(
-        product_group, style_config)
+    style_config = resolve_weather_group_style_config(product_group, style_config)
 
     # Cleanup old sessions before creating new one
     cleanup_sessions()
@@ -2046,8 +2523,7 @@ def generate_weather_layers(
     )
 
     # Compute projection once for all layers
-    projection, extent, fig_w, fig_h = compute_lambert_params(
-        region, custom_extent)
+    projection, extent, fig_w, fig_h = compute_lambert_params(region, custom_extent)
 
     if progress_callback:
         progress_callback(10, "Generating basemap...", "basemap")
@@ -2079,11 +2555,11 @@ def generate_weather_layers(
         total_frames = 1
 
     if progress_callback:
-        progress_callback(
-            20, f"Rendering {total_frames} frame(s)...", "render")
+        progress_callback(20, f"Rendering {total_frames} frame(s)...", "render")
 
     # Resolve timezone for display
     from dateutil import tz as tz_module
+
     display_tz = None
     if user_tz:
         try:
@@ -2102,7 +2578,8 @@ def generate_weather_layers(
         pct = 20 + int(70 * (i + 1) / total_frames)
         if progress_callback:
             progress_callback(
-                pct, f"Rendering frame {i+1}/{total_frames}...", "render")
+                pct, f"Rendering frame {i + 1}/{total_frames}...", "render"
+            )
 
         result = _render_product_frame(
             session_path=session_path,
@@ -2124,15 +2601,17 @@ def generate_weather_layers(
             item_id=item_id,
         )
 
-        frames.append({
-            "index": i,
-            "timestamp_utc": ts_utc_str,
-            "timestamp_local": ts_local_str,
-            "product_path": result["product_path"],
-            "hud_right_path": result["hud_right_path"],
-            "static_overlay_path": result.get("static_overlay_path"),
-            "legend_path": result.get("legend_path"),
-        })
+        frames.append(
+            {
+                "index": i,
+                "timestamp_utc": ts_utc_str,
+                "timestamp_local": ts_local_str,
+                "product_path": result["product_path"],
+                "hud_right_path": result["hud_right_path"],
+                "static_overlay_path": result.get("static_overlay_path"),
+                "legend_path": result.get("legend_path"),
+            }
+        )
 
     if progress_callback:
         progress_callback(95, "Finalizing session...", "finalize")
@@ -2164,21 +2643,3 @@ def generate_weather_layers(
             "extent": extent,
         },
     }
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# EXPORT
-# ═════════════════════════════════════════════════════════════════════════════
-
-def export_frame_png(session_path: str, frame_index: int):
-    from export.cartopy_render import export_frame_png as _export_frame_png_impl
-
-    return _export_frame_png_impl(session_path=session_path, frame_index=frame_index)
-
-
-def export_animation_mp4(session_path: str, fps: int = 4):
-    from export.cartopy_render import (
-        export_animation_mp4 as _export_animation_mp4_impl,
-    )
-
-    return _export_animation_mp4_impl(session_path=session_path, fps=fps)

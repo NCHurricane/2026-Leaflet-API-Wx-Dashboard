@@ -45,8 +45,7 @@ matplotlib.use("Agg")
 LAYER_SESSION_MANIFEST = "_layer_session.json"
 LAYER_SESSION_TTL_HOURS = 12
 LAYER_SESSION_MAX_DIRS = 120
-_COORD_LABEL_RE = re.compile(
-    r"^\s*-?\d+(?:\.\d+)?\s*°?\s*[NSEW]\s*$", re.IGNORECASE)
+_COORD_LABEL_RE = re.compile(r"^\s*-?\d+(?:\.\d+)?\s*°?\s*[NSEW]\s*$", re.IGNORECASE)
 
 
 def _suppress_geo_labels(ax_obj, fig_obj=None):
@@ -417,14 +416,10 @@ def warm_radar_cartopy_cache():
             except Exception:
                 continue
 
-        _LAKES_GEOMS, _LAKES_BOUNDS = _materialize_feature_geometries(
-            _FEATURE_LAKES)
-        _RIVERS_GEOMS, _RIVERS_BOUNDS = _materialize_feature_geometries(
-            _FEATURE_RIVERS)
-        _ROADS_GEOMS, _ROADS_BOUNDS = _materialize_feature_geometries(
-            _FEATURE_ROADS)
-        _STATES_GEOMS, _STATES_BOUNDS = _materialize_feature_geometries(
-            _FEATURE_STATES)
+        _LAKES_GEOMS, _LAKES_BOUNDS = _materialize_feature_geometries(_FEATURE_LAKES)
+        _RIVERS_GEOMS, _RIVERS_BOUNDS = _materialize_feature_geometries(_FEATURE_RIVERS)
+        _ROADS_GEOMS, _ROADS_BOUNDS = _materialize_feature_geometries(_FEATURE_ROADS)
+        _STATES_GEOMS, _STATES_BOUNDS = _materialize_feature_geometries(_FEATURE_STATES)
     finally:
         _RADAR_CARTOPY_WARMED = True
         print(
@@ -539,8 +534,7 @@ def download_and_extract_l3_product(
     cache_path = os.path.join(cache_dir, cache_filename)
 
     if os.path.exists(cache_path):
-        print(
-            f"[INFO] Using cached archive: {cache_filename} ({size_mb:.0f} MB)")
+        print(f"[INFO] Using cached archive: {cache_filename} ({size_mb:.0f} MB)")
         with open(cache_path, "rb") as fh:
             raw_bytes = fh.read()
     else:
@@ -623,8 +617,7 @@ def download_and_extract_l3_product(
         print(f"[ERROR] Failed to extract archive: {type(e).__name__}: {e}")
 
     extracted.sort()
-    print(
-        f"[INFO] Extracted {len(extracted)} {product} files from GCP tar archive")
+    print(f"[INFO] Extracted {len(extracted)} {product} files from GCP tar archive")
     return extracted
 
 
@@ -784,8 +777,7 @@ def download_archive_data(
             latest_only=latest_only,
         )
     except Exception as e:
-        print(
-            f"[ERROR] Archive list_nexrad_files failed: {type(e).__name__}: {e}")
+        print(f"[ERROR] Archive list_nexrad_files failed: {type(e).__name__}: {e}")
         import traceback
 
         traceback.print_exc()
@@ -829,8 +821,7 @@ def download_archive_data(
                     )
                     os.makedirs(save_dir, exist_ok=True)
             except Exception as e2:
-                print(
-                    f"[WARN] Fallback list also failed: {type(e2).__name__}: {e2}")
+                print(f"[WARN] Fallback list also failed: {type(e2).__name__}: {e2}")
 
     # â”€â”€ GCP full-day tar archive fallback (1992â€“present) â”€â”€
     if total_files == 0 and level_path == "level3":
@@ -881,8 +872,7 @@ def download_archive_data(
                         station_id,
                     )
                     os.makedirs(tar_save_dir, exist_ok=True)
-                    tar_request_day_dir = _date_partition_dir(
-                        tar_save_dir, start_dt)
+                    tar_request_day_dir = _date_partition_dir(tar_save_dir, start_dt)
                     os.makedirs(tar_request_day_dir, exist_ok=True)
                     extracted = download_and_extract_l3_product(
                         station=station_id,
@@ -901,8 +891,7 @@ def download_archive_data(
 
             total_files = len(extracted)
             if total_files > 0:
-                print(
-                    f"[INFO] Extracted {total_files} files from GCP tar archive")
+                print(f"[INFO] Extracted {total_files} files from GCP tar archive")
                 return (
                     save_dir,
                     total_files,
@@ -1135,8 +1124,7 @@ def cleanup_layer_sessions(
         return {"removed": 0, "removed_dirs": [], "total": 0}
 
     now = datetime.now(timezone.utc)
-    cutoff = now - \
-        timedelta(hours=max(1, int(ttl_hours or LAYER_SESSION_TTL_HOURS)))
+    cutoff = now - timedelta(hours=max(1, int(ttl_hours or LAYER_SESSION_TTL_HOURS)))
 
     dirs = []
     try:
@@ -1293,8 +1281,7 @@ def generate_archive_layers(
     ui_margin_top = float(style_config.get("figure_top_margin", 0.00))
 
     # Append footer space by increasing figure height so map panel keeps full size.
-    map_panel_height_fraction = max(
-        1e-6, 1.0 - ui_margin_bottom - ui_margin_top)
+    map_panel_height_fraction = max(1e-6, 1.0 - ui_margin_bottom - ui_margin_top)
     fig_height = fig_height / map_panel_height_fraction
     map_axes_pos = [
         ui_margin_side,
@@ -1392,8 +1379,7 @@ def generate_archive_layers(
     if not isinstance(removed_layer_dirs, (list, tuple, set)):
         legacy_removed = cleanup_result.get("removed", [])
         removed_layer_dirs = (
-            legacy_removed if isinstance(
-                legacy_removed, (list, tuple, set)) else []
+            legacy_removed if isinstance(legacy_removed, (list, tuple, set)) else []
         )
 
     for removed_layer_dir in removed_layer_dirs:
@@ -1426,8 +1412,7 @@ def generate_archive_layers(
 
     session_basemap_path = os.path.join(layer_dir, "basemap.png")
     basemap_path = session_basemap_path
-    session_counties_overlay_path = os.path.join(
-        layer_dir, "counties_overlay.png")
+    session_counties_overlay_path = os.path.join(layer_dir, "counties_overlay.png")
     counties_overlay_path = session_counties_overlay_path
     session_states_overlay_path = os.path.join(layer_dir, "states_overlay.png")
     states_overlay_path = session_states_overlay_path
@@ -1735,21 +1720,18 @@ def generate_archive_layers(
                     facecolor=city_text_bg_color,
                     alpha=city_text_bg_alpha,
                     edgecolor="none",
-                    boxstyle=style_config.get(
-                        "city_box_style", "round,pad=0.2"),
+                    boxstyle=style_config.get("city_box_style", "round,pad=0.2"),
                 ),
             )
             txt.set_path_effects(
                 [
                     PathEffects.withStroke(
-                        linewidth=float(style_config.get(
-                            "city_halo_width", 1.2)),
-                        foreground=city_text_outline_color
+                        linewidth=float(style_config.get("city_halo_width", 1.2)),
+                        foreground=city_text_outline_color,
                     )
                 ]
             )
-            drawn_bboxes.append(
-                (cand_x_min, cand_x_max, cand_y_min, cand_y_max))
+            drawn_bboxes.append((cand_x_min, cand_x_max, cand_y_min, cand_y_max))
 
     tzinfo_user = tz.gettz(user_tz) or tz.gettz("America/New_York")
     frame_entries = []
@@ -1769,10 +1751,8 @@ def generate_archive_layers(
     site_counties_cache_path = os.path.join(
         site_basemap_cache_dir, "counties_overlay.png"
     )
-    site_states_cache_path = os.path.join(
-        site_basemap_cache_dir, "states_overlay.png")
-    site_rings_cache_path = os.path.join(
-        site_basemap_cache_dir, "rings_overlay.png")
+    site_states_cache_path = os.path.join(site_basemap_cache_dir, "states_overlay.png")
+    site_rings_cache_path = os.path.join(site_basemap_cache_dir, "rings_overlay.png")
     site_overlay_version_path = os.path.join(
         site_basemap_cache_dir, "overlay_version.txt"
     )
@@ -1828,7 +1808,8 @@ def generate_archive_layers(
     alerts_overlay_enabled = show_alert_polygons and alerts_archive_utils is not None
     if show_alert_polygons and not alerts_overlay_enabled:
         print(
-            "[WARN] Radar archive alert overlays disabled: alerts archive module unavailable")
+            "[WARN] Radar archive alert overlays disabled: alerts archive module unavailable"
+        )
 
     if alerts_overlay_enabled and selected:
         try:
@@ -1906,8 +1887,7 @@ def generate_archive_layers(
             if not available_fields:
                 continue
             field_name = (
-                available_fields[0] if level == "Level 3" else product_label.lower(
-                )
+                available_fields[0] if level == "Level 3" else product_label.lower()
             )
 
             if "velocity" in product_label.lower() or product_label in {
@@ -1942,8 +1922,7 @@ def generate_archive_layers(
                 unix_ts = (
                     raw_dt - np.datetime64("1970-01-01T00:00:00")
                 ) / np.timedelta64(1, "s")
-                dt_utc = datetime.fromtimestamp(
-                    float(unix_ts), tz=timezone.utc)
+                dt_utc = datetime.fromtimestamp(float(unix_ts), tz=timezone.utc)
             elif isinstance(raw_dt, datetime):
                 dt_utc = (
                     raw_dt.replace(tzinfo=timezone.utc)
@@ -2041,12 +2020,9 @@ def generate_archive_layers(
 
                         scale_factor = max(fig_width / 12.0, 0.55)
                         hud_left_size = int(hud_left_size_base * scale_factor)
-                        hud_right_size = int(
-                            hud_right_size_base * scale_factor)
-                        city_text_size = int(
-                            city_text_size_base * scale_factor)
-                        cbar_title_size = int(
-                            cbar_title_size_base * scale_factor)
+                        hud_right_size = int(hud_right_size_base * scale_factor)
+                        city_text_size = int(city_text_size_base * scale_factor)
+                        cbar_title_size = int(cbar_title_size_base * scale_factor)
                         logo_user_size = logo_user_size_base * scale_factor
 
                         print(
@@ -2088,8 +2064,7 @@ def generate_archive_layers(
                 and not os.path.exists(basemap_path)
             ):
                 try:
-                    cached_rgba = _to_rgba(
-                        imageio.imread(site_basemap_cache_path))
+                    cached_rgba = _to_rgba(imageio.imread(site_basemap_cache_path))
                     cached_h, cached_w = cached_rgba.shape[:2]
 
                     canvas_w = int(round(_active_figsize()[0] * fig_dpi))
@@ -2103,8 +2078,7 @@ def generate_archive_layers(
                         bg_rgba = matplotlib.colors.to_rgba(
                             _safe_color(map_bg_color, "#f2f2f2")
                         )
-                        canvas = np.empty(
-                            (canvas_h, canvas_w, 4), dtype=np.uint8)
+                        canvas = np.empty((canvas_h, canvas_w, 4), dtype=np.uint8)
                         canvas[:, :, 0] = int(round(bg_rgba[0] * 255))
                         canvas[:, :, 1] = int(round(bg_rgba[1] * 255))
                         canvas[:, :, 2] = int(round(bg_rgba[2] * 255))
@@ -2113,8 +2087,8 @@ def generate_archive_layers(
                         y_top = max(0, canvas_h - map_bottom_px - map_h_px)
                         x_left = max(0, map_left_px)
                         canvas[
-                            y_top: y_top + map_h_px,
-                            x_left: x_left + map_w_px,
+                            y_top : y_top + map_h_px,
+                            x_left : x_left + map_w_px,
                             :,
                         ] = cached_rgba
 
@@ -2237,8 +2211,7 @@ def generate_archive_layers(
             radar_path = os.path.join(radar_dir, f"{timestamp_key}.png")
             alerts_path = os.path.join(alerts_dir, f"{timestamp_key}.png")
             cities_path = os.path.join(cities_dir, f"{timestamp_key}.png")
-            hud_right_path = os.path.join(
-                hud_right_dir, f"{timestamp_key}.png")
+            hud_right_path = os.path.join(hud_right_dir, f"{timestamp_key}.png")
             layer_frame_path = os.path.join(layer_dir, f"{timestamp_key}.png")
 
             radar_cache_path = None
@@ -2257,11 +2230,9 @@ def generate_archive_layers(
                     sm_dir=sm_dir,
                     geometry_token=cache_geom_token,
                 )
-                radar_cache_day_dir = _date_partition_dir(
-                    radar_cache_root, dt_utc)
+                radar_cache_day_dir = _date_partition_dir(radar_cache_root, dt_utc)
                 os.makedirs(radar_cache_day_dir, exist_ok=True)
-                radar_cache_path = os.path.join(
-                    radar_cache_day_dir, radar_cache_name)
+                radar_cache_path = os.path.join(radar_cache_day_dir, radar_cache_name)
 
             alert_geoms_by_color = {}
             if alerts_overlay_enabled:
@@ -2275,8 +2246,7 @@ def generate_archive_layers(
                                 state_code=alert_state_filter,
                                 category_filter="All Alerts",
                                 wfo_code=None,
-                                custom_extent=[
-                                    min_lat, max_lat, min_lon, max_lon],
+                                custom_extent=[min_lat, max_lat, min_lon, max_lon],
                                 prefer_storm_polygons=True,
                             )
                         )
@@ -2287,12 +2257,10 @@ def generate_archive_layers(
                                 if isinstance(feature, dict)
                                 else {}
                             )
-                            event_name = str(
-                                props.get("event", "") or "").strip()
+                            event_name = str(props.get("event", "") or "").strip()
                             if not _is_radar_alert_event_allowed(event_name):
                                 continue
-                            event_color = _safe_color(
-                                props.get("color"), "#C0C0C0")
+                            event_color = _safe_color(props.get("color"), "#C0C0C0")
                             try:
                                 geom = shape(feature.get("geometry"))
                             except Exception:
@@ -2311,8 +2279,7 @@ def generate_archive_layers(
                             )
                         alert_snapshot_cache[cache_key] = parsed_geoms_by_color
                     except Exception as e:
-                        print(
-                            f"[WARN] Radar archive alert overlay failed: {e}")
+                        print(f"[WARN] Radar archive alert overlay failed: {e}")
                         alert_snapshot_cache[cache_key] = {}
 
                 alert_geoms_by_color = alert_snapshot_cache.get(cache_key, {})
@@ -2343,8 +2310,7 @@ def generate_archive_layers(
             if not radar_layer_ready:
                 fig_radar = plt.figure(figsize=_active_figsize(), dpi=fig_dpi)
                 fig_radar.patch.set_alpha(0.0)
-                ax_radar = _new_geo_axes(
-                    fig_radar, radar_map_extent, facecolor="none")
+                ax_radar = _new_geo_axes(fig_radar, radar_map_extent, facecolor="none")
                 display = pyart.graph.RadarMapDisplay(radar)
                 display.plot_ppi_map(
                     field_name,
@@ -2392,8 +2358,7 @@ def generate_archive_layers(
 
             fig_alerts = plt.figure(figsize=_active_figsize(), dpi=fig_dpi)
             fig_alerts.patch.set_alpha(0.0)
-            ax_alerts = _new_geo_axes(
-                fig_alerts, shared_map_extent, facecolor="none")
+            ax_alerts = _new_geo_axes(fig_alerts, shared_map_extent, facecolor="none")
             ax_alerts.set_axis_off()
             if alert_geoms_by_color:
                 for color, geoms in alert_geoms_by_color.items():
@@ -2430,8 +2395,7 @@ def generate_archive_layers(
 
             fig_cities = plt.figure(figsize=_active_figsize(), dpi=fig_dpi)
             fig_cities.patch.set_alpha(0.0)
-            ax_cities = _new_geo_axes(
-                fig_cities, shared_map_extent, facecolor="none")
+            ax_cities = _new_geo_axes(fig_cities, shared_map_extent, facecolor="none")
             _draw_cities(ax_cities, min_lon, max_lon, min_lat, max_lat)
             plt.savefig(
                 cities_path,
@@ -2444,8 +2408,7 @@ def generate_archive_layers(
             plt.close(fig_cities)
 
             if not os.path.exists(counties_overlay_path):
-                fig_counties = plt.figure(
-                    figsize=_active_figsize(), dpi=fig_dpi)
+                fig_counties = plt.figure(figsize=_active_figsize(), dpi=fig_dpi)
                 fig_counties.patch.set_alpha(0.0)
                 ax_counties = _new_geo_axes(
                     fig_counties, shared_map_extent, facecolor="none"
@@ -2478,8 +2441,7 @@ def generate_archive_layers(
                         alpha=1.0,
                         zorder=zo["counties"],
                     )
-                os.makedirs(os.path.dirname(
-                    counties_overlay_path), exist_ok=True)
+                os.makedirs(os.path.dirname(counties_overlay_path), exist_ok=True)
                 plt.savefig(
                     counties_overlay_path,
                     format="png",
@@ -2493,8 +2455,7 @@ def generate_archive_layers(
             if not os.path.exists(states_overlay_path):
                 state_feature = CensusStates.get_feature()
                 if state_feature is not None:
-                    fig_states = plt.figure(
-                        figsize=_active_figsize(), dpi=fig_dpi)
+                    fig_states = plt.figure(figsize=_active_figsize(), dpi=fig_dpi)
                     fig_states.patch.set_alpha(0.0)
                     ax_states = _new_geo_axes(
                         fig_states, shared_map_extent, facecolor="none"
@@ -2507,8 +2468,7 @@ def generate_archive_layers(
                         alpha=1.0,
                         zorder=zo["states"],
                     )
-                    os.makedirs(os.path.dirname(
-                        states_overlay_path), exist_ok=True)
+                    os.makedirs(os.path.dirname(states_overlay_path), exist_ok=True)
                     plt.savefig(
                         states_overlay_path,
                         format="png",
@@ -2526,8 +2486,7 @@ def generate_archive_layers(
             ):
                 fig_rings = plt.figure(figsize=_active_figsize(), dpi=fig_dpi)
                 fig_rings.patch.set_alpha(0.0)
-                ax_ring = _new_geo_axes(
-                    fig_rings, radar_map_extent, facecolor="none")
+                ax_ring = _new_geo_axes(fig_rings, radar_map_extent, facecolor="none")
                 ring_display = pyart.graph.RadarMapDisplay(radar)
                 ring_display.ax = ax_ring
                 for distance in [46300, 92600, 185200]:
@@ -2569,11 +2528,11 @@ def generate_archive_layers(
                     color=hud_left_text_color,
                     va="top",
                     ha="left",
-                    linespacing=float(style_config.get(
-                        "hud_line_spacing", 1.15)),
+                    linespacing=float(style_config.get("hud_line_spacing", 1.15)),
                     bbox=dict(
                         boxstyle=style_config.get(
-                            "hud_left_box_style", "round,pad=0.5"),
+                            "hud_left_box_style", "round,pad=0.5"
+                        ),
                         fc=hud_left_bg_color,
                         ec=hud_left_edge_color,
                         alpha=hud_left_alpha,
@@ -2635,12 +2594,9 @@ def generate_archive_layers(
                     box_w,
                     box_h,
                     transform=fig_legend.transFigure,
-                    facecolor=style_config.get(
-                        "legend_panel_bg_color", "white"),
-                    edgecolor=style_config.get(
-                        "legend_panel_edge_color", "none"),
-                    alpha=float(style_config.get(
-                        "legend_panel_bg_alpha", 0.9)),
+                    facecolor=style_config.get("legend_panel_bg_color", "white"),
+                    edgecolor=style_config.get("legend_panel_edge_color", "none"),
+                    alpha=float(style_config.get("legend_panel_bg_alpha", 0.9)),
                     zorder=0,
                 )
                 fig_legend.add_artist(legend_panel)
@@ -2662,39 +2618,39 @@ def generate_archive_layers(
                     if norm is not None
                     else matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
                 )
-                scalar = matplotlib.cm.ScalarMappable(
-                    norm=norm_for_bar, cmap=cmap)
+                scalar = matplotlib.cm.ScalarMappable(norm=norm_for_bar, cmap=cmap)
                 scalar.set_array([])
-                cbar = fig_legend.colorbar(
-                    scalar, cax=cax, orientation="horizontal")
+                cbar = fig_legend.colorbar(scalar, cax=cax, orientation="horizontal")
                 cbar.set_label("")
                 cbar.ax.set_xlabel("")
 
                 cax.set_facecolor(style_config.get("cbar_bg_color", "#f2f2f2"))
-                cax.patch.set_alpha(
-                    float(style_config.get("cbar_bg_alpha", 0.9)))
-                cbar_tick_color = style_config.get(
-                    "cbar_tick_color", "#000000")
+                cax.patch.set_alpha(float(style_config.get("cbar_bg_alpha", 0.9)))
+                cbar_tick_color = style_config.get("cbar_tick_color", "#000000")
                 cbar.ax.tick_params(
-                    axis="x", colors=cbar_tick_color, labelsize=int(style_config.get("cbar_tick_labelsize", 10)), pad=int(style_config.get("cbar_tick_pad", 3)), width=float(style_config.get("cbar_tick_width", 0.8))
+                    axis="x",
+                    colors=cbar_tick_color,
+                    labelsize=int(style_config.get("cbar_tick_labelsize", 10)),
+                    pad=int(style_config.get("cbar_tick_pad", 3)),
+                    width=float(style_config.get("cbar_tick_width", 0.8)),
                 )
                 if category_ticks and category_labels:
                     cbar.set_ticks(category_ticks)
                     cbar.set_ticklabels(category_labels)
-                    cbar.ax.tick_params(
-                        axis="x", labelsize=8, colors=cbar_tick_color)
+                    cbar.ax.tick_params(axis="x", labelsize=8, colors=cbar_tick_color)
                 for tick in cbar.ax.get_xticklabels():
                     tick.set_fontname(font_family)
                     tick.set_fontweight("bold")
                     tick.set_color(cbar_tick_color)
                 cbar.outline.set_edgecolor(
-                    style_config.get("cbar_outline_color", "#cbd5e1"))
+                    style_config.get("cbar_outline_color", "#cbd5e1")
+                )
                 cbar.outline.set_linewidth(
-                    float(style_config.get("cbar_outline_width", 1.0)))
+                    float(style_config.get("cbar_outline_width", 1.0))
+                )
 
                 # Draw static alert legend entries below the colorbar.
-                alert_legend_height = max(
-                    0.02, box_h - cbar_h - (4.5 * cbar_pad_y))
+                alert_legend_height = max(0.02, box_h - cbar_h - (4.5 * cbar_pad_y))
                 alert_legend_rect = [
                     box_x + cbar_pad_x,
                     box_y + cbar_pad_y,
@@ -2736,14 +2692,11 @@ def generate_archive_layers(
                         alert_type,
                         fontsize=label_fontsize,
                         fontname=font_family,
-                        fontweight=style_config.get(
-                            "alert_legend_font_weight", "bold"),
-                        fontstyle=style_config.get(
-                            "alert_legend_font_style", "italic"),
+                        fontweight=style_config.get("alert_legend_font_weight", "bold"),
+                        fontstyle=style_config.get("alert_legend_font_style", "italic"),
                         va="center",
                         ha="left",
-                        color=style_config.get(
-                            "alert_legend_text_color", "#000000"),
+                        color=style_config.get("alert_legend_text_color", "#000000"),
                         zorder=zo["hud"] + 12,
                     )
 
@@ -2777,8 +2730,7 @@ def generate_archive_layers(
                 va="top",
                 ha="right",
                 bbox=dict(
-                    boxstyle=style_config.get(
-                        "hud_right_box_style", "round,pad=0.4"),
+                    boxstyle=style_config.get("hud_right_box_style", "round,pad=0.4"),
                     fc=hud_right_bg_color,
                     ec=hud_right_edge_color,
                     alpha=hud_right_alpha,
@@ -2813,8 +2765,7 @@ def generate_archive_layers(
                 layer_rgba = _to_rgba(imageio.imread(source_path))
                 if composite_rgba is None:
                     composite_rgba = np.zeros_like(layer_rgba)
-                composite_rgba = _composite_rgba_full(
-                    composite_rgba, layer_rgba)
+                composite_rgba = _composite_rgba_full(composite_rgba, layer_rgba)
 
             if composite_rgba is None:
                 continue
@@ -3000,190 +2951,3 @@ def _composite_rgba_full(base_rgba, overlay_rgba):
 
     out = np.concatenate([out_rgb, out_a], axis=2)
     return np.clip(out * 255.0, 0, 255).astype(np.uint8)
-
-
-def export_layered_animation(layer_dir, fps=4):
-    """Export a layered radar archive directory into an MP4 animation."""
-    if not layer_dir or not os.path.isdir(layer_dir):
-        return None, 0
-
-    touch_layer_session(layer_dir)
-
-    basemap_path = os.path.join(layer_dir, "basemap.png")
-    if not os.path.exists(basemap_path):
-        manifest = _read_layer_manifest(layer_dir)
-        manifest_basemap = (
-            manifest.get("basemap_source_path") if isinstance(
-                manifest, dict) else None
-        )
-        if isinstance(manifest_basemap, str) and os.path.exists(manifest_basemap):
-            basemap_path = manifest_basemap
-    static_overlay_path = os.path.join(layer_dir, "static_overlay.png")
-    legend_overlay_path = os.path.join(layer_dir, "legend_overlay.png")
-    counties_overlay_path = os.path.join(layer_dir, "counties_overlay.png")
-    if not os.path.exists(counties_overlay_path):
-        manifest = _read_layer_manifest(layer_dir)
-        manifest_counties = (
-            manifest.get("counties_source_path") if isinstance(
-                manifest, dict) else None
-        )
-        if isinstance(manifest_counties, str) and os.path.exists(manifest_counties):
-            counties_overlay_path = manifest_counties
-    states_overlay_path = os.path.join(layer_dir, "states_overlay.png")
-    if not os.path.exists(states_overlay_path):
-        manifest = _read_layer_manifest(layer_dir)
-        manifest_states = (
-            manifest.get("states_source_path") if isinstance(
-                manifest, dict) else None
-        )
-        if isinstance(manifest_states, str) and os.path.exists(manifest_states):
-            states_overlay_path = manifest_states
-    rings_overlay_path = os.path.join(layer_dir, "rings_overlay.png")
-    if not os.path.exists(rings_overlay_path):
-        manifest = _read_layer_manifest(layer_dir)
-        manifest_rings = (
-            manifest.get("rings_source_path") if isinstance(
-                manifest, dict) else None
-        )
-        if isinstance(manifest_rings, str) and os.path.exists(manifest_rings):
-            rings_overlay_path = manifest_rings
-    layer_key = os.path.basename(os.path.normpath(layer_dir))
-    layers_root = os.path.dirname(os.path.normpath(layer_dir))
-    output_dir = os.path.dirname(layers_root)
-    radar_dir = os.path.join(output_dir, "radar", layer_key)
-    alerts_dir = os.path.join(output_dir, "alerts", layer_key)
-    cities_dir = os.path.join(output_dir, "cities", layer_key)
-    hud_right_dir = os.path.join(output_dir, "hud_right", layer_key)
-
-    # Export only timestamped composite frame files (YYYYMMDD_HHMMSS.png).
-    # This prevents static overlays (e.g. states_overlay.png) from being
-    # miscounted as animation frames.
-    frame_name_re = re.compile(r"^\d{8}_\d{6}\.png$")
-    frame_paths = sorted(
-        path
-        for path in glob.glob(os.path.join(layer_dir, "*.png"))
-        if frame_name_re.match(os.path.basename(path))
-    )
-    if not os.path.exists(basemap_path) or not frame_paths:
-        return None, 0
-
-    try:
-        basemap_rgba = _to_rgba(imageio.imread(basemap_path))
-    except Exception as e:
-        print(f"[WARN] Layer export basemap read failed: {e}")
-        return None, 0
-
-    # Pre-composite basemap onto solid canvas background (#152238) so that
-    # transparent margin areas (side tick strips, colorbar strip) appear as the
-    # correct dark colour rather than black in the H.264 MP4 output.
-    _bg = np.zeros_like(basemap_rgba)
-    _bg[:, :, 0] = 21  # #152238 R
-    _bg[:, :, 1] = 34  # G
-    _bg[:, :, 2] = 56  # B
-    _bg[:, :, 3] = 255
-    _primed = _composite_rgba(_bg, basemap_rgba)
-    primed_basemap_rgba = np.concatenate(
-        [_primed, np.full((*_primed.shape[:2], 1), 255, dtype=np.uint8)],
-        axis=2,
-    )
-
-    static_overlay_rgba = None
-    if os.path.exists(static_overlay_path):
-        try:
-            static_overlay_rgba = _to_rgba(imageio.imread(static_overlay_path))
-        except Exception as e:
-            print(f"[WARN] Layer export static overlay read failed: {e}")
-            static_overlay_rgba = None
-
-    legend_overlay_rgba = None
-    if os.path.exists(legend_overlay_path):
-        try:
-            legend_overlay_rgba = _to_rgba(imageio.imread(legend_overlay_path))
-        except Exception as e:
-            print(f"[WARN] Layer export legend overlay read failed: {e}")
-            legend_overlay_rgba = None
-
-    counties_overlay_rgba = None
-    if os.path.exists(counties_overlay_path):
-        try:
-            counties_overlay_rgba = _to_rgba(
-                imageio.imread(counties_overlay_path))
-        except Exception as e:
-            print(f"[WARN] Layer export counties overlay read failed: {e}")
-            counties_overlay_rgba = None
-
-    rings_overlay_rgba = None
-    if os.path.exists(rings_overlay_path):
-        try:
-            rings_overlay_rgba = _to_rgba(imageio.imread(rings_overlay_path))
-        except Exception as e:
-            print(f"[WARN] Layer export rings overlay read failed: {e}")
-            rings_overlay_rgba = None
-
-    composed_frames = []
-    for frame_path in frame_paths:
-        try:
-            frame_name = os.path.basename(frame_path)
-            split_paths = [
-                os.path.join(radar_dir, frame_name),
-                os.path.join(alerts_dir, frame_name),
-                os.path.join(cities_dir, frame_name),
-            ]
-            frame_rgba = primed_basemap_rgba.copy()
-            for split_path in split_paths:
-                if os.path.exists(split_path):
-                    frame_rgba = _composite_rgba_full(
-                        frame_rgba, _to_rgba(imageio.imread(split_path))
-                    )
-
-            if counties_overlay_rgba is not None:
-                frame_rgba = _composite_rgba_full(
-                    frame_rgba, counties_overlay_rgba)
-
-            if rings_overlay_rgba is not None:
-                frame_rgba = _composite_rgba_full(
-                    frame_rgba, rings_overlay_rgba)
-
-            if static_overlay_rgba is not None:
-                frame_rgba = _composite_rgba_full(
-                    frame_rgba, static_overlay_rgba)
-
-            if legend_overlay_rgba is not None:
-                frame_rgba = _composite_rgba_full(
-                    frame_rgba, legend_overlay_rgba)
-
-            hud_right_path = os.path.join(hud_right_dir, frame_name)
-            if os.path.exists(hud_right_path):
-                frame_rgba = _composite_rgba_full(
-                    frame_rgba, _to_rgba(imageio.imread(hud_right_path))
-                )
-
-            composed_frames.append(_as_uint8_image(frame_rgba[:, :, :3]))
-        except Exception as e:
-            print(
-                f"[WARN] Layer export frame skipped ({os.path.basename(frame_path)}): {e}"
-            )
-
-    if not composed_frames:
-        return None, 0
-
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    movie_path = os.path.join(layer_dir, f"export_{timestamp}.mp4")
-    try:
-        from video_utils import save_animation
-
-        movie_path = save_animation(
-            movie_path, composed_frames, fps=int(max(1, fps)))
-    except Exception as e:
-        print(f"[WARN] Layer export MP4 failed: {e}")
-        return None, 0
-
-    _write_layer_manifest(
-        layer_dir,
-        last_export_utc=_iso_utc(datetime.now(timezone.utc)),
-        last_export_file=os.path.basename(movie_path),
-        status="ready",
-        last_access_utc=_iso_utc(datetime.now(timezone.utc)),
-    )
-
-    return movie_path, len(composed_frames)

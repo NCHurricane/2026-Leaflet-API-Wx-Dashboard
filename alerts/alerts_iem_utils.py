@@ -24,7 +24,6 @@ def _split_antimeridian(geom):
     Sub-polygons with a centroid in the eastern hemisphere (lon > 0) are
     shifted by -360 so the whole zone renders contiguously near Alaska.
     """
-    from shapely.geometry import MultiPolygon
     from shapely import ops
 
     try:
@@ -68,25 +67,55 @@ _PHENOM_BASE = {
     # Wind
     "HW": "High Wind",
     "WI": "Wind",
+    "BW": "Brisk Wind",
     # Heat/Cold
     "EH": "Extreme Heat",
     "HT": "Heat",
     "EC": "Extreme Cold",
     "FZ": "Freeze",
     "FR": "Frost",
+    "CW": "Cold Weather",
     # Marine/Coastal
     "SU": "High Surf",
     "CF": "Coastal Flood",
     "LS": "Lakeshore Flood",
+    "BH": "Beach Hazards",
     "MA": "Marine Weather",
     "SC": "Small Craft",
     "GL": "Gale",
     "SR": "Storm",
+    "HF": "Hurricane Force Wind",
+    "UP": "Freezing Spray",
+    "SE": "Hazardous Seas",
+    "SI": "Small Craft",
+    "SW": "Small Craft",
+    "RB": "Small Craft",
+    "LO": "Low Water",
+    "MF": "Dense Fog",
+    "MS": "Marine Weather",
+    "MH": "Marine Weather",
     # Fire
     "FW": "Fire Weather",
     "RF": "Red Flag",
     # Air quality
     "AQ": "Air Quality",
+    # Additional VTEC phenomena
+    "FA": "Flood",
+    "LW": "Lake Wind",
+    "SQ": "Snow Squall",
+    "DS": "Dust Storm",
+    "DU": "Blowing Dust",
+    "SM": "Dense Smoke",
+    "AS": "Air Stagnation",
+    "AF": "Ashfall",
+    "EW": "Extreme Wind",
+    "SS": "Storm Surge",
+    "TS": "Tsunami",
+    "WC": "Wind Chill",
+    "HZ": "Hard Freeze",
+    "ZF": "Freezing Fog",
+    "FG": "Dense Fog",
+    "RP": "Rip Current",
 }
 
 _PHENOM_SIG_EVENT = {
@@ -125,6 +154,8 @@ _MARINE_PHENOMENA = {
     "LO",
     "MF",
     "MS",
+    "BH",
+    "RP",
 }
 
 
@@ -164,10 +195,8 @@ def _event_name_from_attrs(attrs: dict) -> str | None:
         if val:
             return str(val).strip()
 
-    phenom = str(attrs.get("PHENOM", "") or attrs.get(
-        "phenomena", "") or "").strip()
-    sig = str(attrs.get("SIG", "") or attrs.get(
-        "significance", "") or "").strip()
+    phenom = str(attrs.get("PHENOM", "") or attrs.get("phenomena", "") or "").strip()
+    sig = str(attrs.get("SIG", "") or attrs.get("significance", "") or "").strip()
 
     if not phenom or not sig:
         return None
@@ -234,8 +263,7 @@ def fetch_active_alerts_iem(
     start = now - timedelta(hours=max(int(lookback_hours), 1))
     end = now + timedelta(hours=1)
 
-    headers = {
-        "User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"}
+    headers = {"User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"}
 
     def build_url(include_state_filter: bool) -> str:
         url = (
@@ -288,10 +316,8 @@ def fetch_active_alerts_iem(
         _configure_pyshp_logging()
         reader = shpreader.Reader(os.path.join(tmpdir, shp_files[0]))
         with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore", message=".*Possible issue encountered.*")
-            warnings.filterwarnings(
-                "ignore", message=".*polygon interior holes.*")
+            warnings.filterwarnings("ignore", message=".*Possible issue encountered.*")
+            warnings.filterwarnings("ignore", message=".*polygon interior holes.*")
             records_iter = reader.records()
 
         for rec in records_iter:
@@ -317,10 +343,8 @@ def fetch_active_alerts_iem(
             if not event_name:
                 continue
 
-            phenom = str(attrs.get("PHENOM", "")
-                         or attrs.get("phenomena", "")).upper()
-            sig = str(attrs.get("SIG", "") or attrs.get(
-                "significance", "")).upper()
+            phenom = str(attrs.get("PHENOM", "") or attrs.get("phenomena", "")).upper()
+            sig = str(attrs.get("SIG", "") or attrs.get("significance", "")).upper()
             gtype = str(attrs.get("GTYPE", "") or "").upper().strip()
             nws_ugc = str(attrs.get("NWS_UGC", "") or "").strip()
             status = str(attrs.get("STATUS", "") or "").upper().strip()
@@ -362,8 +386,7 @@ def fetch_active_alerts_iem(
                 },
             }
             features.append(
-                {"type": "Feature", "properties": props,
-                    "geometry": mapping(geom)}
+                {"type": "Feature", "properties": props, "geometry": mapping(geom)}
             )
 
     except Exception as e:

@@ -647,7 +647,7 @@ def fetch_metar_data(state_code, use_nws_first=False):
     # WORLD current-mode: use global METAR cache feed.
     if state_upper == "WORLD":
         cache_dir, cache_file = get_cache_path(state_upper)
-        if is_cache_valid(cache_file, minutes=15):
+        if is_cache_valid(cache_file, minutes=30):
             try:
                 df_cached = pd.read_csv(cache_file)
                 if not df_cached.empty:
@@ -682,7 +682,7 @@ def fetch_metar_data(state_code, use_nws_first=False):
     legacy_cache_file = os.path.join(base_path, "surface_data", state_upper, "data.csv")
 
     for candidate in (cache_file, legacy_cache_file):
-        if is_cache_valid(candidate, minutes=15):
+        if is_cache_valid(candidate, minutes=30):
             try:
                 df = pd.read_csv(candidate)
                 if not df.empty:
@@ -699,6 +699,16 @@ def fetch_metar_data(state_code, use_nws_first=False):
                 pass
 
     if state_upper == "CONUS":
+        # Use AWC bulk METAR API — avoids IEM rate limiting (192 requests → ~80 batched)
+        try:
+            df_awc = _fetch_awc_current_conus()
+            if df_awc is not None and not df_awc.empty:
+                df_awc.to_csv(cache_file, index=False)
+                return df_awc
+        except Exception as e:
+            print(f"[surface] AWC CONUS fetch failed, falling back to IEM: {e}")
+
+        # Fallback: per-state IEM (may be rate-limited)
         all_dfs = []
         states = [
             state for state in STATES_FULL.keys() if state not in ["AK", "HI", "CONUS"]
@@ -758,88 +768,59 @@ def fetch_metar_data(state_code, use_nws_first=False):
         return pd.DataFrame()
 
 
-def fetch_metar_data_at_time(state_code, valid_time_utc, source="iem"):
-    """Fetch station observations nearest a target UTC time (IEM-first for archive flows)."""
-    source_key = str(source or "iem").strip().lower()
-    target_dt = valid_time_utc or datetime.now(timezone.utc)
-    if target_dt.tzinfo is None:
-        target_dt = target_dt.replace(tzinfo=timezone.utc)
+def _normalize_utc(dt_val):
+    dt_out = dt_val or datetime.now(timezone.utc)
+    if dt_out.tzinfo is None:
+        return dt_out.replace(tzinfo=timezone.utc)
+    return dt_out.astimezone(timezone.utc)
+
+
+def _select_nearest_station_rows(df, target_dt, max_delta_seconds=75 * 60):
+    if (
+        df is None
+        or df.empty
+        or "valid" not in df.columns
+        or "station_id" not in df.columns
+    ):
+        return pd.DataFrame()
+
+    target_ts = pd.Timestamp(_normalize_utc(target_dt))
+    if "_valid_ts" in df.columns:
+        df_work = df.copy()
     else:
-        target_dt = target_dt.astimezone(timezone.utc)
-
-    # NWS and aviationweather are near-real-time sources; use NWS opportunistically
-    # for recent targets, then fall back to IEM.
-    if source_key in {"nws", "aviationweather", "auto"}:
-        age_seconds = abs((datetime.now(timezone.utc) - target_dt).total_seconds())
-        if age_seconds <= 2 * 3600:
-            try:
-                df_nws = fetch_nws_current_observations(state_code)
-                if df_nws is not None and not df_nws.empty and len(df_nws) > 5:
-                    return df_nws
-            except Exception:
-                pass
-
-    state = str(state_code or "").upper().strip() or "NC"
-
-    if state == "WORLD":
-        try:
-            df_world_raw = _fetch_world_current_observations()
-            if df_world_raw.empty:
-                return pd.DataFrame()
-            df = process_dataframe(df_world_raw, state)
-        except Exception:
-            return pd.DataFrame()
-
-        if (
-            df is None
-            or df.empty
-            or "valid" not in df.columns
-            or "station_id" not in df.columns
-        ):
-            return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
-
         ts = pd.to_datetime(df["valid"], utc=True, errors="coerce")
-        df = df.assign(_valid_ts=ts).dropna(subset=["_valid_ts", "station_id"])
-        if df.empty:
-            return pd.DataFrame()
+        df_work = df.assign(_valid_ts=ts)
 
-        target_ts = pd.Timestamp(target_dt)
-        df["_delta_seconds"] = (df["_valid_ts"] - target_ts).abs().dt.total_seconds()
-        df = (
-            df.sort_values(["station_id", "_delta_seconds"])
-            .groupby("station_id", as_index=False)
-            .first()
-        )
-        df = df[df["_delta_seconds"] <= 75 * 60]
-        if df.empty:
-            return pd.DataFrame()
+    df_work = df_work.dropna(subset=["_valid_ts", "station_id"])
+    if df_work.empty:
+        return pd.DataFrame()
 
-        return df.drop(columns=["_valid_ts", "_delta_seconds"], errors="ignore")
+    df_work["_delta_seconds"] = (
+        (df_work["_valid_ts"] - target_ts).abs().dt.total_seconds()
+    )
+    df_work = (
+        df_work.sort_values(["station_id", "_delta_seconds"])
+        .groupby("station_id", as_index=False)
+        .first()
+    )
+    df_work = df_work[df_work["_delta_seconds"] <= max_delta_seconds]
+    if df_work.empty:
+        return pd.DataFrame()
 
-    if state == "CONUS":
-        all_dfs = []
-        states = [s for s in STATES_FULL.keys() if s not in ["AK", "HI", "CONUS"]]
-        max_workers = min(10, max(4, len(states)))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_state = {
-                executor.submit(fetch_metar_data_at_time, s, target_dt, "iem"): s
-                for s in states
-            }
-            for future in as_completed(future_to_state):
-                try:
-                    df_state = future.result()
-                    if df_state is not None and not df_state.empty:
-                        all_dfs.append(df_state)
-                except Exception:
-                    pass
-        if not all_dfs:
-            return pd.DataFrame()
-        return pd.concat(all_dfs, ignore_index=True)
+    out = df_work.drop(columns=["_valid_ts", "_delta_seconds"], errors="ignore")
+    if "network" not in out.columns:
+        out["network"] = "ASOS"
+    return out
 
-    # Pull a narrow archive window centered on the requested timestamp.
-    start = target_dt - timedelta(minutes=40)
-    end = target_dt + timedelta(minutes=20)
-    network_id = f"{state}_ASOS"
+
+def _fetch_iem_state_archive_window(state, start_dt, end_dt):
+    state_upper = str(state or "").upper().strip()
+    if not state_upper or state_upper in {"CONUS", "WORLD", "AK", "HI"}:
+        return pd.DataFrame()
+
+    start = _normalize_utc(start_dt)
+    end = _normalize_utc(end_dt)
+    network_id = f"{state_upper}_ASOS"
     fields = [
         "station",
         "valid",
@@ -878,50 +859,376 @@ def fetch_metar_data_at_time(state_code, valid_time_utc, source="iem"):
     params.extend(("data", field) for field in fields)
 
     url = "https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py"
+    query = f"{url}?{urlencode(params, doseq=True)}"
+    headers = {"User-Agent": "2026-dashboard-surface-archive/1.0"}
+
+    for attempt in range(4):
+        try:
+            resp = requests.get(query, timeout=45, headers=headers)
+            resp.raise_for_status()
+            if not (resp.text or "").strip():
+                raise ValueError("Empty response body")
+
+            df_raw = pd.read_csv(StringIO(resp.text))
+            if (
+                df_raw is None
+                or df_raw.empty
+                or "station" not in df_raw.columns
+                or "valid" not in df_raw.columns
+            ):
+                raise ValueError("Unexpected IEM response schema")
+
+            df = process_dataframe(df_raw, state_upper)
+            if df is None or df.empty:
+                raise ValueError("No processed rows")
+
+            ts = pd.to_datetime(df["valid"], utc=True, errors="coerce")
+            out = df.assign(_valid_ts=ts).dropna(subset=["_valid_ts", "station_id"])
+            if out.empty:
+                raise ValueError("No timestamped rows")
+
+            if "network" not in out.columns:
+                out["network"] = "ASOS"
+            return out
+        except Exception:
+            if attempt < 3:
+                time.sleep(0.6 * (attempt + 1))
+
+    return pd.DataFrame()
+
+
+# ---------------------------------------------------------------------------
+# AWC (AviationWeather.gov) bulk METAR — replaces rate-limited IEM endpoints
+# for both current and archive surface data.
+# ---------------------------------------------------------------------------
+_AWC_METAR_URL = "https://aviationweather.gov/api/data/metar"
+_AWC_BATCH_SIZE = 30  # stay under 400-record limit per request
+_AWC_MAX_WORKERS = 6
+_AWC_STATION_CACHE: set[str] = set()
+_AWC_STATION_CACHE_TS: float = 0.0
+_AWC_STATION_CACHE_TTL: float = 3600.0  # 1 hour
+
+
+def _get_conus_icao_ids() -> set[str]:
+    """Return all US ASOS ICAO station IDs via IEM currents.json (not rate-limited)."""
+    global _AWC_STATION_CACHE, _AWC_STATION_CACHE_TS
+
+    now = time.time()
+    if _AWC_STATION_CACHE and (now - _AWC_STATION_CACHE_TS) < _AWC_STATION_CACHE_TTL:
+        return _AWC_STATION_CACHE
+
+    all_ids: set[str] = set()
+    states = [s for s in STATES_FULL.keys() if s not in ("AK", "HI", "CONUS")]
+    hdrs = {"User-Agent": "2026-dashboard-surface-archive/1.0"}
+
+    def _ids_for_state(st: str) -> set[str]:
+        try:
+            r = requests.get(
+                f"https://mesonet.agron.iastate.edu/api/1/currents.json?network={st}_ASOS",
+                timeout=10,
+                headers=hdrs,
+            )
+            if r.status_code != 200:
+                return set()
+            ids: set[str] = set()
+            for d in r.json().get("data", []):
+                sid = d.get("station", "")
+                if len(sid) == 3 and sid.isalnum():
+                    ids.add("K" + sid)
+                elif len(sid) == 4 and sid[0] == "K":
+                    ids.add(sid)
+            return ids
+        except Exception:
+            return set()
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futs = {pool.submit(_ids_for_state, st): st for st in states}
+        for f in as_completed(futs):
+            all_ids.update(f.result())
+
+    if all_ids:
+        _AWC_STATION_CACHE = all_ids
+        _AWC_STATION_CACHE_TS = now
+    return all_ids
+
+
+def _get_state_icao_ids(state_code: str) -> set[str]:
+    """Return ASOS ICAO IDs for a single state via IEM currents.json."""
+    hdrs = {"User-Agent": "2026-dashboard-surface-archive/1.0"}
     try:
-        resp = requests.get(f"{url}?{urlencode(params, doseq=True)}", timeout=30)
-        resp.raise_for_status()
-        if not (resp.text or "").strip():
-            return pd.DataFrame()
-        df_raw = pd.read_csv(StringIO(resp.text))
+        r = requests.get(
+            f"https://mesonet.agron.iastate.edu/api/1/currents.json?network={state_code}_ASOS",
+            timeout=10,
+            headers=hdrs,
+        )
+        if r.status_code != 200:
+            return set()
+        ids: set[str] = set()
+        for d in r.json().get("data", []):
+            sid = d.get("station", "")
+            if len(sid) == 3 and sid.isalnum():
+                ids.add("K" + sid)
+            elif len(sid) == 4 and sid[0] == "K":
+                ids.add(sid)
+        return ids
     except Exception:
+        return set()
+
+
+def _fetch_awc_metar_bulk(icao_ids: set[str], hours: int) -> list[dict]:
+    """Fetch historical METAR observations from AWC in batches of 30 stations."""
+    station_list = sorted(icao_ids)
+    batches = [
+        station_list[i : i + _AWC_BATCH_SIZE]
+        for i in range(0, len(station_list), _AWC_BATCH_SIZE)
+    ]
+    all_records: list[dict] = []
+    hdrs = {"User-Agent": "2026-dashboard-surface-archive/1.0"}
+
+    def _fetch_batch(batch_ids: list[str]) -> list[dict]:
+        id_str = ",".join(batch_ids)
+        url = f"{_AWC_METAR_URL}?ids={id_str}&format=json&hours={hours}"
+        try:
+            resp = requests.get(url, timeout=30, headers=hdrs)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    return data
+        except Exception:
+            pass
+        return []
+
+    with ThreadPoolExecutor(max_workers=_AWC_MAX_WORKERS) as pool:
+        futs = [pool.submit(_fetch_batch, b) for b in batches]
+        for f in as_completed(futs):
+            all_records.extend(f.result())
+
+    return all_records
+
+
+def _awc_records_to_iem_df(records: list[dict]) -> pd.DataFrame:
+    """Convert AWC METAR JSON records into an IEM-compatible raw DataFrame.
+
+    The returned DataFrame has the same column names as the IEM CSV download
+    so it can be passed directly into ``process_dataframe()``.
+    """
+    if not records:
         return pd.DataFrame()
 
-    if df_raw is None or df_raw.empty:
+    rows: list[dict] = []
+    for r in records:
+        obs_time = r.get("obsTime")
+        if obs_time is None:
+            continue
+
+        # Celsius → Fahrenheit
+        temp_c = r.get("temp")
+        dewp_c = r.get("dewp")
+        tmpf = (temp_c * 9.0 / 5.0 + 32.0) if temp_c is not None else None
+        dwpf = (dewp_c * 9.0 / 5.0 + 32.0) if dewp_c is not None else None
+
+        # Visibility: AWC returns string like "10+", "6", etc.
+        vsby_raw = r.get("visib")
+        vsby = None
+        if vsby_raw is not None:
+            vsby_str = str(vsby_raw).replace("+", "")
+            match = re.search(r"[\d.]+", vsby_str)
+            if match:
+                try:
+                    vsby = float(match.group(0))
+                except (ValueError, TypeError):
+                    pass
+
+        # Convert ICAO → FAA LID (strip K-prefix for US 4-char IDs)
+        icao = r.get("icaoId", "")
+        station = icao[1:] if len(icao) == 4 and icao.startswith("K") else icao
+
+        valid_dt = datetime.fromtimestamp(obs_time, tz=timezone.utc)
+        valid_str = valid_dt.strftime("%Y-%m-%d %H:%M+00:00")
+
+        rows.append(
+            {
+                "station": station,
+                "valid": valid_str,
+                "lat": r.get("lat"),
+                "lon": r.get("lon"),
+                "tmpf": tmpf,
+                "dwpf": dwpf,
+                "sknt": r.get("wspd"),
+                "drct": r.get("wdir"),
+                "relh": None,
+                "alti": r.get("altim"),
+                "vsby": vsby,
+                "gust": r.get("wgst"),
+                "mslp": r.get("slp"),
+                "wxcodes": None,
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows)
+
+
+def _fetch_awc_archive_window(icao_ids: set[str], start_dt, end_dt):
+    """Fetch AWC bulk data for a set of station IDs covering a time window.
+
+    Returns a processed DataFrame with ``_valid_ts`` column ready for
+    ``_select_nearest_station_rows()``.
+    """
+    start = _normalize_utc(start_dt)
+    end = _normalize_utc(end_dt)
+    span_hours = max(1, int((end - start).total_seconds() / 3600) + 2)
+    # AWC 'hours' param looks back from now, so we must ensure it covers the window
+    age_hours = (
+        max(0, int((datetime.now(timezone.utc) - start).total_seconds() / 3600)) + 1
+    )
+    hours = max(span_hours, age_hours)
+    hours = min(hours, 24)  # AWC practical limit
+
+    records = _fetch_awc_metar_bulk(icao_ids, hours)
+    if not records:
         return pd.DataFrame()
 
-    try:
-        df = process_dataframe(df_raw, state)
-    except Exception:
+    raw_df = _awc_records_to_iem_df(records)
+    if raw_df.empty:
         return pd.DataFrame()
 
-    if (
-        df is None
-        or df.empty
-        or "valid" not in df.columns
-        or "station_id" not in df.columns
-    ):
-        return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
+    df = process_dataframe(raw_df, "CONUS")
+    if df is None or df.empty:
+        return pd.DataFrame()
 
     ts = pd.to_datetime(df["valid"], utc=True, errors="coerce")
-    df = df.assign(_valid_ts=ts).dropna(subset=["_valid_ts", "station_id"])
-    if df.empty:
+    out = df.assign(_valid_ts=ts).dropna(subset=["_valid_ts", "station_id"])
+    if "network" not in out.columns:
+        out["network"] = "ASOS"
+    return out
+
+
+def _fetch_awc_current_conus() -> pd.DataFrame:
+    """Fetch current CONUS ASOS observations from AWC in a single bulk call.
+
+    Returns a fully processed DataFrame compatible with ``fetch_metar_data``
+    output — ready for caching and the ``/api/data/surface`` endpoint.
+    Uses ``hours=2`` so every station that reported in the last 2 hours is
+    included, then deduplicates to the latest observation per station.
+    """
+    icao_ids = _get_conus_icao_ids()
+    if not icao_ids:
         return pd.DataFrame()
 
-    target_ts = pd.Timestamp(target_dt)
-    df["_delta_seconds"] = (df["_valid_ts"] - target_ts).abs().dt.total_seconds()
-    df = (
-        df.sort_values(["station_id", "_delta_seconds"])
-        .groupby("station_id", as_index=False)
-        .first()
-    )
-
-    # Keep only stations that are reasonably close to the requested frame time.
-    df = df[df["_delta_seconds"] <= 75 * 60]
-    if df.empty:
+    records = _fetch_awc_metar_bulk(icao_ids, hours=2)
+    if not records:
         return pd.DataFrame()
 
-    return df.drop(columns=["_valid_ts", "_delta_seconds"], errors="ignore")
+    # Deduplicate to latest observation per station
+    latest: dict[str, dict] = {}
+    for r in records:
+        sid = r.get("icaoId", "")
+        if not sid:
+            continue
+        if sid not in latest or r.get("obsTime", 0) > latest[sid].get("obsTime", 0):
+            latest[sid] = r
+
+    raw_df = _awc_records_to_iem_df(list(latest.values()))
+    if raw_df.empty:
+        return pd.DataFrame()
+
+    df = process_dataframe(raw_df, "CONUS")
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    if "network" not in df.columns:
+        df["network"] = "ASOS"
+    return df
+
+
+def fetch_metar_data_archive_frames(state_code, frame_times_utc, source="iem"):
+    """Fetch surface archive frames with one IEM request per state for the full time span."""
+    frame_times = [
+        _normalize_utc(ts) for ts in (frame_times_utc or []) if ts is not None
+    ]
+    if not frame_times:
+        return []
+
+    source_key = str(source or "iem").strip().lower()
+    if source_key not in {"iem", "auto"}:
+        return [
+            fetch_metar_data_at_time(state_code, ts, source=source_key)
+            for ts in frame_times
+        ]
+
+    state = str(state_code or "").upper().strip() or "NC"
+    window_start = min(frame_times) - timedelta(minutes=40)
+    window_end = max(frame_times) + timedelta(minutes=20)
+
+    if state == "WORLD":
+        return [
+            fetch_metar_data_at_time("WORLD", ts, source="iem") for ts in frame_times
+        ]
+
+    if state == "CONUS":
+        icao_ids = _get_conus_icao_ids()
+        if not icao_ids:
+            return [pd.DataFrame() for _ in frame_times]
+
+        df_all = _fetch_awc_archive_window(icao_ids, window_start, window_end)
+        if df_all is None or df_all.empty:
+            return [pd.DataFrame() for _ in frame_times]
+
+        return [_select_nearest_station_rows(df_all, ts) for ts in frame_times]
+
+    # Single state — use AWC with state-specific station IDs
+    icao_ids = _get_state_icao_ids(state)
+    if icao_ids:
+        df_window = _fetch_awc_archive_window(icao_ids, window_start, window_end)
+        if df_window is not None and not df_window.empty:
+            return [_select_nearest_station_rows(df_window, ts) for ts in frame_times]
+
+    # Fallback to IEM if AWC returned nothing for this state
+    df_window = _fetch_iem_state_archive_window(state, window_start, window_end)
+    return [_select_nearest_station_rows(df_window, ts) for ts in frame_times]
+
+
+def fetch_metar_data_at_time(state_code, valid_time_utc, source="iem"):
+    """Fetch station observations nearest a target UTC time (IEM-first for archive flows)."""
+    source_key = str(source or "iem").strip().lower()
+    target_dt = _normalize_utc(valid_time_utc)
+
+    # NWS and aviationweather are near-real-time sources; use NWS opportunistically
+    # for recent targets, then fall back to IEM.
+    if source_key in {"nws", "aviationweather", "auto"}:
+        age_seconds = abs((datetime.now(timezone.utc) - target_dt).total_seconds())
+        if age_seconds <= 2 * 3600:
+            try:
+                df_nws = fetch_nws_current_observations(state_code)
+                if df_nws is not None and not df_nws.empty and len(df_nws) > 5:
+                    return df_nws
+            except Exception:
+                pass
+
+    state = str(state_code or "").upper().strip() or "NC"
+
+    if state == "WORLD":
+        try:
+            df_world_raw = _fetch_world_current_observations()
+            if df_world_raw.empty:
+                return pd.DataFrame()
+            df = process_dataframe(df_world_raw, state)
+        except Exception:
+            return pd.DataFrame()
+        return _select_nearest_station_rows(df, target_dt)
+
+    if state == "CONUS":
+        frames = fetch_metar_data_archive_frames("CONUS", [target_dt], source="iem")
+        if frames:
+            return frames[0]
+        return pd.DataFrame()
+
+    start = target_dt - timedelta(minutes=40)
+    end = target_dt + timedelta(minutes=20)
+    df_window = _fetch_iem_state_archive_window(state, start, end)
+    return _select_nearest_station_rows(df_window, target_dt)
 
 
 def get_weather_symbol_index(wx_code):

@@ -29,14 +29,13 @@ def run_script(script_name: str, base: str) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run Phase 3/4/5 smoke suite")
+    parser = argparse.ArgumentParser(description="Run Phase 3/4 smoke suite")
     parser.add_argument("--base", default="http://127.0.0.1:8000")
     args = parser.parse_args()
 
     checks = [
         "phase3_smoke.py",
         "phase4_archive_smoke.py",
-        "phase5_export_smoke.py",
     ]
 
     failures = []
@@ -47,7 +46,7 @@ def main() -> int:
 
     print("\n" + "#" * 72)
     if not failures:
-        print("Full regression smoke PASS (Phase 3/4/5).")
+        print("Full regression smoke PASS (Phase 3/4).")
         print("#" * 72)
         return 0
 

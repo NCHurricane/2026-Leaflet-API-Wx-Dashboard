@@ -207,6 +207,17 @@ ALERT_COLORS = {
     "Hazardous Weather Outlook": "#EEE8AA",
     "Hydrologic Outlook": "#90EE90",
     "Short Term Forecast": "#98FB98",
+    # VTEC-derived events not in original NWS list
+    "Wind Chill Warning": "#5F9EA0",
+    "Wind Chill Watch": "#5F9EA0",
+    "Wind Chill Advisory": "#AFEEEE",
+    "Hard Freeze Warning": "#9400D3",
+    "Hard Freeze Watch": "#4169E1",
+    "Freezing Rain Advisory": "#DA70D6",
+    "Sleet Warning": "#EE82EE",
+    "Sleet Advisory": "#DDA0DD",
+    "Ice Storm Watch": "#48D1CC",
+    "Heat Warning": "#C71585",
 }
 
 DEFAULT_COLOR = "#C0C0C0"
@@ -229,6 +240,11 @@ HAZARD_CATEGORIES = {
         "Severe Weather Statement",
         "Special Marine Warning",
     ],
+    "Severe Weather Watches": [
+        "Tornado Watch",
+        "Severe Thunderstorm Watch",
+        "Flash Flood Watch",
+    ],
     "Hydrology Alerts": [
         "Flash Flood Warning",
         "Flood Warning",
@@ -238,6 +254,11 @@ HAZARD_CATEGORIES = {
         "Flash Flood Statement",
         "Flood Statement",
         "Hydrologic Outlook",
+        "Coastal Flood Statement",
+        "Lakeshore Flood Advisory",
+        "Lakeshore Flood Statement",
+        "Lakeshore Flood Warning",
+        "Lakeshore Flood Watch",
     ],
     "Flash Flood Alerts": [
         "Flash Flood Warning",
@@ -258,6 +279,11 @@ HAZARD_CATEGORIES = {
         "Extreme Cold Warning",
         "Extreme Cold Watch",
         "Heavy Freezing Spray Warning",
+        "Avalanche Advisory",
+        "Avalanche Watch",
+        "Avalanche Warning",
+        "Freezing Fog Advisory",
+        "Heavy Freezing Spray Watch",
     ],
     "Cold Alerts": [
         "Extreme Cold Warning",
@@ -300,6 +326,10 @@ HAZARD_CATEGORIES = {
         "Hazardous Seas Warning",
         "Hazardous Seas Watch",
         "Heavy Freezing Spray Warning",
+        "Brisk Wind Advisory",
+        "Freezing Spray Advisory",
+        "Low Water Advisory",
+        "Storm Watch",
     ],
     "Tropical Cyclone Alerts": [
         "Hurricane Warning",
@@ -326,6 +356,28 @@ HAZARD_CATEGORIES = {
         "Air Quality Alert",
         "Ashfall Warning",
         "Ashfall Advisory",
+        "Air Stagnation Advisory",
+        "Blowing Dust Warning",
+        "Dust Advisory",
+        "Lake Wind Advisory",
+    ],
+    "Geophysical Alerts": [
+        "Earthquake Warning",
+        "Tsunami Advisory",
+        "Tsunami Watch",
+        "Tsunami Warning",
+        "Volcano Warning",
+    ],
+    "Public Safety Alerts": [
+        "Civil Danger Warning",
+        "Hazardous Materials Warning",
+        "Local Area Emergency",
+        "Radiological Hazard Warning",
+    ],
+    "Informational Alerts": [
+        "Hazardous Weather Outlook",
+        "Short Term Forecast",
+        "Special Weather Statement",
     ],
 }
 
@@ -343,6 +395,9 @@ HAZARD_CATEGORY_ALIASES = {
     "Non-Precipitation Hazards": "Non-Precipitation Alerts",
     "All Hydrology Hazards": "Hydrology Alerts",
     "Extreme Cold Hazards": "Cold Alerts",
+    "Geophysical Hazards": "Geophysical Alerts",
+    "Public Safety Hazards": "Public Safety Alerts",
+    "Informational Hazards": "Informational Alerts",
 }
 
 NWS_WFO_MAP = {

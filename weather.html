@@ -60,7 +60,7 @@
                 min-height: 700px;
                 background: #030812;
                 overflow: hidden;
-                --wx-side-top: 6rem;
+                --wx-side-top: 5rem;
                 --wx-side-width: 350px;
                 --wx-side-inset: 5px;
                 --wx-side-visible-collapsed: 5px;
@@ -77,7 +77,6 @@
                 position: absolute;
                 top: var(--wx-side-top);
                 width: var(--wx-side-width);
-                max-height: calc(100% - 90px);
                 overflow-x: hidden;
                 overflow-y: auto;
                 background: var(--wx-panel);
@@ -91,11 +90,13 @@
 
             .weather-side-left {
                 left: var(--wx-side-inset);
+                max-height: calc(100% - 95px);
                 border-right: 3px solid var(--wx-yellow);
             }
 
             .weather-side-right {
                 right: var(--wx-side-inset);
+                max-height: calc(100% - 100px);
                 border-left: 3px solid var(--wx-yellow);
             }
 
@@ -185,6 +186,7 @@
                 letter-spacing: 0.04em;
             }
 
+            #wx-side-group-map-layers .wx-check-row,
             #wx-side-group-current .wx-check-row {
                 display: flex;
                 align-items: center;
@@ -193,12 +195,14 @@
                 justify-content: flex-start;
             }
 
+            #wx-side-group-map-layers .wx-check-row span,
             #wx-side-group-current .wx-check-row span {
                 order: 2;
                 flex: 1 1 auto;
                 text-align: right;
             }
 
+            #wx-side-group-map-layers .wx-check-row input[type="checkbox"],
             #wx-side-group-current .wx-check-row input[type="checkbox"] {
                 order: 1;
                 flex: 0 0 auto;
@@ -258,11 +262,45 @@
                 white-space: nowrap;
             }
 
+            #weather-network-filters {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr 1fr;
+                align-items: center;
+                gap: 6px;
+                font-size: 0.9rem;
+                cursor: pointer;
+            }
+
             #weather-surface-opts>.wx-check-row span {
                 display: block;
             }
 
             #weather-surface-opts>.wx-check-row input[type="checkbox"] {
+                width: 18px;
+                height: 18px;
+                margin: 0;
+                justify-self: end;
+            }
+
+            #weather-alerts-opts {
+                margin-top: 4px;
+            }
+
+            #weather-alerts-opts>.wx-check-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 20px;
+                align-items: center;
+                gap: 12px;
+                padding: 2px 0;
+                font-size: 0.8rem;
+                line-height: 1.08;
+            }
+
+            #weather-alerts-opts>.wx-check-row span {
+                display: block;
+            }
+
+            #weather-alerts-opts>.wx-check-row input[type="checkbox"] {
                 width: 18px;
                 height: 18px;
                 margin: 0;
@@ -302,7 +340,8 @@
 
             .wx-block label {
                 display: block;
-                margin-top: 6px;
+                padding-top: 5px;
+                margin-top: 5px;
                 font-size: 0.7rem;
                 color: var(--wx-muted);
                 text-transform: uppercase;
@@ -375,7 +414,8 @@
                 bottom: 2rem;
                 z-index: 520;
                 min-width: 575px;
-                max-width: 725px;
+                max-width: 96vw;
+                width: fit-content;
                 background: rgba(245, 248, 252, 0.95);
                 border: 2px solid #1a1a1a;
                 border-radius: 14px;
@@ -393,9 +433,32 @@
             .legend-row {
                 display: flex;
                 align-items: center;
-                gap: 6px;
+                gap: 4px;
                 margin-bottom: 3px;
                 font-size: 0.68rem;
+                white-space: nowrap;
+                break-inside: avoid;
+            }
+
+            .legend-grid {
+                column-count: 2;
+                column-gap: 6px;
+            }
+
+            .legend-grid-3 {
+                column-count: 3;
+            }
+
+            .legend-grid-4 {
+                column-count: 4;
+            }
+
+            .legend-grid-5 {
+                column-count: 5;
+            }
+
+            .legend-grid-6 {
+                column-count: 6;
             }
 
             .legend-swatch {
@@ -568,6 +631,86 @@
                 margin-bottom: 6px;
             }
 
+            .wx-mode-tabs {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .wx-mode-tab {
+                background: #1e293b;
+                border: 1px solid #475569;
+                border-radius: 4px;
+                color: #94a3b8;
+                font-size: 0.7rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                padding: 6px 8px;
+                cursor: pointer;
+                transition: background 120ms, color 120ms, border-color 120ms;
+            }
+
+            .wx-mode-tab:hover {
+                background: #334155;
+            }
+
+            .wx-mode-tab.active {
+                background: var(--wx-yellow);
+                color: #0a1230;
+                border-color: var(--wx-yellow);
+            }
+
+            .wx-archive-field {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 6px;
+            }
+
+            .wx-archive-field-label {
+                flex: 0 0 auto;
+                min-width: 36px;
+                font-size: 0.68rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                color: #94a3b8;
+            }
+
+            .wx-archive-field .wx-sidebar-input {
+                flex: 1 1 auto;
+            }
+
+            .wx-archive-presets {
+                display: flex;
+                gap: 4px;
+                margin-bottom: 8px;
+            }
+
+            .wx-preset-btn {
+                flex: 1 1 0;
+                background: #1e293b;
+                border: 1px solid #475569;
+                border-radius: 4px;
+                color: #94a3b8;
+                font-size: 0.65rem;
+                font-weight: 700;
+                padding: 5px 2px;
+                cursor: pointer;
+                text-align: center;
+                transition: background 120ms, color 120ms, border-color 120ms;
+            }
+
+            .wx-preset-btn:hover {
+                background: #334155;
+                color: #e2e8f0;
+            }
+
+            .wx-preset-btn.active {
+                background: var(--wx-cyan);
+                color: #0a1230;
+                border-color: var(--wx-cyan);
+            }
+
             .wx-sidebar-select,
             .wx-sidebar-input {
                 width: 100%;
@@ -580,8 +723,7 @@
             }
 
             .wx-sidebar-select,
-            .wx-sidebar-input,
-            .archive-export-label input {
+            .wx-sidebar-input {
                 background: #1e293b;
                 border: 1px solid #475569;
                 border-radius: 4px;
@@ -632,7 +774,6 @@
             }
 
             #archive-scrubber-row button,
-            #archive-export-row button,
             #weather-archive-toggle {
                 background: #1e293b;
                 border: 1px solid #475569;
@@ -644,7 +785,6 @@
             }
 
             #archive-scrubber-row button:hover,
-            #archive-export-row button:hover,
             #weather-archive-toggle:hover {
                 background: #3b82f6;
                 border-color: #3b82f6;
@@ -712,91 +852,6 @@
                 color: #64748b;
             }
 
-            #archive-export-row {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                flex-wrap: wrap;
-                padding-top: 2px;
-                border-top: 1px dashed rgba(71, 85, 105, 0.45);
-            }
-
-            .weather-side-right #archive-export-row {
-                display: flex;
-                flex-direction: column;
-                align-items: stretch;
-                gap: 8px;
-                padding-top: 0;
-                border-top: 0;
-            }
-
-            #archive-export-row button:disabled {
-                opacity: 0.45;
-                cursor: not-allowed;
-            }
-
-            .weather-side-right #archive-export-row button {
-                width: 100%;
-                text-align: center;
-            }
-
-            .archive-export-label {
-                font-size: 0.66rem;
-                color: #94a3b8;
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-            }
-
-            .weather-side-right .archive-export-controls {
-                display: grid;
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-                gap: 6px;
-            }
-
-            .weather-side-right .archive-export-label {
-                display: flex;
-                flex-direction: column;
-                align-items: stretch;
-                gap: 3px;
-                font-size: 0.64rem;
-            }
-
-            .archive-export-label input {
-                width: 62px;
-            }
-
-            .weather-side-right .archive-export-label input {
-                width: 100%;
-            }
-
-            #archive-export-status {
-                font-size: 0.65rem;
-                color: #94a3b8;
-                white-space: normal;
-                flex: 1 1 280px;
-                min-width: 180px;
-                line-height: 1.25;
-            }
-
-            .weather-side-right #archive-export-status {
-                min-width: 0;
-                flex: 0 0 auto;
-            }
-
-            #archive-export-link {
-                font-size: 0.65rem;
-                color: #7dd3fc;
-                text-decoration: none;
-            }
-
-            #archive-export-hint {
-                font-size: 0.62rem;
-                color: #64748b;
-                width: 100%;
-                margin-top: -2px;
-            }
-
             @media (max-width: 1180px) {
                 .weather-side {
                     width: 220px;
@@ -829,10 +884,6 @@
                     bottom: 210px;
                 }
 
-                .weather-side-right .archive-export-controls {
-                    grid-template-columns: 1fr;
-                }
-
                 #weather-map {
                     min-height: 520px;
                 }
@@ -844,7 +895,7 @@
         </style>
     </head>
 
-    <body data-weather-export-enabled="1" data-weather-export-animation-enabled="1">
+    <body>
         <header>
             <img src="img/nchurricane_logo.png" class="banner-logo" alt="NCHurricane.com Logo">
             <h1><a href="index.html">Weather Graphics Dashboard 2026</a></h1>
@@ -873,7 +924,7 @@
                 <div id="weather-map"></div>
 
                 <aside class="weather-side weather-side-left" id="weather-side-left">
-                    <h3>Data Point</h3>
+                    <h3>CHOOSE YOUR WEATHER HERE!⚡</h3>
 
                     <div class="wx-block">
                         <label for="weather-region">Region</label>
@@ -933,31 +984,28 @@
                         </select>
                     </div>
 
-                    <div class="wx-block">
-                        <label>Networks</label>
-                        <div id="weather-network-filters" style="display: flex; flex-wrap: wrap; gap: 12px;">
-                            <label
-                                style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer;">
-                                <input type="checkbox" class="weather-network-filter" value="ASOS" checked> ASOS
-                            </label>
-                            <label
-                                style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer;">
-                                <input type="checkbox" class="weather-network-filter" value="COOP" checked> COOP
-                            </label>
-                            <label
-                                style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer;">
-                                <input type="checkbox" class="weather-network-filter" value="DCP" checked> DCP
-                            </label>
-                            <label
-                                style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer;">
-                                <input type="checkbox" class="weather-network-filter" value="RWIS" checked> RWIS
-                            </label>
-                        </div>
-                    </div>
-
                     <div id="wx-section-current" class="wx-block" data-type="current">
 
                         <div id="weather-surface-opts">
+                            <label class="label-small">Networks</label>
+                            <div id="weather-network-filters">
+                                <label class="weather-network-filter">
+                                    <input type="checkbox" value="ASOS" checked> ASOS
+                                </label>
+                                <label class="weather-network-filter">
+                                    <input type="checkbox" value="COOP" checked> COOP
+                                </label>
+                                <label class="weather-network-filter">
+                                    <input type="checkbox" value="DCP" checked> DCP
+                                </label>
+                                <label class="weather-network-filter">
+                                    <input type="checkbox" value="RWIS" checked> RWIS
+                                </label>
+                            </div>
+                            <div class="wx-obs-density-head">
+                                <label for="weather-obs-density">Station Density</label>
+                            </div>
+                            <input id="weather-obs-density" type="range" min="0.01" max="1" step="0.005" value="0.25">
                             <div class="wx-check-row"><span>Temperature</span><input class="weather-surface-product"
                                     type="checkbox" value="temperature" checked>
                                 <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
@@ -1003,21 +1051,8 @@
                                 <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
                                     type="checkbox" data-product="visibility">
                             </div>
-                            <div class="wx-block">
-                                <div class="wx-obs-density-head">
-                                    <label for="weather-obs-density">Station Density</label>
-                                </div>
-                                <input id="weather-obs-density" type="range" min="0.01" max="1" step="0.005" value="1">
-                            </div>
-                            <div class="wx-block" style="display:none;">
-                                <label for="weather-opacity-surface">Data Opacity (Legacy)</label>
-                                <input id="weather-opacity-surface" type="range" min="0.1" max="1" step="0.05"
-                                    value="0.9">
-                            </div>
                             <div class="wx-block wx-small">Station Count:
                                 <span id="weather-surface-count"></span>
-                            </div>
-                            <div class="wx-block">
                                 <div id="weather-map-status"></div>
                             </div>
                             <div class="wx-block">
@@ -1027,30 +1062,64 @@
                     </div>
 
                     <div id="wx-section-alerts" class="wx-block" data-type="alerts" style="display:none;">
-                        <div class="wx-check-row"><span>Alerts</span><input id="weather-show-alerts" type="checkbox"
-                                checked></div>
                         <div id="weather-alerts-opts">
-                            <label for="weather-alerts-product">Category</label>
-                            <select id="weather-alerts-product">
-                                <option value="All Alerts">All Alerts and Warnings</option>
-                                <option value="Severe Weather Alerts">Severe Weather Alerts</option>
-                                <option value="Severe Weather Warnings">Severe Weather Warnings</option>
-                                <option value="Tropical Cyclone Alerts">Tropical Cyclone Alerts</option>
-                                <option value="Hydrology Alerts">Hydrology Alerts</option>
-                                <option value="Flash Flood Alerts">Flash Flood Alerts</option>
-                                <option value="Winter Alerts">Winter Alerts</option>
-                                <option value="Cold Alerts">Cold Alerts</option>
-                                <option value="Fire Alerts">Fire Alerts</option>
-                                <option value="Heat Alerts">Heat Alerts</option>
-                                <option value="Coastal Alerts">Coastal Alerts</option>
-                                <option value="Marine Alerts">Marine Alerts</option>
-                                <option value="Non-Precipitation Alerts">Non-Precipitation Alerts</option>
-                            </select>
-                            <label for="weather-opacity-alerts">Opacity</label>
-                            <input id="weather-opacity-alerts" type="range" min="0.1" max="1" step="0.05" value="0.75">
-                            <span id="weather-alerts-count" class="wx-small"></span>
-                            <button id="weather-refresh-alerts" type="button">Refresh</button>
-                            <div id="weather-alert-types-in-extent" class="wx-alert-list" style="margin-top:8px;">
+                            <div class="wx-check-row"><span>All Alerts</span><input class="weather-alerts-category"
+                                    id="weather-alerts-all" type="checkbox" value="All Alerts" checked></div>
+                            <label for="alert-categories">Filters</label>
+                            <div class="wx-check-row"><span>Severe Weather Alerts</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Severe Weather Alerts"
+                                    checked>
+                            </div>
+                            <div class="wx-check-row"><span>Severe Weather Warnings</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Severe Weather Warnings"
+                                    checked>
+                            </div>
+                            <div class="wx-check-row"><span>Severe Weather Watches</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Severe Weather Watches"
+                                    checked>
+                            </div>
+                            <div class="wx-check-row"><span>Hydrology Alerts</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Hydrology Alerts" checked>
+                            </div>
+                            <div class="wx-check-row"><span>Flash Flood Alerts</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Flash Flood Alerts" checked>
+                            </div>
+                            <div class="wx-check-row"><span>Winter Alerts</span><input class="weather-alerts-category"
+                                    type="checkbox" value="Winter Alerts" checked></div>
+                            <div class="wx-check-row"><span>Cold Alerts</span><input class="weather-alerts-category"
+                                    type="checkbox" value="Cold Alerts" checked></div>
+                            <div class="wx-check-row"><span>Fire Alerts</span><input class="weather-alerts-category"
+                                    type="checkbox" value="Fire Alerts" checked></div>
+                            <div class="wx-check-row"><span>Heat Alerts</span><input class="weather-alerts-category"
+                                    type="checkbox" value="Heat Alerts" checked></div>
+                            <div class="wx-check-row"><span>Coastal Alerts</span><input class="weather-alerts-category"
+                                    type="checkbox" value="Coastal Alerts" checked></div>
+                            <div class="wx-check-row"><span>Marine Alerts</span><input class="weather-alerts-category"
+                                    type="checkbox" value="Marine Alerts" checked></div>
+                            <div class="wx-check-row"><span>Tropical Cyclone Alerts</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Tropical Cyclone Alerts"
+                                    checked>
+                            </div>
+                            <div class="wx-check-row"><span>Non-Precipitation Alerts</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Non-Precipitation Alerts"
+                                    checked>
+                            </div>
+                            <div class="wx-check-row"><span>Geophysical Alerts</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Geophysical Alerts" checked>
+                            </div>
+                            <div class="wx-check-row"><span>Public Safety Alerts</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Public Safety Alerts"
+                                    checked>
+                            </div>
+                            <div class="wx-check-row"><span>Informational Alerts</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Informational Alerts"
+                                    checked>
+                            </div>
+                            <div class="wx-block wx-small">Alert Count:
+                                <span id="weather-alerts-count"></span>
+                            </div>
+                            <div class="wx-block">
+                                <button id="weather-refresh-alerts" type="button">Refresh</button>
                             </div>
                         </div>
                     </div>
@@ -1228,18 +1297,34 @@
                     </div>
 
                     <div class="wx-block">
-                        <button id="weather-archive-toggle" type="button">Archive Mode</button>
+                        <div class="wx-mode-tabs">
+                            <button id="weather-mode-current" class="wx-mode-tab active" type="button">Current</button>
+                            <button id="weather-mode-archive" class="wx-mode-tab" type="button">Archive</button>
+                        </div>
                         <div id="wx-archive-actions" style="display:none; margin-top:8px;">
-                            <label class="wx-sidebar-label">From
+                            <label style="margin-bottom:4px;">Lookback Options</label>
+                            <div class="wx-archive-presets">
+                                <button class="wx-preset-btn active" type="button" data-hours="1">1 hr</button>
+                                <button class="wx-preset-btn" type="button" data-hours="2">2 hr</button>
+                                <button class="wx-preset-btn" type="button" data-hours="3">3 hr</button>
+                                <button class="wx-preset-btn" type="button" data-hours="6">6 hr</button>
+                                <button class="wx-preset-btn" type="button" data-hours="12">12 hr</button>
+                                <button class="wx-preset-btn" type="button" data-hours="24">24 hr</button>
+                            </div>
+                            <div class="wx-archive-presets">
+                                <button class="wx-preset-btn" type="button" data-hours="snapshot">Single Frame</button>
+                                <button class="wx-preset-btn" type="button" data-hours="custom">Custom</button>
+                            </div>
+                            <div class="wx-archive-field">
+                                <span class="wx-archive-field-label">From</span>
                                 <input type="datetime-local" id="archive-from" class="wx-sidebar-input">
-                            </label>
-                            <label class="wx-sidebar-label">To
+                            </div>
+                            <div class="wx-archive-field">
+                                <span class="wx-archive-field-label">To</span>
                                 <input type="datetime-local" id="archive-to" class="wx-sidebar-input">
-                            </label>
+                            </div>
                             <button id="archive-load-btn" class="primary" type="button"
                                 style="width:100%; margin-top:6px;">Load</button>
-                            <button id="archive-exit-btn" class="secondary" type="button"
-                                style="width:100%; margin-top:4px;">Live Mode</button>
                         </div>
                     </div>
                 </aside>
@@ -1247,19 +1332,16 @@
                     aria-label="Collapse left sidebar" aria-expanded="true">‹</button>
 
                 <aside class="weather-side weather-side-right" id="weather-side-right">
-                    <h3>Layers</h3>
-                    <div id="wx-side-groups-empty" class="wx-block wx-small" style="display:none;">
-                        Enable a product group to see style controls.
-                    </div>
-                    <div id="wx-side-group-current" class="wx-block wx-side-group" data-type="current">
-                        <h4>Current</h4>
+                    <h3>Map Layers</h3>
+                    <div id="wx-side-group-map-layers" class="wx-block">
                         <div class="wx-check-row"><span>Cities</span><input id="weather-toggle-cities" type="checkbox">
                         </div>
                         <div class="wx-cities-density">
                             <div class="wx-cities-density-head">
                                 <label for="weather-cities-density">City Density</label>
                             </div>
-                            <input id="weather-cities-density" type="range" min="0.01" max="1" step="0.005" value="1">
+                            <input id="weather-cities-density" type="range" min="0.01" max="1" step="0.005"
+                                value="0.25">
                         </div>
                         <div class="wx-check-row"><span>State Borders</span><input id="weather-toggle-states"
                                 type="checkbox" checked></div>
@@ -1267,6 +1349,12 @@
                                 type="checkbox" checked></div>
                         <div class="wx-check-row"><span>County Borders</span><input id="weather-toggle-counties"
                                 type="checkbox"></div>
+                    </div>
+                    <div id="wx-side-groups-empty" class="wx-block wx-small" style="display:none;">
+                        Enable a product group to see style controls.
+                    </div>
+                    <div id="wx-side-group-current" class="wx-block wx-side-group" data-type="current">
+                        <h4>Current Styling</h4>
                         <div id="weather-gradient-blur-wrap" class="wx-block" style="display:none;">
                             <div class="wx-obs-density-head">
                                 <label for="weather-gradient-blur">Gradient Blur</label>
@@ -1286,8 +1374,11 @@
                     </div>
                     <div id="wx-side-group-alerts" class="wx-block wx-side-group" data-type="alerts"
                         style="display:none;">
-                        <h4>Alerts</h4>
-                        <div class="wx-small">Product-specific style controls will be added here.</div>
+                        <h4>Alerts Styling</h4>
+                        <div class="wx-block">
+                            <label for="weather-opacity-alerts">Polygon Opacity</label>
+                            <input id="weather-opacity-alerts" type="range" min="0.1" max="1" step="0.05" value="0.75">
+                        </div>
                     </div>
                     <div id="wx-side-group-spc" class="wx-block wx-side-group" data-type="spc" style="display:none;">
                         <h4>SPC</h4>
@@ -1296,28 +1387,6 @@
                     <div id="wx-side-group-mrms" class="wx-block wx-side-group" data-type="mrms" style="display:none;">
                         <h4>MRMS</h4>
                         <div class="wx-small">Product-specific style controls will be added here.</div>
-                    </div>
-                    <div class="wx-block">
-                        <h3>Export</h3>
-                        <div id="archive-export-row">
-                            <button id="archive-screenshot" class="secondary" type="button">Screenshot PNG</button>
-                            <button id="archive-export-frame" class="secondary" type="button">Export Frame PNG</button>
-                            <button id="archive-export-animation" class="secondary" type="button">Export HD MP4</button>
-                            <div class="archive-export-controls">
-                                <label class="archive-export-label">Start <input id="archive-export-start" type="number"
-                                        min="0" step="1" value="0"></label>
-                                <label class="archive-export-label">End <input id="archive-export-end" type="number"
-                                        min="0" step="1" value="0"></label>
-                                <label class="archive-export-label">FPS <input id="archive-export-fps" type="number"
-                                        min="1" max="24" step="1" value="4"></label>
-                            </div>
-                            <span id="archive-export-status" role="status" aria-live="polite"></span>
-                            <a id="archive-export-link" href="#" target="_blank" rel="noopener"
-                                style="display:none;">Open
-                                Export</a>
-                            <span id="archive-export-hint">Frame export supports Weather archive products. MP4 export
-                                currently uses server rendering for MRMS archive.</span>
-                        </div>
                     </div>
                 </aside>
                 <button id="weather-side-toggle-right" class="weather-side-toggle weather-side-toggle-right"
@@ -1347,7 +1416,6 @@
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script
             src="https://cdn.jsdelivr.net/npm/leaflet.layergroup.collision@0.1.6/dist/leaflet.layergroup.collision.js"></script>
-        <script src="https://unpkg.com/leaflet-image@0.4.0/leaflet-image.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
         <script src="js/shared.js"></script>
         <script src="js/weather.js"></script>

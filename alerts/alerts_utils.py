@@ -33,7 +33,6 @@ import hashlib
 import time
 import requests
 import numpy as np
-import math
 import matplotlib
 import concurrent.futures
 import threading
@@ -116,12 +115,13 @@ MARINE_ALERT_EVENTS = {
 # Zone geometry cache – resolves NWS forecast-zone / marine-zone polygons
 # from the public zones API and keeps them in memory with a TTL.
 # ---------------------------------------------------------------------------
-_ZONE_GEOM_CACHE = {}          # zone_id -> (shapely_geom | None, expire_ts)
+_ZONE_GEOM_CACHE = {}  # zone_id -> (shapely_geom | None, expire_ts)
 _ZONE_GEOM_LOCK = threading.Lock()
-_ZONE_GEOM_TTL = 6 * 3600     # 6 hours – zone boundaries rarely change
-_ZONE_GEOM_MAX_WORKERS = 20   # concurrent HTTP fetches for a batch
+_ZONE_GEOM_TTL = 6 * 3600  # 6 hours – zone boundaries rarely change
+_ZONE_GEOM_MAX_WORKERS = 20  # concurrent HTTP fetches for a batch
 _NWS_HEADERS = {
-    "User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"}
+    "User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"
+}
 
 
 def _fetch_single_zone_geometry(zone_url):
@@ -163,8 +163,7 @@ def _prefetch_zone_geometries(features):
             except Exception:
                 pass
         if not has_geom:
-            props = feat.get("properties", {}) if isinstance(
-                feat, dict) else {}
+            props = feat.get("properties", {}) if isinstance(feat, dict) else {}
             for url in props.get("affectedZones", []):
                 zid = url.rstrip("/").split("/")[-1]
                 with _ZONE_GEOM_LOCK:
@@ -476,9 +475,7 @@ def _alert_feature_fingerprint(feature):
     props = feature.get("properties", {}) if isinstance(feature, dict) else {}
 
     # Prefer the stable NWS alert ID for dedup (unique per alert product)
-    alert_id = str(
-        feature.get("id", "") or props.get("id", "") or ""
-    ).strip()
+    alert_id = str(feature.get("id", "") or props.get("id", "") or "").strip()
     if alert_id:
         return ("id", alert_id)
 
@@ -618,8 +615,7 @@ def fetch_active_alerts_with_source(state=None, source="nws"):
                             with open(cache_file, "w") as cache_handle:
                                 json.dump(data, cache_handle)
                         except Exception as cache_error:
-                            print(
-                                f"[WARN] Error refreshing alert cache: {cache_error}")
+                            print(f"[WARN] Error refreshing alert cache: {cache_error}")
                 return features, cached_source
         except Exception as e:
             print(f"[WARN] Error reading alert cache: {e}")
@@ -646,8 +642,7 @@ def fetch_active_alerts_with_source(state=None, source="nws"):
             print(f"[WARN] IEM live alert download failed: {e}")
             return [], "IEM"
 
-    headers = {
-        "User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"}
+    headers = {"User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"}
     url = (
         f"https://api.weather.gov/alerts/active?area={state}"
         if state
@@ -725,14 +720,12 @@ def process_alerts(
     for feat in features_list:
         props = feat["properties"]
         event_name = props["event"]
-        is_marine_event = bool(props.get("isMarine")
-                               ) or event_name in marine_events
+        is_marine_event = bool(props.get("isMarine")) or event_name in marine_events
 
         if not _is_alert_active_for_time(props, valid_time):
             continue
 
-        if event_name not in ALERT_COLORS:
-            continue
+        color = ALERT_COLORS.get(event_name, "#6699CC")
         if allowed_events is not None and event_name not in allowed_events:
             continue
 
@@ -933,8 +926,7 @@ def plot_cities(
 ):
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        cities_path = os.path.join(
-            os.path.dirname(script_dir), "data", filename)
+        cities_path = os.path.join(os.path.dirname(script_dir), "data", filename)
 
         if not os.path.exists(cities_path) and filename != "us-cities.json":
             print(
@@ -1044,8 +1036,7 @@ def plot_cities(
             clip_on=True,
         )
         txt.set_path_effects(
-            [PathEffects.withStroke(
-                linewidth=halo_width, foreground=halo_color)]
+            [PathEffects.withStroke(linewidth=halo_width, foreground=halo_color)]
         )
         drawn_bboxes.append((cand_x_min, cand_x_max, cand_y_min, cand_y_max))
 
@@ -1100,8 +1091,7 @@ def get_alerts_prebuilt_state_basemap_spec(view_key, projection_mode):
             else:
                 geometry = _load_prebuilt_state_geometry(region_key)
 
-            west, east, south, north = _get_prebuilt_state_geometry_bounds(
-                geometry)
+            west, east, south, north = _get_prebuilt_state_geometry_bounds(geometry)
             if _expand_prebuilt_state_extent is not None:
                 if region_key == "CONUS":
                     # Match tools/generate_state_basemaps.py CONUS framing.
@@ -1342,8 +1332,7 @@ def draw_alerts_prebuilt_state_basemap(
         label="alerts_prebuilt_state_basemap",
         zorder=0,
     )
-    bg_ax.imshow(plt.imread(basemap_path),
-                 aspect="auto", interpolation="nearest")
+    bg_ax.imshow(plt.imread(basemap_path), aspect="auto", interpolation="nearest")
     bg_ax.axis("off")
     bg_ax.set_zorder(0)
 
@@ -1382,8 +1371,7 @@ def draw_alerts_state_overlays(
                     conus_states = [
                         st for st in us_states.values() if st and not st.is_empty
                     ]
-                    selected_geom = unary_union(
-                        conus_states) if conus_states else None
+                    selected_geom = unary_union(conus_states) if conus_states else None
                 else:
                     selected_geom = us_states.get(code)
 
@@ -1425,8 +1413,7 @@ def ensure_alerts_basemap_cache(
     if cache_parent_dir:
         os.makedirs(cache_parent_dir, exist_ok=True)
 
-    fig = plt.figure(figsize=(fig_width, fig_height), dpi=150,
-                     facecolor=fig_bg_color)
+    fig = plt.figure(figsize=(fig_width, fig_height), dpi=150, facecolor=fig_bg_color)
     use_prebuilt_state_basemap = bool(
         state_basemap_source_path and os.path.exists(state_basemap_source_path)
     )
@@ -1450,22 +1437,19 @@ def ensure_alerts_basemap_cache(
         ax.outline_patch.set_visible(False)
     except Exception:
         pass
-    ax.set_extent([ext_lon0, ext_lon1, ext_lat0, ext_lat1],
-                  crs=ccrs.PlateCarree())
+    ax.set_extent([ext_lon0, ext_lon1, ext_lat0, ext_lat1], crs=ccrs.PlateCarree())
     if use_prebuilt_state_basemap:
         draw_alerts_static_overlays(ax, **static_layer_kwargs)
     else:
         draw_alerts_static_layers(ax, **static_layer_kwargs)
     ax.patch.set_alpha(0)
-    plt.savefig(cache_path, dpi=150,
-                facecolor=fig.get_facecolor(), edgecolor='none')
+    plt.savefig(cache_path, dpi=150, facecolor=fig.get_facecolor(), edgecolor="none")
     plt.close(fig)
 
 
 def apply_alerts_cached_basemap(fig, ax, cache_path):
     _bg_ax = fig.add_axes([0, 0, 1, 1], label="alerts_basemap_bg", zorder=0)
-    _bg_ax.imshow(plt.imread(cache_path), aspect="auto",
-                  interpolation="nearest")
+    _bg_ax.imshow(plt.imread(cache_path), aspect="auto", interpolation="nearest")
     _bg_ax.axis("off")
     _bg_ax.set_zorder(0)
     ax.set_zorder(1)
@@ -1528,8 +1512,7 @@ def generate_alerts_map(
     county_width = float(style_config.get("county_width", 0.5))
     county_color = style_config.get("county_color", "#d3d3d3")
     density_scale = city_density_input / 5.0
-    show_places = bool(
-        show_places or style_config.get("show_places", False))
+    show_places = bool(show_places or style_config.get("show_places", False))
 
     # City text styling
     city_text_color = style_config.get("city_text_color", "#d8e700")
@@ -1562,10 +1545,12 @@ def generate_alerts_map(
     # Base map styling from config (replacing module-level constants).
     land_color = style_config.get("land_color", ALERTS_BASEMAP_LAND_COLOR)
     ocean_color = style_config.get("ocean_color", ALERTS_BASEMAP_OCEAN_COLOR)
-    coastline_width = float(style_config.get(
-        "coastline_width", ALERTS_BASEMAP_COASTLINE_WIDTH))
+    coastline_width = float(
+        style_config.get("coastline_width", ALERTS_BASEMAP_COASTLINE_WIDTH)
+    )
     coastline_color = style_config.get(
-        "coastline_color", ALERTS_BASEMAP_COASTLINE_COLOR)
+        "coastline_color", ALERTS_BASEMAP_COASTLINE_COLOR
+    )
     font_family = style_config.get("font_family", "Montserrat")
 
     # Country borders
@@ -1629,8 +1614,7 @@ def generate_alerts_map(
     )
     os.makedirs(image_dir, exist_ok=True)
 
-    full_state = STATES_FULL.get(
-        state_code, state_code) if state_code else "National"
+    full_state = STATES_FULL.get(state_code, state_code) if state_code else "National"
 
     exclude_list = []
     is_national_view = state_code is None and wfo_code is None and region != "CONUS"
@@ -1696,8 +1680,7 @@ def generate_alerts_map(
         view_key,
     )
     prebuilt_state_basemap = (
-        get_alerts_prebuilt_state_basemap_spec(
-            view_key, effective_projection_mode)
+        get_alerts_prebuilt_state_basemap_spec(view_key, effective_projection_mode)
         if use_cached_basemap
         else None
     )
@@ -1725,14 +1708,10 @@ def generate_alerts_map(
     elif state_code and state_code in STATE_BOUNDS:
         ext_lon0, ext_lon1, ext_lat0, ext_lat1 = STATE_BOUNDS[state_code]
     elif clean_alerts:
-        ext_lon0 = min(item["geometry"].bounds[0]
-                       for item in clean_alerts) - 0.5
-        ext_lon1 = max(item["geometry"].bounds[2]
-                       for item in clean_alerts) + 0.5
-        ext_lat0 = min(item["geometry"].bounds[1]
-                       for item in clean_alerts) - 0.5
-        ext_lat1 = max(item["geometry"].bounds[3]
-                       for item in clean_alerts) + 0.5
+        ext_lon0 = min(item["geometry"].bounds[0] for item in clean_alerts) - 0.5
+        ext_lon1 = max(item["geometry"].bounds[2] for item in clean_alerts) + 0.5
+        ext_lat0 = min(item["geometry"].bounds[1] for item in clean_alerts) - 0.5
+        ext_lat1 = max(item["geometry"].bounds[3] for item in clean_alerts) + 0.5
     else:
         ext_lon0, ext_lon1, ext_lat0, ext_lat1 = STATE_BOUNDS.get(
             "CONUS", [-125, -70, 25, 50]
@@ -1762,11 +1741,9 @@ def generate_alerts_map(
 
     # Build projection (same approach as surface_utils: always state-centered Lambert)
     if effective_projection_mode == "original":
-        proj = ccrs.LambertConformal(
-            central_longitude=-96, central_latitude=35)
+        proj = ccrs.LambertConformal(central_longitude=-96, central_latitude=35)
         if state_code == "NC":
-            proj = ccrs.LambertConformal(
-                central_longitude=-79.0, central_latitude=35.5)
+            proj = ccrs.LambertConformal(central_longitude=-79.0, central_latitude=35.5)
     elif effective_projection_mode == "platecarree":
         proj = ccrs.PlateCarree()
     else:
@@ -1784,18 +1761,22 @@ def generate_alerts_map(
     _N = 50
     _sample_lon0 = ext_lon0
     _sample_lon1 = ext_lon1 + 360.0 if ext_lon0 > ext_lon1 else ext_lon1
-    edge_lons = np.concatenate([
-        np.linspace(_sample_lon0, _sample_lon1, _N),  # bottom edge
-        np.full(_N, _sample_lon1),                     # right edge
-        np.linspace(_sample_lon1, _sample_lon0, _N),  # top edge
-        np.full(_N, _sample_lon0),                     # left edge
-    ])
-    edge_lats = np.concatenate([
-        np.full(_N, ext_lat0),                 # bottom edge
-        np.linspace(ext_lat0, ext_lat1, _N),  # right edge
-        np.full(_N, ext_lat1),                 # top edge
-        np.linspace(ext_lat1, ext_lat0, _N),  # left edge
-    ])
+    edge_lons = np.concatenate(
+        [
+            np.linspace(_sample_lon0, _sample_lon1, _N),  # bottom edge
+            np.full(_N, _sample_lon1),  # right edge
+            np.linspace(_sample_lon1, _sample_lon0, _N),  # top edge
+            np.full(_N, _sample_lon0),  # left edge
+        ]
+    )
+    edge_lats = np.concatenate(
+        [
+            np.full(_N, ext_lat0),  # bottom edge
+            np.linspace(ext_lat0, ext_lat1, _N),  # right edge
+            np.full(_N, ext_lat1),  # top edge
+            np.linspace(ext_lat1, ext_lat0, _N),  # left edge
+        ]
+    )
     proj_pts = proj.transform_points(ccrs.PlateCarree(), edge_lons, edge_lats)
     proj_w = proj_pts[:, 0].max() - proj_pts[:, 0].min()
     proj_h = proj_pts[:, 1].max() - proj_pts[:, 1].min()
@@ -1821,8 +1802,7 @@ def generate_alerts_map(
     # Use legend panel background as the figure fill so side padding strips
     # and the bottom legend area share the same colour.
     fig_bg_color = style_config.get("legend_panel_bg_color", "white")
-    fig = plt.figure(figsize=(fig_width, fig_height), dpi=150,
-                     facecolor=fig_bg_color)
+    fig = plt.figure(figsize=(fig_width, fig_height), dpi=150, facecolor=fig_bg_color)
 
     ax = fig.add_axes(
         [left_margin, bottom_margin, ax_width, ax_height], projection=proj
@@ -1951,8 +1931,9 @@ def generate_alerts_map(
     else:
         _set_lon0 = ext_lon0
         _set_lon1 = ext_lon1 + 360.0 if ext_lon0 > ext_lon1 else ext_lon1
-        ax.set_extent([_set_lon0, _set_lon1, ext_lat0, ext_lat1],
-                      crs=ccrs.PlateCarree())
+        ax.set_extent(
+            [_set_lon0, _set_lon1, ext_lat0, ext_lat1], crs=ccrs.PlateCarree()
+        )
 
     if show_places:
         current_extent = ax.get_extent(crs=ccrs.PlateCarree())
@@ -1984,8 +1965,13 @@ def generate_alerts_map(
             max(0.065, bottom_margin * 0.58),
             "NO ACTIVE ALERTS AT THIS TIME",
             ha="center",
-            fontsize=max(12, int(
-                hud_left_size * float(style_config.get("no_alerts_text_size_mult", 1.25)))),
+            fontsize=max(
+                12,
+                int(
+                    hud_left_size
+                    * float(style_config.get("no_alerts_text_size_mult", 1.25))
+                ),
+            ),
             fontname=font_family,
             fontstyle=style_config.get("hud_font_style", "italic"),
             fontweight=style_config.get("hud_font_weight", "black"),
@@ -2010,8 +1996,11 @@ def generate_alerts_map(
             fontsize=int(legend_size),
             title="Active Alerts",
             title_fontsize=int(legend_size) + 2,
-            prop={"family": font_family, "weight": style_config.get(
-                "legend_font_weight", "bold"), "size": int(legend_size)},
+            prop={
+                "family": font_family,
+                "weight": style_config.get("legend_font_weight", "bold"),
+                "size": int(legend_size),
+            },
         )
         leg.get_title().set(
             text=leg.get_title().get_text().upper(),
@@ -2022,8 +2011,7 @@ def generate_alerts_map(
         )
         leg.set_zorder(zo["legend"])
 
-    dt_local = datetime.now(timezone.utc).astimezone(
-        tz.gettz("America/New_York"))
+    dt_local = datetime.now(timezone.utc).astimezone(tz.gettz("America/New_York"))
     use_target_area = valid_custom_extent is not None
     region_label = (
         "Target Area"
@@ -2101,8 +2089,13 @@ def generate_alerts_map(
     date_str = output_time_utc.strftime("%Y%m%d_%H%M")
     filename = f"{date_str}_alerts.png"
     save_path = os.path.join(image_dir, filename)
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.02,
-                facecolor=fig.get_facecolor(), edgecolor='none')
+    plt.savefig(
+        save_path,
+        bbox_inches="tight",
+        pad_inches=0.02,
+        facecolor=fig.get_facecolor(),
+        edgecolor="none",
+    )
     plt.close(fig)
     perf_mark("save_png")
 

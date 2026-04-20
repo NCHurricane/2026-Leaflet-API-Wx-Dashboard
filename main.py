@@ -4,7 +4,7 @@ import os
 import time as _time
 import uvicorn
 import glob
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -815,6 +815,52 @@ def _safe_float(row, col: str):
         return None
 
 
+def _enrich_alert_features_geometry(features: list[dict]) -> None:
+    """Fill missing alert geometries using local SAME county fallback."""
+    try:
+        from shapely.geometry import mapping, shape
+        from alerts.alerts_utils import CensusCounties
+
+        counties_loaded = False
+
+        for feat in features:
+            if not isinstance(feat, dict):
+                continue
+
+            raw_geom = feat.get("geometry")
+            has_valid_geom = False
+            if raw_geom:
+                try:
+                    g = shape(raw_geom)
+                    has_valid_geom = g is not None and not g.is_empty
+                except Exception:
+                    has_valid_geom = False
+            if has_valid_geom:
+                continue
+
+            props = feat.get("properties") or {}
+            final_geom = None
+
+            same_codes = (props.get("geocode") or {}).get("SAME") or []
+            if same_codes:
+                if not counties_loaded:
+                    CensusCounties.load()
+                    counties_loaded = True
+                fips_codes = [
+                    c[1:] for c in same_codes if isinstance(c, str) and len(c) == 6
+                ]
+                if fips_codes:
+                    final_geom = CensusCounties.get_geometry_for_fips(fips_codes)
+
+            if final_geom is not None and not final_geom.is_empty:
+                try:
+                    feat["geometry"] = mapping(final_geom)
+                except Exception:
+                    pass
+    except Exception as exc:
+        print(f"[WARN] Alert geometry enrichment skipped: {exc}")
+
+
 # ── Phase 1: Data Endpoints (served from worker cache) ───────────────────────
 
 
@@ -854,6 +900,8 @@ def get_data_alerts(state: Optional[str] = None):
             return state_upper in str(props.get("areaDesc") or "")
 
         features = [f for f in features if _matches(f)]
+
+    _enrich_alert_features_geometry(features)
 
     return {
         "type": "FeatureCollection",
@@ -1200,8 +1248,6 @@ _ARCHIVE_SESSION_TTL_HOURS = 2
 _ARCHIVE_MAX_SESSIONS = 20
 _archive_sessions: dict = {}  # session_id → {expires_utc, status, frames, ...}
 _archive_lock = threading.Lock()
-_export_results: dict = {}
-_export_lock = threading.Lock()
 
 
 def _archive_session_key(product_type: str, params: dict) -> str:
@@ -1289,7 +1335,7 @@ def archive_mrms(
     product: str = "PrecipRate",
     date_from: str = "",
     date_to: str = "",
-    max_frames: int = 12,
+    max_frames: int = 24,
     south: float = 21.0,
     west: float = -130.0,
     north: float = 52.0,
@@ -1468,6 +1514,43 @@ def archive_result(session_id: str):
     }
 
 
+# ─── Archive JSON disk cache ────────────────────────────────────────────────
+# Keyed by a hash of the query parameters.  Historical data never changes, so
+# cached files live indefinitely and eliminate repeated IEM / SPC / AWC hits.
+
+_ARCHIVE_JSON_DIR = os.path.join("cache", "archive", "json")
+os.makedirs(_ARCHIVE_JSON_DIR, exist_ok=True)
+
+
+def _archive_cache_path(prefix: str, **params) -> str:
+    """Return a deterministic file path for an archive query."""
+    import hashlib
+
+    key = json.dumps(params, sort_keys=True, default=str)
+    digest = hashlib.sha256(key.encode()).hexdigest()[:16]
+    return os.path.join(_ARCHIVE_JSON_DIR, f"{prefix}_{digest}.json")
+
+
+def _read_archive_cache(path: str) -> dict | None:
+    """Return cached JSON dict or None."""
+    if os.path.isfile(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return None
+
+
+def _write_archive_cache(path: str, data: dict) -> None:
+    """Persist JSON dict to disk."""
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, separators=(",", ":"))
+    except Exception:
+        pass
+
+
 # ─── 4b: Alerts Archive (IEM WatchWarn) ──────────────────────────────────────
 
 
@@ -1494,13 +1577,23 @@ def archive_alerts(
         raise HTTPException(
             status_code=400, detail="Max alerts archive span is 30 days."
         )
+    state_upper = state.upper() if state else ""
+    cache_file = _archive_cache_path(
+        "alerts",
+        date_from=dt_from.isoformat(),
+        date_to=dt_to.isoformat(),
+        state=state_upper,
+    )
+    cached = _read_archive_cache(cache_file)
+    if cached is not None:
+        _enrich_alert_features_geometry(cached.get("features", []))
+        return cached
     try:
-        features = _fetch_iem_alerts_range(
-            dt_from, dt_to, state.upper() if state else None
-        )
+        features = _fetch_iem_alerts_range(dt_from, dt_to, state_upper or None)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"IEM fetch error: {exc}")
-    return {
+    _enrich_alert_features_geometry(features)
+    result = {
         "type": "FeatureCollection",
         "features": features,
         "count": len(features),
@@ -1508,6 +1601,8 @@ def archive_alerts(
         "date_to": dt_to.isoformat(),
         "_source": "iem_watchwarn",
     }
+    _write_archive_cache(cache_file, result)
+    return result
 
 
 def _fetch_iem_alerts_range(
@@ -1520,15 +1615,27 @@ def _fetch_iem_alerts_range(
     import requests as _requests
     from alerts.alerts_iem_utils import IEM_WATCHWARN_URL, _event_name_from_attrs
 
+    # IEM expects UTC — convert from whatever tz the caller supplied
+    utc_from = dt_from.astimezone(timezone.utc)
+    utc_to = dt_to.astimezone(timezone.utc)
+
+    # IEM watchwarn.py filters by issuance time, not active-during window.
+    # Extend start 72 h earlier to capture watches/warnings issued before the
+    # window but still active during it (e.g. tropical watches issued 48 h
+    # ahead of landfall).  The JS frame-slicer filters each frame by
+    # onset/expires, so extra pre-window alerts won't display.
+    LOOKBACK = timedelta(hours=72)
+    query_from = utc_from - LOOKBACK
+
     headers = {"User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"}
 
     def _build_url(with_state: bool) -> str:
         url = (
             f"{IEM_WATCHWARN_URL}"
-            f"?year1={dt_from.year}&month1={dt_from.month}&day1={dt_from.day}"
-            f"&hour1={dt_from.hour}&minute1={dt_from.minute}"
-            f"&year2={dt_to.year}&month2={dt_to.month}&day2={dt_to.day}"
-            f"&hour2={dt_to.hour}&minute2={dt_to.minute}"
+            f"?year1={query_from.year}&month1={query_from.month}&day1={query_from.day}"
+            f"&hour1={query_from.hour}&minute1={query_from.minute}"
+            f"&year2={utc_to.year}&month2={utc_to.month}&day2={utc_to.day}"
+            f"&hour2={utc_to.hour}&minute2={utc_to.minute}"
             f"&simple=yes&fmt=shp"
         )
         if with_state and state:
@@ -1569,14 +1676,33 @@ def _fetch_iem_alerts_range(
                 continue
             attrs = rec.attributes
             event = _event_name_from_attrs(attrs) or str(attrs.get("PHENOM", ""))
+
+            # Convert IEM YYYYMMDDHHMM timestamps to ISO-8601
+            def _iem_to_iso(raw: str) -> str:
+                s = str(raw or "").strip()
+                if len(s) >= 12:
+                    try:
+                        dt = datetime(
+                            int(s[0:4]),
+                            int(s[4:6]),
+                            int(s[6:8]),
+                            int(s[8:10]),
+                            int(s[10:12]),
+                            tzinfo=timezone.utc,
+                        )
+                        return dt.isoformat()
+                    except Exception:
+                        pass
+                return s
+
             features.append(
                 {
                     "type": "Feature",
                     "geometry": geom_json,
                     "properties": {
                         "event": event,
-                        "onset": str(attrs.get("ISSUED", "")),
-                        "expires": str(attrs.get("EXPIRED", "")),
+                        "onset": _iem_to_iso(attrs.get("ISSUED", "")),
+                        "expires": _iem_to_iso(attrs.get("EXPIRED", "")),
                         "areaDesc": str(attrs.get("AREA_DESC", "")),
                         "_source": "iem_archive",
                     },
@@ -1607,16 +1733,17 @@ def archive_surface(
     product: str = "temperature",
     date_from: str = "",
     date_to: str = "",
-    max_frames: int = 12,
+    max_frames: int = 24,
     source: str = "iem",
+    network: str = "ASOS",
 ):
     """Fetch historical surface frames from IEM-compatible ASOS data for scrubber playback."""
     if not date_from or not date_to:
         raise HTTPException(
             status_code=400, detail="date_from and date_to are required."
         )
-    if not 1 <= int(max_frames) <= 48:
-        raise HTTPException(status_code=400, detail="max_frames must be 1-48.")
+    if not 1 <= int(max_frames) <= 120:
+        raise HTTPException(status_code=400, detail="max_frames must be 1-120.")
 
     try:
         dt_from = _parse_archive_dt(date_from)
@@ -1640,22 +1767,54 @@ def archive_surface(
         region_upper = "NC"
 
     source_key = str(source or "iem").strip().lower()
-    if source_key == "auto":
-        source_key = "iem"
+    source_key = "iem"
+
+    network_key = str(network or "ASOS").strip().upper()
+    if network_key != "ASOS":
+        raise HTTPException(
+            status_code=400,
+            detail="Only ASOS network is supported for surface archive.",
+        )
 
     total = int(max_frames)
-    if total == 1:
+    # Surface uses hourly frame times (ASOS reports at top of hour)
+    frame_times = []
+    cursor = dt_from.replace(minute=0, second=0, microsecond=0)
+    if cursor < dt_from:
+        cursor += timedelta(hours=1)
+    while cursor <= dt_to and len(frame_times) < total:
+        frame_times.append(cursor)
+        cursor += timedelta(hours=1)
+    if not frame_times:
         frame_times = [dt_from]
-    else:
-        step = (dt_to - dt_from) / (total - 1)
-        frame_times = [dt_from + (step * i) for i in range(total)]
+
+    cache_file = _archive_cache_path(
+        "surface",
+        region=region_upper,
+        product=product_key,
+        date_from=dt_from.isoformat(),
+        date_to=dt_to.isoformat(),
+        max_frames=total,
+    )
+    cached = _read_archive_cache(cache_file)
+    if cached is not None:
+        return cached
+
+    try:
+        frame_dfs = surface_utils.fetch_metar_data_archive_frames(
+            region_upper, frame_times, source=source_key
+        )
+    except Exception:
+        frame_dfs = [None] * len(frame_times)
 
     frames = []
-    for ts in frame_times:
+    for idx, ts in enumerate(frame_times):
         try:
-            df = surface_utils.fetch_metar_data_at_time(
-                region_upper, ts, source=source_key
-            )
+            df = frame_dfs[idx] if idx < len(frame_dfs) else None
+            if df is None:
+                df = surface_utils.fetch_metar_data_at_time(
+                    region_upper, ts, source=source_key
+                )
             stations = _build_surface_stations(df, product_key)
         except Exception:
             stations = []
@@ -1669,20 +1828,21 @@ def archive_surface(
             }
         )
 
-    return {
+    result = {
         "status": "success",
         "type": "surface_archive",
         "region": region_upper,
         "product": product_key,
         "product_label": _SURFACE_ARCHIVE_PRODUCT_MAP.get(product_key, product_key),
-        "source": "iem"
-        if source_key in {"iem", "auto"}
-        else f"{source_key}_fallback_to_iem",
+        "source": "awc",
+        "network": "ASOS",
         "date_from": dt_from.isoformat(),
         "date_to": dt_to.isoformat(),
         "frame_count": len(frames),
         "frames": frames,
     }
+    _write_archive_cache(cache_file, result)
+    return result
 
 
 # ─── 4c: SPC Archive (single-date snapshot) ───────────────────────────────────
@@ -1718,6 +1878,11 @@ def archive_spc(
         if hazard not in day3_hazards:
             hazard = "cat"
 
+    cache_file = _archive_cache_path("spc", date=date, day=day, hazard=hazard)
+    cached = _read_archive_cache(cache_file)
+    if cached is not None:
+        return cached
+
     year = target_dt.year
     date_str = target_dt.strftime("%Y%m%d")
     spc_base = "https://www.spc.noaa.gov"
@@ -1743,7 +1908,7 @@ def archive_spc(
             break
 
     if geojson is None:
-        return {
+        result = {
             "type": "FeatureCollection",
             "features": [],
             "count": 0,
@@ -1752,9 +1917,11 @@ def archive_spc(
             "hazard": hazard,
             "_note": f"No SPC archive found for {date} day{day}.",
         }
+        _write_archive_cache(cache_file, result)
+        return result
 
     features = geojson.get("features", []) if isinstance(geojson, dict) else []
-    return {
+    result = {
         "type": "FeatureCollection",
         "features": features,
         "count": len(features),
@@ -1763,338 +1930,7 @@ def archive_spc(
         "hazard": hazard,
         "_source": "spc_archive",
     }
-
-
-# ─── Phase 5: Cartopy HD Export (MRMS archive-first) ───────────────────────
-
-
-def _archive_mrms_frame_path(session_id: str, frame_index: int) -> tuple[str, dict]:
-    """Resolve a cached MRMS archive frame image path from session+index."""
-    with _archive_lock:
-        session = _archive_sessions.get(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Archive session not found.")
-    if session.get("status") != "success":
-        raise HTTPException(status_code=409, detail="Archive session is not ready.")
-    if session.get("product_type") != "mrms":
-        raise HTTPException(
-            status_code=400, detail="Only MRMS archive export is supported in Phase 5."
-        )
-
-    frames = session.get("frames") or []
-    if frame_index < 0 or frame_index >= len(frames):
-        raise HTTPException(status_code=400, detail="frame_index is out of range.")
-
-    frame = frames[frame_index]
-    image_url = str(frame.get("image_url") or "")
-    if not image_url.startswith("/cache/"):
-        raise HTTPException(status_code=500, detail="Invalid frame image path.")
-
-    rel = image_url[len("/cache/") :]
-    local_path = os.path.join(_CACHE_ROOT, rel.replace("/", os.sep))
-    if not os.path.exists(local_path):
-        raise HTTPException(status_code=404, detail="Frame image is missing on disk.")
-    return local_path, frame
-
-
-def _compose_hd_export_frame(
-    src_path: str, title: str, subtitle: str, out_path: str
-) -> str:
-    """Compose a branded 1920x1080 frame from a source PNG."""
-    from PIL import Image, ImageOps, ImageDraw, ImageFont
-
-    target_w, target_h = 1920, 1080
-    canvas = Image.new("RGBA", (target_w, target_h), (8, 14, 28, 255))
-    draw = ImageDraw.Draw(canvas)
-
-    # Subtle vertical gradient background.
-    for y in range(target_h):
-        t = y / float(max(1, target_h - 1))
-        r = int(8 + 8 * t)
-        g = int(14 + 12 * t)
-        b = int(28 + 20 * t)
-        draw.line([(0, y), (target_w, y)], fill=(r, g, b, 255))
-
-    # Frame viewport region.
-    frame_x1, frame_y1 = 24, 74
-    frame_x2, frame_y2 = target_w - 24, target_h - 88
-    frame_w = frame_x2 - frame_x1
-    frame_h = frame_y2 - frame_y1
-
-    draw.rectangle(
-        [(frame_x1 - 2, frame_y1 - 2), (frame_x2 + 2, frame_y2 + 2)],
-        fill=(36, 60, 96, 220),
-    )
-    draw.rectangle([(frame_x1, frame_y1), (frame_x2, frame_y2)], fill=(6, 10, 18, 255))
-
-    src = Image.open(src_path).convert("RGBA")
-    fitted = ImageOps.contain(
-        src, (frame_w - 10, frame_h - 10), Image.Resampling.LANCZOS
-    )
-    px = frame_x1 + (frame_w - fitted.width) // 2
-    py = frame_y1 + (frame_h - fitted.height) // 2
-    canvas.alpha_composite(fitted, (px, py))
-
-    try:
-        font_title = ImageFont.truetype("arial.ttf", 31)
-        font_sub = ImageFont.truetype("arial.ttf", 20)
-        font_footer = ImageFont.truetype("arial.ttf", 18)
-    except Exception:
-        font_title = ImageFont.load_default()
-        font_sub = ImageFont.load_default()
-        font_footer = ImageFont.load_default()
-
-    # Attempt to normalize/pretty-print timestamp text.
-    pretty_subtitle = subtitle
-    try:
-        if subtitle:
-            parsed = datetime.fromisoformat(subtitle.replace("Z", "+00:00"))
-            pretty_subtitle = parsed.astimezone().strftime("%Y-%m-%d %H:%M %Z")
-    except Exception:
-        pass
-
-    # Top chrome.
-    draw.rectangle([(0, 0), (target_w, 56)], fill=(12, 22, 40, 235))
-    draw.rectangle([(0, 56), (target_w, 58)], fill=(64, 126, 219, 255))
-    draw.text((18, 12), title, fill=(240, 244, 255, 255), font=font_title)
-
-    sub_bbox = draw.textbbox((0, 0), pretty_subtitle, font=font_sub)
-    sub_w = max(0, sub_bbox[2] - sub_bbox[0])
-    draw.text(
-        (target_w - sub_w - 20, 18),
-        pretty_subtitle,
-        fill=(173, 196, 230, 255),
-        font=font_sub,
-    )
-
-    # Bottom chrome.
-    draw.rectangle([(0, target_h - 62), (target_w, target_h)], fill=(12, 22, 40, 235))
-    footer_left = "NCHurricane Weather Dashboard"
-    footer_right = "MRMS Archive HD Export"
-    draw.text(
-        (18, target_h - 43), footer_left, fill=(204, 218, 240, 255), font=font_footer
-    )
-    rb = draw.textbbox((0, 0), footer_right, font=font_footer)
-    rw = max(0, rb[2] - rb[0])
-    draw.text(
-        (target_w - rw - 20, target_h - 43),
-        footer_right,
-        fill=(151, 173, 210, 255),
-        font=font_footer,
-    )
-
-    # Optional logo (best effort).
-    try:
-        logo_path = resolve_logo_path(LOGO_PATH)
-        if logo_path and os.path.exists(logo_path):
-            logo = Image.open(logo_path).convert("RGBA")
-            logo = ImageOps.contain(logo, (150, 40), Image.Resampling.LANCZOS)
-            canvas.alpha_composite(logo, (target_w - logo.width - 16, 8))
-    except Exception:
-        pass
-
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    canvas.save(out_path, format="PNG")
-    return out_path
-
-
-@app.post("/api/export/frame")
-def export_frame(payload: dict = Body(default={})):
-    """
-    Export a single archive MRMS frame to a branded HD PNG.
-    Body: {session_id: str, frame_index: int}
-    """
-    session_id = str(payload.get("session_id") or "").strip()
-    frame_index = int(payload.get("frame_index", 0))
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id is required.")
-
-    src_path, frame = _archive_mrms_frame_path(session_id, frame_index)
-    ts = str(frame.get("timestamp") or "")
-
-    export_dir = os.path.join(_ARCHIVE_ROOT, session_id, "exports")
-    out_name = f"export_hd_frame_{frame_index:04d}.png"
-    out_path = os.path.join(export_dir, out_name)
-    _compose_hd_export_frame(
-        src_path,
-        title="NCHurricane Weather Dashboard - MRMS Archive",
-        subtitle=ts,
-        out_path=out_path,
-    )
-
-    rel = os.path.relpath(out_path, _CACHE_ROOT).replace("\\", "/")
-    return {
-        "status": "success",
-        "session_id": session_id,
-        "frame_index": frame_index,
-        "image_url": f"/cache/{rel}",
-        "timestamp": ts,
-    }
-
-
-@app.post("/api/export/animation")
-def export_animation(payload: dict = Body(default={})):
-    """
-    Start exporting an archive MRMS animation (HD MP4) in background.
-    Body: {session_id, start_index?, end_index?, fps?, request_id?}
-    """
-    session_id = str(payload.get("session_id") or "").strip()
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id is required.")
-
-    with _archive_lock:
-        session = _archive_sessions.get(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Archive session not found.")
-    if session.get("status") != "success":
-        raise HTTPException(status_code=409, detail="Archive session is not ready.")
-    if session.get("product_type") != "mrms":
-        raise HTTPException(
-            status_code=400, detail="Only MRMS archive export is supported in Phase 5."
-        )
-
-    frames = session.get("frames") or []
-    if not frames:
-        raise HTTPException(
-            status_code=400, detail="No frames available in this session."
-        )
-
-    start_index = int(payload.get("start_index", 0))
-    end_index = int(payload.get("end_index", len(frames) - 1))
-    fps = int(payload.get("fps", 4))
-    if fps < 1 or fps > 24:
-        raise HTTPException(status_code=400, detail="fps must be 1-24.")
-    if start_index < 0 or end_index >= len(frames) or end_index < start_index:
-        raise HTTPException(status_code=400, detail="Invalid frame range.")
-
-    request_id = str(payload.get("request_id") or "").strip()
-    if not request_id:
-        request_id = f"export_anim_{session_id}_{start_index}_{end_index}_{fps}"
-
-    # If finished already, return cached result.
-    with _export_lock:
-        existing = _export_results.get(request_id)
-    if existing and existing.get("status") == "success":
-        return existing
-
-    active_tasks[request_id] = {
-        "percent": 0,
-        "stage": "queued",
-        "message": "Export request queued",
-    }
-    with _export_lock:
-        _export_results[request_id] = {
-            "status": "processing",
-            "request_id": request_id,
-            "session_id": session_id,
-            "video_url": None,
-            "error": None,
-        }
-
-    def _worker() -> None:
-        try:
-            import numpy as np
-            from PIL import Image
-            from video_utils import save_animation
-
-            export_dir = os.path.join(_ARCHIVE_ROOT, session_id, "exports")
-            os.makedirs(export_dir, exist_ok=True)
-            out_path = os.path.join(
-                export_dir,
-                f"export_hd_animation_{start_index:04d}_{end_index:04d}_{fps}fps.mp4",
-            )
-
-            rgb_frames = []
-            selected = frames[start_index : end_index + 1]
-            total = len(selected)
-
-            for i, frame in enumerate(selected):
-                pct = 5 + int(80 * (i / max(1, total)))
-                active_tasks[request_id] = {
-                    "percent": pct,
-                    "stage": "compositing",
-                    "message": f"Compositing frame {i + 1}/{total}",
-                }
-                src_url = str(frame.get("image_url") or "")
-                if not src_url.startswith("/cache/"):
-                    continue
-                src_path = os.path.join(
-                    _CACHE_ROOT, src_url[len("/cache/") :].replace("/", os.sep)
-                )
-                if not os.path.exists(src_path):
-                    continue
-
-                tmp_png = os.path.join(export_dir, f"__tmp_hd_{i:04d}.png")
-                _compose_hd_export_frame(
-                    src_path,
-                    title="NCHurricane Weather Dashboard - MRMS Archive",
-                    subtitle=str(frame.get("timestamp") or ""),
-                    out_path=tmp_png,
-                )
-                arr = np.array(Image.open(tmp_png).convert("RGB"))
-                rgb_frames.append(arr)
-                try:
-                    os.remove(tmp_png)
-                except Exception:
-                    pass
-
-            if not rgb_frames:
-                raise RuntimeError("No frames were composited for export.")
-
-            active_tasks[request_id] = {
-                "percent": 90,
-                "stage": "encoding",
-                "message": "Encoding MP4",
-            }
-            save_animation(out_path, rgb_frames, fps=fps)
-
-            rel = os.path.relpath(out_path, _CACHE_ROOT).replace("\\", "/")
-            result = {
-                "status": "success",
-                "request_id": request_id,
-                "session_id": session_id,
-                "video_url": f"/cache/{rel}",
-                "frame_count": len(rgb_frames),
-                "fps": fps,
-                "error": None,
-            }
-            with _export_lock:
-                _export_results[request_id] = result
-            active_tasks[request_id] = {
-                "percent": 100,
-                "stage": "success",
-                "message": f"Export finished ({len(rgb_frames)} frames)",
-            }
-        except Exception as exc:
-            with _export_lock:
-                _export_results[request_id] = {
-                    "status": "error",
-                    "request_id": request_id,
-                    "session_id": session_id,
-                    "video_url": None,
-                    "error": str(exc),
-                }
-            active_tasks[request_id] = {
-                "percent": 100,
-                "stage": "error",
-                "message": str(exc),
-            }
-
-    threading.Thread(target=_worker, daemon=True).start()
-    return {
-        "status": "processing",
-        "request_id": request_id,
-        "session_id": session_id,
-    }
-
-
-@app.get("/api/export/result")
-def export_result(request_id: str):
-    """Fetch export result status for animation jobs."""
-    with _export_lock:
-        result = _export_results.get(request_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Export request not found.")
+    _write_archive_cache(cache_file, result)
     return result
 
 
@@ -2747,76 +2583,6 @@ def get_radar_archive_endpoint(
         view_mode=view_mode,
     )
     return attach_mode_and_source(response, "archive")
-
-
-@app.get("/api/radar/archive/export-animation")
-def export_radar_archive_animation(
-    layers_path: str,
-    fps: int = 4,
-):
-    if radar_archive_utils is None:
-        return {
-            "status": "error",
-            "message": "Radar archive module is not available.",
-            "data_source": "ARCHIVE",
-        }
-
-    requested = str(layers_path or "").strip().replace("\\", "/")
-    if not requested:
-        return {
-            "status": "error",
-            "message": "layers_path is required.",
-            "data_source": "ARCHIVE",
-        }
-    if requested.startswith("/") or ".." in requested:
-        return {
-            "status": "error",
-            "message": "Invalid layers_path.",
-            "data_source": "ARCHIVE",
-        }
-
-    radar_root = os.path.normpath(DIRS["radar"])
-    layer_dir = os.path.normpath(os.path.join(radar_root, requested))
-    if not (layer_dir.startswith(radar_root) and os.path.isdir(layer_dir)):
-        return {
-            "status": "error",
-            "message": "Layer directory not found.",
-            "data_source": "ARCHIVE",
-        }
-
-    if "/layers/" not in layer_dir.replace("\\", "/"):
-        return {
-            "status": "error",
-            "message": "layers_path must point to a layered archive directory.",
-            "data_source": "ARCHIVE",
-        }
-
-    if hasattr(radar_archive_utils, "touch_layer_session"):
-        try:
-            radar_archive_utils.touch_layer_session(layer_dir)
-        except Exception:
-            pass
-
-    movie_path, frame_count = radar_archive_utils.export_layered_animation(
-        layer_dir=layer_dir,
-        fps=max(1, int(fps or 4)),
-    )
-    if not movie_path:
-        return {
-            "status": "error",
-            "message": "Unable to export layered animation.",
-            "data_source": "ARCHIVE",
-        }
-
-    rel_path = os.path.relpath(movie_path, DIRS["radar"]).replace("\\", "/")
-    return {
-        "status": "success",
-        "message": f"Exported layered animation ({frame_count} frames).",
-        "image_url": f"/img/{rel_path}",
-        "layers_path": requested,
-        "output_mode": "video",
-        "data_source": "ARCHIVE",
-    }
 
 
 @app.get("/api/radar")
@@ -3504,47 +3270,13 @@ def get_radar_archive(
                 "map_axes_pos": map_axes_pos,
             }
 
-        layer_dir = layered_result.get("layer_dir")
-        if not layer_dir:
-            return {
-                "status": "error",
-                "message": "Layered export directory was not generated.",
-                "data_source": data_source,
-                "requested_source": requested_source,
-                "source_used": source_used,
-            }
-
-        movie_path, frame_count = radar_archive_utils.export_layered_animation(
-            layer_dir=layer_dir,
-            fps=max(1, int(fps or 4)),
-        )
-        if movie_path is None:
-            return {
-                "status": "error",
-                "message": "Failed to generate archive animation.",
-                "data_source": data_source,
-                "requested_source": requested_source,
-                "source_used": source_used,
-            }
-
-        rel_path = os.path.relpath(movie_path, DIRS["radar"]).replace("\\", "/")
-        layer_rel = os.path.relpath(layer_dir, DIRS["radar"]).replace("\\", "/")
+        # Video (MP4 export) mode has been removed.
         return {
-            "status": "success",
-            "image_url": f"/img/{rel_path}",
-            "layers_path": layer_rel,
-            "frame_count": int(frame_count),
+            "status": "error",
+            "message": "Only 'layers' view mode is supported.",
             "data_source": data_source,
             "requested_source": requested_source,
             "source_used": source_used,
-            "output_mode": "video",
-            "site_used": site,
-            "message": "Radar archive animation generated."
-            + (
-                " Note: THREDDS fallback used — data limited to recent scans only."
-                if thredds_fallback_used
-                else ""
-            ),
         }
 
     except Exception as e:
@@ -3841,105 +3573,6 @@ def get_satellite_archive_endpoint(
         view_mode=view_mode,
     )
     return attach_mode_and_source(response, "archive")
-
-
-@app.get("/api/satellite/archive/export-animation")
-def export_satellite_archive_animation(
-    frames_path: str,
-    fps: int = 4,
-):
-    if satellite_archive_utils is None:
-        return {
-            "status": "error",
-            "message": "Satellite archive module is not available.",
-            "data_source": "ARCHIVE",
-        }
-
-    requested = str(frames_path or "").strip().replace("\\", "/")
-    if not requested:
-        return {
-            "status": "error",
-            "message": "frames_path is required.",
-            "data_source": "ARCHIVE",
-        }
-    if requested.startswith("/") or ".." in requested:
-        return {
-            "status": "error",
-            "message": "Invalid frames_path.",
-            "data_source": "ARCHIVE",
-        }
-
-    sat_archive_root = os.path.normpath(DIRS["satellite_archive"])
-    target_path = os.path.normpath(os.path.join(sat_archive_root, requested))
-    if not (target_path.startswith(sat_archive_root) and os.path.exists(target_path)):
-        return {
-            "status": "error",
-            "message": "Frame directory not found.",
-            "data_source": "ARCHIVE",
-        }
-
-    frame_dir = None
-    frame_paths = None
-    output_dir = None
-
-    if os.path.isfile(target_path):
-        if not target_path.lower().endswith(".json"):
-            return {
-                "status": "error",
-                "message": "frames_path must point to a frame directory or scrubber manifest JSON.",
-                "data_source": "ARCHIVE",
-            }
-        try:
-            with open(target_path, "r", encoding="utf-8") as manifest_file:
-                payload = json.load(manifest_file)
-            names = payload.get("frame_files") if isinstance(payload, dict) else None
-            if not isinstance(names, list):
-                names = []
-            output_dir = os.path.dirname(target_path)
-            frame_paths = []
-            for name in names:
-                candidate = os.path.normpath(
-                    os.path.join(output_dir, os.path.basename(str(name)))
-                )
-                if candidate.startswith(sat_archive_root) and os.path.isfile(candidate):
-                    frame_paths.append(candidate)
-        except Exception as manifest_error:
-            return {
-                "status": "error",
-                "message": f"Invalid scrubber manifest: {manifest_error}",
-                "data_source": "ARCHIVE",
-            }
-        if not frame_paths:
-            return {
-                "status": "error",
-                "message": "No frame files found in scrubber manifest.",
-                "data_source": "ARCHIVE",
-            }
-    else:
-        frame_dir = target_path
-        output_dir = frame_dir
-
-    movie_path, frame_count = satellite_archive_utils.export_scrubber_animation(
-        frame_dir=frame_dir,
-        output_dir=output_dir,
-        fps=max(1, int(fps or 4)),
-        frame_paths=frame_paths,
-    )
-    if not movie_path:
-        return {
-            "status": "error",
-            "message": "Unable to export satellite animation.",
-            "data_source": "ARCHIVE",
-        }
-
-    rel_path = os.path.relpath(movie_path, sat_archive_root).replace("\\", "/")
-    return {
-        "status": "success",
-        "message": f"Exported satellite animation ({frame_count} frames).",
-        "image_url": f"/img/satellite_archive/{rel_path}",
-        "output_mode": "video",
-        "data_source": "ARCHIVE",
-    }
 
 
 @app.get("/api/satellite")
@@ -4752,99 +4385,6 @@ def api_weather(
     finally:
         if request_id:
             active_tasks.pop(request_id, None)
-
-
-@app.get("/api/weather/export-frame")
-def api_weather_export_frame(
-    layers_path: str = "",
-    frame_index: int = 0,
-):
-    """Export a composited PNG from existing layered artifacts."""
-    if not weather_utils:
-        raise HTTPException(
-            status_code=503,
-            detail=error_payload(
-                "Weather module unavailable", code="module_unavailable"
-            ),
-        )
-
-    session_path, err = weather_utils.validate_layers_path(layers_path)
-    if err:
-        raise HTTPException(
-            status_code=400, detail=error_payload(err, code="invalid_layers_path")
-        )
-
-    export_path = weather_utils.export_frame_png(session_path, frame_index)
-    if not export_path:
-        return success_payload(
-            status="warning",
-            message=f"Frame {frame_index} not available for export.",
-            image_url=None,
-            source="weather",
-            data_mode="export",
-        )
-
-    from urllib.parse import quote
-
-    rel = os.path.relpath(export_path, weather_utils.WEATHER_ARCHIVE_LAYERS).replace(
-        "\\", "/"
-    )
-    rel = quote(rel, safe="/")
-    image_url = f"/img/weather_archive_layers/{rel}"
-
-    return success_payload(
-        message=f"Frame {frame_index} exported.",
-        image_url=image_url,
-        source="weather",
-        data_mode="export",
-    )
-
-
-@app.get("/api/weather/export-animation")
-def api_weather_export_animation(
-    layers_path: str = "",
-    fps: int = 4,
-):
-    """Export MP4 from existing layered artifacts without re-rendering."""
-    if not weather_utils:
-        raise HTTPException(
-            status_code=503,
-            detail=error_payload(
-                "Weather module unavailable", code="module_unavailable"
-            ),
-        )
-
-    session_path, err = weather_utils.validate_layers_path(layers_path)
-    if err:
-        raise HTTPException(
-            status_code=400, detail=error_payload(err, code="invalid_layers_path")
-        )
-
-    fps = max(1, min(int(fps or 4), 30))
-    export_path = weather_utils.export_animation_mp4(session_path, fps=fps)
-    if not export_path:
-        return success_payload(
-            status="warning",
-            message="No frames available for animation export.",
-            image_url=None,
-            source="weather",
-            data_mode="export",
-        )
-
-    from urllib.parse import quote
-
-    rel = os.path.relpath(export_path, weather_utils.WEATHER_ARCHIVE_LAYERS).replace(
-        "\\", "/"
-    )
-    rel = quote(rel, safe="/")
-    image_url = f"/img/weather_archive_layers/{rel}"
-
-    return success_payload(
-        message="Animation exported.",
-        image_url=image_url,
-        source="weather",
-        data_mode="export",
-    )
 
 
 if __name__ == "__main__":

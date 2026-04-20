@@ -115,8 +115,7 @@ def _nearest_file(time_pairs, target_time, tolerance_seconds):
     if not time_pairs:
         return None
 
-    nearest = min(time_pairs, key=lambda x: abs(
-        (x[0] - target_time).total_seconds()))
+    nearest = min(time_pairs, key=lambda x: abs((x[0] - target_time).total_seconds()))
     delta = abs((nearest[0] - target_time).total_seconds())
     return nearest if delta <= tolerance_seconds else None
 
@@ -212,8 +211,7 @@ def _downsample_evenly(items, target_count):
 
 def _build_frame_plan(channel_files, req_bands, max_frames):
     primary_band = req_bands[0]
-    primary_series = sorted(channel_files.get(
-        primary_band, []), key=lambda x: x[0])
+    primary_series = sorted(channel_files.get(primary_band, []), key=lambda x: x[0])
     if not primary_series:
         return []
 
@@ -253,8 +251,7 @@ def _resolve_sat_bucket(sat_id, provider):
         digits = "".join(filter(str.isdigit, str(sat_id)))
         bucket = bucket_map.get(f"goes{digits}")
     if bucket is None:
-        raise ValueError(
-            f"Unsupported satellite id for {provider.upper()}: {sat_id}")
+        raise ValueError(f"Unsupported satellite id for {provider.upper()}: {sat_id}")
     return bucket
 
 
@@ -377,6 +374,7 @@ def _download_archive_files(
 
 # ─── Layer Rendering Helpers for Separated Layer Output ───────────────────────────
 
+
 def _save_layer_png(fig, path, dpi=150, transparent=False):
     """Save matplotlib figure to PNG with consistent settings."""
     fig.savefig(
@@ -415,15 +413,17 @@ def _create_background_layer(ax, fig, style_config):
         edgecolor="none",
         zorder=zo["land"],
     )
-    ax.coastlines("10m", color=coastline_color,
-                  linewidth=coastline_width, zorder=zo["borders"])
+    ax.coastlines(
+        "10m", color=coastline_color, linewidth=coastline_width, zorder=zo["borders"]
+    )
 
 
 def _create_borders_layer(ax, fig, style_config):
     """Render borders layer (countries/states/etc) on separate figure."""
     show_counties = style_config.get("show_counties", False)
-    county_linewidth = float(style_config.get(
-        "county_linewidth", style_config.get("county_width", 0.3)))
+    county_linewidth = float(
+        style_config.get("county_linewidth", style_config.get("county_width", 0.3))
+    )
     county_color = style_config.get("county_color", "white")
     show_country = style_config.get("show_country", True)
     if isinstance(show_country, str):
@@ -567,7 +567,17 @@ def _create_cities_layer(ax, fig, curr_ext, style_config):
     )
 
 
-def _create_hud_layer(ax, fig, timestamp_text, channel_key, sector, sat_num, region_label, custom_extent, style_config):
+def _create_hud_layer(
+    ax,
+    fig,
+    timestamp_text,
+    channel_key,
+    sector,
+    sat_num,
+    region_label,
+    custom_extent,
+    style_config,
+):
     """Render HUD (heads-up display) layers on separate figure."""
     font_family = style_config.get("font_family", "Montserrat")
     hud_left_size = style_config.get("hud_left_size", 10)
@@ -583,14 +593,12 @@ def _create_hud_layer(ax, fig, timestamp_text, channel_key, sector, sat_num, reg
     hud_left_bg_color = style_config.get("hud_left_bg_color", "#000000")
     hud_left_edge_color = style_config.get("hud_left_edge_color", "#555555")
     hud_left_alpha = float(style_config.get("hud_left_alpha", 0.7))
-    hud_left_box_style = style_config.get(
-        "hud_left_box_style", "round,pad=0.5")
+    hud_left_box_style = style_config.get("hud_left_box_style", "round,pad=0.5")
     hud_right_text_color = style_config.get("hud_right_text_color", "#ffd700")
     hud_right_bg_color = style_config.get("hud_right_bg_color", "#000000")
     hud_right_edge_color = style_config.get("hud_right_edge_color", "#555555")
     hud_right_alpha = float(style_config.get("hud_right_alpha", 0.7))
-    hud_right_box_style = style_config.get(
-        "hud_right_box_style", "round,pad=0.4")
+    hud_right_box_style = style_config.get("hud_right_box_style", "round,pad=0.4")
 
     fig_width = 12.8
     scale_factor = max(fig_width / 12.8, 0.55)
@@ -763,24 +771,24 @@ def generate_satellite_archive_animation(
             ),
         )
 
-    any_downloaded, all_req_bands, merged_channel_files = _download_segments(
-        segments)
+    any_downloaded, all_req_bands, merged_channel_files = _download_segments(segments)
 
     # Meso sectors can be inactive for extended periods.
     # If no files were found, widen the search window automatically.
     normalized_sector = normalize_sector_name(sector)
     if not any_downloaded and normalized_sector in {"Meso1", "Meso2"}:
         fallback_hours = int(
-            style_config.get("meso_fallback_hours",
-                             _MESO_DEFAULT_FALLBACK_HOURS)
+            style_config.get("meso_fallback_hours", _MESO_DEFAULT_FALLBACK_HOURS)
         )
         fallback_start = end_dt - timedelta(hours=max(1, fallback_hours))
         if fallback_start < start_dt:
             fallback_segments = _split_date_range_by_satellite(
-                sat_id, fallback_start, end_dt)
+                sat_id, fallback_start, end_dt
+            )
             if fallback_segments:
-                any_downloaded, all_req_bands, merged_channel_files = _download_segments(
-                    fallback_segments)
+                any_downloaded, all_req_bands, merged_channel_files = (
+                    _download_segments(fallback_segments)
+                )
 
     if not any_downloaded or all_req_bands is None:
         if normalized_sector in {"Meso1", "Meso2"}:
@@ -834,10 +842,12 @@ def generate_satellite_archive_animation(
     logo_user_y = style_config.get("logo_user_y", 0.01)
 
     cbar_size = float(style_config.get("cbar_size", 0.75))
-    cbar_horizontal_size = float(style_config.get(
-        "cbar_size_horizontal", min(cbar_size, 0.35)))
+    cbar_horizontal_size = float(
+        style_config.get("cbar_size_horizontal", min(cbar_size, 0.35))
+    )
     cbar_horizontal_fraction = float(
-        style_config.get("cbar_fraction_horizontal", 0.045))
+        style_config.get("cbar_fraction_horizontal", 0.045)
+    )
     cbar_title_size = style_config.get("cbar_title_size", 14)
     cbar_tick_labelsize = style_config.get("cbar_tick_labelsize", 10)
     cbar_tick_color = style_config.get("cbar_tick_color", "black")
@@ -858,8 +868,9 @@ def generate_satellite_archive_animation(
     city_text_alpha = float(style_config.get("city_text_alpha", 0.95))
 
     show_counties = style_config.get("show_counties", False)
-    county_linewidth = float(style_config.get(
-        "county_linewidth", style_config.get("county_width", 0.3)))
+    county_linewidth = float(
+        style_config.get("county_linewidth", style_config.get("county_width", 0.3))
+    )
     county_color = style_config.get("county_color", "white")
 
     expand_top = float(style_config.get("map_margin_top", 0.0))
@@ -875,8 +886,7 @@ def generate_satellite_archive_animation(
     night_bg_lon_offset = float(style_config.get("night_bg_lon_offset", 0.0))
     night_bg_lat_offset = float(style_config.get("night_bg_lat_offset", 0.0))
     night_bg_zoom = float(style_config.get("night_bg_zoom", 100.0))
-    night_bg_source_pref = str(style_config.get(
-        "night_bg_source_pref", "tiff_first"))
+    night_bg_source_pref = str(style_config.get("night_bg_source_pref", "tiff_first"))
 
     # Base map styling
     map_bg_color = style_config.get("map_bg_color", "#000000")
@@ -915,10 +925,8 @@ def generate_satellite_archive_animation(
     hud_font_weight = style_config.get("hud_font_weight", "black")
     hud_font_style = style_config.get("hud_font_style", "italic")
     hud_line_spacing = float(style_config.get("hud_line_spacing", 1.15))
-    hud_left_box_style = style_config.get(
-        "hud_left_box_style", "round,pad=0.5")
-    hud_right_box_style = style_config.get(
-        "hud_right_box_style", "round,pad=0.4")
+    hud_left_box_style = style_config.get("hud_left_box_style", "round,pad=0.5")
+    hud_right_box_style = style_config.get("hud_right_box_style", "round,pad=0.4")
     hud_right_text_color = style_config.get("hud_right_text_color", "#ffd700")
     hud_right_bg_color = style_config.get("hud_right_bg_color", "#000000")
     hud_right_edge_color = style_config.get("hud_right_edge_color", "#555555")
@@ -1049,8 +1057,12 @@ def generate_satellite_archive_animation(
             edgecolor="none",
             zorder=zo["land"],
         )
-        _ax.coastlines("10m", color=coastline_color,
-                       linewidth=coastline_width, zorder=zo["borders"])
+        _ax.coastlines(
+            "10m",
+            color=coastline_color,
+            linewidth=coastline_width,
+            zorder=zo["borders"],
+        )
 
         if show_counties:
             census_feature = CensusCounties.get_feature()
@@ -1141,8 +1153,7 @@ def generate_satellite_archive_animation(
                     ]
                 else:
                     ticks = [193, 213, 233, 253, 273, 303]
-                    tick_labels = ["-80C", "-60C",
-                                   "-40C", "-20C", "0C", "+30C"]
+                    tick_labels = ["-80C", "-60C", "-40C", "-20C", "0C", "+30C"]
             elif "WV" in ABI_CHANNELS[channel_key]["name"]:
                 ticks = [198, 218, 238, 258, 273]
                 tick_labels = ["-75C", "-55C", "-35C", "-15C", "0C"]
@@ -1160,8 +1171,9 @@ def generate_satellite_archive_animation(
             cb.set_label("")
             cb.ax.set_xlabel("")
 
-            cb.ax.tick_params(axis="x", colors=cbar_tick_color,
-                              labelsize=cbar_tick_labelsize)
+            cb.ax.tick_params(
+                axis="x", colors=cbar_tick_color, labelsize=cbar_tick_labelsize
+            )
             if tick_labels:
                 cb.ax.set_xticklabels(tick_labels)
             for tick in cb.ax.get_xticklabels():
@@ -1264,8 +1276,7 @@ def generate_satellite_archive_animation(
                 frame_name = f"{scan_token}_{i:03d}.png"
             rendered_frame_names.add(frame_name)
             frame_path = os.path.join(frame_dir, frame_name)
-            frame_sat = time_to_sat.get(
-                scan_time, sat_id) if _is_logical else sat_id
+            frame_sat = time_to_sat.get(scan_time, sat_id) if _is_logical else sat_id
             sat_num = "".join(filter(str.isdigit, str(frame_sat)))
             region_label = str(sector).upper() + (
                 " - Target Area" if custom_extent else ""
@@ -1287,8 +1298,7 @@ def generate_satellite_archive_animation(
                     bottom=figure_bottom_margin,
                     top=1.0 - figure_top_margin,
                 )
-                ax = fig.add_subplot(
-                    1, 1, 1, projection=sample.metpy.cartopy_crs)
+                ax = fig.add_subplot(1, 1, 1, projection=sample.metpy.cartopy_crs)
                 ax.set_facecolor(map_bg_color)
 
                 if custom_extent:
@@ -1311,8 +1321,7 @@ def generate_satellite_archive_animation(
                     # Guard against NaN/Inf extent values (e.g. Full Disk geostationary)
                     if all(np.isfinite(v) for v in img_extent):
                         try:
-                            ax.set_extent(
-                                img_extent, crs=sample.metpy.cartopy_crs)
+                            ax.set_extent(img_extent, crs=sample.metpy.cartopy_crs)
                         except ValueError as e:
                             print(
                                 f"[WARN] Invalid archive projected extent frame {i}: {type(e).__name__}: {e}; falling back to global"
@@ -1325,10 +1334,8 @@ def generate_satellite_archive_animation(
                 y_min, y_max = ax.get_ylim()
                 x_span = x_max - x_min
                 y_span = y_max - y_min
-                ax.set_xlim(x_min - x_span * expand_left,
-                            x_max + x_span * expand_right)
-                ax.set_ylim(y_min - y_span * expand_bottom,
-                            y_max + y_span * expand_top)
+                ax.set_xlim(x_min - x_span * expand_left, x_max + x_span * expand_right)
+                ax.set_ylim(y_min - y_span * expand_bottom, y_max + y_span * expand_top)
 
                 # Plot satellite data (store artist reference for future updates)
                 if channel_key in RGB_COMPOSITE_KEYS:
@@ -1460,7 +1467,8 @@ def generate_satellite_archive_animation(
                         top=1.0 - figure_top_margin,
                     )
                     bg_ax = bg_fig.add_subplot(
-                        1, 1, 1, projection=sample.metpy.cartopy_crs)
+                        1, 1, 1, projection=sample.metpy.cartopy_crs
+                    )
                     bg_ax.set_facecolor(map_bg_color)
                     bg_ax.set_xlim(*ax.get_xlim())
                     bg_ax.set_ylim(*ax.get_ylim())
@@ -1481,7 +1489,8 @@ def generate_satellite_archive_animation(
                         top=1.0 - figure_top_margin,
                     )
                     sat_ax = sat_fig.add_subplot(
-                        1, 1, 1, projection=sample.metpy.cartopy_crs)
+                        1, 1, 1, projection=sample.metpy.cartopy_crs
+                    )
                     sat_fig.patch.set_alpha(0)
                     sat_ax.patch.set_alpha(0)
                     sat_ax.set_xlim(*ax.get_xlim())
@@ -1512,8 +1521,11 @@ def generate_satellite_archive_animation(
                         )
                     else:
                         target_norm = ABI_CHANNELS[channel_key].get("norm")
-                        interp_mode = "nearest" if str(
-                            channel_key).startswith("Channel13") else "bicubic"
+                        interp_mode = (
+                            "nearest"
+                            if str(channel_key).startswith("Channel13")
+                            else "bicubic"
+                        )
                         sat_ax.imshow(
                             data,
                             cmap=ABI_CHANNELS[channel_key]["cmap"],
@@ -1524,8 +1536,7 @@ def generate_satellite_archive_animation(
                             zorder=zo["sat_image"],
                         )
                     sat_path = os.path.join(frame_dir, f"{frame_base}_sat.png")
-                    _save_layer_png(
-                        sat_fig, sat_path, dpi=_anim_dpi, transparent=True)
+                    _save_layer_png(sat_fig, sat_path, dpi=_anim_dpi, transparent=True)
                     layers_dict["satellite"] = os.path.basename(sat_path)
                 except Exception as e:
                     print(f"[WARN] Satellite layer frame {i}: {e}")
@@ -1540,16 +1551,15 @@ def generate_satellite_archive_animation(
                         top=1.0 - figure_top_margin,
                     )
                     brd_ax = brd_fig.add_subplot(
-                        1, 1, 1, projection=sample.metpy.cartopy_crs)
+                        1, 1, 1, projection=sample.metpy.cartopy_crs
+                    )
                     brd_fig.patch.set_alpha(0)
                     brd_ax.patch.set_alpha(0)
                     brd_ax.set_xlim(*ax.get_xlim())
                     brd_ax.set_ylim(*ax.get_ylim())
                     _create_borders_layer(brd_ax, brd_fig, style_config)
-                    brd_path = os.path.join(
-                        frame_dir, f"{frame_base}_borders.png")
-                    _save_layer_png(
-                        brd_fig, brd_path, dpi=_anim_dpi, transparent=True)
+                    brd_path = os.path.join(frame_dir, f"{frame_base}_borders.png")
+                    _save_layer_png(brd_fig, brd_path, dpi=_anim_dpi, transparent=True)
                     layers_dict["borders"] = os.path.basename(brd_path)
                 except Exception as e:
                     print(f"[WARN] Borders layer frame {i}: {e}")
@@ -1564,18 +1574,18 @@ def generate_satellite_archive_animation(
                         top=1.0 - figure_top_margin,
                     )
                     city_ax = city_fig.add_subplot(
-                        1, 1, 1, projection=sample.metpy.cartopy_crs)
+                        1, 1, 1, projection=sample.metpy.cartopy_crs
+                    )
                     city_fig.patch.set_alpha(0)
                     city_ax.patch.set_alpha(0)
                     city_ax.set_xlim(*ax.get_xlim())
                     city_ax.set_ylim(*ax.get_ylim())
                     curr_ext = city_ax.get_extent(crs=ccrs.PlateCarree())
-                    _create_cities_layer(
-                        city_ax, city_fig, curr_ext, style_config)
-                    city_path = os.path.join(
-                        frame_dir, f"{frame_base}_cities.png")
+                    _create_cities_layer(city_ax, city_fig, curr_ext, style_config)
+                    city_path = os.path.join(frame_dir, f"{frame_base}_cities.png")
                     _save_layer_png(
-                        city_fig, city_path, dpi=_anim_dpi, transparent=True)
+                        city_fig, city_path, dpi=_anim_dpi, transparent=True
+                    )
                     layers_dict["cities"] = os.path.basename(city_path)
                 except Exception as e:
                     print(f"[WARN] Cities layer frame {i}: {e}")
@@ -1590,16 +1600,25 @@ def generate_satellite_archive_animation(
                         top=1.0 - figure_top_margin,
                     )
                     hud_ax = hud_fig.add_subplot(
-                        1, 1, 1, projection=sample.metpy.cartopy_crs)
+                        1, 1, 1, projection=sample.metpy.cartopy_crs
+                    )
                     hud_fig.patch.set_alpha(0)
                     hud_ax.patch.set_alpha(0)
                     hud_ax.set_xlim(*ax.get_xlim())
                     hud_ax.set_ylim(*ax.get_ylim())
-                    _create_hud_layer(hud_ax, hud_fig, timestamp_text, channel_key,
-                                      sector, sat_num, region_label, custom_extent, style_config)
+                    _create_hud_layer(
+                        hud_ax,
+                        hud_fig,
+                        timestamp_text,
+                        channel_key,
+                        sector,
+                        sat_num,
+                        region_label,
+                        custom_extent,
+                        style_config,
+                    )
                     hud_path = os.path.join(frame_dir, f"{frame_base}_hud.png")
-                    _save_layer_png(
-                        hud_fig, hud_path, dpi=_anim_dpi, transparent=True)
+                    _save_layer_png(hud_fig, hud_path, dpi=_anim_dpi, transparent=True)
                     layers_dict["hud"] = os.path.basename(hud_path)
                 except Exception as e:
                     print(f"[WARN] HUD layer frame {i}: {e}")
@@ -1614,17 +1633,17 @@ def generate_satellite_archive_animation(
                         top=1.0 - figure_top_margin,
                     )
                     logo_ax = logo_fig.add_subplot(
-                        1, 1, 1, projection=sample.metpy.cartopy_crs)
+                        1, 1, 1, projection=sample.metpy.cartopy_crs
+                    )
                     logo_fig.patch.set_alpha(0)
                     logo_ax.patch.set_alpha(0)
                     logo_ax.set_xlim(*ax.get_xlim())
                     logo_ax.set_ylim(*ax.get_ylim())
-                    _create_logo_layer(logo_ax, logo_fig,
-                                       logo_file, style_config)
-                    logo_path = os.path.join(
-                        frame_dir, f"{frame_base}_logo.png")
+                    _create_logo_layer(logo_ax, logo_fig, logo_file, style_config)
+                    logo_path = os.path.join(frame_dir, f"{frame_base}_logo.png")
                     _save_layer_png(
-                        logo_fig, logo_path, dpi=_anim_dpi, transparent=True)
+                        logo_fig, logo_path, dpi=_anim_dpi, transparent=True
+                    )
                     layers_dict["logo"] = os.path.basename(logo_path)
                 except Exception as e:
                     print(f"[WARN] Logo layer frame {i}: {e}")
@@ -1686,8 +1705,7 @@ def generate_satellite_archive_animation(
 
         frames_ref_path = None
         try:
-            manifest_stamp = datetime.now(
-                timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+            manifest_stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
             manifest_name = f"scrubber_manifest_{request_start_code}_{request_end_code}_{manifest_stamp}.json"
             frames_ref_path = os.path.join(output_dir, manifest_name)
             manifest_payload = {
@@ -1703,8 +1721,7 @@ def generate_satellite_archive_animation(
             with open(frames_ref_path, "w", encoding="utf-8") as manifest_file:
                 json.dump(manifest_payload, manifest_file, indent=2)
         except Exception as manifest_error:
-            print(
-                f"[WARN] Could not write scrubber manifest: {manifest_error}")
+            print(f"[WARN] Could not write scrubber manifest: {manifest_error}")
 
         return (
             {
@@ -1732,43 +1749,9 @@ def generate_satellite_archive_animation(
 
         start_code = frame_plan[0][0].strftime("%Y%m%d_%H%M")
         end_code = frame_plan[-1][0].strftime("%Y%m%d_%H%M")
-        movie_path = os.path.join(
-            output_dir, f"{start_code}-{end_code}_archive.mp4")
+        movie_path = os.path.join(output_dir, f"{start_code}-{end_code}_archive.mp4")
         save_animation(movie_path, frames, fps=int(fps))
         preview_path = rendered_frame_paths[-1] if rendered_frame_paths else None
         return movie_path, preview_path, f"{len(frames)} archive frames generated."
     except Exception as e:
         return None, None, f"Error creating archive animation: {e}"
-
-
-def export_scrubber_animation(frame_dir=None, output_dir=None, fps=4, frame_paths=None):
-    """Encode scrubber frame PNGs from *frame_dir* into an MP4 in *output_dir*."""
-    import glob
-
-    from video_utils import save_animation
-
-    if frame_paths:
-        paths = [str(path) for path in frame_paths if os.path.isfile(path)]
-    else:
-        if not frame_dir:
-            return None, 0
-        pattern = os.path.join(frame_dir, "*.png")
-        paths = sorted(glob.glob(pattern))
-
-    if not paths:
-        return None, 0
-
-    if not output_dir:
-        output_dir = os.path.dirname(paths[0])
-
-    frames = []
-    for p in paths:
-        img = imageio.imread(p)
-        if img.shape[-1] == 4:
-            img = img[:, :, :3]
-        frames.append(img)
-
-    datecode = datetime.now().strftime("%Y%m%d_%H%M%S")
-    movie_path = os.path.join(output_dir, f"{datecode}_scrubber_export.mp4")
-    save_animation(movie_path, frames, fps=int(fps))
-    return movie_path, len(frames)

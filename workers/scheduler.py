@@ -20,7 +20,7 @@ def start_scheduler() -> None:
     _scheduler.add_job(
         run_alerts_worker,
         "interval",
-        minutes=2,
+        minutes=1,
         id="alerts_worker",
         max_instances=1,
         misfire_grace_time=60,
@@ -36,7 +36,7 @@ def start_scheduler() -> None:
     _scheduler.add_job(
         run_mrms_worker,
         "interval",
-        minutes=2,
+        minutes=15,
         id="mrms_worker",
         max_instances=1,
         misfire_grace_time=60,
@@ -44,7 +44,7 @@ def start_scheduler() -> None:
     _scheduler.add_job(
         run_surface_worker,
         "interval",
-        minutes=5,
+        minutes=30,
         id="surface_worker",
         max_instances=1,
         misfire_grace_time=120,
@@ -74,7 +74,7 @@ def start_scheduler() -> None:
     # scheduled interval (~2 min). On-demand cold-cache fetch handles the first request.
 
     print(
-        "[scheduler] Background workers started: alerts (2 min), spc (30 min), mrms (2 min), surface (5 min)"
+        "[scheduler] Background workers started: alerts (1 min), spc (30 min), mrms (15 min), surface (30 min)"
     )
 
 
