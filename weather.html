@@ -7,6 +7,7 @@
         <title>Weather — NCHurricane Dashboard</title>
         <link rel="stylesheet" href="css/shared.css">
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
         <style>
             :root {
                 --wx-navy: #0a1230;
@@ -412,7 +413,7 @@
                 left: 50%;
                 transform: translateX(-50%);
                 bottom: 2rem;
-                z-index: 520;
+                z-index: 490;
                 min-width: 575px;
                 max-width: 96vw;
                 width: fit-content;
@@ -516,15 +517,84 @@
                 text-align: center;
             }
 
-            .leaflet-control-layers {
-                background: rgba(15, 23, 42, 0.92) !important;
-                border: 1px solid #334155 !important;
-                color: #e2e8f0 !important;
+            .leaflet-top.leaflet-left {
+                display: flex;
+                flex-direction: row;
+                align-items: flex-start;
+            }
+
+            .leaflet-top.leaflet-left .leaflet-control {
+                clear: none;
+                float: none;
+            }
+
+            .wx-basemap-control {
+                margin-top: 0;
+                position: relative;
+            }
+
+            .wx-basemap-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 52px;
+                height: 52px;
+                background: rgba(15, 23, 42, 0.92);
+                border: 1px solid #334155;
+                border-radius: 4px;
+                color: #e2e8f0;
+                font-size: 1rem;
+                cursor: pointer;
+                outline: none;
+                padding: 0;
+            }
+
+            .wx-basemap-btn:hover,
+            .wx-basemap-btn.open {
+                background: rgba(74, 128, 212, 0.3);
+                border-color: #4a80d4;
+                color: #fff;
+            }
+
+            .wx-basemap-dropdown {
+                display: none;
+                position: absolute;
+                top: 0;
+                left: calc(100% + 4px);
+                background: rgba(15, 23, 42, 0.97);
+                border: 1px solid #334155;
+                border-radius: 4px;
+                min-width: 140px;
+                z-index: 9999;
+                overflow: hidden;
+            }
+
+            .wx-basemap-dropdown.open {
+                display: block;
+            }
+
+            .wx-basemap-item {
+                display: block;
+                width: 100%;
+                padding: 6px 12px;
+                background: none;
+                border: none;
+                color: #e2e8f0;
+                font-size: 0.78rem;
+                font-family: inherit;
+                text-align: left;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+
+            .wx-basemap-item:hover,
+            .wx-basemap-item.active {
+                background: rgba(74, 128, 212, 0.35);
+                color: #fff;
             }
 
             .leaflet-control-logo {
-                bottom: 1rem !important;
-                right: 3.2rem !important;
+                margin-top: 4px;
             }
 
             .leaflet-control-attribution {
@@ -532,8 +602,8 @@
                 color: #dce8f1 !important;
                 border-top-left-radius: 6px;
                 z-index: 550 !important;
-                bottom: 25px !important;
-                right: 4rem !important;
+                bottom: 2rem !important;
+                right: 1rem !important;
             }
 
             .leaflet-control-attribution a {
@@ -548,6 +618,124 @@
 
             .leaflet-popup-tip {
                 background: #0f172a;
+            }
+
+            .wx-alert-pager {
+                min-width: 400px;
+                max-width: min(92vw, 440px);
+            }
+
+            .wx-alert-page {
+                font-size: 0.68rem;
+                line-height: 1.32;
+            }
+
+            .wx-alert-page strong {
+                display: inline-block;
+                margin-bottom: 2px;
+                font-size: 0.72rem;
+                text-transform: uppercase;
+            }
+
+            .wx-alert-page small {
+                display: inline-block;
+                margin-top: 2px;
+                font-size: 0.6rem;
+                line-height: 1.35;
+            }
+
+            .wx-alert-page-controls {
+                margin-top: 8px;
+                border-top: 1px solid rgba(148, 163, 184, 0.35);
+                padding-top: 7px;
+                display: grid;
+                grid-template-columns: 26px 1fr 26px;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .wx-alert-page-nav {
+                width: 22px;
+                height: 22px;
+                border-radius: 999px;
+                border: 1px solid #475569;
+                background: rgba(2, 6, 23, 0.75);
+                color: #e2e8f0;
+                font-size: 0.9rem;
+                line-height: 1;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+            }
+
+            .wx-alert-page-nav:disabled {
+                opacity: 0.35;
+                cursor: default;
+            }
+
+            .wx-alert-page-dots {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+
+            .wx-alert-page-dot {
+                width: 9px;
+                height: 9px;
+                border-radius: 999px;
+                border: 0;
+                background: rgba(226, 232, 240, 0.45);
+                cursor: pointer;
+                padding: 0;
+            }
+
+            .wx-alert-page-dot.is-active {
+                width: 12px;
+                height: 12px;
+                background: #f8fafc;
+            }
+
+            /* Severity · Urgency · Certainty row under alert event name */
+            .wx-alert-meta {
+                font-size: 0.62rem;
+                color: #94a3b8;
+                margin-top: 1px;
+                margin-bottom: 3px;
+                letter-spacing: 0.03em;
+            }
+
+            /* "(in 14 min)" relative expiry badge */
+            .wx-alert-rel-time {
+                color: #fbbf24;
+                font-weight: 700;
+                font-style: normal;
+            }
+
+            /* Hover tooltip showing all alert types at cursor point */
+            .leaflet-tooltip.wx-alert-hover-tip {
+                background: rgba(4, 14, 30, 0.95);
+                border: 1px solid #35538b;
+                border-radius: 4px;
+                color: #e8eaf6;
+                font-size: 0.72rem;
+                padding: 5px 9px;
+                white-space: nowrap;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+            }
+
+            .leaflet-tooltip.wx-alert-hover-tip::before {
+                display: none;
+            }
+
+            @media (max-width: 800px) {
+                .wx-alert-pager {
+                    min-width: 0;
+                    max-width: 88vw;
+                }
             }
 
             .leaflet-tooltip.city-name-label {
@@ -892,6 +1080,154 @@
                     position: static;
                 }
             }
+
+            /* ── High-priority alert polygon pulse ───────────────────────────── */
+            @keyframes wx-alert-pulse {
+
+                0%,
+                100% {
+                    fill-opacity: 0.3;
+                }
+
+                50% {
+                    fill-opacity: 0.75;
+                }
+            }
+
+            .wx-alert-pulse {
+                animation: wx-alert-pulse 1.8s ease-in-out infinite;
+            }
+
+            /* ── New-alert notification banners ────────────────────────────── */
+            #wx-new-alert-stack {
+                position: absolute;
+                top: 12px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 1000;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                pointer-events: none;
+                width: min(92vw, 360px);
+            }
+
+            .wx-new-alert-banner {
+                pointer-events: all;
+                background: #040e1e;
+                border: 2px solid #fff;
+                border-radius: 8px;
+                padding: 10px 14px 6px;
+                color: #fff;
+                font-family: inherit;
+                position: relative;
+                overflow: hidden;
+                animation: wx-alert-slide-in 0.3s ease-out;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+            }
+
+            .wx-new-alert-banner.is-dismissing {
+                animation: wx-alert-slide-out 0.3s ease-in forwards;
+            }
+
+            @keyframes wx-alert-slide-in {
+                from {
+                    opacity: 0;
+                    transform: translateY(-16px);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            @keyframes wx-alert-slide-out {
+                from {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+
+                to {
+                    opacity: 0;
+                    transform: translateY(-16px);
+                }
+            }
+
+            .wx-new-alert-banner-header {
+                font-size: 0.65rem;
+                font-weight: 700;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                color: #fff;
+                margin-bottom: 2px;
+            }
+
+            .wx-new-alert-banner-event {
+                font-size: 1.05rem;
+                font-weight: 800;
+                letter-spacing: 0.05em;
+                text-transform: uppercase;
+                line-height: 1.2;
+            }
+
+            .wx-new-alert-banner-area {
+                font-size: 0.7rem;
+                font-weight: 600;
+                letter-spacing: 0.05em;
+                text-transform: uppercase;
+                color: #bbb;
+                margin-top: 3px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .wx-new-alert-banner-buttons {
+                display: flex;
+                gap: 8px;
+                margin-top: 6px;
+                align-items: center;
+                justify-content: flex-start;
+            }
+
+            .wx-new-alert-banner-view {
+                background: none;
+                border: 1px solid currentColor;
+                border-radius: 4px;
+                color: inherit;
+                font-size: 0.68rem;
+                font-weight: 700;
+                letter-spacing: 0.06em;
+                padding: 2px 10px;
+                cursor: pointer;
+                text-transform: uppercase;
+            }
+
+            .wx-new-alert-banner-view:hover {
+                background: rgba(255, 255, 255, 0.15);
+            }
+
+            .wx-new-alert-banner-progress {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                height: 3px;
+                width: 100%;
+                border-radius: 0 0 6px 6px;
+                transform-origin: left;
+                animation: wx-alert-progress 15s linear forwards;
+            }
+
+            @keyframes wx-alert-progress {
+                from {
+                    transform: scaleX(1);
+                }
+
+                to {
+                    transform: scaleX(0);
+                }
+            }
         </style>
     </head>
 
@@ -922,6 +1258,7 @@
 
             <div class="weather-map-wrap">
                 <div id="weather-map"></div>
+                <div id="wx-new-alert-stack"></div>
 
                 <aside class="weather-side weather-side-left" id="weather-side-left">
                     <h3>CHOOSE YOUR WEATHER HERE!⚡</h3>

@@ -258,6 +258,10 @@ app.mount("/cache", StaticFiles(directory=_CACHE_ROOT), name="cache")
 app.mount("/css", StaticFiles(directory=os.path.join(BASE_DIR, "css")), name="css")
 app.mount("/js", StaticFiles(directory=os.path.join(BASE_DIR, "js")), name="js")
 app.mount("/data", StaticFiles(directory=os.path.join(BASE_DIR, "data")), name="data")
+app.mount("/img", StaticFiles(directory=os.path.join(BASE_DIR, "img")), name="img")
+app.mount(
+    "/fonts", StaticFiles(directory=os.path.join(BASE_DIR, "fonts")), name="fonts"
+)
 
 
 def _serve_page(filename: str):

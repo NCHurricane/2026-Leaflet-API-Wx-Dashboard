@@ -186,6 +186,111 @@
     };
     const ALERT_DEFAULT = '#6699cc';
 
+    // Synced from config/alerts_config.py ALERT_PRIORITY
+    const ALERT_PRIORITY = {
+        'Tsunami Warning': 1,
+        'Tornado Warning': 2,
+        'Extreme Wind Warning': 3,
+        'Severe Thunderstorm Warning': 4,
+        'Flash Flood Warning': 5,
+        'Flash Flood Statement': 6,
+        'Severe Weather Statement': 7,
+        'Civil Danger Warning': 8,
+        'Radiological Hazard Warning': 9,
+        'Hazardous Materials Warning': 10,
+        'Fire Warning': 11,
+        'Storm Surge Warning': 12,
+        'Hurricane Force Wind Warning': 13,
+        'Hurricane Warning': 14,
+        'Typhoon Warning': 15,
+        'Special Marine Warning': 16,
+        'Blizzard Warning': 17,
+        'Snow Squall Warning': 18,
+        'Ice Storm Warning': 19,
+        'Heavy Freezing Spray Warning': 20,
+        'Winter Storm Warning': 21,
+        'Lake Effect Snow Warning': 22,
+        'Dust Storm Warning': 23,
+        'Blowing Dust Warning': 24,
+        'High Wind Warning': 25,
+        'Tropical Storm Warning': 26,
+        'Storm Warning': 27,
+        'Tsunami Advisory': 28,
+        'Tsunami Watch': 29,
+        'Avalanche Warning': 30,
+        'Earthquake Warning': 31,
+        'Volcano Warning': 32,
+        'Ashfall Warning': 33,
+        'Flood Warning': 34,
+        'Coastal Flood Warning': 35,
+        'Lakeshore Flood Warning': 36,
+        'Ashfall Advisory': 37,
+        'High Surf Warning': 38,
+        'Extreme Heat Warning': 39,
+        'Tornado Watch': 40,
+        'Severe Thunderstorm Watch': 41,
+        'Flash Flood Watch': 42,
+        'Gale Warning': 43,
+        'Flood Statement': 44,
+        'Extreme Cold Warning': 45,
+        'Freeze Warning': 46,
+        'Red Flag Warning': 47,
+        'Storm Surge Watch': 48,
+        'Hurricane Watch': 49,
+        'Hurricane Force Wind Watch': 50,
+        'Typhoon Watch': 51,
+        'Tropical Storm Watch': 52,
+        'Storm Watch': 53,
+        'Tropical Cyclone Local Statement': 54,
+        'Winter Weather Advisory': 55,
+        'Avalanche Advisory': 56,
+        'Cold Weather Advisory': 57,
+        'Heat Advisory': 58,
+        'Flood Advisory': 59,
+        'Coastal Flood Advisory': 60,
+        'Lakeshore Flood Advisory': 61,
+        'High Surf Advisory': 62,
+        'Dense Fog Advisory': 63,
+        'Dense Smoke Advisory': 64,
+        'Small Craft Advisory': 65,
+        'Brisk Wind Advisory': 66,
+        'Hazardous Seas Warning': 67,
+        'Dust Advisory': 68,
+        'Blowing Dust Advisory': 69,
+        'Lake Wind Advisory': 70,
+        'Wind Advisory': 71,
+        'Frost Advisory': 72,
+        'Freezing Fog Advisory': 73,
+        'Freezing Spray Advisory': 74,
+        'Low Water Advisory': 75,
+        'Local Area Emergency': 76,
+        'Winter Storm Watch': 77,
+        'Rip Current Statement': 78,
+        'Beach Hazards Statement': 79,
+        'Gale Watch': 80,
+        'Avalanche Watch': 81,
+        'Hazardous Seas Watch': 82,
+        'Heavy Freezing Spray Watch': 83,
+        'Flood Watch': 84,
+        'Coastal Flood Watch': 85,
+        'Lakeshore Flood Watch': 86,
+        'High Wind Watch': 87,
+        'Extreme Heat Watch': 88,
+        'Extreme Cold Watch': 89,
+        'Freeze Watch': 90,
+        'Fire Weather Watch': 91,
+        'Extreme Fire Danger': 92,
+        'Coastal Flood Statement': 93,
+        'Lakeshore Flood Statement': 94,
+        'Special Weather Statement': 95,
+        'Marine Weather Statement': 96,
+        'Air Quality Alert': 97,
+        'Air Stagnation Advisory': 98,
+        'Hazardous Weather Outlook': 99,
+        'Hydrologic Outlook': 100,
+        'Short Term Forecast': 101,
+    };
+
     // ── Alert category filter map (mirrors HAZARD_CATEGORIES from alerts_config.py) ──
     const ALERT_CATEGORIES = {
         'Severe Weather Alerts': ['Tornado Warning', 'Severe Thunderstorm Warning', 'Flash Flood Warning', 'Tornado Watch', 'Severe Thunderstorm Watch', 'Extreme Wind Warning', 'Severe Weather Statement'],
@@ -283,10 +388,61 @@
         'OpenStreetMap': tilesOsm,
         'Satellite': tilesSatellite,
     };
-    L.control.layers(baseLayers, {}, { position: 'topright' }).addTo(map);
+    // Custom compact basemap selector (replaces Leaflet's built-in layer control)
+    const BasemapControl = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd(m) {
+            const container = L.DomUtil.create('div', 'wx-basemap-control leaflet-bar');
+            L.DomEvent.disableClickPropagation(container);
+            L.DomEvent.disableScrollPropagation(container);
+
+            const btn = L.DomUtil.create('button', 'wx-basemap-btn', container);
+            btn.type = 'button';
+            btn.title = 'Switch basemap';
+            btn.innerHTML = '<i class="fa-solid fa-layer-group fa-xl"></i>';
+
+            const dropdown = L.DomUtil.create('div', 'wx-basemap-dropdown', container);
+            let activeLayer = 'Dark (No Labels)';
+
+            for (const name of Object.keys(baseLayers)) {
+                const item = L.DomUtil.create('button', 'wx-basemap-item', dropdown);
+                item.type = 'button';
+                item.textContent = name;
+                if (name === activeLayer) item.classList.add('active');
+                L.DomEvent.on(item, 'click', () => {
+                    for (const layer of Object.values(baseLayers)) {
+                        if (m.hasLayer(layer)) m.removeLayer(layer);
+                    }
+                    baseLayers[name].addTo(m);
+                    activeLayer = name;
+                    dropdown.querySelectorAll('.wx-basemap-item').forEach((el) => {
+                        el.classList.toggle('active', el.textContent === name);
+                    });
+                    dropdown.classList.remove('open');
+                    btn.classList.remove('open');
+                });
+            }
+
+            L.DomEvent.on(btn, 'click', () => {
+                const isOpen = dropdown.classList.toggle('open');
+                btn.classList.toggle('open', isOpen);
+            });
+
+            // Close on outside click
+            L.DomEvent.on(document, 'click', (e) => {
+                if (!container.contains(e.target)) {
+                    dropdown.classList.remove('open');
+                    btn.classList.remove('open');
+                }
+            });
+
+            return container;
+        },
+    });
+    new BasemapControl().addTo(map);
     map.attributionControl.addAttribution('©2026 ChuckCopeland.com/NCHurricane.com');
     const LogoControl = L.Control.extend({
-        options: { position: 'bottomright' },
+        options: { position: 'topright' },
         onAdd() {
             const div = L.DomUtil.create('div', 'leaflet-control-logo');
             const img = L.DomUtil.create('img', '', div);
@@ -317,6 +473,8 @@
     const CITY_LABEL_X_PAD = 4;
     const CITY_LABEL_Y_PAD = 2;
     let _allAlertFeatures = [];
+    let _knownAlertIds = null; // null = first load; Set<string> after first load
+    let _activeAlertsPopup = null;
     let alertsOpacity = 0.75;
     let spcOpacity = 0.60;
     let surfaceValueOpacity = 0.9;
@@ -356,13 +514,285 @@
     }
 
     // ── Popup builders ───────────────────────────────────────────────────────
+    function _alertMessagePreview(props, maxLines = 8) {
+        const raw = String(
+            props?.description
+            || props?.summary
+            || props?.instruction
+            || '',
+        ).trim();
+        if (!raw) return '';
+        const lines = raw
+            .split(/\r?\n+/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .slice(0, Math.max(1, maxLines));
+        return lines.map((line) => _escapeHtml(line)).join('<br>');
+    }
+
+    function _alertFeatureCenterLatLng(feat) {
+        const geom = feat?.geometry;
+        if (!geom) return null;
+
+        const bounds = { minLat: Infinity, maxLat: -Infinity, minLng: Infinity, maxLng: -Infinity };
+        const visit = (node) => {
+            if (!Array.isArray(node)) return;
+            if (node.length >= 2 && Number.isFinite(node[0]) && Number.isFinite(node[1])) {
+                const lng = Number(node[0]);
+                const lat = Number(node[1]);
+                bounds.minLat = Math.min(bounds.minLat, lat);
+                bounds.maxLat = Math.max(bounds.maxLat, lat);
+                bounds.minLng = Math.min(bounds.minLng, lng);
+                bounds.maxLng = Math.max(bounds.maxLng, lng);
+                return;
+            }
+            for (const child of node) visit(child);
+        };
+
+        visit(geom.coordinates);
+        if (!Number.isFinite(bounds.minLat) || !Number.isFinite(bounds.minLng)) return null;
+        return {
+            lat: (bounds.minLat + bounds.maxLat) / 2,
+            lng: (bounds.minLng + bounds.maxLng) / 2,
+        };
+    }
+
+    function _alertForecastUrl(feat, preferredLatLng = null) {
+        const p = feat?.properties || {};
+        const ugcList = Array.isArray(p?.geocode?.UGC) ? p.geocode.UGC : [];
+        const sameList = Array.isArray(p?.geocode?.SAME) ? p.geocode.SAME : [];
+
+        const zone = ugcList.find((code) => /^[A-Z]{2}Z\d{3}$/.test(String(code || '').trim())) || '';
+        const stateFromUgc = zone ? zone.slice(0, 2) : '';
+        const same = sameList.find((code) => /^\d{6}$/.test(String(code || '').trim())) || '';
+        const county = (stateFromUgc && same)
+            ? `${stateFromUgc}C${same.slice(3)}`
+            : '';
+
+        const latlng = preferredLatLng && Number.isFinite(preferredLatLng.lat) && Number.isFinite(preferredLatLng.lng)
+            ? preferredLatLng
+            : _alertFeatureCenterLatLng(feat);
+
+        if (!zone || !latlng) return '';
+
+        const params = new URLSearchParams();
+        params.set('warnzone', zone);
+        if (county) params.set('warncounty', county);
+        params.set('firewxzone', zone);
+        const firstArea = String(p.areaDesc || '').split(';')[0].trim();
+        if (firstArea) params.set('local_place1', stateFromUgc ? `${firstArea} ${stateFromUgc}` : firstArea);
+        params.set('product1', String(p.event || 'Hazard Alert'));
+        params.set('lat', Number(latlng.lat).toFixed(4));
+        params.set('lon', Number(latlng.lng).toFixed(4));
+        return `https://forecast.weather.gov/showsigwx.php?${params.toString()}`;
+    }
+
+    function _alertCwaCode(feat) {
+        const p = feat?.properties || {};
+        const awips = Array.isArray(p?.parameters?.AWIPSidentifier)
+            ? String(p.parameters.AWIPSidentifier[0] || '').trim().toUpperCase()
+            : '';
+        if (awips.length >= 3) {
+            return awips.slice(-3);
+        }
+
+        const wmo = Array.isArray(p?.parameters?.WMOidentifier)
+            ? String(p.parameters.WMOidentifier[0] || '').trim().toUpperCase()
+            : '';
+        const wmoMatch = wmo.match(/\bK([A-Z]{3})\b/);
+        if (wmoMatch) {
+            return wmoMatch[1];
+        }
+
+        const sender = String(p?.sender || '').trim().toUpperCase();
+        const senderMatch = sender.match(/([A-Z]{3})@/);
+        if (senderMatch) {
+            return senderMatch[1];
+        }
+
+        return '';
+    }
+
+    function _alertWwaFallbackUrl(feat) {
+        const p = feat?.properties || {};
+        const cwa = _alertCwaCode(feat);
+        const eventName = String(p?.event || '').trim();
+        if (!cwa || !eventName) return '';
+
+        const params = new URLSearchParams();
+        params.set('cwa', cwa);
+        params.set('wwa', eventName.toLowerCase());
+        return `https://forecast.weather.gov/wwamap/wwatxtget.php?${params.toString()}`;
+    }
+
+    function _alertExternalUrl(feat, preferredLatLng = null) {
+        const forecastUrl = _alertForecastUrl(feat, preferredLatLng);
+        if (forecastUrl) return forecastUrl;
+        return _alertWwaFallbackUrl(feat);
+    }
+
+    function _alertExternalLinkHtml(feat, preferredLatLng = null) {
+        const url = _alertExternalUrl(feat, preferredLatLng);
+        if (!url) return '';
+        return `<br><small><a href="${_escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Full alert text (NWS)</a></small>`;
+    }
+
     function alertPopup(feat) {
         const p = feat.properties || {};
         const event = p.event || 'Unknown Alert';
         const headline = p.headline || '';
         const expires = p.expires ? new Date(p.expires).toLocaleString() : '';
-        const area = p.areaDesc || '';
-        return `<strong>${event}</strong><br>${headline}${expires ? '<br><em>Expires: ' + expires + '</em>' : ''}<br><small>${area}</small>`;
+        const preview = _alertMessagePreview(p);
+        const externalLink = _alertExternalLinkHtml(feat);
+        return `<strong>${event}</strong><br>${headline}${expires ? '<br><em>Expires: ' + expires + '</em>' : ''}${preview ? '<br><small>' + preview + '</small>' : ''}${externalLink}`;
+    }
+
+    function _ringContainsPoint(ring, lng, lat) {
+        if (!Array.isArray(ring) || ring.length < 3) return false;
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const xi = ring[i]?.[0];
+            const yi = ring[i]?.[1];
+            const xj = ring[j]?.[0];
+            const yj = ring[j]?.[1];
+            if (![xi, yi, xj, yj].every(Number.isFinite)) continue;
+            const intersects = ((yi > lat) !== (yj > lat))
+                && (lng < (xj - xi) * (lat - yi) / ((yj - yi) || 1e-12) + xi);
+            if (intersects) inside = !inside;
+        }
+        return inside;
+    }
+
+    function _polygonContainsPoint(coords, lng, lat) {
+        if (!Array.isArray(coords) || !coords.length) return false;
+        if (!_ringContainsPoint(coords[0], lng, lat)) return false;
+        for (let i = 1; i < coords.length; i++) {
+            if (_ringContainsPoint(coords[i], lng, lat)) return false;
+        }
+        return true;
+    }
+
+    function _featureContainsLatLng(feat, latlng) {
+        const geom = feat?.geometry;
+        if (!geom || !latlng) return false;
+        const lng = latlng.lng;
+        const lat = latlng.lat;
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return false;
+
+        if (geom.type === 'Polygon') {
+            return _polygonContainsPoint(geom.coordinates, lng, lat);
+        }
+        if (geom.type === 'MultiPolygon') {
+            return (geom.coordinates || []).some((poly) => _polygonContainsPoint(poly, lng, lat));
+        }
+        return false;
+    }
+
+    function _alertPriorityValue(feat) {
+        const p = feat?.properties || {};
+        const priorityRaw = Number(p.priority);
+        if (Number.isFinite(priorityRaw)) return priorityRaw;
+        return ALERT_PRIORITY[p.event] ?? 999;
+    }
+
+    function _alertExpiresTs(feat) {
+        const expires = Date.parse(feat?.properties?.expires || '');
+        return Number.isFinite(expires) ? expires : Number.MAX_SAFE_INTEGER;
+    }
+
+    // Extract the VTEC action code (NEW, CON, EXT, CAN, EXP, …) from a feature.
+    function _vtecAction(feat) {
+        const vtecArr = feat?.properties?.parameters?.VTEC;
+        if (!Array.isArray(vtecArr) || !vtecArr.length) return null;
+        const m = String(vtecArr[0]).match(/\/O\.([A-Z]{3})\./);
+        return m ? m[1] : null;
+    }
+
+    // Return a human-readable "X min" / "Xh Ym" string for time remaining until isoStr.
+    function _relExpires(isoStr) {
+        if (!isoStr) return '';
+        const diffMs = Date.parse(isoStr) - Date.now();
+        if (!Number.isFinite(diffMs) || diffMs < 0) return 'expired';
+        const mins = Math.round(diffMs / 60_000);
+        if (mins < 60) return `${mins} min`;
+        const hrs = Math.floor(mins / 60);
+        const rem = mins % 60;
+        return rem ? `${hrs}h ${rem}m` : `${hrs}h`;
+    }
+
+    function _sortedAlertsForPoint(latlng) {
+        return (_allAlertFeatures || [])
+            .filter((feat) => _featureContainsLatLng(feat, latlng))
+            .sort((a, b) => {
+                const pDiff = _alertPriorityValue(a) - _alertPriorityValue(b);
+                if (pDiff !== 0) return pDiff;
+                const eDiff = _alertExpiresTs(a) - _alertExpiresTs(b);
+                if (eDiff !== 0) return eDiff;
+                const aEvent = a?.properties?.event || '';
+                const bEvent = b?.properties?.event || '';
+                return aEvent.localeCompare(bEvent);
+            });
+    }
+
+    function _buildAlertsPagerContent(features, pageIndex, preferredLatLng = null) {
+        const total = features.length;
+        const idx = Math.max(0, Math.min(pageIndex, total - 1));
+        const feat = features[idx] || {};
+        const p = feat?.properties || {};
+        const event = p.event || 'Unknown Alert';
+        const headline = p.headline || '';
+        const expires = p.expires ? new Date(p.expires).toLocaleString() : '';
+        const expiresRel = _relExpires(p.expires);
+        const metaBadge = [p.severity, p.urgency, p.certainty].filter(Boolean).join(' · ');
+        const preview = _alertMessagePreview(p);
+        const externalLink = _alertExternalLinkHtml(feat, preferredLatLng);
+        const navDisabled = total <= 1 ? 'disabled' : '';
+        const dots = features.map((_, i) => {
+            const active = i === idx ? ' is-active' : '';
+            const aria = `Alert ${i + 1} of ${total}`;
+            return `<button type="button" class="wx-alert-page-dot${active}" data-alert-page="${i}" aria-label="${aria}" title="${aria}"></button>`;
+        }).join('');
+        const expiresHtml = expires
+            ? '<br><em>Expires: ' + expires + (expiresRel ? ' <span class="wx-alert-rel-time">(in ' + expiresRel + ')</span>' : '') + '</em>'
+            : '';
+
+        return (
+            `<div class="wx-alert-pager" data-alert-pager="1">`
+            + `<div class="wx-alert-page">`
+            + `<strong>${event}</strong>`
+            + (metaBadge ? `<div class="wx-alert-meta">${_escapeHtml(metaBadge)}</div>` : '')
+            + `<br>${headline}${expiresHtml}${preview ? '<br><small>' + preview + '</small>' : ''}${externalLink}`
+            + `</div>`
+            + `<div class="wx-alert-page-controls">`
+            + `<button type="button" class="wx-alert-page-nav" data-alert-nav="prev" aria-label="Previous alert" ${navDisabled}>&lsaquo;</button>`
+            + `<div class="wx-alert-page-dots">${dots}</div>`
+            + `<button type="button" class="wx-alert-page-nav" data-alert-nav="next" aria-label="Next alert" ${navDisabled}>&rsaquo;</button>`
+            + `</div>`
+            + `</div>`
+        );
+    }
+
+    function _updateAlertsPager(newIndex) {
+        if (!_activeAlertsPopup?.popup || !_activeAlertsPopup?.features?.length) return;
+        const total = _activeAlertsPopup.features.length;
+        _activeAlertsPopup.index = ((newIndex % total) + total) % total;
+        _activeAlertsPopup.popup.setContent(
+            _buildAlertsPagerContent(
+                _activeAlertsPopup.features,
+                _activeAlertsPopup.index,
+                _activeAlertsPopup.latlng || null,
+            ),
+        );
+    }
+
+    function _openAlertsPagerAt(latlng) {
+        const features = _sortedAlertsForPoint(latlng);
+        if (!features.length) return;
+        const popup = L.popup({ maxWidth: 440, className: 'wx-alerts-pager-popup' })
+            .setLatLng(latlng)
+            .setContent(_buildAlertsPagerContent(features, 0, latlng));
+        _activeAlertsPopup = { popup, features, index: 0, latlng };
+        popup.openOn(map);
     }
 
     function spcPopup(feat) {
@@ -408,11 +838,11 @@
         const events = Object.keys(counts).sort((a, b) => a.localeCompare(b));
         if (!events.length) { setLegend(null); return; }
         const rows = events.map((e) => swatch(ALERT_COLORS[e] || ALERT_DEFAULT, `${e} (${counts[e]})`)).join('');
-        const colClass = events.length > 25 ? 'legend-grid legend-grid-6'
-            : events.length > 20 ? 'legend-grid legend-grid-5'
-                : events.length > 15 ? 'legend-grid legend-grid-4'
-                    : events.length > 10 ? 'legend-grid legend-grid-3'
-                        : events.length > 5 ? 'legend-grid' : '';
+        const colClass = events.length > 20 ? 'legend-grid legend-grid-6'
+            : events.length > 16 ? 'legend-grid legend-grid-5'
+                : events.length > 12 ? 'legend-grid legend-grid-4'
+                    : events.length > 8 ? 'legend-grid legend-grid-3'
+                        : events.length > 4 ? 'legend-grid' : '';
         const wrap = colClass ? `<div class="${colClass}">${rows}</div>` : rows;
         setLegend('<h4>Alerts In View</h4>' + wrap);
     }
@@ -459,6 +889,124 @@
             && !!byId('weather-show-mrms')?.checked;
     }
 
+    // ── New-alert notification banners ───────────────────────────────────────
+    const ALERT_NOTIFY_EVENTS = new Set([
+        'Tornado Warning',
+        'Severe Thunderstorm Warning',
+        'Tornado Watch',
+        'Severe Thunderstorm Watch',
+        'Special Marine Warning',
+        'Flash Flood Warning',
+        'Snow Squall Warning',
+        'Flash Flood Watch',
+    ]);
+    const ALERT_NOTIFY_DISMISS_MS = 15_000;
+    // Polygons for these events pulse on the map to draw attention.
+    const ALERT_PULSE_EVENTS = new Set([
+        'Tornado Warning',
+        'Severe Thunderstorm Warning',
+        'Flash Flood Warning',
+    ]);
+
+    function _showNewAlertBanner(feat) {
+        if (!_isTypeEnabled('alerts')) return;
+        const stack = byId('wx-new-alert-stack');
+        if (!stack) return;
+        const p = feat?.properties || {};
+        const event = p.event || 'Unknown Alert';
+        const color = ALERT_COLORS[event] || ALERT_DEFAULT;
+        const area = (p.areaDesc || '').replace(/\s*;\s*/g, ', ');
+
+        const banner = document.createElement('div');
+        banner.className = 'wx-new-alert-banner';
+        banner.style.borderColor = color;
+        banner.innerHTML = [
+            `<div class="wx-new-alert-banner-header">New Alert</div>`,
+            `<div class="wx-new-alert-banner-event" style="color:${color}">${_escapeHtml(event)}</div>`,
+            area ? `<div class="wx-new-alert-banner-area">${_escapeHtml(area)}</div>` : '',
+            `<div class="wx-new-alert-banner-buttons">`,
+            `  <button type="button" class="wx-new-alert-banner-view" style="color:${color}">View</button>`,
+            `</div>`,
+            `<div class="wx-new-alert-banner-progress" style="background:${color}"></div>`,
+        ].join('');
+
+        const dismiss = () => {
+            if (banner._dismissTimer) clearTimeout(banner._dismissTimer);
+            banner.classList.add('is-dismissing');
+            banner.addEventListener('animationend', () => banner.remove(), { once: true });
+        };
+
+        banner.querySelector('.wx-new-alert-banner-view').addEventListener('click', () => {
+            const center = _alertFeatureCenterLatLng(feat);
+            if (!center) return;
+            dismiss();
+            map.flyTo(center, Math.max(map.getZoom(), 9), { duration: 1.0 });
+            map.once('moveend', () => _openAlertsPagerAt(center));
+        });
+
+        banner._dismissTimer = setTimeout(dismiss, ALERT_NOTIFY_DISMISS_MS);
+        stack.appendChild(banner);
+    }
+
+    // ── TEST: test banner from browser console ────────────────────────────────
+    // Usage (string): _testAlertBanner('Tornado Warning', 'Bertie, Martin Counties in NC')
+    // Usage (feature): _testAlertBanner(featureObject)
+    // Comment out this block when done testing.
+    window._testAlertBanner = function (eventOrFeat = 'Tornado Warning', areaDesc = 'Test County, Test State') {
+        if (eventOrFeat && typeof eventOrFeat === 'object' && eventOrFeat.type === 'Feature') {
+            _showNewAlertBanner(eventOrFeat);
+            return;
+        }
+        const eventName = eventOrFeat;
+        const center = map.getCenter();
+        const fakeFeat = {
+            id: 'test-' + Date.now(),
+            type: 'Feature',
+            geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                    [center.lng - 0.5, center.lat - 0.3],
+                    [center.lng + 0.5, center.lat - 0.3],
+                    [center.lng + 0.5, center.lat + 0.3],
+                    [center.lng - 0.5, center.lat + 0.3],
+                    [center.lng - 0.5, center.lat - 0.3],
+                ]],
+            },
+            properties: {
+                event: eventName,
+                headline: `${eventName} issued for ${areaDesc}`,
+                areaDesc,
+                expires: new Date(Date.now() + 3_600_000).toISOString(),
+                description: 'THIS IS A TEST ALERT GENERATED FOR BANNER TESTING PURPOSES.',
+                geocode: { UGC: [], SAME: [] },
+                parameters: {},
+            },
+        };
+        _showNewAlertBanner(fakeFeat);
+    };
+
+    // ── TEST: fire banners from a FeatureCollection object or a URL ──────────
+    // Usage (object): _testAlertBannerFromJson({...featureCollection...})
+    // Usage (URL):    _testAlertBannerFromJson('/data/test_severe_thunderstorm_warning.json')
+    // Comment out this block (and window._testAlertBanner above) when done testing.
+    window._testAlertBannerFromJson = async function (sourceOrUrl) {
+        let featureCollection;
+        if (typeof sourceOrUrl === 'string') {
+            const resp = await fetch(sourceOrUrl);
+            if (!resp.ok) { console.error('_testAlertBannerFromJson: fetch failed', resp.status); return; }
+            featureCollection = await resp.json();
+        } else {
+            featureCollection = sourceOrUrl;
+        }
+        const features = featureCollection?.features;
+        if (!Array.isArray(features) || features.length === 0) {
+            console.warn('_testAlertBannerFromJson: no features found in object');
+            return;
+        }
+        features.forEach(feat => _showNewAlertBanner(feat));
+    };
+    // ── END TEST ─────────────────────────────────────────────────────────────
+
     async function loadAlerts() {
         const requestSeq = ++_alertsRequestSeq;
         if (alertsLayer) { map.removeLayer(alertsLayer); alertsLayer = null; }
@@ -479,11 +1027,56 @@
 
             if (requestSeq !== _alertsRequestSeq || !_canApplyAlertsResponse()) return;
 
-            const features = (geojson.features || []).filter(f => _matchesCheckedCategories(f, checkedCategories));
+            const features = (geojson.features || [])
+                .filter(f => _matchesCheckedCategories(f, checkedCategories))
+                .filter(f => {
+                    // Drop cancelled/expired alerts — they can briefly linger in the NWS feed.
+                    if (f?.properties?.messageType === 'Cancel') return false;
+                    const action = _vtecAction(f);
+                    return action !== 'CAN' && action !== 'EXP';
+                });
+
+            // Diff against known IDs to detect new qualifying alerts.
+            // _knownAlertIds === null means this is the first load — populate silently.
+            const prevIds = _knownAlertIds;
+            const newIdSet = new Set(features.map(f => f.id).filter(Boolean));
+            _knownAlertIds = newIdSet;
+
+            if (prevIds !== null) {
+                for (const feat of features) {
+                    if (!feat.id) continue;
+                    if (prevIds.has(feat.id)) continue;
+                    const event = feat?.properties?.event || '';
+                    if (ALERT_NOTIFY_EVENTS.has(event)) {
+                        _showNewAlertBanner(feat);
+                    }
+                }
+            }
+
             _allAlertFeatures = features;
             alertsLayer = L.geoJSON({ type: 'FeatureCollection', features }, {
                 style: alertStyle,
-                onEachFeature: (feat, layer) => layer.bindPopup(alertPopup(feat)),
+                onEachFeature: (feat, layer) => {
+                    layer.on('click', (e) => {
+                        if (e?.latlng) _openAlertsPagerAt(e.latlng);
+                    });
+                    // Hover tooltip — shows every alert type at the cursor point.
+                    layer.on('mouseover', (e) => {
+                        const alerts = _sortedAlertsForPoint(e.latlng);
+                        const lines = (alerts.length ? alerts : [feat])
+                            .map(f => {
+                                const ev = f?.properties?.event || 'Unknown';
+                                const color = ALERT_COLORS[ev] || ALERT_DEFAULT;
+                                return `<span style="color:${color};font-weight:700">●</span> ${_escapeHtml(ev)}`;
+                            }).join('<br>');
+                        layer.bindTooltip(lines, { sticky: true, opacity: 0.95, className: 'wx-alert-hover-tip' }).openTooltip(e.latlng);
+                    });
+                    layer.on('mouseout', () => layer.closeTooltip());
+                    // Pulse high-priority polygons.
+                    if (ALERT_PULSE_EVENTS.has(feat?.properties?.event || '')) {
+                        layer.on('add', () => layer.getElement?.()?.classList.add('wx-alert-pulse'));
+                    }
+                },
             });
             alertsLayer.addTo(map);
             buildAlertsLegend(features);
@@ -1892,7 +2485,11 @@
             if (alertsLayer) { map.removeLayer(alertsLayer); alertsLayer = null; }
             alertsLayer = L.geoJSON(geojson, {
                 style: alertStyle,
-                onEachFeature(feat, layer) { layer.bindPopup(alertPopup(feat)); },
+                onEachFeature(feat, layer) {
+                    layer.on('click', (e) => {
+                        if (e?.latlng) _openAlertsPagerAt(e.latlng);
+                    });
+                },
             });
             alertsLayer.addTo(map);
             _allAlertFeatures = filtered;
@@ -2783,6 +3380,46 @@
         }
     });
 
+    map.on('popupopen', (evt) => {
+        const popupRoot = evt?.popup?.getElement?.();
+        if (!popupRoot) return;
+
+        // Keep popup interactions inside the popup; avoid map-level click close.
+        if (L?.DomEvent) {
+            L.DomEvent.disableClickPropagation(popupRoot);
+            L.DomEvent.disableScrollPropagation(popupRoot);
+        }
+
+        if (popupRoot.dataset.alertPagerBound === '1') return;
+        popupRoot.dataset.alertPagerBound = '1';
+
+        popupRoot.addEventListener('click', (clickEvt) => {
+            const pagerEl = clickEvt.target.closest('[data-alert-pager="1"]');
+            if (!pagerEl) return;
+
+            const navBtn = clickEvt.target.closest('[data-alert-nav]');
+            if (navBtn) {
+                clickEvt.preventDefault();
+                clickEvt.stopPropagation();
+                const dir = navBtn.getAttribute('data-alert-nav');
+                const delta = dir === 'next' ? 1 : -1;
+                _updateAlertsPager((_activeAlertsPopup?.index || 0) + delta);
+                return;
+            }
+            const dotBtn = clickEvt.target.closest('[data-alert-page]');
+            if (!dotBtn) return;
+            clickEvt.preventDefault();
+            clickEvt.stopPropagation();
+            const nextIndex = Number(dotBtn.getAttribute('data-alert-page'));
+            if (!Number.isFinite(nextIndex)) return;
+            _updateAlertsPager(nextIndex);
+        });
+    });
+
+    map.on('popupclose', () => {
+        _activeAlertsPopup = null;
+    });
+
     // ── Init ─────────────────────────────────────────────────────────────────
     function init() {
         _setAllAlertCategories(true);
@@ -2804,8 +3441,8 @@
         refreshActiveLayers();
     }
 
-    // ── Auto-refresh alerts every 2 min (matches backend worker interval) ──
-    const ALERTS_AUTO_REFRESH_MS = 60_000;
+    // ── Auto-refresh alerts every 30s for faster new-alert pickup ──
+    const ALERTS_AUTO_REFRESH_MS = 30_000;
     setInterval(() => {
         if (_archiveMode) return;
         if (!_isTypeEnabled('alerts')) return;
