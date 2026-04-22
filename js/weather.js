@@ -503,7 +503,9 @@
     const CITY_LABEL_HEIGHT_PX = 11;
     const CITY_LABEL_X_PAD = 4;
     const CITY_LABEL_Y_PAD = 2;
-    let _allAlertFeatures = [];
+    let _allAlertFeatures = [];        // Full geometry — used for all interactions (hover, click, pager)
+    let _alertsDisplayFeatures = [];   // Simplified display geometry — used for map rendering only
+    let _lastAlertsZoomBucket = null;  // Tracks current bucket; null = uninitialized
     let _knownAlertIds = null; // null = first load; Set<string> after first load
     let _activeAlertsPopup = null;
     let alertsOpacity = 0.75;
@@ -721,12 +723,99 @@
         return true;
     }
 
+    // Returns the zoom-bucket string for the current map zoom level.
+    // Used to select between full and simplified display geometry on the alerts endpoint.
+    // Threshold ≤5 matches CONUS-level view where simplification provides the most benefit.
+    function _alertsZoomBucket() {
+        return map.getZoom() <= 5 ? 'low' : 'high';
+    }
+
+    // Re-fetch only the display geometry and swap the Leaflet render layer.
+    // Called on zoom-bucket transitions to update the display without re-fetching full data.
+    async function _refreshAlertsDisplayLayer() {
+        if (!_allAlertFeatures.length || !_canApplyAlertsResponse()) return;
+        const checkedCategories = _getCheckedAlertCategories();
+        if (!checkedCategories.length) return;
+
+        const regionCode = String(byId('weather-region')?.value || 'CONUS').toUpperCase();
+        const stateCode = /^[A-Z]{2}$/.test(regionCode) ? regionCode : null;
+        const zoomBucket = _alertsZoomBucket();
+
+        try {
+            const displayUrl = _buildAlertsUrl(stateCode, { geometry_mode: 'display', zoom_bucket: zoomBucket });
+            const resp = await fetch(displayUrl, { cache: 'no-store' });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const displayGeojson = await resp.json();
+
+            if (!_canApplyAlertsResponse()) return;
+
+            const displayFeatures = (displayGeojson.features || [])
+                .filter(f => _matchesCheckedCategories(f, checkedCategories))
+                .filter(f => {
+                    if (f?.properties?.messageType === 'Cancel') return false;
+                    const action = _vtecAction(f);
+                    return action !== 'CAN' && action !== 'EXP';
+                });
+
+            _alertsDisplayFeatures = displayFeatures;
+
+            // Swap the render layer in-place: remove old, add new.
+            if (alertsLayer) { map.removeLayer(alertsLayer); alertsLayer = null; }
+            alertsLayer = L.geoJSON({ type: 'FeatureCollection', features: displayFeatures }, {
+                style: alertStyle,
+                onEachFeature: (feat, layer) => {
+                    layer.on('click', (e) => {
+                        if (e?.latlng) _openAlertsPagerAt(e.latlng);
+                    });
+                    // Throttled hover — PIP against full geometry; click is never throttled.
+                    layer.on('mouseover', _makeThrottledHoverHandler(() => feat, () => layer));
+                    layer.on('mouseout', () => layer.closeTooltip());
+                    if (ALERT_PULSE_EVENTS.has(feat?.properties?.event || '')) {
+                        layer.on('add', () => layer.getElement?.()?.classList.add('wx-alert-pulse'));
+                    }
+                },
+            });
+            alertsLayer.addTo(map);
+        } catch (err) {
+            // On failure, keep the current layer — do not clear it.
+            console.warn('[alerts] Display layer refresh failed:', err.message);
+        }
+    }
+
+    // Compute the axis-aligned bounding box for a feature geometry.
+    // Result is cached on the feature object to avoid repeated traversal.
+    function _featureBbox(feat) {
+        if (feat._bbox) return feat._bbox;
+        const coords = [];
+        const geom = feat?.geometry;
+        if (!geom) return null;
+        const collect = (ring) => { for (const [x, y] of ring) coords.push([x, y]); };
+        if (geom.type === 'Polygon') {
+            for (const ring of (geom.coordinates || [])) collect(ring);
+        } else if (geom.type === 'MultiPolygon') {
+            for (const poly of (geom.coordinates || []))
+                for (const ring of poly) collect(ring);
+        }
+        if (!coords.length) return null;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const [x, y] of coords) {
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+        feat._bbox = { minX, minY, maxX, maxY };
+        return feat._bbox;
+    }
+
     function _featureContainsLatLng(feat, latlng) {
         const geom = feat?.geometry;
         if (!geom || !latlng) return false;
         const lng = latlng.lng;
         const lat = latlng.lat;
         if (!Number.isFinite(lng) || !Number.isFinite(lat)) return false;
+
+        // Fast bbox rejection before the full ray-cast PIP traversal.
+        const bb = _featureBbox(feat);
+        if (bb && (lng < bb.minX || lng > bb.maxX || lat < bb.minY || lat > bb.maxY)) return false;
 
         if (geom.type === 'Polygon') {
             return _polygonContainsPoint(geom.coordinates, lng, lat);
@@ -735,6 +824,32 @@
             return (geom.coordinates || []).some((poly) => _polygonContainsPoint(poly, lng, lat));
         }
         return false;
+    }
+
+    // Throttle limit (ms) for alert polygon hover hit-testing.
+    // Prevents expensive _sortedAlertsForPoint PIP scans from running on every
+    // mouseover event during rapid pointer movement; click is never throttled.
+    const _HOVER_THROTTLE_MS = 80;
+    let _hoverThrottleTimer = null;
+
+    // Returns a mouseover handler that throttles the expensive PIP call.
+    // `layerRef` is expected to have .bindTooltip() / .openTooltip() methods.
+    function _makeThrottledHoverHandler(getFeat, getLayer) {
+        return function (e) {
+            if (_hoverThrottleTimer !== null) return;   // still within throttle window
+            _hoverThrottleTimer = setTimeout(() => { _hoverThrottleTimer = null; }, _HOVER_THROTTLE_MS);
+            const lyr = getLayer();
+            if (!lyr) return;
+            const feat = getFeat();
+            const alerts = _sortedAlertsForPoint(e.latlng);
+            const lines = (alerts.length ? alerts : [feat])
+                .map(f => {
+                    const ev = f?.properties?.event || 'Unknown';
+                    const color = ALERT_COLORS[ev] || ALERT_DEFAULT;
+                    return `<span style="color:${color};font-weight:700">\u25cf</span> ${_escapeHtml(ev)}`;
+                }).join('<br>');
+            lyr.bindTooltip(lines, { sticky: true, opacity: 0.95, className: 'wx-alert-hover-tip' }).openTooltip(e.latlng);
+        };
     }
 
     function _alertPriorityValue(feat) {
@@ -1057,12 +1172,25 @@
     };
     // ── END TEST ─────────────────────────────────────────────────────────────
 
+    // Build an alerts API URL with given query params. stateCode is optional.
+    function _buildAlertsUrl(stateCode, extraParams = {}) {
+        const base = apiUrl('/api/data/alerts');
+        const sep = base.includes('?') ? '&' : '?';
+        const params = new URLSearchParams({
+            ...(stateCode ? { state: stateCode } : {}),
+            ...extraParams,
+            _ts: String(Date.now()),
+        });
+        return `${base}${sep}${params.toString()}`;
+    }
+
     async function loadAlerts() {
         const requestSeq = ++_alertsRequestSeq;
         if (alertsLayer) { map.removeLayer(alertsLayer); alertsLayer = null; }
         const checkedCategories = _getCheckedAlertCategories();
         if (!checkedCategories.length) {
             _allAlertFeatures = [];
+            _alertsDisplayFeatures = [];
             const countEl = byId('weather-alerts-count');
             if (countEl) countEl.textContent = '0 active alert(s)';
             setLegend(null);
@@ -1071,33 +1199,52 @@
         setStatus('Loading alerts...');
         try {
             const regionCode = String(byId('weather-region')?.value || 'CONUS').toUpperCase();
-            const stateParam = /^[A-Z]{2}$/.test(regionCode)
-                ? `state=${encodeURIComponent(regionCode)}&`
-                : '';
-            const alertsUrl = `${apiUrl('/api/data/alerts')}${apiUrl('/api/data/alerts').includes('?') ? '&' : '?'}${stateParam}_ts=${Date.now()}`;
-            const resp = await fetch(alertsUrl, { cache: 'no-store' });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const geojson = await resp.json();
+            const stateCode = /^[A-Z]{2}$/.test(regionCode) ? regionCode : null;
+            const zoomBucket = _alertsZoomBucket();
+
+            // Fetch full geometry (interaction) and display geometry (rendering) in parallel.
+            // Full is always fetched; display is fetched with zoom-based bucket.
+            const fullUrl = _buildAlertsUrl(stateCode, { geometry_mode: 'full', zoom_bucket: zoomBucket });
+            const displayUrl = _buildAlertsUrl(stateCode, { geometry_mode: 'display', zoom_bucket: zoomBucket });
+
+            const [fullResp, displayResp] = await Promise.all([
+                fetch(fullUrl, { cache: 'no-store' }),
+                fetch(displayUrl, { cache: 'no-store' }),
+            ]);
+
+            if (!fullResp.ok) throw new Error(`HTTP ${fullResp.status}`);
+            const fullGeojson = await fullResp.json();
+
+            // Display fetch is best-effort: fall back to full on failure.
+            let displayGeojson = fullGeojson;
+            if (displayResp.ok) {
+                try { displayGeojson = await displayResp.json(); } catch (_) { /* use full */ }
+            }
 
             if (requestSeq !== _alertsRequestSeq || !_canApplyAlertsResponse()) return;
 
-            const features = (geojson.features || [])
-                .filter(f => _matchesCheckedCategories(f, checkedCategories))
-                .filter(f => {
-                    // Drop cancelled/expired alerts — they can briefly linger in the NWS feed.
-                    if (f?.properties?.messageType === 'Cancel') return false;
-                    const action = _vtecAction(f);
-                    return action !== 'CAN' && action !== 'EXP';
-                });
+            // Apply identical cancel/expire and category filters to both collections.
+            function _applyFilters(rawFeatures) {
+                return (rawFeatures || [])
+                    .filter(f => _matchesCheckedCategories(f, checkedCategories))
+                    .filter(f => {
+                        if (f?.properties?.messageType === 'Cancel') return false;
+                        const action = _vtecAction(f);
+                        return action !== 'CAN' && action !== 'EXP';
+                    });
+            }
 
-            // Diff against known IDs to detect new qualifying alerts.
+            const fullFeatures = _applyFilters(fullGeojson.features);
+            const displayFeatures = _applyFilters(displayGeojson.features);
+
+            // ID tracking and banners always use the canonical full features.
             // _knownAlertIds === null means this is the first load — populate silently.
             const prevIds = _knownAlertIds;
-            const newIdSet = new Set(features.map(f => f.id).filter(Boolean));
+            const newIdSet = new Set(fullFeatures.map(f => f.id).filter(Boolean));
             _knownAlertIds = newIdSet;
 
             if (prevIds !== null) {
-                for (const feat of features) {
+                for (const feat of fullFeatures) {
                     if (!feat.id) continue;
                     if (prevIds.has(feat.id)) continue;
                     const event = feat?.properties?.event || '';
@@ -1107,24 +1254,23 @@
                 }
             }
 
-            _allAlertFeatures = features;
-            alertsLayer = L.geoJSON({ type: 'FeatureCollection', features }, {
+            _lastAlertsZoomBucket = zoomBucket;
+
+            // Update state: full for interactions, display for rendering.
+            _allAlertFeatures = fullFeatures;
+            _alertsDisplayFeatures = displayFeatures;
+
+            // Render map layer from display features (may be simplified at low zoom).
+            // Hover and click handlers use _allAlertFeatures via _sortedAlertsForPoint().
+            alertsLayer = L.geoJSON({ type: 'FeatureCollection', features: displayFeatures }, {
                 style: alertStyle,
                 onEachFeature: (feat, layer) => {
                     layer.on('click', (e) => {
                         if (e?.latlng) _openAlertsPagerAt(e.latlng);
                     });
-                    // Hover tooltip — shows every alert type at the cursor point.
-                    layer.on('mouseover', (e) => {
-                        const alerts = _sortedAlertsForPoint(e.latlng);
-                        const lines = (alerts.length ? alerts : [feat])
-                            .map(f => {
-                                const ev = f?.properties?.event || 'Unknown';
-                                const color = ALERT_COLORS[ev] || ALERT_DEFAULT;
-                                return `<span style="color:${color};font-weight:700">●</span> ${_escapeHtml(ev)}`;
-                            }).join('<br>');
-                        layer.bindTooltip(lines, { sticky: true, opacity: 0.95, className: 'wx-alert-hover-tip' }).openTooltip(e.latlng);
-                    });
+                    // Throttled hover — PIP is expensive at CONUS scale with many polygons.
+                    // Click is immediate; hover is deduplicated within _HOVER_THROTTLE_MS window.
+                    layer.on('mouseover', _makeThrottledHoverHandler(() => feat, () => layer));
                     layer.on('mouseout', () => layer.closeTooltip());
                     // Pulse high-priority polygons.
                     if (ALERT_PULSE_EVENTS.has(feat?.properties?.event || '')) {
@@ -1133,10 +1279,11 @@
                 },
             });
             alertsLayer.addTo(map);
-            buildAlertsLegend(features);
 
+            // Legend and count always reflect the full canonical feature set.
+            buildAlertsLegend(fullFeatures);
             const countEl = byId('weather-alerts-count');
-            if (countEl) countEl.textContent = `${features.length} active alert(s)`;
+            if (countEl) countEl.textContent = `${fullFeatures.length} active alert(s)`;
             setStatus(`Alerts updated at ${new Date().toLocaleTimeString()}.`);
         } catch (err) {
             if (requestSeq !== _alertsRequestSeq) return;
@@ -2186,6 +2333,15 @@
         if (_surfaceStations.length && _isTypeEnabled('current') && _activeSurfaceProduct()) {
             _renderSurfaceMarkers(_surfaceStations);
         }
+        // Swap display geometry when crossing the zoom-bucket threshold (low ↔ high).
+        // Full geometry (_allAlertFeatures) is unchanged; only the render layer is swapped.
+        if (!_archiveMode && _isTypeEnabled('alerts') && _allAlertFeatures.length) {
+            const newBucket = _alertsZoomBucket();
+            if (newBucket !== _lastAlertsZoomBucket) {
+                _lastAlertsZoomBucket = newBucket;
+                _refreshAlertsDisplayLayer();
+            }
+        }
     });
 
     // ── MRMS layer ────────────────────────────────────────────────────────────
@@ -2588,7 +2744,9 @@
                 },
             });
             alertsLayer.addTo(map);
+            // In archive mode both collections hold the same data (no live simplification).
             _allAlertFeatures = filtered;
+            _alertsDisplayFeatures = filtered;
             buildAlertsLegend(filtered);
         } else if (layerType === 'spc') {
             if (spcLayer) { map.removeLayer(spcLayer); spcLayer = null; }

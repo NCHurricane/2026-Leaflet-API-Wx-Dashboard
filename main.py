@@ -1,6 +1,7 @@
 import threading
 import shutil
 import os
+import sys
 import time as _time
 import uvicorn
 import glob
@@ -11,61 +12,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import json
 from datetime import datetime, timezone, timedelta
+from io import StringIO
 
 # --- IMPORT YOUR UTILITIES ---
 from surface import surface_utils
+
+# Suppress Py-ART license header during threshold utils imports
+_old_stdout = sys.stdout
+_old_stderr = sys.stderr
+sys.stdout = StringIO()
+sys.stderr = StringIO()
 from radar import radar_utils as radar_thredds_utils
 from satellite import satellite_utils as satellite_thredds_utils
+
+sys.stdout = _old_stdout
+sys.stderr = _old_stderr
+
 from font_utils import resolve_logo_path
 from config.geo_config import STATE_BOUNDS
 
+# Module state — initialized at startup
 USING_NODD = False
-try:
-    from radar import radar_nodd_utils as radar_utils
-    from satellite import satellite_nodd_utils as satellite_utils
-
-    USING_NODD = True
-    print("[OK] Using NODD modules for radar and satellite")
-except Exception as import_error:
-    radar_utils = radar_thredds_utils
-    satellite_utils = satellite_thredds_utils
-    print(f"[WARN] NODD modules unavailable, using THREDDS fallback: {import_error}")
-
-# Archive radar module (standalone, always available when NODD is)
-try:
-    from radar import radar_archive_utils
-
-    print("[OK] Radar archive module loaded")
-except Exception as archive_err:
-    radar_archive_utils = None
-    print(f"[WARN] Radar archive module unavailable: {archive_err}")
-
-# Archive satellite module (standalone, uses NODD sources)
-try:
-    from satellite import satellite_archive_utils
-
-    print("[OK] Satellite archive module loaded")
-except Exception as sat_archive_err:
-    satellite_archive_utils = None
-    print(f"[WARN] Satellite archive module unavailable: {sat_archive_err}")
-
-# Unified weather module
-try:
-    from weather import weather_utils
-
-    print("[OK] Unified weather module loaded")
-except Exception as weather_err:
-    weather_utils = None
-    print(f"[WARN] Unified weather module unavailable: {weather_err}")
-
-# Background workers (APScheduler)
-try:
-    from workers.scheduler import start_scheduler, stop_scheduler
-
-    _SCHEDULER_AVAILABLE = True
-except Exception as sched_err:
-    _SCHEDULER_AVAILABLE = False
-    print(f"[WARN] Background workers unavailable: {sched_err}")
+radar_utils = None
+satellite_utils = None
+radar_archive_utils = None
+satellite_archive_utils = None
+weather_utils = None
+_SCHEDULER_AVAILABLE = False
+start_scheduler = None
+stop_scheduler = None
 
 # --- GLOBAL TASK STORE ---
 active_tasks = {}
@@ -93,55 +68,172 @@ DIRS = {
     "spc_archive": os.path.join(BASE_DIR, "spc", "spc_archive", "spc_images"),
 }
 
-os.makedirs(DIRS["surface"], exist_ok=True)
-os.makedirs(DIRS["surface_archive"], exist_ok=True)
-os.makedirs(DIRS["alerts"], exist_ok=True)
-os.makedirs(DIRS["alerts_archive"], exist_ok=True)
-os.makedirs(DIRS["mrms"], exist_ok=True)
-os.makedirs(DIRS["spc"], exist_ok=True)
-os.makedirs(DIRS["spc_archive"], exist_ok=True)
-
-# Weather unified workflow directories
-if weather_utils:
-    DIRS["weather"] = weather_utils.WEATHER_IMAGES
-    DIRS["weather_archive"] = weather_utils.WEATHER_ARCHIVE
-    DIRS["weather_archive_layers"] = weather_utils.WEATHER_ARCHIVE_LAYERS
-    for _wd in [
-        DIRS["weather"],
-        DIRS["weather_archive"],
-        DIRS["weather_archive_layers"],
-    ]:
-        os.makedirs(_wd, exist_ok=True)
-
+# Defer directory creation and module initialization to startup handler
 app = FastAPI(title="NCHurricane Weather API")
 
 
-@app.on_event("startup")
-def _warm_radar_render_assets():
-    """Warm radar Cartopy assets at startup to reduce first-render latency."""
+def _initialize_modules() -> None:
+    """Load all optional modules at startup (NODD, Archive, Weather, Scheduler) with timing."""
+    global USING_NODD, radar_utils, satellite_utils, radar_archive_utils
+    global satellite_archive_utils, weather_utils, _SCHEDULER_AVAILABLE
+    global start_scheduler, stop_scheduler
+
+    startup_events = []
+
+    # 1. Initialize NODD modules
+    _t0 = _time.time()
+    old_stderr = sys.stderr  # Save stderr for restoration
+    try:
+        # Suppress Py-ART license header during import
+        sys.stderr = StringIO()
+
+        from radar import radar_nodd_utils as radar_nodd
+        from satellite import satellite_nodd_utils as satellite_nodd
+
+        sys.stderr = old_stderr
+
+        radar_utils = radar_nodd
+        satellite_utils = satellite_nodd
+        USING_NODD = True
+        startup_events.append(("[OK] NODD modules", _time.time() - _t0))
+    except Exception as import_error:
+        sys.stderr = old_stderr
+        radar_utils = radar_thredds_utils
+        satellite_utils = satellite_thredds_utils
+        startup_events.append(
+            (f"[WARN] NODD fallback to THREDDS: {import_error}", _time.time() - _t0)
+        )
+
+    # 2. Initialize Radar Archive module
+    _t0 = _time.time()
+    try:
+        from radar import radar_archive_utils as rad_archive
+
+        radar_archive_utils = rad_archive
+        startup_events.append(("[OK] Radar archive module", _time.time() - _t0))
+    except Exception as archive_err:
+        startup_events.append(
+            (f"[WARN] Radar archive unavailable: {archive_err}", _time.time() - _t0)
+        )
+
+    # 3. Initialize Satellite Archive module
+    _t0 = _time.time()
+    try:
+        from satellite import satellite_archive_utils as sat_archive
+
+        satellite_archive_utils = sat_archive
+        startup_events.append(("[OK] Satellite archive module", _time.time() - _t0))
+    except Exception as sat_archive_err:
+        startup_events.append(
+            (
+                f"[WARN] Satellite archive unavailable: {sat_archive_err}",
+                _time.time() - _t0,
+            )
+        )
+
+    # 4. Initialize Weather unified module
+    _t0 = _time.time()
+    try:
+        from weather import weather_utils as wx_utils
+
+        weather_utils = wx_utils
+        startup_events.append(("[OK] Weather unified module", _time.time() - _t0))
+    except Exception as weather_err:
+        startup_events.append(
+            (f"[WARN] Weather module unavailable: {weather_err}", _time.time() - _t0)
+        )
+
+    # 5. Initialize Background Scheduler
+    _t0 = _time.time()
+    try:
+        from workers.scheduler import start_scheduler as _start, stop_scheduler as _stop
+
+        start_scheduler = _start
+        stop_scheduler = _stop
+        _SCHEDULER_AVAILABLE = True
+        startup_events.append(("[OK] APScheduler loaded", _time.time() - _t0))
+    except Exception as sched_err:
+        startup_events.append(
+            (f"[WARN] APScheduler unavailable: {sched_err}", _time.time() - _t0)
+        )
+
+    # 6. Create base directories (non-weather)
+    _t0 = _time.time()
+    os.makedirs(DIRS["surface"], exist_ok=True)
+    os.makedirs(DIRS["surface_archive"], exist_ok=True)
+    os.makedirs(DIRS["alerts"], exist_ok=True)
+    os.makedirs(DIRS["alerts_archive"], exist_ok=True)
+    os.makedirs(DIRS["mrms"], exist_ok=True)
+    os.makedirs(DIRS["spc"], exist_ok=True)
+    os.makedirs(DIRS["spc_archive"], exist_ok=True)
+    startup_events.append(("[OK] Base directories created", _time.time() - _t0))
+
+    # 7. Create weather directories if weather_utils is available
+    _t0 = _time.time()
+    if weather_utils:
+        DIRS["weather"] = weather_utils.WEATHER_IMAGES
+        DIRS["weather_archive"] = weather_utils.WEATHER_ARCHIVE
+        DIRS["weather_archive_layers"] = weather_utils.WEATHER_ARCHIVE_LAYERS
+        for _wd in [
+            DIRS["weather"],
+            DIRS["weather_archive"],
+            DIRS["weather_archive_layers"],
+        ]:
+            os.makedirs(_wd, exist_ok=True)
+        startup_events.append(("[OK] Weather directories", _time.time() - _t0))
+
+    # 8. Warm radar Cartopy assets
+    _t0 = _time.time()
     try:
         if hasattr(radar_thredds_utils, "warm_radar_cartopy_cache"):
             radar_thredds_utils.warm_radar_cartopy_cache()
+        startup_events.append(("[Perf] Radar Cartopy warmup", _time.time() - _t0))
     except Exception as e:
-        print(f"[WARN] Radar warmup skipped: {e}")
+        startup_events.append((f"[WARN] Radar warmup failed: {e}", _time.time() - _t0))
 
+    # 9. Warm radar archive Cartopy assets
+    _t0 = _time.time()
     try:
         if radar_archive_utils and hasattr(
             radar_archive_utils, "warm_radar_cartopy_cache"
         ):
             radar_archive_utils.warm_radar_cartopy_cache()
+        startup_events.append(("[Perf] Radar archive warmup", _time.time() - _t0))
     except Exception as e:
-        print(f"[WARN] Radar archive warmup skipped: {e}")
+        startup_events.append(
+            (f"[WARN] Radar archive warmup failed: {e}", _time.time() - _t0)
+        )
 
-
-@app.on_event("startup")
-def _start_background_workers():
-    """Start APScheduler background workers for alerts and SPC pre-caching."""
+    # 10. Start background workers
+    _t0 = _time.time()
     if _SCHEDULER_AVAILABLE:
         try:
             start_scheduler()
+            startup_events.append(
+                ("[OK] Background workers started", _time.time() - _t0)
+            )
         except Exception as e:
-            print(f"[WARN] Background worker startup failed: {e}")
+            startup_events.append(
+                (f"[WARN] Background workers failed: {e}", _time.time() - _t0)
+            )
+
+    # Print startup summary
+    print("\n" + "=" * 70)
+    print("STARTUP SEQUENCE")
+    print("=" * 70)
+    total_time = 0
+    for event_msg, elapsed in startup_events:
+        total_time += elapsed
+        print(f"{event_msg:<50} {elapsed:.2f}s")
+    print("=" * 70)
+    print(f"{'TOTAL STARTUP TIME':<50} {total_time:.2f}s")
+    print("=" * 70 + "\n")
+
+
+@app.on_event("startup")
+def _run_startup_sequence():
+    """Execute the complete startup sequence with initialization."""
+    _initialize_modules()
 
 
 @app.on_event("shutdown")
@@ -889,12 +981,56 @@ def _enrich_alert_features_geometry(features: list[dict]) -> None:
 
 
 @app.get("/api/data/alerts")
-def get_data_alerts(state: Optional[str] = None):
-    """Return national alerts GeoJSON from worker cache, optionally filtered by state."""
-    cache_file = os.path.join(_CACHE_ROOT, "alerts", "national.geojson")
+def get_data_alerts(
+    state: Optional[str] = None,
+    geometry_mode: Optional[str] = None,
+    zoom_bucket: Optional[str] = None,
+):
+    """Return national alerts GeoJSON from worker cache with dual-geometry support.
+
+    Query Parameters:
+        state: Optional state code to filter by (e.g., 'NC', 'CA')
+        geometry_mode: 'full' or 'display' (default: 'full')
+            - 'full': canonical full geometry, always used for interactions
+            - 'display': simplified variant for low-zoom rendering
+        zoom_bucket: 'low' or 'high' (default: 'high')
+            - 'low': CONUS-like zoom with simplified geometry
+            - 'high': state/local zoom with full geometry
+
+    Returns GeoJSON FeatureCollection with metadata about geometry mode and
+    simplification statistics.
+    """
+    from config.alerts_config import GEOMETRY_ENDPOINT_DEFAULTS
+
+    # Normalize and validate parameters.
+    mode = (
+        str(geometry_mode or GEOMETRY_ENDPOINT_DEFAULTS["geometry_mode"])
+        .lower()
+        .strip()
+    )
+    bucket = (
+        str(zoom_bucket or GEOMETRY_ENDPOINT_DEFAULTS["zoom_bucket"]).lower().strip()
+    )
+
+    if mode not in {"full", "display"}:
+        mode = GEOMETRY_ENDPOINT_DEFAULTS["geometry_mode"]
+    if bucket not in {"low", "high"}:
+        bucket = GEOMETRY_ENDPOINT_DEFAULTS["zoom_bucket"]
+
+    # Select cache file based on geometry_mode and zoom_bucket.
+    # Use display-low variant only if explicitly requested with low zoom.
+    if mode == "display" and bucket == "low":
+        cache_file = os.path.join(_CACHE_ROOT, "alerts", "national_display_low.geojson")
+    else:
+        # Default to full geometry (backward compatible).
+        cache_file = os.path.join(_CACHE_ROOT, "alerts", "national_full.geojson")
+
+    # Fallback to legacy cache if specific cache not found.
+    if not os.path.exists(cache_file):
+        cache_file = os.path.join(_CACHE_ROOT, "alerts", "national.geojson")
 
     if not os.path.exists(cache_file):
-        # Cold cache: trigger a synchronous worker run
+        # Cold cache: trigger a synchronous worker run.
         try:
             from workers.alerts_worker import run_alerts_worker
 
@@ -913,6 +1049,7 @@ def get_data_alerts(state: Optional[str] = None):
 
     features = data.get("features", [])
 
+    # Apply state filtering identically to both variants.
     if state:
         state_upper = state.upper().strip()
 
@@ -925,15 +1062,30 @@ def get_data_alerts(state: Optional[str] = None):
 
         features = [f for f in features if _matches(f)]
 
-    # Geometry enrichment now happens at cache-write time in alerts_worker,
-    # not at request time. This eliminates request-time bottleneck.
+    # Count simplified features (only relevant for display mode).
+    simplified_count = 0
+    if mode == "display" and bucket == "low":
+        simplified_count = sum(1 for f in features if f.get("_simplified") is True)
 
+    # Clean up internal metadata flags from response (don't expose to client).
+    for feat in features:
+        if "_simplified" in feat:
+            del feat["_simplified"]
+
+    # Build response with dual-geometry metadata.
     return {
         "type": "FeatureCollection",
         "features": features,
         "_source": data.get("_source", "NWS"),
         "_updated": data.get("_updated"),
         "count": len(features),
+        # Geometry optimization metadata (Phase 3).
+        "_geometry_mode": mode,
+        "_zoom_bucket": bucket,
+        "_simplified_feature_count": simplified_count,
+        "_simplification_metrics": data.get(
+            "_simplification_metrics", {}
+        ),  # Empty dict if full variant
     }
 
 

@@ -519,3 +519,35 @@ NWS_WFO_MAP = {
     "Eureka, CA": "EKA",
     "Hanford, CA": "HNX",
 }
+
+# ============================================================================
+# Geometry Optimization Configuration (Phase 1)
+# ============================================================================
+# Events excluded from geometry simplification. These must always use full
+# geometry at every zoom level for display and interaction.
+GEOMETRY_EXCLUDED_EVENTS = {
+    "Tornado Warning",
+    "Severe Thunderstorm Warning",
+    "Flash Flood Warning",
+    "Special Marine Warning",
+    "Snow Squall Warning",
+}
+
+# Simplification parameters for low-zoom rendering of non-excluded events.
+# Controls topological simplification of polygon geometries.
+GEOMETRY_SIMPLIFICATION_SETTINGS = {
+    # Tolerance in meters for Douglas-Peucker simplification algorithm
+    "low_zoom_tolerance_m": 1000.0,
+    # Minimum number of vertices to preserve during simplification
+    "minimum_vertices_gate": 3,
+    # Whether to preserve topology during simplification (prevents self-intersections)
+    "preserve_topology": True,
+}
+
+# Endpoint parameters and defaults for geometry serving.
+# geometry_mode: "full" for canonical geometry, "display" for simplified low-zoom variant
+# zoom_bucket: "low" for CONUS-like zoom, "high" for state/local zoom
+GEOMETRY_ENDPOINT_DEFAULTS = {
+    "geometry_mode": "full",  # Default to full geometry for backward compatibility
+    "zoom_bucket": "high",  # Default to high zoom (no simplification)
+}

@@ -2173,3 +2173,194 @@ def generate_alerts_map(
         status_message,
         data_source,
     )
+
+
+# ============================================================================
+# Geometry Optimization: Simplification for low-zoom rendering (Phase 2)
+# ============================================================================
+
+
+def _simplify_geometry_for_display(geom, tolerance_m: float = 1000.0) -> object | None:
+    """Simplify a Shapely geometry using Douglas-Peucker with meter-based tolerance.
+
+    Args:
+        geom: Shapely geometry (Polygon or MultiPolygon).
+        tolerance_m: Simplification tolerance in meters.
+
+    Returns:
+        Simplified Shapely geometry, or None if simplification fails or produces
+        an empty/invalid result.
+    """
+    if geom is None or geom.is_empty:
+        return None
+
+    try:
+        from pyproj import Geod
+
+        # Use WGS84 Geod for distance calculations.
+        geod = Geod(ellps="WGS84")
+
+        # Estimate tolerance in degrees (~1000m = 0.009° at equator).
+        # Rough conversion: 1 degree ≈ 111 km at equator, scales by cos(latitude).
+        bounds = geom.bounds  # (minx, miny, maxx, maxy)
+        center_lat = (bounds[1] + bounds[3]) / 2.0
+        tolerance_deg = tolerance_m / (
+            111000.0
+            * max(
+                0.1, abs(__import__("math").cos(__import__("math").radians(center_lat)))
+            )
+        )
+        tolerance_deg = max(0.0001, tolerance_deg)
+
+        # Apply Douglas-Peucker simplification.
+        simplified = geom.simplify(tolerance_deg, preserve_topology=True)
+
+        if simplified is None or simplified.is_empty:
+            return None
+
+        # Validate minimum vertex count.
+        min_vertices = 3
+        if hasattr(simplified, "exterior"):
+            # Polygon: check outer ring.
+            if len(simplified.exterior.coords) < min_vertices + 1:  # +1 for closed ring
+                return None
+        elif hasattr(simplified, "geoms"):
+            # MultiPolygon: check all rings.
+            valid = True
+            for part in simplified.geoms:
+                if hasattr(part, "exterior"):
+                    if len(part.exterior.coords) < min_vertices + 1:
+                        valid = False
+                        break
+            if not valid:
+                return None
+
+        return simplified
+    except Exception:
+        # Fallback: return None on any simplification error.
+        return None
+
+
+def _create_display_low_features(full_features: list[dict]) -> tuple[list[dict], dict]:
+    """Create a simplified display-low variant of alert features.
+
+    Non-excluded events are simplified for low-zoom rendering. Excluded storm
+    events always retain full geometry. Validation ensures that invalid
+    simplifications fall back to full geometry.
+
+    Args:
+        full_features: List of full GeoJSON Feature dicts with geometries.
+
+    Returns:
+        (display_features, metrics) where metrics is a dict with simplification stats.
+    """
+    from config.alerts_config import (
+        GEOMETRY_EXCLUDED_EVENTS,
+        GEOMETRY_SIMPLIFICATION_SETTINGS,
+    )
+
+    tolerance_m = GEOMETRY_SIMPLIFICATION_SETTINGS["low_zoom_tolerance_m"]
+    display_features = []
+    total_features = 0
+    simplified_features = 0
+    excluded_features = 0
+    total_vertices_before = 0
+    total_vertices_after = 0
+
+    for feat in full_features:
+        if not isinstance(feat, dict):
+            continue
+
+        total_features += 1
+        props = feat.get("properties", {})
+        event_name = str(props.get("event", "") or "").strip()
+
+        # Skip excluded events – always use full geometry.
+        if event_name in GEOMETRY_EXCLUDED_EVENTS:
+            display_feat = dict(feat)
+            display_feat.setdefault("_simplified", False)  # Mark as not simplified
+            display_features.append(display_feat)
+            excluded_features += 1
+            continue
+
+        # Attempt to simplify non-excluded events.
+        raw_geom = feat.get("geometry")
+        if not raw_geom:
+            display_feat = dict(feat)
+            display_feat.setdefault("_simplified", False)  # Mark as not simplified
+            display_features.append(display_feat)
+            continue
+
+        try:
+            full_geom = shape(raw_geom)
+            if full_geom.is_empty:
+                display_feat = dict(feat)
+                display_feat.setdefault("_simplified", False)  # Mark as not simplified
+                display_features.append(display_feat)
+                continue
+
+            # Count vertices before simplification.
+            if hasattr(full_geom, "exterior"):
+                total_vertices_before += len(full_geom.exterior.coords)
+            elif hasattr(full_geom, "geoms"):
+                for part in full_geom.geoms:
+                    if hasattr(part, "exterior"):
+                        total_vertices_before += len(part.exterior.coords)
+
+            # Attempt simplification.
+            simplified_geom = _simplify_geometry_for_display(
+                full_geom, tolerance_m=tolerance_m
+            )
+
+            # Fallback to full geometry if simplification fails.
+            if simplified_geom is None or simplified_geom.is_empty:
+                display_feat = dict(feat)
+                display_feat.setdefault(
+                    "_simplified", False
+                )  # Mark as not simplified (fallback)
+                display_features.append(display_feat)
+                if hasattr(full_geom, "exterior"):
+                    total_vertices_after += len(full_geom.exterior.coords)
+                elif hasattr(full_geom, "geoms"):
+                    for part in full_geom.geoms:
+                        if hasattr(part, "exterior"):
+                            total_vertices_after += len(part.exterior.coords)
+            else:
+                # Use simplified geometry.
+                display_feat = dict(feat)
+                display_feat["geometry"] = mapping(simplified_geom)
+                display_feat["_simplified"] = True  # Mark as simplified
+                display_features.append(display_feat)
+                simplified_features += 1
+
+                if hasattr(simplified_geom, "exterior"):
+                    total_vertices_after += len(simplified_geom.exterior.coords)
+                elif hasattr(simplified_geom, "geoms"):
+                    for part in simplified_geom.geoms:
+                        if hasattr(part, "exterior"):
+                            total_vertices_after += len(part.exterior.coords)
+        except Exception:
+            # On any error, include full feature unchanged.
+            display_feat = dict(feat)
+            display_feat.setdefault(
+                "_simplified", False
+            )  # Mark as not simplified (error)
+            display_features.append(display_feat)
+
+    # Calculate vertex reduction percentage.
+    vertex_reduction_pct = 0.0
+    if total_vertices_before > 0:
+        vertex_reduction_pct = 100.0 * (
+            1.0 - (total_vertices_after / total_vertices_before)
+        )
+
+    metrics = {
+        "total_features": total_features,
+        "simplified_features": simplified_features,
+        "excluded_features": excluded_features,
+        "total_vertices_before": total_vertices_before,
+        "total_vertices_after": total_vertices_after,
+        "vertex_reduction_percent": round(vertex_reduction_pct, 2),
+    }
+
+    return display_features, metrics
