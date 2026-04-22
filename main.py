@@ -820,10 +820,23 @@ def _safe_float(row, col: str):
 
 
 def _enrich_alert_features_geometry(features: list[dict]) -> None:
-    """Fill missing alert geometries using local SAME county fallback."""
+    """Fill missing alert geometries.
+
+    Priority order:
+      1. NWS forecast-zone geometry (terrain-accurate, e.g. mountain ridgelines)
+      2. SAME/county FIPS fallback (entire county polygons) when zone fetch fails
+    """
     try:
         from shapely.geometry import mapping, shape
-        from alerts.alerts_utils import CensusCounties
+        from alerts.alerts_utils import (
+            CensusCounties,
+            _prefetch_zone_geometries,
+            _resolve_zone_geometry,
+        )
+
+        # Bulk-prefetch all zone geometries for features missing inline geometry.
+        # This is one concurrent pass and avoids per-alert serial HTTP calls.
+        _prefetch_zone_geometries(features)
 
         counties_loaded = False
 
@@ -845,16 +858,23 @@ def _enrich_alert_features_geometry(features: list[dict]) -> None:
             props = feat.get("properties") or {}
             final_geom = None
 
-            same_codes = (props.get("geocode") or {}).get("SAME") or []
-            if same_codes:
-                if not counties_loaded:
-                    CensusCounties.load()
-                    counties_loaded = True
-                fips_codes = [
-                    c[1:] for c in same_codes if isinstance(c, str) and len(c) == 6
-                ]
-                if fips_codes:
-                    final_geom = CensusCounties.get_geometry_for_fips(fips_codes)
+            # 1. Try NWS zone geometry first (terrain-accurate boundaries)
+            zone_urls = props.get("affectedZones") or []
+            if zone_urls:
+                final_geom = _resolve_zone_geometry(zone_urls)
+
+            # 2. Fall back to SAME county polygons if zone geometry unavailable
+            if final_geom is None or final_geom.is_empty:
+                same_codes = (props.get("geocode") or {}).get("SAME") or []
+                if same_codes:
+                    if not counties_loaded:
+                        CensusCounties.load()
+                        counties_loaded = True
+                    fips_codes = [
+                        c[1:] for c in same_codes if isinstance(c, str) and len(c) == 6
+                    ]
+                    if fips_codes:
+                        final_geom = CensusCounties.get_geometry_for_fips(fips_codes)
 
             if final_geom is not None and not final_geom.is_empty:
                 try:
@@ -905,7 +925,8 @@ def get_data_alerts(state: Optional[str] = None):
 
         features = [f for f in features if _matches(f)]
 
-    _enrich_alert_features_geometry(features)
+    # Geometry enrichment now happens at cache-write time in alerts_worker,
+    # not at request time. This eliminates request-time bottleneck.
 
     return {
         "type": "FeatureCollection",

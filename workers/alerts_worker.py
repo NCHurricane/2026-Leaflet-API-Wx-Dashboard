@@ -1,4 +1,4 @@
-"""Background worker: fetches national NWS alerts and writes to cache/alerts/national.geojson."""
+"""Background worker: fetches national NWS alerts, enriches geometries, and writes to cache/alerts/national.geojson."""
 
 import json
 from datetime import datetime, timezone
@@ -9,12 +9,17 @@ CACHE_FILE = CACHE_DIR / "national.geojson"
 
 
 def run_alerts_worker() -> None:
-    """Fetch all active US alerts and write national.geojson to the cache."""
+    """Fetch all active US alerts, enrich geometries, and write national.geojson to the cache."""
     try:
         from alerts.alerts_utils import fetch_active_alerts_with_source
+        from main import _enrich_alert_features_geometry
 
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         features, source = fetch_active_alerts_with_source(state=None, source="nws")
+
+        # Enrich all features with missing geometries before caching
+        _enrich_alert_features_geometry(features)
+
         payload = {
             "type": "FeatureCollection",
             "_source": source,
@@ -22,6 +27,8 @@ def run_alerts_worker() -> None:
             "features": features,
         }
         CACHE_FILE.write_text(json.dumps(payload), encoding="utf-8")
-        print(f"[alerts_worker] Cached {len(features)} alerts from {source}")
+        print(
+            f"[alerts_worker] Cached {len(features)} alerts from {source} (with geometry enrichment)"
+        )
     except Exception as exc:
         print(f"[alerts_worker] Error: {exc}")

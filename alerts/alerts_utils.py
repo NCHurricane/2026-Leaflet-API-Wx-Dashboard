@@ -114,6 +114,7 @@ MARINE_ALERT_EVENTS = {
 # ---------------------------------------------------------------------------
 # Zone geometry cache – resolves NWS forecast-zone / marine-zone polygons
 # from the public zones API and keeps them in memory with a TTL.
+# Disk-backed so the ~50s zone fetch survives server restarts.
 # ---------------------------------------------------------------------------
 _ZONE_GEOM_CACHE = {}  # zone_id -> (shapely_geom | None, expire_ts)
 _ZONE_GEOM_LOCK = threading.Lock()
@@ -122,6 +123,62 @@ _ZONE_GEOM_MAX_WORKERS = 20  # concurrent HTTP fetches for a batch
 _NWS_HEADERS = {
     "User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"
 }
+
+_ZONE_DISK_CACHE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "cache",
+    "alerts",
+    "zone_geometry_cache.json",
+)
+
+
+def _load_zone_disk_cache() -> None:
+    """Load persisted zone geometries from disk into the in-memory cache."""
+    try:
+        if not os.path.exists(_ZONE_DISK_CACHE_PATH):
+            return
+        with open(_ZONE_DISK_CACHE_PATH, "r", encoding="utf-8") as fh:
+            raw = json.load(fh)
+        now = time.time()
+        loaded = 0
+        with _ZONE_GEOM_LOCK:
+            for zone_id, entry in raw.items():
+                expire_ts = entry.get("expire_ts", 0)
+                if expire_ts <= now:
+                    continue  # skip expired entries
+                geom_raw = entry.get("geometry")
+                geom = shape(geom_raw) if geom_raw else None
+                _ZONE_GEOM_CACHE[zone_id] = (geom, expire_ts)
+                loaded += 1
+        if loaded:
+            print(f"[zone-geom] Loaded {loaded} zone geometries from disk cache")
+    except Exception as exc:
+        print(f"[zone-geom] Disk cache load skipped: {exc}")
+
+
+def _save_zone_disk_cache() -> None:
+    """Persist current in-memory zone geometry cache to disk."""
+    try:
+        os.makedirs(os.path.dirname(_ZONE_DISK_CACHE_PATH), exist_ok=True)
+        snapshot = {}
+        with _ZONE_GEOM_LOCK:
+            for zone_id, (geom, expire_ts) in _ZONE_GEOM_CACHE.items():
+                try:
+                    snapshot[zone_id] = {
+                        "expire_ts": expire_ts,
+                        "geometry": mapping(geom) if geom else None,
+                    }
+                except Exception:
+                    pass
+        with open(_ZONE_DISK_CACHE_PATH, "w", encoding="utf-8") as fh:
+            json.dump(snapshot, fh)
+    except Exception as exc:
+        print(f"[zone-geom] Disk cache save skipped: {exc}")
+
+
+# Load persisted zone geometries at module import time so the first worker
+# run after a restart hits warm cache instead of re-fetching ~895 zones.
+_load_zone_disk_cache()
 
 
 def _fetch_single_zone_geometry(zone_url):
@@ -182,6 +239,8 @@ def _prefetch_zone_geometries(features):
         f"workers in {time.time() - fetch_start:.1f}s | "
         f"{len(_ZONE_GEOM_CACHE)} cached total"
     )
+    # Persist updated cache to disk so restarts don't re-fetch
+    _save_zone_disk_cache()
 
 
 def _resolve_zone_geometry(affected_zone_urls):
