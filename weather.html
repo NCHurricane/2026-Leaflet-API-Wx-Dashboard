@@ -5,6 +5,7 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Weather — NCHurricane Dashboard</title>
+        <link rel="icon" href="img/favicon.ico">
         <link rel="stylesheet" href="css/shared.css">
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
@@ -287,7 +288,8 @@
                 margin-top: 4px;
             }
 
-            #weather-alerts-opts>.wx-check-row {
+            #weather-alerts-opts>.wx-check-row,
+            #wx-section-alerts .wx-block>.wx-check-row {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) 20px;
                 align-items: center;
@@ -297,11 +299,13 @@
                 line-height: 1.08;
             }
 
-            #weather-alerts-opts>.wx-check-row span {
+            #weather-alerts-opts>.wx-check-row span,
+            #wx-section-alerts .wx-block>.wx-check-row span {
                 display: block;
             }
 
-            #weather-alerts-opts>.wx-check-row input[type="checkbox"] {
+            #weather-alerts-opts>.wx-check-row input[type="checkbox"],
+            #wx-section-alerts .wx-block>.wx-check-row input[type="checkbox"] {
                 width: 18px;
                 height: 18px;
                 margin: 0;
@@ -549,6 +553,28 @@
                 padding: 0;
             }
 
+            .wx-reset-view-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 52px;
+                height: 52px;
+                background: rgba(15, 23, 42, 0.92);
+                border: 1px solid #334155;
+                border-radius: 4px;
+                color: #e2e8f0;
+                font-size: 0.8rem;
+                cursor: pointer;
+                outline: none;
+                padding: 0;
+            }
+
+            .wx-reset-view-btn:hover {
+                background: rgba(74, 128, 212, 0.3);
+                border-color: #4a80d4;
+                color: #fff;
+            }
+
             .wx-basemap-btn:hover,
             .wx-basemap-btn.open {
                 background: rgba(74, 128, 212, 0.3);
@@ -761,6 +787,7 @@
             }
 
             .city-name-tag {
+                font-family: 'Montserrat-ExtraBold', system-ui, sans-serif;
                 background: transparent;
                 border: 0;
                 box-shadow: none;
@@ -768,11 +795,12 @@
             }
 
             .city-name-tag span {
+                font-family: 'Montserrat-Italic', system-ui, sans-serif;
                 display: block;
                 color: #d8f1ff;
-                font-size: 0.57rem;
-                font-weight: 700;
-                letter-spacing: 0.01em;
+                font-size: 0.6rem;
+                font-weight: 900;
+                letter-spacing: 0.02em;
                 line-height: 1;
                 text-align: center;
                 white-space: nowrap;
@@ -1086,16 +1114,16 @@
 
                 0%,
                 100% {
-                    fill-opacity: 0.3;
+                    fill-opacity: 0.1;
                 }
 
                 50% {
-                    fill-opacity: 0.75;
+                    fill-opacity: 0.5;
                 }
             }
 
             .wx-alert-pulse {
-                animation: wx-alert-pulse 1.8s ease-in-out infinite;
+                animation: wx-alert-pulse 1.25s ease-in-out infinite;
             }
 
             /* ── New-alert notification banners ────────────────────────────── */
@@ -1155,7 +1183,7 @@
             }
 
             .wx-new-alert-banner-header {
-                font-size: 0.65rem;
+                font-size: 1.5rem;
                 font-weight: 700;
                 letter-spacing: 0.14em;
                 text-transform: uppercase;
@@ -1172,7 +1200,7 @@
             }
 
             .wx-new-alert-banner-area {
-                font-size: 0.7rem;
+                font-size: 0.8rem;
                 font-weight: 600;
                 letter-spacing: 0.05em;
                 text-transform: uppercase;
@@ -1216,7 +1244,7 @@
                 width: 100%;
                 border-radius: 0 0 6px 6px;
                 transform-origin: left;
-                animation: wx-alert-progress 15s linear forwards;
+                animation: wx-alert-progress 30s linear forwards;
             }
 
             @keyframes wx-alert-progress {
@@ -1457,6 +1485,35 @@
                             </div>
                             <div class="wx-block">
                                 <button id="weather-refresh-alerts" type="button">Refresh</button>
+                            </div>
+                            <div class="wx-block">
+                                <div class="wx-check-row"><span>Radar Overlay</span><input id="weather-alerts-radar"
+                                        type="checkbox"></div>
+                                <label for="weather-alerts-radar-opacity" id="weather-alerts-radar-opacity-label"
+                                    style="display:none;">Radar Opacity</label>
+                                <input id="weather-alerts-radar-opacity" type="range" min="0" max="1" step="0.05"
+                                    value="0.6" style="display:none;">
+                            </div>
+                            <div class="wx-block">
+                                <div class="wx-check-row"><span>NOWCoast Alerts Overlay</span><input
+                                        id="weather-alerts-nowcoast" type="checkbox"></div>
+                                <label for="weather-alerts-nowcoast-opacity" id="weather-alerts-nowcoast-opacity-label"
+                                    style="display:none;">NOWCoast Opacity</label>
+                                <input id="weather-alerts-nowcoast-opacity" type="range" min="0" max="1" step="0.05"
+                                    value="0.55" style="display:none;">
+                            </div>
+                            <div class="wx-block">
+                                <div class="wx-small"
+                                    style="margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">SPC Day 1
+                                    Overlays</div>
+                                <div class="wx-check-row"><span>Categorical</span><input id="weather-alerts-spc-cat"
+                                        type="checkbox"></div>
+                                <div class="wx-check-row"><span>Tornado (+ CIG)</span><input
+                                        id="weather-alerts-spc-torn" type="checkbox"></div>
+                                <div class="wx-check-row"><span>Wind (+ CIG)</span><input id="weather-alerts-spc-wind"
+                                        type="checkbox"></div>
+                                <div class="wx-check-row"><span>Hail (+ CIG)</span><input id="weather-alerts-spc-hail"
+                                        type="checkbox"></div>
                             </div>
                         </div>
                     </div>

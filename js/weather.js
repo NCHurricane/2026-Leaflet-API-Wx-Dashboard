@@ -59,6 +59,10 @@
         '30': { fill: '#ff4f4f', stroke: '#a00000' },
         '45': { fill: '#ff66ff', stroke: '#880088' },
         '60': { fill: '#ff00ff', stroke: '#880088' },
+        // CIG intensity levels (SPC March 2026 enhancement)
+        'CIG1': { fill: '#ffa040', stroke: '#cc5500' },
+        'CIG2': { fill: '#ff3300', stroke: '#aa0000' },
+        'CIG3': { fill: '#cc0099', stroke: '#880066' },
     };
 
     const SPC_FIRE_COLORS = {
@@ -439,6 +443,20 @@
             return container;
         },
     });
+    const ResetViewControl = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd(m) {
+            const container = L.DomUtil.create('div', 'wx-reset-view-control leaflet-bar');
+            L.DomEvent.disableClickPropagation(container);
+            const btn = L.DomUtil.create('button', 'wx-reset-view-btn', container);
+            btn.type = 'button';
+            btn.title = 'Reset to default view';
+            btn.innerHTML = '<i class="fa-solid fa-house fa-2xl"></i>';
+            L.DomEvent.on(btn, 'click', () => m.setView(INITIAL_VIEW_CENTER, INITIAL_VIEW_ZOOM));
+            return container;
+        },
+    });
+    new ResetViewControl().addTo(map);
     new BasemapControl().addTo(map);
     map.attributionControl.addAttribution('©2026 ChuckCopeland.com/NCHurricane.com');
     const LogoControl = L.Control.extend({
@@ -457,7 +475,20 @@
 
     // ── Layer state ──────────────────────────────────────────────────────────
     let alertsLayer = null;
+    let nexradLayer = null;
+    let _nexradRefreshTimer = null;
+    const NEXRAD_TILE_URL = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png';
+    const NEXRAD_REFRESH_MS = 5 * 60 * 1000;
+    let nowcoastAlertsLayer = null;
+    let _nowcoastAlertsRefreshTimer = null;
+    const NOWCOAST_ALERTS_WMS_URL = 'https://nowcoast.noaa.gov/geoserver/hazards/alerts/ows';
+    const NOWCOAST_ALERTS_LAYER = 'watches_warnings_advisories';
+    const NOWCOAST_ALERTS_REFRESH_MS = 2 * 60 * 1000;
     let spcLayer = null;
+    // Alerts-panel independent SPC Day 1 overlays
+    const _ALERTS_SPC_HAZARDS = ['cat', 'torn', 'wind', 'hail'];
+    const _alertsSpcLayers = { cat: null, torn: null, wind: null, hail: null };
+    const _alertsSpcSeq = { cat: 0, torn: 0, wind: 0, hail: 0 };
     let surfaceLayer = null;
     let mrmsOverlay = null;
     let statesLayer = null;
@@ -511,6 +542,24 @@
         const key = dn || label;
         const c = SPC_PROB_COLORS[key] || { fill: '#aaaaaa', stroke: '#555' };
         return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: 1 };
+    }
+
+    // CIG-aware style: probability zones filled normally; CIG zones get dashed
+    // outline + low-opacity fill to simulate the SPC hatch-style rendering.
+    function _spcProbCigStyle(feat) {
+        const dn = String(feat?.properties?.dn || feat?.properties?.DN || '');
+        const label = (feat?.properties?.LABEL || '').replace('%', '');
+        const key = dn || label;
+        const isCig = /^CIG/i.test(key);
+        const c = SPC_PROB_COLORS[key] || { fill: '#aaaaaa', stroke: '#555555' };
+        return {
+            color: c.stroke,
+            weight: isCig ? 2.5 : 1,
+            dashArray: isCig ? (key === 'CIG3' ? '4 3' : key === 'CIG2' ? '6 3' : '8 4') : null,
+            fillColor: c.fill,
+            fillOpacity: isCig ? spcOpacity * 0.25 : spcOpacity,
+            opacity: 1,
+        };
     }
 
     // ── Popup builders ───────────────────────────────────────────────────────
@@ -900,12 +949,13 @@
         'Snow Squall Warning',
         'Flash Flood Watch',
     ]);
-    const ALERT_NOTIFY_DISMISS_MS = 15_000;
+    const ALERT_NOTIFY_DISMISS_MS = 30_000;
     // Polygons for these events pulse on the map to draw attention.
     const ALERT_PULSE_EVENTS = new Set([
         'Tornado Warning',
         'Severe Thunderstorm Warning',
         'Flash Flood Warning',
+        'Special Marine Warning',
     ]);
 
     function _showNewAlertBanner(feat) {
@@ -1020,7 +1070,11 @@
         }
         setStatus('Loading alerts...');
         try {
-            const alertsUrl = `${apiUrl('/api/data/alerts')}${apiUrl('/api/data/alerts').includes('?') ? '&' : '?'}_ts=${Date.now()}`;
+            const regionCode = String(byId('weather-region')?.value || 'CONUS').toUpperCase();
+            const stateParam = /^[A-Z]{2}$/.test(regionCode)
+                ? `state=${encodeURIComponent(regionCode)}&`
+                : '';
+            const alertsUrl = `${apiUrl('/api/data/alerts')}${apiUrl('/api/data/alerts').includes('?') ? '&' : '?'}${stateParam}_ts=${Date.now()}`;
             const resp = await fetch(alertsUrl, { cache: 'no-store' });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const geojson = await resp.json();
@@ -1132,6 +1186,29 @@
         }
     }
 
+    async function _loadAlertsSpcOverlay(hazard) {
+        const seq = ++_alertsSpcSeq[hazard];
+        const existing = _alertsSpcLayers[hazard];
+        if (existing && map.hasLayer(existing)) map.removeLayer(existing);
+        _alertsSpcLayers[hazard] = null;
+        try {
+            const resp = await fetch(apiUrl(`/api/data/spc?day=1&hazard=${hazard}`));
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const geojson = await resp.json();
+            if (seq !== _alertsSpcSeq[hazard]) return;
+            const styleFn = hazard === 'cat' ? spcCatStyle : _spcProbCigStyle;
+            const layer = L.geoJSON(geojson, {
+                style: styleFn,
+                onEachFeature: (feat, lyr) => lyr.bindPopup(spcPopup(feat)),
+            });
+            _alertsSpcLayers[hazard] = layer;
+            if (byId(`weather-alerts-spc-${hazard}`)?.checked) layer.addTo(map);
+        } catch (err) {
+            if (seq !== _alertsSpcSeq[hazard]) return;
+            console.error(`[alerts-spc-${hazard}]`, err);
+        }
+    }
+
     // ── Region → fitBounds ───────────────────────────────────────────────────
     function fitRegion(code) {
         const regionCode = (code || 'CONUS').toUpperCase();
@@ -1238,9 +1315,17 @@
 
     function _clearAllMapLayers() {
         if (alertsLayer && map.hasLayer(alertsLayer)) map.removeLayer(alertsLayer);
+        if (nexradLayer && map.hasLayer(nexradLayer)) { map.removeLayer(nexradLayer); nexradLayer = null; }
+        if (_nexradRefreshTimer) { clearInterval(_nexradRefreshTimer); _nexradRefreshTimer = null; }
+        if (nowcoastAlertsLayer && map.hasLayer(nowcoastAlertsLayer)) { map.removeLayer(nowcoastAlertsLayer); nowcoastAlertsLayer = null; }
+        if (_nowcoastAlertsRefreshTimer) { clearInterval(_nowcoastAlertsRefreshTimer); _nowcoastAlertsRefreshTimer = null; }
         if (spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
         if (surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
         if (mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
+        for (const h of _ALERTS_SPC_HAZARDS) {
+            if (_alertsSpcLayers[h] && map.hasLayer(_alertsSpcLayers[h])) map.removeLayer(_alertsSpcLayers[h]);
+            _alertsSpcLayers[h] = null;
+        }
         alertsLayer = null;
         spcLayer = null;
         surfaceLayer = null;
@@ -2243,6 +2328,13 @@
 
     function enterArchiveMode() {
         _archiveMode = true;
+        // Disable live radar overlay — it would show current radar against historical data
+        const radarCb = byId('weather-alerts-radar');
+        if (radarCb && radarCb.checked) radarCb.dispatchEvent(new Event('change'));
+        if (radarCb) radarCb.disabled = true;
+        const nowcoastCb = byId('weather-alerts-nowcoast');
+        if (nowcoastCb && nowcoastCb.checked) nowcoastCb.dispatchEvent(new Event('change'));
+        if (nowcoastCb) nowcoastCb.disabled = true;
         _clearAllMapLayers();
         const fromEl = byId('archive-from');
         const toEl = byId('archive-to');
@@ -2348,6 +2440,10 @@
 
     function exitArchiveMode() {
         stopScrubberPlay();
+        const radarCb = byId('weather-alerts-radar');
+        if (radarCb) radarCb.disabled = false;
+        const nowcoastCb = byId('weather-alerts-nowcoast');
+        if (nowcoastCb) nowcoastCb.disabled = false;
         _archiveMode = false;
         _archiveFrames = [];
         _archiveFrameIndex = 0;
@@ -3342,6 +3438,81 @@
 
     byId('weather-refresh-mrms')?.addEventListener('click', loadMrms);
     byId('weather-refresh-alerts')?.addEventListener('click', () => loadAlerts());
+
+    byId('weather-alerts-radar')?.addEventListener('change', function () {
+        const opacityLabel = byId('weather-alerts-radar-opacity-label');
+        const opacitySlider = byId('weather-alerts-radar-opacity');
+        if (this.checked) {
+            const opacity = parseFloat(opacitySlider?.value ?? 0.6);
+            nexradLayer = L.tileLayer(NEXRAD_TILE_URL, {
+                opacity,
+                zIndex: 300,
+                attribution: '&copy; Iowa State Mesonet / NWS'
+            });
+            nexradLayer.addTo(map);
+            if (opacityLabel) opacityLabel.style.display = '';
+            if (opacitySlider) opacitySlider.style.display = '';
+            _nexradRefreshTimer = setInterval(() => { if (nexradLayer) nexradLayer.redraw(); }, NEXRAD_REFRESH_MS);
+        } else {
+            if (nexradLayer && map.hasLayer(nexradLayer)) { map.removeLayer(nexradLayer); nexradLayer = null; }
+            if (_nexradRefreshTimer) { clearInterval(_nexradRefreshTimer); _nexradRefreshTimer = null; }
+            if (opacityLabel) opacityLabel.style.display = 'none';
+            if (opacitySlider) opacitySlider.style.display = 'none';
+        }
+    });
+
+    byId('weather-alerts-radar-opacity')?.addEventListener('input', function () {
+        if (nexradLayer) nexradLayer.setOpacity(parseFloat(this.value));
+    });
+
+    byId('weather-alerts-nowcoast')?.addEventListener('change', function () {
+        const opacityLabel = byId('weather-alerts-nowcoast-opacity-label');
+        const opacitySlider = byId('weather-alerts-nowcoast-opacity');
+        if (this.checked) {
+            const opacity = parseFloat(opacitySlider?.value ?? 0.55);
+            nowcoastAlertsLayer = L.tileLayer.wms(NOWCOAST_ALERTS_WMS_URL, {
+                layers: NOWCOAST_ALERTS_LAYER,
+                format: 'image/png',
+                transparent: true,
+                version: '1.3.0',
+                opacity,
+                zIndex: 290,
+                attribution: '&copy; NOAA/NWS nowCOAST',
+            });
+            nowcoastAlertsLayer.addTo(map);
+            if (opacityLabel) opacityLabel.style.display = '';
+            if (opacitySlider) opacitySlider.style.display = '';
+            _nowcoastAlertsRefreshTimer = setInterval(() => {
+                if (nowcoastAlertsLayer) nowcoastAlertsLayer.setParams({ _ts: Date.now() }, false);
+            }, NOWCOAST_ALERTS_REFRESH_MS);
+        } else {
+            if (nowcoastAlertsLayer && map.hasLayer(nowcoastAlertsLayer)) { map.removeLayer(nowcoastAlertsLayer); nowcoastAlertsLayer = null; }
+            if (_nowcoastAlertsRefreshTimer) { clearInterval(_nowcoastAlertsRefreshTimer); _nowcoastAlertsRefreshTimer = null; }
+            if (opacityLabel) opacityLabel.style.display = 'none';
+            if (opacitySlider) opacitySlider.style.display = 'none';
+        }
+    });
+
+    byId('weather-alerts-nowcoast-opacity')?.addEventListener('input', function () {
+        if (nowcoastAlertsLayer) nowcoastAlertsLayer.setOpacity(parseFloat(this.value));
+    });
+
+    // ── Alerts-panel SPC Day 1 overlay checkboxes ────────────────────────────
+    for (const hazard of _ALERTS_SPC_HAZARDS) {
+        byId(`weather-alerts-spc-${hazard}`)?.addEventListener('change', function () {
+            const layer = _alertsSpcLayers[hazard];
+            if (this.checked) {
+                if (layer) {
+                    layer.addTo(map);
+                } else {
+                    _loadAlertsSpcOverlay(hazard);
+                }
+            } else {
+                if (layer && map.hasLayer(layer)) map.removeLayer(layer);
+            }
+        });
+    }
+
     byId('weather-refresh-spc')?.addEventListener('click', refreshSpc);
     byId('weather-refresh-surface')?.addEventListener('click', () => {
         const region = byId('weather-region')?.value || 'NC';

@@ -61,6 +61,51 @@ Each new international source would require:
 
 ---
 
+---
+
+## Console Test Scripts (New Alert Banner)
+
+Two functions are exposed on `window` in `js/weather.js` for testing the new-alert banner popup. They are **always present** (not gated behind a flag) — call them from the browser DevTools console.
+
+### `_testAlertBanner(eventOrFeat, areaDesc)`
+
+Fires a single synthetic banner with a fake polygon centered on the current map view.
+
+```js
+// Default — Tornado Warning
+_testAlertBanner()
+
+// Custom event type and area
+_testAlertBanner('Severe Thunderstorm Warning', 'Wake County, NC')
+_testAlertBanner('Flash Flood Warning', 'Buncombe County, NC')
+_testAlertBanner('Tornado Emergency', 'Moore County, NC')
+
+// Pass a real GeoJSON Feature directly
+_testAlertBanner(someFeatureObject)
+```
+
+### `_testAlertBannerFromJson(sourceOrUrl)`
+
+Fires banners for every feature in a FeatureCollection — accepts either a URL or a JS object.
+
+```js
+// From a local API endpoint
+_testAlertBannerFromJson('/api/data/alerts')
+
+// From a local test fixture file (served statically)
+_testAlertBannerFromJson('/data/test_severe_thunderstorm_warning.json')
+
+// From an inline object
+_testAlertBannerFromJson({ type: 'FeatureCollection', features: [ /* ... */ ] })
+```
+
+### Notes
+- The banner auto-dismisses after its configured timeout (same as real alerts).
+- `_knownAlertIds` state is **not** mutated by these test calls — real alert detection is unaffected.
+- To test the pulse animation on alert polygons, load real alerts first then call `_testAlertBanner`.
+
+---
+
 ## Open Questions
 
 - Should international alerts get their own hazard categories or map into existing NWS categories?

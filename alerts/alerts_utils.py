@@ -775,6 +775,7 @@ def process_alerts(
             except Exception:
                 pass
 
+        # County fallback from SAME codes
         if not final_geom:
             same_codes = props.get("geocode", {}).get("SAME", [])
             if same_codes:
@@ -783,7 +784,8 @@ def process_alerts(
                     counties_loaded = True
                 fips_codes = [c[1:] for c in same_codes if len(c) == 6]
                 final_geom = CensusCounties.get_geometry_for_fips(fips_codes)
-                used_county_fallback = final_geom is not None
+                if final_geom is not None:
+                    used_county_fallback = True
 
         # Zone geometry fallback – resolve from NWS affectedZones API
         if not final_geom:

@@ -14,8 +14,7 @@ def run_alerts_worker() -> None:
         from alerts.alerts_utils import fetch_active_alerts_with_source
 
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        features, source = fetch_active_alerts_with_source(
-            state=None, source="nws")
+        features, source = fetch_active_alerts_with_source(state=None, source="nws")
         payload = {
             "type": "FeatureCollection",
             "_source": source,
