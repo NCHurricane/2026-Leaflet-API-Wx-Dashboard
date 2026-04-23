@@ -1178,6 +1178,322 @@
         popup.openOn(map);
     }
 
+    // ── Immersive new-alert detail panel ─────────────────────────────────────
+    let _activeNewAlertDetail = null;
+
+    function _firstParam(p, key) {
+        const arr = p?.parameters?.[key];
+        if (Array.isArray(arr) && arr.length) {
+            const v = String(arr[0] || '').trim();
+            return v || '';
+        }
+        return '';
+    }
+
+    function _formatSentExpires(p) {
+        const fmt = (iso) => {
+            if (!iso) return '';
+            try {
+                return new Date(iso).toLocaleString([], {
+                    month: 'short', day: 'numeric',
+                    hour: 'numeric', minute: '2-digit',
+                });
+            } catch (_) { return ''; }
+        };
+        return { sent: fmt(p?.sent), expires: fmt(p?.expires) };
+    }
+
+    function _buildThreatChips(p) {
+        const chips = [];
+        const push = (label, value) => {
+            const v = String(value || '').trim();
+            if (v && v.toLowerCase() !== 'none') chips.push({ label, value: v });
+        };
+        push('Tornado', _firstParam(p, 'tornadoDetection') || _firstParam(p, 'tornadoThreat'));
+        const hailThreat = _firstParam(p, 'hailThreat');
+        const maxHail = _firstParam(p, 'maxHailSize');
+        if (hailThreat || maxHail) {
+            const parts = [hailThreat, maxHail ? `max ${maxHail}\u2033` : ''].filter(Boolean);
+            push('Hail', parts.join(' · '));
+        }
+        const windThreat = _firstParam(p, 'windThreat');
+        const maxWind = _firstParam(p, 'maxWindGust');
+        if (windThreat || maxWind) {
+            const parts = [windThreat, maxWind ? `max ${maxWind}` : ''].filter(Boolean);
+            push('Wind', parts.join(' · '));
+        }
+        push('Flash Flood', _firstParam(p, 'flashFloodDetection'));
+        return chips;
+    }
+
+    function _splitDescriptionSections(rawDesc) {
+        const text = String(rawDesc || '').trim();
+        if (!text) return { intro: '', locations: '' };
+        // NWS uses "* LOCATIONS IMPACTED INCLUDE..." or "...LOCATIONS IMPACTED INCLUDE..."
+        const m = text.match(/(?:^|\n)\s*\*?\s*LOCATIONS IMPACTED INCLUDE[\s\S]*$/i);
+        if (m) {
+            const intro = text.slice(0, m.index).trim();
+            const locBlock = m[0].replace(/^[\s\*]*LOCATIONS IMPACTED INCLUDE[\.\s]*/i, '').trim();
+            return { intro, locations: locBlock };
+        }
+        return { intro: text, locations: '' };
+    }
+
+    function _formatTextBlock(text) {
+        // Convert NWS plain-text to safe HTML: preserve paragraphs (blank lines), join wrapped lines.
+        const paras = String(text || '')
+            .split(/\n\s*\n/)
+            .map((para) => para.replace(/\s*\n\s*/g, ' ').trim())
+            .filter(Boolean);
+        return paras.map((para) => `<p>${_escapeHtml(para)}</p>`).join('');
+    }
+
+    function _formatLocationsImpacted(text) {
+        const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!cleaned) return '';
+        return `<p>${_escapeHtml(cleaned)}</p>`;
+    }
+
+    function _buildNewAlertDetailHtml(feat, index, total) {
+        const p = feat?.properties || {};
+        const event = p.event || 'Alert';
+        const color = ALERT_COLORS[event] || ALERT_DEFAULT;
+        const badges = [p.severity, p.urgency, p.certainty]
+            .filter(Boolean)
+            .map((b) => `<span class="wx-nad-badge">${_escapeHtml(String(b))}</span>`)
+            .join('');
+        const { sent, expires } = _formatSentExpires(p);
+        const expRel = _relExpires(p?.expires);
+        const senderName = String(p.senderName || '').trim();
+        const issuedLine = [
+            sent ? `Issued ${_escapeHtml(sent)}` : '',
+            expires ? `until ${_escapeHtml(expires)}` : '',
+            senderName ? `by ${_escapeHtml(senderName)}` : '',
+        ].filter(Boolean).join(' ');
+        const expiresLine = expires
+            ? `Expires: ${_escapeHtml(expires)}${expRel ? ` <span class="wx-nad-countdown">(in ${_escapeHtml(expRel)})</span>` : ''}`
+            : '';
+        const { intro, locations } = _splitDescriptionSections(p.description);
+        const descHtml = _formatTextBlock(intro);
+        const locHtml = locations ? _formatLocationsImpacted(locations) : '';
+        const instrHtml = _formatTextBlock(p.instruction || '');
+        const chips = _buildThreatChips(p);
+        const chipsHtml = chips.length
+            ? `<div class="wx-nad-chips">${chips.map((c) => `<span class="wx-nad-chip"><strong>${_escapeHtml(c.label)}:</strong> ${_escapeHtml(c.value)}</span>`).join('')}</div>`
+            : '';
+        const fullUrl = _alertExternalUrl(feat);
+        const linkHtml = fullUrl
+            ? `<a class="wx-nad-fulllink" href="${_escapeHtml(fullUrl)}" target="_blank" rel="noopener noreferrer">View Full NWS Alert Text</a>`
+            : '';
+        const navDisabled = total <= 1;
+        const counter = total > 1 ? `<span class="wx-nad-counter">${index + 1} / ${total}</span>` : '';
+
+        return [
+            `<div class="wx-nad-header" style="border-color:${color}">`,
+            `  <div class="wx-nad-title" style="color:${color}">${_escapeHtml(event)}</div>`,
+            `  <button type="button" class="wx-nad-close" aria-label="Close">×</button>`,
+            `</div>`,
+            badges ? `<div class="wx-nad-badges">${badges}</div>` : '',
+            issuedLine ? `<div class="wx-nad-issued">${issuedLine}</div>` : '',
+            expiresLine ? `<div class="wx-nad-expires">${expiresLine}</div>` : '',
+            `<div class="wx-nad-scroll">`,
+            descHtml ? `<section class="wx-nad-section">${descHtml}</section>` : '',
+            locHtml ? `<section class="wx-nad-section"><h4>Locations Impacted</h4>${locHtml}</section>` : '',
+            instrHtml ? `<section class="wx-nad-section"><h4>Precautionary / Preparedness Actions</h4>${instrHtml}</section>` : '',
+            chipsHtml ? `<section class="wx-nad-section">${chipsHtml}</section>` : '',
+            `</div>`,
+            linkHtml ? `<div class="wx-nad-footer">${linkHtml}</div>` : '',
+            (!navDisabled || counter)
+                ? `<div class="wx-nad-nav">
+                       <button type="button" class="wx-nad-nav-btn" data-nad-nav="prev" aria-label="Previous alert"${navDisabled ? ' disabled' : ''}>‹</button>
+                       ${counter}
+                       <button type="button" class="wx-nad-nav-btn" data-nad-nav="next" aria-label="Next alert"${navDisabled ? ' disabled' : ''}>›</button>
+                   </div>`
+                : '',
+        ].join('');
+    }
+
+    function _positionNewAlertDetail(panel, latlng) {
+        const wrap = panel.parentElement;
+        if (!wrap) return;
+        const wrapRect = wrap.getBoundingClientRect();
+        let preferRight = true;
+        try {
+            const pt = map.latLngToContainerPoint(latlng);
+            preferRight = pt.x < (wrapRect.width / 2);
+        } catch (_) { /* fallback right */ }
+        panel.classList.toggle('is-right', preferRight);
+        panel.classList.toggle('is-left', !preferRight);
+    }
+
+    function _closeNewAlertDetail() {
+        const ctx = _activeNewAlertDetail;
+        if (!ctx) return;
+        const { panel, keyHandler, mapClickHandler, mapMoveHandler } = ctx;
+        if (keyHandler) document.removeEventListener('keydown', keyHandler);
+        if (mapClickHandler) map.off('click', mapClickHandler);
+        if (mapMoveHandler) map.off('movestart zoomstart', mapMoveHandler);
+        _stopNewAlertRadarLoop();
+        if (panel?.parentElement) panel.parentElement.removeChild(panel);
+        _activeNewAlertDetail = null;
+    }
+
+    // ── Short radar loop that auto-plays during the new-alert detail view ────
+    // 4 frames at 5-min cadence ending at the most recent slot. Skipped when
+    // the user already has the alerts-radar tile layer enabled.
+    const _NEW_ALERT_RADAR_FRAMES = 4;
+    const _NEW_ALERT_RADAR_STEP_MIN = 5;
+    const _NEW_ALERT_RADAR_FRAME_MS = 700;
+    const _NEW_ALERT_RADAR_PAUSE_MS = 900;
+    const _NEW_ALERT_RADAR_OPACITY = 0.6;
+    let _newAlertRadarState = null;
+
+    function _newAlertRadarTimestamps() {
+        // IEM tile cache uses relative-minute slugs (-m05, -m10, ...) for past
+        // frames; the most recent frame is the un-suffixed current tile.
+        // Returns offsets in 5-minute increments, oldest first, ending at 0.
+        const out = [];
+        const stepMin = _NEW_ALERT_RADAR_STEP_MIN;
+        for (let i = _NEW_ALERT_RADAR_FRAMES - 1; i >= 0; i--) {
+            out.push(i * stepMin);
+        }
+        return out;
+    }
+
+    function _formatNexradTimestamp(_) {
+        // Kept for compatibility but unused with the relative-minute URL form.
+        return '';
+    }
+
+    function _startNewAlertRadarLoop() {
+        _stopNewAlertRadarLoop();
+        // Skip if user already has the persistent alerts-radar overlay on.
+        if (byId('weather-alerts-radar')?.checked) return;
+
+        const offsets = _newAlertRadarTimestamps();
+        const layers = offsets.map((mins) => {
+            // IEM layer naming: nexrad-n0q-mXXm (trailing 'm') for past frames,
+            // followed by the -900913 (EPSG:3857) projection suffix.
+            const slug = mins === 0
+                ? 'nexrad-n0q-900913'
+                : `nexrad-n0q-m${String(mins).padStart(2, '0')}m-900913`;
+            const url = `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/${slug}/{z}/{x}/{y}.png`;
+            return L.tileLayer(url, {
+                opacity: 0,
+                zIndex: 305,
+                attribution: '&copy; Iowa State Mesonet / NWS',
+            }).addTo(map);
+        });
+
+        let idx = 0;
+        const tick = () => {
+            const ctx = _newAlertRadarState;
+            if (!ctx) return;
+            ctx.layers.forEach((lyr, i) => lyr.setOpacity(i === idx ? _NEW_ALERT_RADAR_OPACITY : 0));
+            // Hold longer on the freshest frame so the loop "lands" on current.
+            const hold = idx === ctx.layers.length - 1 ? _NEW_ALERT_RADAR_PAUSE_MS : _NEW_ALERT_RADAR_FRAME_MS;
+            idx = (idx + 1) % ctx.layers.length;
+            ctx.timer = setTimeout(tick, hold);
+        };
+
+        _newAlertRadarState = { layers, timer: null };
+        tick();
+    }
+
+    function _stopNewAlertRadarLoop() {
+        const ctx = _newAlertRadarState;
+        if (!ctx) return;
+        if (ctx.timer) clearTimeout(ctx.timer);
+        ctx.layers.forEach((lyr) => {
+            try { if (map.hasLayer(lyr)) map.removeLayer(lyr); } catch (_) { /* ignore */ }
+        });
+        _newAlertRadarState = null;
+    }
+
+    function _renderNewAlertDetail() {
+        const ctx = _activeNewAlertDetail;
+        if (!ctx) return;
+        const { panel, features, latlng } = ctx;
+        const idx = ctx.index;
+        panel.innerHTML = _buildNewAlertDetailHtml(features[idx], idx, features.length);
+        panel.querySelector('.wx-nad-close')?.addEventListener('click', _closeNewAlertDetail);
+        panel.querySelectorAll('[data-nad-nav]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const dir = btn.getAttribute('data-nad-nav');
+                const total = ctx.features.length;
+                if (total <= 1) return;
+                ctx.index = dir === 'next'
+                    ? (ctx.index + 1) % total
+                    : (ctx.index - 1 + total) % total;
+                _renderNewAlertDetail();
+            });
+        });
+        // Anchor stays put per spec; only refresh side classification on initial mount.
+        if (!ctx._positioned) {
+            _positionNewAlertDetail(panel, latlng);
+            ctx._positioned = true;
+        }
+    }
+
+    function _openNewAlertDetail(latlng, sourceFeat) {
+        _closeNewAlertDetail();
+        // Close any normal alerts pager so views don't stack.
+        if (_activeAlertsPopup?.popup) {
+            try { map.closePopup(_activeAlertsPopup.popup); } catch (_) { /* ignore */ }
+            _activeAlertsPopup = null;
+        }
+
+        const wrap = document.querySelector('.weather-map-wrap');
+        if (!wrap) return;
+
+        // Step through all alerts containing this point, but make sure the
+        // triggering alert is shown first.
+        let features = _sortedAlertsForPoint(latlng);
+        if (!features.length) features = [sourceFeat];
+        const sourceId = sourceFeat?.id || sourceFeat?.properties?.id;
+        let startIdx = features.findIndex((f) => (f?.id || f?.properties?.id) === sourceId);
+        if (startIdx < 0) {
+            features = [sourceFeat, ...features.filter((f) => (f?.id || f?.properties?.id) !== sourceId)];
+            startIdx = 0;
+        }
+
+        const panel = document.createElement('div');
+        panel.id = 'wx-new-alert-detail';
+        panel.className = 'wx-new-alert-detail';
+        panel.addEventListener('click', (e) => e.stopPropagation());
+        wrap.appendChild(panel);
+
+        const keyHandler = (e) => {
+            if (e.key === 'Escape') _closeNewAlertDetail();
+        };
+        document.addEventListener('keydown', keyHandler);
+        const mapClickHandler = () => _closeNewAlertDetail();
+        map.on('click', mapClickHandler);
+        // Close the panel if the user pans or zooms away (including the Home
+        // button). Bind on the next tick so the initial flyTo's tail-end
+        // movement doesn't immediately dismiss the panel we just opened.
+        let mapMoveHandler = null;
+        setTimeout(() => {
+            if (!_activeNewAlertDetail) return;
+            mapMoveHandler = () => _closeNewAlertDetail();
+            _activeNewAlertDetail.mapMoveHandler = mapMoveHandler;
+            map.on('movestart zoomstart', mapMoveHandler);
+        }, 250);
+
+        _activeNewAlertDetail = {
+            panel,
+            features,
+            index: startIdx,
+            latlng,
+            keyHandler,
+            mapClickHandler,
+            mapMoveHandler: null,
+            _positioned: false,
+        };
+        _renderNewAlertDetail();
+        _startNewAlertRadarLoop();
+    }
+
     function spcPopup(feat) {
         const p = feat.properties || {};
         const label = p.LABEL2 || p.label2 || p.LABEL || p.label || p.dn || '';
@@ -1463,10 +1779,112 @@
         } catch (_) { /* ignore */ }
     }
 
+    // Severity gate for the immersive new-alert detail flow. Banners still emit for
+    // any ALERT_NOTIFY_EVENTS entry; the View action only opens the detail panel for
+    // Severe/Extreme severities (warnings) — lesser severities fall back to the
+    // standard pager popup.
+    const ALERT_DETAIL_SEVERITIES = new Set(['Severe', 'Extreme']);
+    function _alertQualifiesForDetail(feat) {
+        const p = feat?.properties || {};
+        const event = String(p.event || '');
+        const severity = String(p.severity || '');
+        return ALERT_NOTIFY_EVENTS.has(event) && ALERT_DETAIL_SEVERITIES.has(severity);
+    }
+
+    // Dismiss every queued new-alert banner. Optionally skip one (the banner
+    // whose own dismiss path is being run by the caller).
+    function _dismissAllNewAlertBanners(except) {
+        const stack = byId('wx-new-alert-stack');
+        if (!stack) return;
+        const banners = stack.querySelectorAll('.wx-new-alert-banner');
+        banners.forEach((banner) => {
+            if (banner === except) return;
+            if (banner.classList.contains('is-dismissing')) return;
+            if (banner._dismissTimer) clearTimeout(banner._dismissTimer);
+            banner.classList.add('is-dismissing');
+            banner.addEventListener('animationend', () => banner.remove(), { once: true });
+        });
+    }
+
+    // ── Spatial dedup for cross-CWA duplicate warnings ───────────────────────
+    // When a storm sits on a forecast-office boundary, multiple offices issue
+    // independent warnings with their own UUIDs but near-identical polygons.
+    // Suppress subsequent banners whose bbox IoU >= threshold matches one we
+    // already showed within the lookback window.
+    const _ALERT_BANNER_DEDUP_IOU = 0.6;
+    const _ALERT_BANNER_DEDUP_MS = 10 * 60_000;
+    const _recentBannerLedger = []; // { event, bbox, ts }
+
+    function _alertBbox(feat) {
+        const geom = feat?.geometry;
+        if (!geom) return null;
+        let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+        const visit = (node) => {
+            if (!Array.isArray(node)) return;
+            if (node.length >= 2 && Number.isFinite(node[0]) && Number.isFinite(node[1])) {
+                const lng = Number(node[0]);
+                const lat = Number(node[1]);
+                if (lat < minLat) minLat = lat;
+                if (lat > maxLat) maxLat = lat;
+                if (lng < minLng) minLng = lng;
+                if (lng > maxLng) maxLng = lng;
+                return;
+            }
+            for (const child of node) visit(child);
+        };
+        visit(geom.coordinates);
+        if (!Number.isFinite(minLat)) return null;
+        return { minLat, maxLat, minLng, maxLng };
+    }
+
+    function _bboxArea(b) {
+        return Math.max(0, b.maxLat - b.minLat) * Math.max(0, b.maxLng - b.minLng);
+    }
+
+    function _bboxIoU(a, b) {
+        const iLat0 = Math.max(a.minLat, b.minLat);
+        const iLat1 = Math.min(a.maxLat, b.maxLat);
+        const iLng0 = Math.max(a.minLng, b.minLng);
+        const iLng1 = Math.min(a.maxLng, b.maxLng);
+        if (iLat1 <= iLat0 || iLng1 <= iLng0) return 0;
+        const inter = (iLat1 - iLat0) * (iLng1 - iLng0);
+        const union = _bboxArea(a) + _bboxArea(b) - inter;
+        return union > 0 ? inter / union : 0;
+    }
+
+    function _isDuplicateBanner(feat) {
+        const event = String(feat?.properties?.event || '');
+        const bbox = _alertBbox(feat);
+        if (!event || !bbox) return false;
+        const now = Date.now();
+        // Drop expired ledger entries first.
+        for (let i = _recentBannerLedger.length - 1; i >= 0; i--) {
+            if (now - _recentBannerLedger[i].ts > _ALERT_BANNER_DEDUP_MS) {
+                _recentBannerLedger.splice(i, 1);
+            }
+        }
+        for (const entry of _recentBannerLedger) {
+            if (entry.event !== event) continue;
+            if (_bboxIoU(entry.bbox, bbox) >= _ALERT_BANNER_DEDUP_IOU) return true;
+        }
+        return false;
+    }
+
+    function _recordBannerLedger(feat) {
+        const event = String(feat?.properties?.event || '');
+        const bbox = _alertBbox(feat);
+        if (!event || !bbox) return;
+        _recentBannerLedger.push({ event, bbox, ts: Date.now() });
+    }
+
     function _showNewAlertBanner(feat) {
         if (!_isTypeEnabled('alerts')) return;
         const stack = byId('wx-new-alert-stack');
         if (!stack) return;
+        // Suppress cross-CWA duplicates that describe substantially the same
+        // threat area as a banner already shown in the recent window.
+        if (_isDuplicateBanner(feat)) return;
+        _recordBannerLedger(feat);
         const p = feat?.properties || {};
         const event = p.event || 'Unknown Alert';
         const color = ALERT_COLORS[event] || ALERT_DEFAULT;
@@ -1497,16 +1915,111 @@
         banner.querySelector('.wx-new-alert-banner-view').addEventListener('click', () => {
             const center = _alertFeatureCenterLatLng(feat);
             if (!center) return;
+            // Dismiss every other queued banner — user committed to this one.
+            _dismissAllNewAlertBanners(banner);
             dismiss();
             map.flyTo(center, Math.max(map.getZoom(), 9), { duration: 1.0 });
-            map.once('moveend', () => _openAlertsPagerAt(center));
+            map.once('moveend', () => {
+                if (_alertQualifiesForDetail(feat)) {
+                    _openNewAlertDetail(center, feat);
+                } else {
+                    _openAlertsPagerAt(center);
+                }
+            });
         });
 
         banner._dismissTimer = setTimeout(dismiss, ALERT_NOTIFY_DISMISS_MS);
         stack.appendChild(banner);
     }
 
+    // ── Console test helpers (always exposed on window) ──────────────────────
+    // _testAlertBanner(eventOrFeat?, areaDesc?, severity?)
+    //   - With no args: synthetic Tornado Warning at the current map center.
+    //   - First arg can be an event name string OR a real GeoJSON Feature.
+    //   - Pass severity='Severe' (or 'Extreme') to trigger the immersive
+    //     new-alert detail panel from the View button.
+    function _testAlertBanner(eventOrFeat, areaDesc, severity) {
+        let feat;
+        if (eventOrFeat && typeof eventOrFeat === 'object' && eventOrFeat.geometry) {
+            feat = eventOrFeat;
+            // Allow caller to override severity on a real feature too.
+            if (severity) {
+                feat = JSON.parse(JSON.stringify(feat));
+                feat.properties = feat.properties || {};
+                feat.properties.severity = severity;
+            }
+        } else {
+            const event = (typeof eventOrFeat === 'string' && eventOrFeat) || 'Tornado Warning';
+            const c = map.getCenter();
+            const d = 0.4; // ~½° box around center
+            feat = {
+                type: 'Feature',
+                id: `test-${Date.now()}`,
+                geometry: {
+                    type: 'Polygon',
+                    coordinates: [[
+                        [c.lng - d, c.lat - d],
+                        [c.lng + d, c.lat - d],
+                        [c.lng + d, c.lat + d],
+                        [c.lng - d, c.lat + d],
+                        [c.lng - d, c.lat - d],
+                    ]],
+                },
+                properties: {
+                    event,
+                    headline: `${event} (TEST)`,
+                    areaDesc: areaDesc || 'Test Area',
+                    severity: severity || 'Severe',
+                    urgency: 'Immediate',
+                    certainty: 'Observed',
+                    sent: new Date().toISOString(),
+                    expires: new Date(Date.now() + 30 * 60_000).toISOString(),
+                    senderName: 'NWS Test Office',
+                    description:
+                        `At ${new Date().toLocaleTimeString()}, severe weather was indicated by radar.\n\n`
+                        + `HAZARD...60 mph wind gusts and quarter size hail.\n\n`
+                        + `SOURCE...Radar indicated.\n\n`
+                        + `IMPACT...Hail damage to vehicles is expected. Expect wind damage to roofs, siding, and trees.\n\n`
+                        + `LOCATIONS IMPACTED INCLUDE...\n${areaDesc || 'Test City, Test Town, Other Place'}.`,
+                    instruction:
+                        `For your protection move to an interior room on the lowest floor of a building.`,
+                    parameters: {
+                        hailThreat: ['RADAR INDICATED'],
+                        maxHailSize: ['1.00'],
+                        windThreat: ['RADAR INDICATED'],
+                        maxWindGust: ['60 MPH'],
+                    },
+                },
+            };
+        }
+        _showNewAlertBanner(feat);
+        return feat;
+    }
 
+    // _testAlertBannerFromJson(sourceOrUrl, severityOverride?)
+    //   Fires a banner for every feature in a FeatureCollection. Accepts a URL
+    //   or an inline GeoJSON object. Pass severityOverride to force the
+    //   immersive detail flow regardless of the source severity.
+    async function _testAlertBannerFromJson(sourceOrUrl, severityOverride) {
+        let coll = sourceOrUrl;
+        if (typeof sourceOrUrl === 'string') {
+            const resp = await fetch(sourceOrUrl, { cache: 'no-store' });
+            coll = await resp.json();
+        }
+        const feats = Array.isArray(coll?.features) ? coll.features : [];
+        feats.forEach((f) => {
+            const feat = severityOverride
+                ? { ...f, properties: { ...(f.properties || {}), severity: severityOverride } }
+                : f;
+            _showNewAlertBanner(feat);
+        });
+        return feats.length;
+    }
+
+    try {
+        window._testAlertBanner = _testAlertBanner;
+        window._testAlertBannerFromJson = _testAlertBannerFromJson;
+    } catch (_) { /* non-browser */ }
 
     // Build an alerts API URL with given query params. stateCode is optional.
     function _buildAlertsUrl(stateCode, extraParams = {}) {
@@ -4269,30 +4782,116 @@
     byId('weather-refresh-mrms')?.addEventListener('click', loadMrms);
     byId('weather-refresh-alerts')?.addEventListener('click', () => loadAlerts());
 
+    // ── Persistent radar-overlay loop (Alerts panel "Radar Overlay" checkbox) ─
+    // 4-frame loop reusing the same IEM tile naming as the new-alert loop, but
+    // with its own state so opacity can be driven by the sidebar slider and
+    // the frames refresh every 5 minutes so "now" keeps moving forward.
+    const _RADAR_OVERLAY_FRAMES = 4;
+    const _RADAR_OVERLAY_STEP_MIN = 5;
+    const _RADAR_OVERLAY_FRAME_MS = 700;
+    const _RADAR_OVERLAY_PAUSE_MS = 900;
+    let _radarOverlayLoop = null;
+
+    function _radarOverlayBuildLayers(opacity) {
+        const offsets = [];
+        for (let i = _RADAR_OVERLAY_FRAMES - 1; i >= 0; i--) {
+            offsets.push(i * _RADAR_OVERLAY_STEP_MIN);
+        }
+        return offsets.map((mins) => {
+            const slug = mins === 0
+                ? 'nexrad-n0q-900913'
+                : `nexrad-n0q-m${String(mins).padStart(2, '0')}m-900913`;
+            const url = `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/${slug}/{z}/{x}/{y}.png`;
+            return L.tileLayer(url, {
+                opacity: 0,
+                zIndex: 300,
+                attribution: '&copy; Iowa State Mesonet / NWS',
+            }).addTo(map);
+        });
+    }
+
+    function _radarOverlayStartLoop(initialOpacity) {
+        _radarOverlayStopLoop();
+        const opacity = Number.isFinite(initialOpacity) ? initialOpacity : 0.6;
+        const layers = _radarOverlayBuildLayers(opacity);
+        const state = {
+            layers,
+            opacity,
+            idx: 0,
+            cycleTimer: null,
+            refreshTimer: null,
+        };
+
+        const tick = () => {
+            if (!_radarOverlayLoop) return;
+            const s = _radarOverlayLoop;
+            s.layers.forEach((lyr, i) => lyr.setOpacity(i === s.idx ? s.opacity : 0));
+            const hold = s.idx === s.layers.length - 1 ? _RADAR_OVERLAY_PAUSE_MS : _RADAR_OVERLAY_FRAME_MS;
+            s.idx = (s.idx + 1) % s.layers.length;
+            s.cycleTimer = setTimeout(tick, hold);
+        };
+
+        // Rebuild the frame URLs every 5 minutes so the loop keeps tracking
+        // the most recent radar volume.
+        state.refreshTimer = setInterval(() => {
+            if (!_radarOverlayLoop) return;
+            const op = _radarOverlayLoop.opacity;
+            _radarOverlayLoop.layers.forEach((lyr) => {
+                try { if (map.hasLayer(lyr)) map.removeLayer(lyr); } catch (_) { /* ignore */ }
+            });
+            _radarOverlayLoop.layers = _radarOverlayBuildLayers(op);
+            _radarOverlayLoop.idx = 0;
+        }, NEXRAD_REFRESH_MS);
+
+        _radarOverlayLoop = state;
+        tick();
+    }
+
+    function _radarOverlayStopLoop() {
+        const s = _radarOverlayLoop;
+        if (!s) return;
+        if (s.cycleTimer) clearTimeout(s.cycleTimer);
+        if (s.refreshTimer) clearInterval(s.refreshTimer);
+        s.layers.forEach((lyr) => {
+            try { if (map.hasLayer(lyr)) map.removeLayer(lyr); } catch (_) { /* ignore */ }
+        });
+        _radarOverlayLoop = null;
+    }
+
+    function _radarOverlaySetOpacity(value) {
+        if (!_radarOverlayLoop) return;
+        const op = parseFloat(value);
+        if (!Number.isFinite(op)) return;
+        _radarOverlayLoop.opacity = op;
+        // The non-active frames stay at 0; only the active frame visually changes.
+        const s = _radarOverlayLoop;
+        s.layers.forEach((lyr, i) => {
+            // Active frame index is one behind the next-to-show idx.
+            const activeIdx = (s.idx - 1 + s.layers.length) % s.layers.length;
+            lyr.setOpacity(i === activeIdx ? op : 0);
+        });
+    }
+
     byId('weather-alerts-radar')?.addEventListener('change', function () {
         const opacityLabel = byId('weather-alerts-radar-opacity-label');
         const opacitySlider = byId('weather-alerts-radar-opacity');
         if (this.checked) {
             const opacity = parseFloat(opacitySlider?.value ?? 0.6);
-            nexradLayer = L.tileLayer(NEXRAD_TILE_URL, {
-                opacity,
-                zIndex: 300,
-                attribution: '&copy; Iowa State Mesonet / NWS'
-            });
-            nexradLayer.addTo(map);
+            // If a transient new-alert loop is running, retire it; the persistent
+            // overlay loop takes over.
+            _stopNewAlertRadarLoop();
+            _radarOverlayStartLoop(opacity);
             if (opacityLabel) opacityLabel.style.display = '';
             if (opacitySlider) opacitySlider.style.display = '';
-            _nexradRefreshTimer = setInterval(() => { if (nexradLayer) nexradLayer.redraw(); }, NEXRAD_REFRESH_MS);
         } else {
-            if (nexradLayer && map.hasLayer(nexradLayer)) { map.removeLayer(nexradLayer); nexradLayer = null; }
-            if (_nexradRefreshTimer) { clearInterval(_nexradRefreshTimer); _nexradRefreshTimer = null; }
+            _radarOverlayStopLoop();
             if (opacityLabel) opacityLabel.style.display = 'none';
             if (opacitySlider) opacitySlider.style.display = 'none';
         }
     });
 
     byId('weather-alerts-radar-opacity')?.addEventListener('input', function () {
-        if (nexradLayer) nexradLayer.setOpacity(parseFloat(this.value));
+        _radarOverlaySetOpacity(this.value);
     });
 
     byId('weather-alerts-nowcoast')?.addEventListener('change', function () {
@@ -4412,7 +5011,10 @@
                 const center = _alertFeatureCenterLatLng(feat) || _activeAlertsPopup?.latlng || null;
                 if (!center) return;
                 map.flyTo(center, Math.max(map.getZoom(), 9), { duration: 0.9 });
-                map.once('moveend', () => _openAlertsPagerAt(center));
+                map.once('moveend', () => {
+                    _openAlertsPagerAt(center);
+                    _startNewAlertRadarLoop();
+                });
                 return;
             }
 
@@ -4437,6 +5039,9 @@
 
     map.on('popupclose', () => {
         _activeAlertsPopup = null;
+        // Stop the short alert-context radar loop when the user dismisses
+        // the popup that triggered it (Zoom To Alert flow).
+        _stopNewAlertRadarLoop();
     });
 
     // ── Init ─────────────────────────────────────────────────────────────────
@@ -4463,8 +5068,8 @@
         _startReliabilityTicker();
     }
 
-    // ── Auto-refresh alerts every 60s for faster new-alert pickup ──
-    const ALERTS_AUTO_REFRESH_MS = 60_000;
+    // ── Auto-refresh alerts every 15s for faster new-alert pickup ──
+    const ALERTS_AUTO_REFRESH_MS = 15_000;
     setInterval(() => {
         if (_archiveMode) return;
         if (!_isTypeEnabled('alerts')) return;

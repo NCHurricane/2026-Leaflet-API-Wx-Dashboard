@@ -67,30 +67,36 @@ Each new international source would require:
 
 Two functions are exposed on `window` in `js/weather.js` for testing the new-alert banner popup. They are **always present** (not gated behind a flag) — call them from the browser DevTools console.
 
-### `_testAlertBanner(eventOrFeat, areaDesc)`
+### `_testAlertBanner(eventOrFeat, areaDesc, severity)`
 
 Fires a single synthetic banner with a fake polygon centered on the current map view.
 
 ```js
-// Default — Tornado Warning
+// Default — Tornado Warning, Severe (triggers immersive detail panel)
 _testAlertBanner()
 
 // Custom event type and area
 _testAlertBanner('Severe Thunderstorm Warning', 'Wake County, NC')
 _testAlertBanner('Flash Flood Warning', 'Buncombe County, NC')
-_testAlertBanner('Tornado Emergency', 'Moore County, NC')
 
-// Pass a real GeoJSON Feature directly
+// Force a specific severity (e.g. test the fallback pager popup)
+_testAlertBanner('Severe Thunderstorm Warning', 'Wake County, NC', 'Moderate')
+
+// Pass a real GeoJSON Feature directly (optional severity override)
 _testAlertBanner(someFeatureObject)
+_testAlertBanner(someFeatureObject, null, 'Severe')
 ```
 
-### `_testAlertBannerFromJson(sourceOrUrl)`
+### `_testAlertBannerFromJson(sourceOrUrl, severityOverride)`
 
-Fires banners for every feature in a FeatureCollection — accepts either a URL or a JS object.
+Fires banners for every feature in a FeatureCollection — accepts either a URL or a JS object. Pass `severityOverride` to force the immersive detail flow.
 
 ```js
 // From a local API endpoint
 _testAlertBannerFromJson('/api/data/alerts')
+
+// Force immersive detail panel for every feature
+_testAlertBannerFromJson('/api/data/alerts', 'Severe')
 
 // From a local test fixture file (served statically)
 _testAlertBannerFromJson('/data/test_severe_thunderstorm_warning.json')

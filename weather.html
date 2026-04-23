@@ -1441,6 +1441,231 @@
                     transform: scaleX(0);
                 }
             }
+
+            /* ── Immersive new-alert detail panel ──────────────────────── */
+            .wx-new-alert-detail {
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                width: min(520px, 38vw);
+                max-height: 85%;
+                display: flex;
+                flex-direction: column;
+                z-index: 700;
+                background: rgba(2, 6, 23, 0.92);
+                border: 1px solid #475569;
+                border-radius: 10px;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+                color: #e2e8f0;
+                font-size: 0.78rem;
+                line-height: 1.4;
+                backdrop-filter: blur(2px);
+                animation: wx-nad-fade 180ms ease-out;
+            }
+
+            .wx-new-alert-detail.is-right {
+                right: 200px;
+            }
+
+            .wx-new-alert-detail.is-left {
+                left: 200px;
+            }
+
+            @keyframes wx-nad-fade {
+                from {
+                    opacity: 0;
+                    transform: translateY(-50%) translateX(8px);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: translateY(-50%) translateX(0);
+                }
+            }
+
+            .wx-nad-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                padding: 10px 12px;
+                border-bottom: 2px solid;
+            }
+
+            .wx-nad-title {
+                font-weight: 800;
+                font-size: 0.95rem;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+                line-height: 1.2;
+            }
+
+            .wx-nad-close {
+                flex-shrink: 0;
+                width: 26px;
+                height: 26px;
+                border-radius: 999px;
+                border: 1px solid #475569;
+                background: rgba(15, 23, 42, 0.85);
+                color: #e2e8f0;
+                font-size: 1.1rem;
+                line-height: 1;
+                cursor: pointer;
+            }
+
+            .wx-nad-close:hover {
+                background: #1e293b;
+                color: #fff;
+            }
+
+            .wx-nad-badges {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                padding: 8px 12px 0;
+            }
+
+            .wx-nad-badge {
+                display: inline-block;
+                padding: 2px 8px;
+                font-size: 0.65rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                border-radius: 3px;
+                background: rgba(148, 163, 184, 0.18);
+                color: #cbd5e1;
+                border: 1px solid rgba(148, 163, 184, 0.3);
+            }
+
+            .wx-nad-issued {
+                padding: 8px 12px 2px;
+                font-size: 0.7rem;
+                color: #cbd5e1;
+            }
+
+            .wx-nad-expires {
+                padding: 0 12px 8px;
+                font-size: 0.72rem;
+                font-style: italic;
+                color: #cbd5e1;
+            }
+
+            .wx-nad-countdown {
+                color: #fbbf24;
+                font-weight: 700;
+                font-style: normal;
+            }
+
+            .wx-nad-scroll {
+                flex: 1 1 auto;
+                overflow-y: auto;
+                padding: 4px 12px;
+                max-height: 38vh;
+            }
+
+            .wx-nad-scroll::-webkit-scrollbar {
+                width: 8px;
+            }
+
+            .wx-nad-scroll::-webkit-scrollbar-thumb {
+                background: rgba(148, 163, 184, 0.3);
+                border-radius: 4px;
+            }
+
+            .wx-nad-section {
+                margin: 8px 0;
+            }
+
+            .wx-nad-section h4 {
+                margin: 0 0 4px;
+                font-size: 0.7rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                color: #fbbf24;
+            }
+
+            .wx-nad-section p {
+                margin: 0 0 6px;
+                color: #e2e8f0;
+            }
+
+            .wx-nad-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            .wx-nad-chip {
+                padding: 3px 8px;
+                font-size: 0.7rem;
+                background: rgba(251, 191, 36, 0.12);
+                border: 1px solid rgba(251, 191, 36, 0.4);
+                border-radius: 3px;
+                color: #fde68a;
+            }
+
+            .wx-nad-chip strong {
+                color: #fbbf24;
+                margin-right: 3px;
+            }
+
+            .wx-nad-footer {
+                padding: 10px 12px;
+                border-top: 1px solid rgba(148, 163, 184, 0.3);
+            }
+
+            .wx-nad-fulllink {
+                font-size: 0.78rem;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+                text-decoration: none;
+                color: #fef08a;
+            }
+
+            .wx-nad-fulllink:hover,
+            .wx-nad-fulllink:focus-visible {
+                color: #fff16f;
+                text-decoration: underline;
+            }
+
+            .wx-nad-nav {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 12px;
+                padding: 8px 12px;
+                border-top: 1px solid rgba(148, 163, 184, 0.3);
+            }
+
+            .wx-nad-nav-btn {
+                width: 26px;
+                height: 26px;
+                border-radius: 999px;
+                border: 1px solid #475569;
+                background: rgba(15, 23, 42, 0.85);
+                color: #e2e8f0;
+                font-size: 1rem;
+                line-height: 1;
+                cursor: pointer;
+            }
+
+            .wx-nad-nav-btn:hover:not(:disabled) {
+                background: #1e293b;
+                color: #fff;
+            }
+
+            .wx-nad-nav-btn:disabled {
+                opacity: 0.35;
+                cursor: not-allowed;
+            }
+
+            .wx-nad-counter {
+                font-size: 0.7rem;
+                color: #94a3b8;
+            }
         </style>
     </head>
 

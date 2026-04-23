@@ -10,6 +10,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from workers._freshness import is_cache_fresh, mark_run_complete
+
 CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "alerts"
 CACHE_FILE_FULL = CACHE_DIR / "national_full.geojson"
 CACHE_FILE_DISPLAY_LOW = CACHE_DIR / "national_display_low.geojson"
@@ -17,8 +19,13 @@ CACHE_FILE_DISPLAY_LOW = CACHE_DIR / "national_display_low.geojson"
 # Legacy cache path for backward compatibility (symlink or copy of full)
 CACHE_FILE = CACHE_DIR / "national.geojson"
 
+# Skip the run if a sentinel touch indicates a recent successful refresh.
+# Threshold = 75% of the 60s scheduler interval, so an external Task Scheduler
+# invocation will preempt the in-process tick (and vice versa).
+_FRESH_WINDOW_SEC = 45
 
-def run_alerts_worker() -> None:
+
+def run_alerts_worker(force: bool = False) -> None:
     """Fetch all active US alerts, enrich geometries, and write dual cache artifacts.
 
     Produces:
@@ -26,6 +33,9 @@ def run_alerts_worker() -> None:
       - national_display_low.geojson: simplified variant for low-zoom rendering
       - national.geojson: legacy backward-compatible symlink to full
     """
+    if not force and is_cache_fresh("alerts", _FRESH_WINDOW_SEC):
+        print("[alerts_worker] Cache fresh — skipping run")
+        return
     worker_start = time.time()
     try:
         from alerts.alerts_utils import (
@@ -38,7 +48,8 @@ def run_alerts_worker() -> None:
 
         # Fetch and enrich full features.
         fetch_start = time.time()
-        features, source = fetch_active_alerts_with_source(state=None, source="nws")
+        features, source = fetch_active_alerts_with_source(
+            state=None, source="nws")
         enrich_start = time.time()
 
         _enrich_alert_features_geometry(features)
@@ -56,7 +67,8 @@ def run_alerts_worker() -> None:
 
         # Create and write simplified display-low variant.
         simplify_start = time.time()
-        display_features, simplify_metrics = _create_display_low_features(features)
+        display_features, simplify_metrics = _create_display_low_features(
+            features)
         simplify_elapsed = time.time() - simplify_start
 
         display_payload = {
@@ -67,7 +79,8 @@ def run_alerts_worker() -> None:
             "_simplification_metrics": simplify_metrics,
             "features": display_features,
         }
-        CACHE_FILE_DISPLAY_LOW.write_text(json.dumps(display_payload), encoding="utf-8")
+        CACHE_FILE_DISPLAY_LOW.write_text(
+            json.dumps(display_payload), encoding="utf-8")
 
         # Write legacy backward-compatible cache (full geometry).
         CACHE_FILE.write_text(json.dumps(full_payload), encoding="utf-8")
@@ -88,8 +101,17 @@ def run_alerts_worker() -> None:
             f"  Caches: {CACHE_FILE_FULL.name}, {CACHE_FILE_DISPLAY_LOW.name}, "
             f"{CACHE_FILE.name} (legacy)"
         )
+        mark_run_complete("alerts")
     except Exception as exc:
         print(f"[alerts_worker] Error: {exc}")
         import traceback
 
         traceback.print_exc()
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Run the alerts worker once.")
+    parser.add_argument("--force", action="store_true", help="Bypass freshness gate.")
+    args = parser.parse_args()
+    run_alerts_worker(force=args.force)

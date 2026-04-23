@@ -5,7 +5,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from workers._freshness import is_cache_fresh, mark_run_complete
+
 CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "spc"
+
+# Skip if a successful refresh happened within the last 22 min (75% of 30 min interval)
+_FRESH_WINDOW_SEC = 22 * 60
 
 # Convective hazards to pre-cache per outlook day
 _CONVECTIVE_HAZARDS: dict[int, list[str]] = {
@@ -33,8 +38,11 @@ def _write_cache(name: str, payload: dict, source: str) -> None:
     path.write_text(json.dumps(out), encoding="utf-8")
 
 
-def run_spc_worker() -> None:
+def run_spc_worker(force: bool = False) -> None:
     """Fetch all SPC convective + fire weather GeoJSON and write to cache/spc/."""
+    if not force and is_cache_fresh("spc", _FRESH_WINDOW_SEC):
+        print("[spc_worker] Cache fresh — skipping run")
+        return
     from spc.spc_utils import (
         fetch_outlook_geojson,
         fetch_fire_wx_geojson,
@@ -76,3 +84,14 @@ def run_spc_worker() -> None:
         f"[spc_worker] SPC cache refresh complete in {time.time() - start:.2f}s "
         f"({errors} error(s))"
     )
+    mark_run_complete("spc")
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run the SPC worker once.")
+    parser.add_argument("--force", action="store_true",
+                        help="Bypass freshness gate.")
+    args = parser.parse_args()
+    run_spc_worker(force=args.force)

@@ -15,6 +15,7 @@ Thumbs.db
 # Logs and temp
 *.log
 *.tmp
+logs/
 
 # Generic caches/build artifacts
 cache/

@@ -10,6 +10,8 @@ Only ONE product is refreshed at a time (active product pivots on user request).
 import os
 import shutil
 
+from workers._freshness import is_cache_fresh, mark_run_complete
+
 _CACHE_ROOT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache"
 )
@@ -17,6 +19,10 @@ _MRMS_CACHE = os.path.join(_CACHE_ROOT, "mrms")
 
 # Module-level active product state (also mirrored in app.state for API access)
 _active_product: str = "PrecipFlag"
+
+# Skip if a successful refresh happened within the last ~11 min
+# (75% of the 15 min Task Scheduler interval).
+_FRESH_WINDOW_SEC = 11 * 60
 
 
 def set_active_product(product: str) -> None:
@@ -28,10 +34,16 @@ def get_active_product() -> str:
     return _active_product
 
 
-def run_mrms_worker() -> None:
+def run_mrms_worker(force: bool = False) -> None:
     """Download the latest GRIB2 for the active MRMS product."""
     global _active_product
     product = _active_product
+
+    # Gate per-product so a product switch always triggers a fresh download.
+    sentinel_name = f"mrms_{product}"
+    if not force and is_cache_fresh(sentinel_name, _FRESH_WINDOW_SEC):
+        print(f"[mrms_worker] {product} cache fresh — skipping run")
+        return
 
     try:
         from mrms.mrms_nodd_utils import get_latest_mrms_file
@@ -64,5 +76,23 @@ def run_mrms_worker() -> None:
         print(
             f"[mrms_worker] {product} cached at {file_dt.strftime('%Y-%m-%d %H:%M UTC')}"
         )
+        mark_run_complete(sentinel_name)
     except Exception as exc:
         print(f"[mrms_worker] Error fetching {product}: {exc}")
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run the MRMS worker once.")
+    parser.add_argument(
+        "--product",
+        default=None,
+        help="Override the active MRMS product (e.g. PrecipRate).",
+    )
+    parser.add_argument("--force", action="store_true",
+                        help="Bypass freshness gate.")
+    args = parser.parse_args()
+    if args.product:
+        set_active_product(args.product)
+    run_mrms_worker(force=args.force)
