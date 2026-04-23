@@ -1,21 +1,32 @@
 """APScheduler configuration and job registration for background data workers."""
 
-from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, timezone, timedelta
 
-_scheduler = BackgroundScheduler(timezone="UTC")
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.executors.pool import ThreadPoolExecutor
+
+# Use a multi-thread executor so the first ticks of each worker run in
+# parallel rather than queueing behind one another.
+_scheduler = BackgroundScheduler(
+    timezone="UTC",
+    executors={"default": ThreadPoolExecutor(max_workers=8)},
+    job_defaults={"coalesce": True, "max_instances": 1},
+)
 
 
 def start_scheduler() -> None:
     """Register background jobs and start the scheduler.
 
-    Jobs:
-        alerts_worker — 2 min interval, always active.
-        spc_worker    — 30 min interval, always active.
+    All workers are scheduled with `next_run_time=now` so their first tick
+    fires immediately on background scheduler threads — the FastAPI startup
+    handler returns in milliseconds instead of blocking on initial cache fills.
     """
     from workers.alerts_worker import run_alerts_worker
     from workers.spc_worker import run_spc_worker
     from workers.mrms_worker import run_mrms_worker
     from workers.surface_worker import run_surface_worker
+
+    now = datetime.now(timezone.utc)
 
     _scheduler.add_job(
         run_alerts_worker,
@@ -24,6 +35,7 @@ def start_scheduler() -> None:
         id="alerts_worker",
         max_instances=1,
         misfire_grace_time=60,
+        next_run_time=now,
     )
     _scheduler.add_job(
         run_spc_worker,
@@ -32,7 +44,10 @@ def start_scheduler() -> None:
         id="spc_worker",
         max_instances=1,
         misfire_grace_time=300,
+        next_run_time=now,
     )
+    # MRMS first tick deferred 30s so heavy S3 download doesn't compete with
+    # the alerts/surface initial fetches for network bandwidth.
     _scheduler.add_job(
         run_mrms_worker,
         "interval",
@@ -40,6 +55,7 @@ def start_scheduler() -> None:
         id="mrms_worker",
         max_instances=1,
         misfire_grace_time=60,
+        next_run_time=now + timedelta(seconds=30),
     )
     _scheduler.add_job(
         run_surface_worker,
@@ -48,33 +64,14 @@ def start_scheduler() -> None:
         id="surface_worker",
         max_instances=1,
         misfire_grace_time=120,
+        next_run_time=now,
     )
 
     _scheduler.start()
 
-    # Trigger an immediate first run of both workers so cache is warm within seconds
-    # of startup rather than waiting for the first scheduled interval.
-    try:
-        run_alerts_worker()
-    except Exception as exc:
-        print(f"[scheduler] Initial alerts_worker run failed: {exc}")
-
-    try:
-        run_spc_worker()
-    except Exception as exc:
-        print(f"[scheduler] Initial spc_worker run failed: {exc}")
-
-    try:
-        run_surface_worker()
-    except Exception as exc:
-        print(f"[scheduler] Initial surface_worker run failed: {exc}")
-
-    # MRMS initial run is intentionally NOT triggered at startup to avoid a blocking
-    # S3 download on the critical startup path. The worker will run at its first
-    # scheduled interval (~2 min). On-demand cold-cache fetch handles the first request.
-
     print(
-        "[scheduler] Background workers started: alerts (1 min), spc (30 min), mrms (15 min), surface (30 min)"
+        "[scheduler] Background workers scheduled: alerts (1 min), spc (30 min), "
+        "mrms (15 min, +30s delay), surface (30 min) — first ticks running now in background"
     )
 
 

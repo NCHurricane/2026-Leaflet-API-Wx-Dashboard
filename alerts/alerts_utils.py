@@ -118,7 +118,10 @@ MARINE_ALERT_EVENTS = {
 # ---------------------------------------------------------------------------
 _ZONE_GEOM_CACHE = {}  # zone_id -> (shapely_geom | None, expire_ts)
 _ZONE_GEOM_LOCK = threading.Lock()
-_ZONE_GEOM_TTL = 6 * 3600  # 6 hours – zone boundaries rarely change
+# NWS forecast/public/fire zones change on the order of years, not hours.
+# A long TTL means restart-after-restart hits the disk cache instead of
+# re-fetching ~1000+ zones (~60s of cold-start latency).
+_ZONE_GEOM_TTL = 30 * 24 * 3600  # 30 days
 _ZONE_GEOM_MAX_WORKERS = 20  # concurrent HTTP fetches for a batch
 _NWS_HEADERS = {
     "User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"
@@ -151,7 +154,8 @@ def _load_zone_disk_cache() -> None:
                 _ZONE_GEOM_CACHE[zone_id] = (geom, expire_ts)
                 loaded += 1
         if loaded:
-            print(f"[zone-geom] Loaded {loaded} zone geometries from disk cache")
+            print(
+                f"[zone-geom] Loaded {loaded} zone geometries from disk cache")
     except Exception as exc:
         print(f"[zone-geom] Disk cache load skipped: {exc}")
 
@@ -220,7 +224,8 @@ def _prefetch_zone_geometries(features):
             except Exception:
                 pass
         if not has_geom:
-            props = feat.get("properties", {}) if isinstance(feat, dict) else {}
+            props = feat.get("properties", {}) if isinstance(
+                feat, dict) else {}
             for url in props.get("affectedZones", []):
                 zid = url.rstrip("/").split("/")[-1]
                 with _ZONE_GEOM_LOCK:
@@ -278,6 +283,8 @@ def _resolve_zone_geometry(affected_zone_urls):
             f"in {time.time() - fetch_start:.1f}s | {len(cached_geoms)} resolved, "
             f"{len(_ZONE_GEOM_CACHE)} cached total"
         )
+        # Persist newly-fetched zones so subsequent restarts skip the network round-trip.
+        _save_zone_disk_cache()
     if not cached_geoms:
         return None
     return unary_union(cached_geoms) if len(cached_geoms) > 1 else cached_geoms[0]
@@ -674,7 +681,8 @@ def fetch_active_alerts_with_source(state=None, source="nws"):
                             with open(cache_file, "w") as cache_handle:
                                 json.dump(data, cache_handle)
                         except Exception as cache_error:
-                            print(f"[WARN] Error refreshing alert cache: {cache_error}")
+                            print(
+                                f"[WARN] Error refreshing alert cache: {cache_error}")
                 return features, cached_source
         except Exception as e:
             print(f"[WARN] Error reading alert cache: {e}")
@@ -701,7 +709,8 @@ def fetch_active_alerts_with_source(state=None, source="nws"):
             print(f"[WARN] IEM live alert download failed: {e}")
             return [], "IEM"
 
-    headers = {"User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"}
+    headers = {
+        "User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"}
     url = (
         f"https://api.weather.gov/alerts/active?area={state}"
         if state
@@ -779,7 +788,8 @@ def process_alerts(
     for feat in features_list:
         props = feat["properties"]
         event_name = props["event"]
-        is_marine_event = bool(props.get("isMarine")) or event_name in marine_events
+        is_marine_event = bool(props.get("isMarine")
+                               ) or event_name in marine_events
 
         if not _is_alert_active_for_time(props, valid_time):
             continue
@@ -987,7 +997,8 @@ def plot_cities(
 ):
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        cities_path = os.path.join(os.path.dirname(script_dir), "data", filename)
+        cities_path = os.path.join(
+            os.path.dirname(script_dir), "data", filename)
 
         if not os.path.exists(cities_path) and filename != "us-cities.json":
             print(
@@ -1097,7 +1108,8 @@ def plot_cities(
             clip_on=True,
         )
         txt.set_path_effects(
-            [PathEffects.withStroke(linewidth=halo_width, foreground=halo_color)]
+            [PathEffects.withStroke(
+                linewidth=halo_width, foreground=halo_color)]
         )
         drawn_bboxes.append((cand_x_min, cand_x_max, cand_y_min, cand_y_max))
 
@@ -1152,7 +1164,8 @@ def get_alerts_prebuilt_state_basemap_spec(view_key, projection_mode):
             else:
                 geometry = _load_prebuilt_state_geometry(region_key)
 
-            west, east, south, north = _get_prebuilt_state_geometry_bounds(geometry)
+            west, east, south, north = _get_prebuilt_state_geometry_bounds(
+                geometry)
             if _expand_prebuilt_state_extent is not None:
                 if region_key == "CONUS":
                     # Match tools/generate_state_basemaps.py CONUS framing.
@@ -1393,7 +1406,8 @@ def draw_alerts_prebuilt_state_basemap(
         label="alerts_prebuilt_state_basemap",
         zorder=0,
     )
-    bg_ax.imshow(plt.imread(basemap_path), aspect="auto", interpolation="nearest")
+    bg_ax.imshow(plt.imread(basemap_path),
+                 aspect="auto", interpolation="nearest")
     bg_ax.axis("off")
     bg_ax.set_zorder(0)
 
@@ -1432,7 +1446,8 @@ def draw_alerts_state_overlays(
                     conus_states = [
                         st for st in us_states.values() if st and not st.is_empty
                     ]
-                    selected_geom = unary_union(conus_states) if conus_states else None
+                    selected_geom = unary_union(
+                        conus_states) if conus_states else None
                 else:
                     selected_geom = us_states.get(code)
 
@@ -1474,7 +1489,8 @@ def ensure_alerts_basemap_cache(
     if cache_parent_dir:
         os.makedirs(cache_parent_dir, exist_ok=True)
 
-    fig = plt.figure(figsize=(fig_width, fig_height), dpi=150, facecolor=fig_bg_color)
+    fig = plt.figure(figsize=(fig_width, fig_height),
+                     dpi=150, facecolor=fig_bg_color)
     use_prebuilt_state_basemap = bool(
         state_basemap_source_path and os.path.exists(state_basemap_source_path)
     )
@@ -1498,19 +1514,22 @@ def ensure_alerts_basemap_cache(
         ax.outline_patch.set_visible(False)
     except Exception:
         pass
-    ax.set_extent([ext_lon0, ext_lon1, ext_lat0, ext_lat1], crs=ccrs.PlateCarree())
+    ax.set_extent([ext_lon0, ext_lon1, ext_lat0, ext_lat1],
+                  crs=ccrs.PlateCarree())
     if use_prebuilt_state_basemap:
         draw_alerts_static_overlays(ax, **static_layer_kwargs)
     else:
         draw_alerts_static_layers(ax, **static_layer_kwargs)
     ax.patch.set_alpha(0)
-    plt.savefig(cache_path, dpi=150, facecolor=fig.get_facecolor(), edgecolor="none")
+    plt.savefig(cache_path, dpi=150,
+                facecolor=fig.get_facecolor(), edgecolor="none")
     plt.close(fig)
 
 
 def apply_alerts_cached_basemap(fig, ax, cache_path):
     _bg_ax = fig.add_axes([0, 0, 1, 1], label="alerts_basemap_bg", zorder=0)
-    _bg_ax.imshow(plt.imread(cache_path), aspect="auto", interpolation="nearest")
+    _bg_ax.imshow(plt.imread(cache_path), aspect="auto",
+                  interpolation="nearest")
     _bg_ax.axis("off")
     _bg_ax.set_zorder(0)
     ax.set_zorder(1)
@@ -1675,7 +1694,8 @@ def generate_alerts_map(
     )
     os.makedirs(image_dir, exist_ok=True)
 
-    full_state = STATES_FULL.get(state_code, state_code) if state_code else "National"
+    full_state = STATES_FULL.get(
+        state_code, state_code) if state_code else "National"
 
     exclude_list = []
     is_national_view = state_code is None and wfo_code is None and region != "CONUS"
@@ -1741,7 +1761,8 @@ def generate_alerts_map(
         view_key,
     )
     prebuilt_state_basemap = (
-        get_alerts_prebuilt_state_basemap_spec(view_key, effective_projection_mode)
+        get_alerts_prebuilt_state_basemap_spec(
+            view_key, effective_projection_mode)
         if use_cached_basemap
         else None
     )
@@ -1769,10 +1790,14 @@ def generate_alerts_map(
     elif state_code and state_code in STATE_BOUNDS:
         ext_lon0, ext_lon1, ext_lat0, ext_lat1 = STATE_BOUNDS[state_code]
     elif clean_alerts:
-        ext_lon0 = min(item["geometry"].bounds[0] for item in clean_alerts) - 0.5
-        ext_lon1 = max(item["geometry"].bounds[2] for item in clean_alerts) + 0.5
-        ext_lat0 = min(item["geometry"].bounds[1] for item in clean_alerts) - 0.5
-        ext_lat1 = max(item["geometry"].bounds[3] for item in clean_alerts) + 0.5
+        ext_lon0 = min(item["geometry"].bounds[0]
+                       for item in clean_alerts) - 0.5
+        ext_lon1 = max(item["geometry"].bounds[2]
+                       for item in clean_alerts) + 0.5
+        ext_lat0 = min(item["geometry"].bounds[1]
+                       for item in clean_alerts) - 0.5
+        ext_lat1 = max(item["geometry"].bounds[3]
+                       for item in clean_alerts) + 0.5
     else:
         ext_lon0, ext_lon1, ext_lat0, ext_lat1 = STATE_BOUNDS.get(
             "CONUS", [-125, -70, 25, 50]
@@ -1802,9 +1827,11 @@ def generate_alerts_map(
 
     # Build projection (same approach as surface_utils: always state-centered Lambert)
     if effective_projection_mode == "original":
-        proj = ccrs.LambertConformal(central_longitude=-96, central_latitude=35)
+        proj = ccrs.LambertConformal(
+            central_longitude=-96, central_latitude=35)
         if state_code == "NC":
-            proj = ccrs.LambertConformal(central_longitude=-79.0, central_latitude=35.5)
+            proj = ccrs.LambertConformal(
+                central_longitude=-79.0, central_latitude=35.5)
     elif effective_projection_mode == "platecarree":
         proj = ccrs.PlateCarree()
     else:
@@ -1863,7 +1890,8 @@ def generate_alerts_map(
     # Use legend panel background as the figure fill so side padding strips
     # and the bottom legend area share the same colour.
     fig_bg_color = style_config.get("legend_panel_bg_color", "white")
-    fig = plt.figure(figsize=(fig_width, fig_height), dpi=150, facecolor=fig_bg_color)
+    fig = plt.figure(figsize=(fig_width, fig_height),
+                     dpi=150, facecolor=fig_bg_color)
 
     ax = fig.add_axes(
         [left_margin, bottom_margin, ax_width, ax_height], projection=proj
@@ -2072,7 +2100,8 @@ def generate_alerts_map(
         )
         leg.set_zorder(zo["legend"])
 
-    dt_local = datetime.now(timezone.utc).astimezone(tz.gettz("America/New_York"))
+    dt_local = datetime.now(timezone.utc).astimezone(
+        tz.gettz("America/New_York"))
     use_target_area = valid_custom_extent is not None
     region_label = (
         "Target Area"
@@ -2207,7 +2236,8 @@ def _simplify_geometry_for_display(geom, tolerance_m: float = 1000.0) -> object 
         tolerance_deg = tolerance_m / (
             111000.0
             * max(
-                0.1, abs(__import__("math").cos(__import__("math").radians(center_lat)))
+                0.1, abs(__import__("math").cos(
+                    __import__("math").radians(center_lat)))
             )
         )
         tolerance_deg = max(0.0001, tolerance_deg)
@@ -2278,7 +2308,8 @@ def _create_display_low_features(full_features: list[dict]) -> tuple[list[dict],
         # Skip excluded events – always use full geometry.
         if event_name in GEOMETRY_EXCLUDED_EVENTS:
             display_feat = dict(feat)
-            display_feat.setdefault("_simplified", False)  # Mark as not simplified
+            # Mark as not simplified
+            display_feat.setdefault("_simplified", False)
             display_features.append(display_feat)
             excluded_features += 1
             continue
@@ -2287,7 +2318,8 @@ def _create_display_low_features(full_features: list[dict]) -> tuple[list[dict],
         raw_geom = feat.get("geometry")
         if not raw_geom:
             display_feat = dict(feat)
-            display_feat.setdefault("_simplified", False)  # Mark as not simplified
+            # Mark as not simplified
+            display_feat.setdefault("_simplified", False)
             display_features.append(display_feat)
             continue
 
@@ -2295,7 +2327,8 @@ def _create_display_low_features(full_features: list[dict]) -> tuple[list[dict],
             full_geom = shape(raw_geom)
             if full_geom.is_empty:
                 display_feat = dict(feat)
-                display_feat.setdefault("_simplified", False)  # Mark as not simplified
+                # Mark as not simplified
+                display_feat.setdefault("_simplified", False)
                 display_features.append(display_feat)
                 continue
 
@@ -2334,7 +2367,8 @@ def _create_display_low_features(full_features: list[dict]) -> tuple[list[dict],
                 simplified_features += 1
 
                 if hasattr(simplified_geom, "exterior"):
-                    total_vertices_after += len(simplified_geom.exterior.coords)
+                    total_vertices_after += len(
+                        simplified_geom.exterior.coords)
                 elif hasattr(simplified_geom, "geoms"):
                     for part in simplified_geom.geoms:
                         if hasattr(part, "exterior"):

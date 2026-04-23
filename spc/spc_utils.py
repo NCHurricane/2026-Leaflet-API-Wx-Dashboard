@@ -29,10 +29,51 @@ register_montserrat_fonts()
 plt.rcParams["hatch.linewidth"] = 2.0
 
 SPC_BASE = "https://www.spc.noaa.gov"
+_SPC_WX_MAPSERVER = (
+    "https://mapservices.weather.noaa.gov/vector/rest/services"
+    "/outlooks/SPC_wx_outlks/MapServer"
+)
 
-_DAY12_HAZARDS = {"cat", "torn", "wind",
-                  "hail", "sigtorn", "sigwind", "sighail"}
+_DAY12_HAZARDS = {"cat", "torn", "wind", "hail", "cigtorn", "cigwind", "cighail"}
 _DAY3_HAZARDS = {"cat", "prob", "sig"}
+
+_SPC_CONVECTIVE_LAYER_IDS = {
+    1: {
+        "cat": 1,
+        "cigtorn": 2,
+        "torn": 3,
+        "cighail": 4,
+        "hail": 5,
+        "cigwind": 6,
+        "wind": 7,
+        # Back-compat names from older significant-overlay handling.
+        "sigtorn": 2,
+        "sighail": 4,
+        "sigwind": 6,
+    },
+    2: {
+        "cat": 9,
+        "cigtorn": 10,
+        "torn": 11,
+        "cighail": 12,
+        "hail": 13,
+        "cigwind": 14,
+        "wind": 15,
+        "sigtorn": 10,
+        "sighail": 12,
+        "sigwind": 14,
+    },
+    3: {
+        "cat": 17,
+        "sig": 18,
+        "prob": 19,
+    },
+    4: {"cat": 21, "prob": 21},
+    5: {"cat": 22, "prob": 22},
+    6: {"cat": 23, "prob": 23},
+    7: {"cat": 24, "prob": 24},
+    8: {"cat": 25, "prob": 25},
+}
 
 # Layered UI opacities for these overlays are intentionally fixed.
 LAYER_OPACITY_CITIES = 1.0
@@ -91,8 +132,7 @@ def _request_text(url: str, timeout: int = 20, retries: int = 3) -> str:
         try:
             response = requests.get(url, timeout=timeout)
             if response.status_code in {429, 500, 502, 503, 504}:
-                last_error = RuntimeError(
-                    f"HTTP {response.status_code} for {url}")
+                last_error = RuntimeError(f"HTTP {response.status_code} for {url}")
                 continue
             response.raise_for_status()
             return response.text
@@ -154,14 +194,29 @@ def _current_outlook_url(day: int, hazard: str) -> str:
     if day in (1, 2):
         if hazard not in _DAY12_HAZARDS:
             hazard = "cat"
-        return f"{SPC_BASE}/products/outlook/day{day}otlk_{hazard}.nolyr.geojson"
+        return f"{SPC_BASE}/products/outlook/day{day}otlk_{hazard}.lyr.geojson"
     if day == 3:
         if hazard not in _DAY3_HAZARDS:
             hazard = "cat"
         return f"{SPC_BASE}/products/outlook/day3otlk_{hazard}.nolyr.geojson"
     if day in (4, 5, 6, 7, 8):
-        return f"{SPC_BASE}/products/exper/day4-8/day{day}prob.nolyr.geojson"
+        return f"{SPC_BASE}/products/exper/day4-8/day{day}prob.lyr.geojson"
     raise ValueError("day must be between 1 and 8")
+
+
+def _spc_mapserver_layer_id(day: int, hazard: str) -> int:
+    hazard_key = (hazard or "cat").strip().lower()
+    day_layers = _SPC_CONVECTIVE_LAYER_IDS.get(int(day))
+    if not day_layers:
+        raise ValueError("day must be between 1 and 8")
+    if hazard_key not in day_layers:
+        hazard_key = "cat" if "cat" in day_layers else next(iter(day_layers))
+    return int(day_layers[hazard_key])
+
+
+def _spc_mapserver_geojson_url(day: int, hazard: str) -> str:
+    layer_id = _spc_mapserver_layer_id(day, hazard)
+    return f"{_SPC_WX_MAPSERVER}/{layer_id}/query?where=1%3D1&outFields=*&f=geojson"
 
 
 def _report_csv_url(
@@ -224,42 +279,32 @@ def _coerce_lat_lon(value: str, is_lon: bool = False) -> Optional[float]:
 def fetch_outlook_geojson(day: int, hazard: str):
     url = _current_outlook_url(day, hazard)
     payload = _request_json(url)
-    return payload, "SPC GeoJSON"
+    return payload, "NWS SPC GeoJSON"
+
+
+def fetch_cig_overlay_geojson(day: int, hazard: str):
+    # CIG overlays not available from original SPC GeoJSON source
+    return None, "CIG overlays unavailable"
 
 
 # ── Fire Weather Outlook helpers ────────────────────────────────────────────
-_FIRE_WX_HAZARDS = {"dryt", "windrh"}
-
-# NWS MapServer layer IDs for Day 3-8 fire weather (each day has a group
-# layer followed by DryT then WindRH sub-layers).
-_FIRE_WX_MAPSERVER = (
-    "https://mapservices.weather.noaa.gov/vector/rest/services"
-    "/fire_weather/SPC_firewx/MapServer"
-)
-_FIRE_WX_LAYER_IDS = {
-    # day -> {hazard -> layer_id}
-    3: {"dryt": 7, "windrh": 8},
-    4: {"dryt": 10, "windrh": 11},
-    5: {"dryt": 13, "windrh": 14},
-    6: {"dryt": 16, "windrh": 17},
-    7: {"dryt": 19, "windrh": 20},
-    8: {"dryt": 22, "windrh": 23},
-}
+# Days 1-2 fire weather hazards: dry thunderstorm + wind/RH
+_FIRE_WX_HAZARDS_12 = {"dryt", "windrh"}
+# Days 3-8 fire weather hazards: categorical and probabilistic for each type
+_FIRE_WX_HAZARDS_38 = {"drytcat", "drytprob", "windrhcat", "windrhprob"}
 
 
 def _fire_wx_url(day: int, hazard: str) -> str:
     """Build GeoJSON URL for SPC Fire Weather Outlook (Day 1-8)."""
     hazard = (hazard or "windrh").strip().lower()
-    if hazard not in _FIRE_WX_HAZARDS:
-        hazard = "windrh"
     if day in (1, 2):
-        return f"{SPC_BASE}/products/fire_wx/day{day}fw_{hazard}.nolyr.geojson"
-    if day in _FIRE_WX_LAYER_IDS:
-        layer_id = _FIRE_WX_LAYER_IDS[day][hazard]
-        return (
-            f"{_FIRE_WX_MAPSERVER}/{layer_id}/query"
-            f"?where=1%3D1&outFields=*&f=geojson"
-        )
+        if hazard not in _FIRE_WX_HAZARDS_12:
+            hazard = "windrh"
+        return f"{SPC_BASE}/products/fire_wx/day{day}fw_{hazard}.lyr.geojson"
+    if day in range(3, 9):
+        if hazard not in _FIRE_WX_HAZARDS_38:
+            hazard = "windrhprob"  # default to windrhprob
+        return f"{SPC_BASE}/products/exper/fire_wx/day{day}fw_{hazard}.lyr.geojson"
     raise ValueError("Fire weather outlooks require day 1-8")
 
 
@@ -274,13 +319,13 @@ def _significant_overlay_url(day: int, hazard: str) -> Optional[str]:
     hazard = (hazard or "").strip().lower()
     if day in (1, 2):
         if hazard == "torn":
-            return f"{SPC_BASE}/products/outlook/day{day}otlk_sigtorn.nolyr.geojson"
+            return _spc_mapserver_geojson_url(day, "sigtorn")
         if hazard == "wind":
-            return f"{SPC_BASE}/products/outlook/day{day}otlk_sigwind.nolyr.geojson"
+            return _spc_mapserver_geojson_url(day, "sigwind")
         if hazard == "hail":
-            return f"{SPC_BASE}/products/outlook/day{day}otlk_sighail.nolyr.geojson"
+            return _spc_mapserver_geojson_url(day, "sighail")
     if day == 3 and hazard == "prob":
-        return f"{SPC_BASE}/products/outlook/day3otlk_sig.nolyr.geojson"
+        return _spc_mapserver_geojson_url(day, "sig")
     return None
 
 
@@ -476,16 +521,13 @@ def _parse_md_valid_window(detail_text: str):
         ref_date = datetime.now(timezone.utc)
 
     try:
-        d1, h1, m1 = int(match.group(1)), int(
-            match.group(2)), int(match.group(3))
-        d2, h2, m2 = int(match.group(4)), int(
-            match.group(5)), int(match.group(6))
+        d1, h1, m1 = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        d2, h2, m2 = int(match.group(4)), int(match.group(5)), int(match.group(6))
 
         start_utc = ref_date.replace(
             day=d1, hour=h1, minute=m1, second=0, microsecond=0
         )
-        end_utc = ref_date.replace(
-            day=d2, hour=h2, minute=m2, second=0, microsecond=0)
+        end_utc = ref_date.replace(day=d2, hour=h2, minute=m2, second=0, microsecond=0)
         return start_utc, end_utc
     except Exception:
         return None, None
@@ -502,8 +544,7 @@ def _extract_watch_type(detail_text: str, fallback_title: str = "") -> str:
 
 def fetch_active_watch_items(ttl_seconds: int = 90):
     listing_url = f"{SPC_BASE}/products/watch/"
-    listing_html = _cached_text(
-        "spc_watch_listing", "active", listing_url, ttl_seconds)
+    listing_html = _cached_text("spc_watch_listing", "active", listing_url, ttl_seconds)
 
     watch_ids = []
     seen = set()
@@ -546,8 +587,7 @@ def fetch_active_watch_items(ttl_seconds: int = 90):
             else:
                 wou_url = f"{SPC_BASE}/products/watch/{wou_rel}"
             try:
-                wou_text = _cached_text(
-                    "spc_watch_wou", watch_id, wou_url, ttl_seconds)
+                wou_text = _cached_text("spc_watch_wou", watch_id, wou_url, ttl_seconds)
                 county_fips = _parse_watch_county_fips_from_wou(wou_text)
                 issue_utc, expire_utc = _parse_watch_window_from_wou(wou_text)
                 if not polygon:
@@ -560,8 +600,7 @@ def fetch_active_watch_items(ttl_seconds: int = 90):
 
         wwp_url = f"{SPC_BASE}/products/watch/wwp{watch_id}.txt"
         try:
-            wwp_text = _cached_text(
-                "spc_watch_wwp", watch_id, wwp_url, ttl_seconds)
+            wwp_text = _cached_text("spc_watch_wwp", watch_id, wwp_url, ttl_seconds)
             watch_probabilities = _parse_watch_probability_table(wwp_text)
         except Exception:
             watch_probabilities = {}
@@ -602,8 +641,7 @@ def fetch_active_watch_items(ttl_seconds: int = 90):
 
 def fetch_active_watch_options(ttl_seconds: int = 90):
     listing_url = f"{SPC_BASE}/products/watch/"
-    listing_html = _cached_text(
-        "spc_watch_listing", "active", listing_url, ttl_seconds)
+    listing_html = _cached_text("spc_watch_listing", "active", listing_url, ttl_seconds)
 
     items = []
     seen = set()
@@ -630,8 +668,7 @@ def fetch_active_watch_options(ttl_seconds: int = 90):
 
 def fetch_active_md_items(ttl_seconds: int = 90):
     listing_url = f"{SPC_BASE}/products/md/"
-    listing_html = _cached_text(
-        "spc_md_listing", "active", listing_url, ttl_seconds)
+    listing_html = _cached_text("spc_md_listing", "active", listing_url, ttl_seconds)
 
     md_ids = []
     seen = set()
@@ -648,8 +685,7 @@ def fetch_active_md_items(ttl_seconds: int = 90):
     for md_id in md_ids[:32]:
         detail_url = f"{SPC_BASE}/products/md/md{md_id}.html"
         try:
-            detail_text = _cached_text(
-                "spc_md_detail", md_id, detail_url, ttl_seconds)
+            detail_text = _cached_text("spc_md_detail", md_id, detail_url, ttl_seconds)
         except Exception:
             continue
 
@@ -691,8 +727,7 @@ def fetch_active_md_items(ttl_seconds: int = 90):
 
 def fetch_active_md_options(ttl_seconds: int = 90):
     listing_url = f"{SPC_BASE}/products/md/"
-    listing_html = _cached_text(
-        "spc_md_listing", "active", listing_url, ttl_seconds)
+    listing_html = _cached_text("spc_md_listing", "active", listing_url, ttl_seconds)
 
     items = []
     seen = set()
@@ -760,8 +795,7 @@ def _draw_watch_county_items_layer(
 
     for item in items:
         county_fips = item.get("county_fips") or []
-        county_geoms = [fips_map.get(fips)
-                        for fips in county_fips if fips in fips_map]
+        county_geoms = [fips_map.get(fips) for fips in county_fips if fips in fips_map]
         county_geoms = [geom for geom in county_geoms if geom is not None]
 
         if not county_geoms:
@@ -854,19 +888,16 @@ def fetch_reports_rows(
         candidate_dates.append(report_date_utc - timedelta(days=1))
 
     for candidate_date in candidate_dates:
-        candidate_urls = [_report_csv_url(
-            candidate_date, report_mode, type_key)]
+        candidate_urls = [_report_csv_url(candidate_date, report_mode, type_key)]
         if type_key not in {"", "all"}:
             mode_key = (report_mode or "filtered").strip().lower()
             if mode_key == "filtered":
-                candidate_urls.append(_report_csv_url(
-                    candidate_date, "all", type_key))
+                candidate_urls.append(_report_csv_url(candidate_date, "all", type_key))
             elif mode_key == "all":
                 candidate_urls.append(
                     _report_csv_url(candidate_date, "filtered", type_key)
                 )
-            candidate_urls.append(_report_csv_url(
-                candidate_date, report_mode, "all"))
+            candidate_urls.append(_report_csv_url(candidate_date, report_mode, "all"))
 
         deduped_urls = []
         seen_urls = set()
@@ -930,8 +961,7 @@ def fetch_reports_rows(
             continue
 
         if normalized[0].lower() == "time":
-            header_map = {name.lower(): idx for idx,
-                          name in enumerate(normalized)}
+            header_map = {name.lower(): idx for idx, name in enumerate(normalized)}
             section_event = _event_from_second_header(
                 normalized[1] if len(normalized) > 1 else ""
             )
@@ -1202,8 +1232,7 @@ def _add_outlook_polygons(
 ):
     legend_entries = []
     features = (
-        outlook_geojson.get("features", []) if isinstance(
-            outlook_geojson, dict) else []
+        outlook_geojson.get("features", []) if isinstance(outlook_geojson, dict) else []
     )
     for feature in features:
         geometry = feature.get("geometry") or {}
@@ -1350,8 +1379,7 @@ def _build_outlook_bin_layers(
         return fallback_dn
 
     features = (
-        outlook_geojson.get("features", []) if isinstance(
-            outlook_geojson, dict) else []
+        outlook_geojson.get("features", []) if isinstance(outlook_geojson, dict) else []
     )
     for idx, feature in enumerate(features):
         props = feature.get("properties") or {}
@@ -1576,8 +1604,7 @@ def _dashify_hatch_layer_png(
             return
 
         if rgba.shape[2] == 3:
-            alpha_channel = np.ones(
-                (rgba.shape[0], rgba.shape[1], 1), dtype=rgba.dtype)
+            alpha_channel = np.ones((rgba.shape[0], rgba.shape[1], 1), dtype=rgba.dtype)
             rgba = np.concatenate([rgba, alpha_channel], axis=2)
         elif rgba.shape[2] < 4:
             return
@@ -2298,8 +2325,7 @@ def generate_spc_map(
     is_reports_only = hazard_key == "reports"
     is_watches_only = hazard_key == "watches"
     is_mds_only = hazard_key in {"md", "mds"}
-    show_outlook_layers = not (
-        is_reports_only or is_watches_only or is_mds_only)
+    show_outlook_layers = not (is_reports_only or is_watches_only or is_mds_only)
 
     show_country = _to_bool(style_config.get("show_country", True), True)
     show_states = _to_bool(style_config.get("show_states", True), True)
@@ -2402,8 +2428,7 @@ def generate_spc_map(
             mds_items = []
             mds_source = ""
 
-    selected_watch_ids = _selected_ids_from_style(
-        style_config, "spc_selected_watch_id")
+    selected_watch_ids = _selected_ids_from_style(style_config, "spc_selected_watch_id")
     if selected_watch_ids:
         watches_items = [
             item
@@ -2411,8 +2436,7 @@ def generate_spc_map(
             if _normalize_product_id(item.get("id", "")) in selected_watch_ids
         ]
 
-    selected_md_ids = _selected_ids_from_style(
-        style_config, "spc_selected_md_id")
+    selected_md_ids = _selected_ids_from_style(style_config, "spc_selected_md_id")
     if selected_md_ids:
         mds_items = [
             item
@@ -2426,10 +2450,8 @@ def generate_spc_map(
         resolved_region,
         custom_extent=custom_extent,
     )
-    output_size = _resolve_output_size(
-        render_extent, projection=map_projection)
-    is_conus_like_view = bool(custom_extent) or str(
-        resolved_region).upper() == "CONUS"
+    output_size = _resolve_output_size(render_extent, projection=map_projection)
+    is_conus_like_view = bool(custom_extent) or str(resolved_region).upper() == "CONUS"
     base_feature_resolution = "50m" if is_conus_like_view else "10m"
 
     # Use resolved region directory once extent logic is finalized
@@ -2482,8 +2504,7 @@ def generate_spc_map(
         facecolor=ocean_color,
         zorder=0,
     )
-    layer_paths["basemap"] = _save_layer(
-        fig_base, "basemap", transparent=False)
+    layer_paths["basemap"] = _save_layer(fig_base, "basemap", transparent=False)
 
     fig_country, ax_country = _new_fig_ax()
     ax_country.add_feature(
@@ -2559,8 +2580,7 @@ def generate_spc_map(
         layer_paths.update(outlook_bin_paths)
 
         sig_geojson = fetch_significant_geojson(day, hazard)
-        show_sig_hatch = _to_bool(style_config.get(
-            "spc_show_sig_hatch", True), True)
+        show_sig_hatch = _to_bool(style_config.get("spc_show_sig_hatch", True), True)
         fig_hatch, ax_hatch = _new_fig_ax()
         if show_sig_hatch and sig_geojson:
             hatch_applied = _add_significant_hatching(
@@ -2638,8 +2658,7 @@ def generate_spc_map(
     fig_cities, ax_cities = _new_fig_ax()
     plot_cities(
         ax_cities,
-        (render_extent[0], render_extent[1],
-         render_extent[2], render_extent[3]),
+        (render_extent[0], render_extent[1], render_extent[2], render_extent[3]),
         filename=style_config.get("cities_file", "us-cities.json"),
         style_config=style_config,
         z_cities=70,
@@ -2659,8 +2678,7 @@ def generate_spc_map(
     valid_until_iso = ""
     issue_iso = ""
     features = (
-        outlook_geojson.get("features", []) if isinstance(
-            outlook_geojson, dict) else []
+        outlook_geojson.get("features", []) if isinstance(outlook_geojson, dict) else []
     )
     if features:
         first_props = features[0].get("properties", {}) or {}
@@ -2773,8 +2791,7 @@ def generate_spc_map(
     is_hail_prob = hazard_key == "hail"
     is_reports_mode = hazard_key == "reports"
     selected_watch_item = (
-        watches_items[0] if (is_watches_only and len(
-            watches_items) == 1) else None
+        watches_items[0] if (is_watches_only and len(watches_items) == 1) else None
     )
     legend_mode = (
         "cat"
@@ -2918,8 +2935,7 @@ def generate_spc_map(
     if show_places:
         plot_cities(
             ax_comp,
-            (render_extent[0], render_extent[1],
-             render_extent[2], render_extent[3]),
+            (render_extent[0], render_extent[1], render_extent[2], render_extent[3]),
             filename=style_config.get("cities_file", "us-cities.json"),
             style_config=style_config,
             z_cities=94,

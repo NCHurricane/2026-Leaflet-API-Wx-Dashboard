@@ -1,3 +1,7 @@
+from config.geo_config import STATE_BOUNDS
+from font_utils import resolve_logo_path
+from satellite import satellite_utils as satellite_thredds_utils
+from radar import radar_utils as radar_thredds_utils
 import threading
 import shutil
 import os
@@ -22,14 +26,10 @@ _old_stdout = sys.stdout
 _old_stderr = sys.stderr
 sys.stdout = StringIO()
 sys.stderr = StringIO()
-from radar import radar_utils as radar_thredds_utils
-from satellite import satellite_utils as satellite_thredds_utils
 
 sys.stdout = _old_stdout
 sys.stderr = _old_stderr
 
-from font_utils import resolve_logo_path
-from config.geo_config import STATE_BOUNDS
 
 # Module state — initialized at startup
 USING_NODD = False
@@ -101,7 +101,8 @@ def _initialize_modules() -> None:
         radar_utils = radar_thredds_utils
         satellite_utils = satellite_thredds_utils
         startup_events.append(
-            (f"[WARN] NODD fallback to THREDDS: {import_error}", _time.time() - _t0)
+            (f"[WARN] NODD fallback to THREDDS: {import_error}", _time.time(
+            ) - _t0)
         )
 
     # 2. Initialize Radar Archive module
@@ -110,10 +111,12 @@ def _initialize_modules() -> None:
         from radar import radar_archive_utils as rad_archive
 
         radar_archive_utils = rad_archive
-        startup_events.append(("[OK] Radar archive module", _time.time() - _t0))
+        startup_events.append(
+            ("[OK] Radar archive module", _time.time() - _t0))
     except Exception as archive_err:
         startup_events.append(
-            (f"[WARN] Radar archive unavailable: {archive_err}", _time.time() - _t0)
+            (f"[WARN] Radar archive unavailable: {archive_err}", _time.time(
+            ) - _t0)
         )
 
     # 3. Initialize Satellite Archive module
@@ -122,7 +125,8 @@ def _initialize_modules() -> None:
         from satellite import satellite_archive_utils as sat_archive
 
         satellite_archive_utils = sat_archive
-        startup_events.append(("[OK] Satellite archive module", _time.time() - _t0))
+        startup_events.append(
+            ("[OK] Satellite archive module", _time.time() - _t0))
     except Exception as sat_archive_err:
         startup_events.append(
             (
@@ -137,10 +141,12 @@ def _initialize_modules() -> None:
         from weather import weather_utils as wx_utils
 
         weather_utils = wx_utils
-        startup_events.append(("[OK] Weather unified module", _time.time() - _t0))
+        startup_events.append(
+            ("[OK] Weather unified module", _time.time() - _t0))
     except Exception as weather_err:
         startup_events.append(
-            (f"[WARN] Weather module unavailable: {weather_err}", _time.time() - _t0)
+            (f"[WARN] Weather module unavailable: {weather_err}", _time.time(
+            ) - _t0)
         )
 
     # 5. Initialize Background Scheduler
@@ -154,7 +160,8 @@ def _initialize_modules() -> None:
         startup_events.append(("[OK] APScheduler loaded", _time.time() - _t0))
     except Exception as sched_err:
         startup_events.append(
-            (f"[WARN] APScheduler unavailable: {sched_err}", _time.time() - _t0)
+            (f"[WARN] APScheduler unavailable: {sched_err}", _time.time(
+            ) - _t0)
         )
 
     # 6. Create base directories (non-weather)
@@ -166,7 +173,8 @@ def _initialize_modules() -> None:
     os.makedirs(DIRS["mrms"], exist_ok=True)
     os.makedirs(DIRS["spc"], exist_ok=True)
     os.makedirs(DIRS["spc_archive"], exist_ok=True)
-    startup_events.append(("[OK] Base directories created", _time.time() - _t0))
+    startup_events.append(
+        ("[OK] Base directories created", _time.time() - _t0))
 
     # 7. Create weather directories if weather_utils is available
     _t0 = _time.time()
@@ -182,35 +190,45 @@ def _initialize_modules() -> None:
             os.makedirs(_wd, exist_ok=True)
         startup_events.append(("[OK] Weather directories", _time.time() - _t0))
 
-    # 8. Warm radar Cartopy assets
+    # 8. Warm radar Cartopy assets in a background thread.
+    # First radar request typically arrives several seconds after launch, so
+    # the warmup completes long before it's needed without blocking startup.
     _t0 = _time.time()
-    try:
-        if hasattr(radar_thredds_utils, "warm_radar_cartopy_cache"):
-            radar_thredds_utils.warm_radar_cartopy_cache()
-        startup_events.append(("[Perf] Radar Cartopy warmup", _time.time() - _t0))
-    except Exception as e:
-        startup_events.append((f"[WARN] Radar warmup failed: {e}", _time.time() - _t0))
 
-    # 9. Warm radar archive Cartopy assets
-    _t0 = _time.time()
-    try:
-        if radar_archive_utils and hasattr(
-            radar_archive_utils, "warm_radar_cartopy_cache"
-        ):
-            radar_archive_utils.warm_radar_cartopy_cache()
-        startup_events.append(("[Perf] Radar archive warmup", _time.time() - _t0))
-    except Exception as e:
-        startup_events.append(
-            (f"[WARN] Radar archive warmup failed: {e}", _time.time() - _t0)
-        )
+    def _warm_cartopy_async():
+        try:
+            if hasattr(radar_thredds_utils, "warm_radar_cartopy_cache"):
+                _w0 = _time.time()
+                radar_thredds_utils.warm_radar_cartopy_cache()
+                print(
+                    f"[Perf] Radar Cartopy warmup {_time.time() - _w0:.2f}s (bg)")
+        except Exception as e:
+            print(f"[WARN] Radar warmup failed (bg): {e}")
+        try:
+            if radar_archive_utils and hasattr(
+                radar_archive_utils, "warm_radar_cartopy_cache"
+            ):
+                _w0 = _time.time()
+                radar_archive_utils.warm_radar_cartopy_cache()
+                print(
+                    f"[Perf] Radar archive warmup {_time.time() - _w0:.2f}s (bg)")
+        except Exception as e:
+            print(f"[WARN] Radar archive warmup failed (bg): {e}")
 
-    # 10. Start background workers
+    threading.Thread(
+        target=_warm_cartopy_async, name="cartopy-warmup", daemon=True
+    ).start()
+    startup_events.append(
+        ("[OK] Cartopy warmup dispatched (bg)", _time.time() - _t0))
+
+    # 9. Start background workers (scheduler returns immediately; first ticks
+    # run in background threads via APScheduler `next_run_time=now`)
     _t0 = _time.time()
     if _SCHEDULER_AVAILABLE:
         try:
             start_scheduler()
             startup_events.append(
-                ("[OK] Background workers started", _time.time() - _t0)
+                ("[OK] Background workers scheduled", _time.time() - _t0)
             )
         except Exception as e:
             startup_events.append(
@@ -254,13 +272,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/img/surface", StaticFiles(directory=DIRS["surface"]), name="surface_images")
+app.mount("/img/surface",
+          StaticFiles(directory=DIRS["surface"]), name="surface_images")
 app.mount(
     "/img/surface_archive",
     StaticFiles(directory=DIRS["surface_archive"]),
     name="surface_archive_images",
 )
-app.mount("/img/alerts", StaticFiles(directory=DIRS["alerts"]), name="alert_images")
+app.mount("/img/alerts",
+          StaticFiles(directory=DIRS["alerts"]), name="alert_images")
 app.mount(
     "/img/alerts_archive",
     StaticFiles(directory=DIRS["alerts_archive"]),
@@ -289,18 +309,21 @@ os.makedirs(
 app.mount(
     "/img/radar_archive/radar_level2_images",
     StaticFiles(
-        directory=os.path.join(DIRS["radar"], "radar_archive", "radar_level2_images")
+        directory=os.path.join(
+            DIRS["radar"], "radar_archive", "radar_level2_images")
     ),
     name="radar_archive_level2_images",
 )
 app.mount(
     "/img/radar_archive/radar_level3_images",
     StaticFiles(
-        directory=os.path.join(DIRS["radar"], "radar_archive", "radar_level3_images")
+        directory=os.path.join(
+            DIRS["radar"], "radar_archive", "radar_level3_images")
     ),
     name="radar_archive_level3_images",
 )
-app.mount("/img/satellite", StaticFiles(directory=DIRS["satellite"]), name="sat_images")
+app.mount("/img/satellite",
+          StaticFiles(directory=DIRS["satellite"]), name="sat_images")
 os.makedirs(DIRS["satellite_archive"], exist_ok=True)
 app.mount(
     "/img/satellite_archive",
@@ -314,6 +337,8 @@ app.mount(
     StaticFiles(directory=DIRS["spc_archive"]),
     name="spc_archive_images",
 )
+# Sound files
+app.mount("/sounds", StaticFiles(directory="sounds"), name="sounds")
 # Weather unified static mounts
 if weather_utils:
     app.mount(
@@ -359,7 +384,8 @@ app.mount(
 def _serve_page(filename: str):
     page_path = os.path.join(BASE_DIR, filename)
     if not os.path.exists(page_path):
-        raise HTTPException(status_code=404, detail=f"Page not found: {filename}")
+        raise HTTPException(
+            status_code=404, detail=f"Page not found: {filename}")
     return FileResponse(page_path)
 
 
@@ -375,7 +401,8 @@ def parse_styles(style_str: Optional[str]):
             for k, v in raw_styles.items():
                 try:
                     float_v = float(v)
-                    parsed_styles[k] = int(float_v) if float_v.is_integer() else float_v
+                    parsed_styles[k] = int(
+                        float_v) if float_v.is_integer() else float_v
                 except (ValueError, TypeError):
                     parsed_styles[k] = v
         except Exception as e:
@@ -448,7 +475,8 @@ def parse_utc_datetime(value: str) -> datetime:
     if not raw:
         raise HTTPException(
             status_code=400,
-            detail=error_payload("Invalid empty datetime value.", code="invalid_date"),
+            detail=error_payload(
+                "Invalid empty datetime value.", code="invalid_date"),
         )
 
     normalized = raw.replace("Z", "+00:00")
@@ -535,7 +563,8 @@ def success_payload(
 def attach_mode_and_source(payload: dict, data_mode: str):
     if not isinstance(payload, dict):
         return payload
-    source_value = payload.get("source") or payload.get("data_source") or "Unknown"
+    source_value = payload.get("source") or payload.get(
+        "data_source") or "Unknown"
     payload["source"] = source_value
     payload["data_mode"] = data_mode
     return payload
@@ -841,16 +870,6 @@ def _build_surface_stations(df, product: str) -> list:
     if meta is None or df is None or df.empty:
         return []
 
-    # DEBUG
-    print(f"DEBUG: DataFrame columns include: {list(df.columns)[:15]}")
-    print(f"DEBUG: 'network' in columns: {'network' in df.columns}")
-
-    # Also write to file
-    with open("debug_build_surface.txt", "a") as f:
-        f.write(
-            f"call: 'network' in columns={('network' in df.columns)}, shape={df.shape}\n"
-        )
-
     col = meta["col"]
     anchors_key = meta["anchors"]
     if anchors_key == "temp":
@@ -966,7 +985,8 @@ def _enrich_alert_features_geometry(features: list[dict]) -> None:
                         c[1:] for c in same_codes if isinstance(c, str) and len(c) == 6
                     ]
                     if fips_codes:
-                        final_geom = CensusCounties.get_geometry_for_fips(fips_codes)
+                        final_geom = CensusCounties.get_geometry_for_fips(
+                            fips_codes)
 
             if final_geom is not None and not final_geom.is_empty:
                 try:
@@ -985,6 +1005,10 @@ def get_data_alerts(
     state: Optional[str] = None,
     geometry_mode: Optional[str] = None,
     zoom_bucket: Optional[str] = None,
+    west: Optional[float] = None,
+    east: Optional[float] = None,
+    south: Optional[float] = None,
+    north: Optional[float] = None,
 ):
     """Return national alerts GeoJSON from worker cache with dual-geometry support.
 
@@ -996,6 +1020,8 @@ def get_data_alerts(
         zoom_bucket: 'low' or 'high' (default: 'high')
             - 'low': CONUS-like zoom with simplified geometry
             - 'high': state/local zoom with full geometry
+        west/east/south/north: Optional viewport bbox (lon/lat) to include
+            surrounding-area alerts near the current map view.
 
     Returns GeoJSON FeatureCollection with metadata about geometry mode and
     simplification statistics.
@@ -1009,7 +1035,8 @@ def get_data_alerts(
         .strip()
     )
     bucket = (
-        str(zoom_bucket or GEOMETRY_ENDPOINT_DEFAULTS["zoom_bucket"]).lower().strip()
+        str(zoom_bucket or GEOMETRY_ENDPOINT_DEFAULTS["zoom_bucket"]).lower(
+        ).strip()
     )
 
     if mode not in {"full", "display"}:
@@ -1020,10 +1047,12 @@ def get_data_alerts(
     # Select cache file based on geometry_mode and zoom_bucket.
     # Use display-low variant only if explicitly requested with low zoom.
     if mode == "display" and bucket == "low":
-        cache_file = os.path.join(_CACHE_ROOT, "alerts", "national_display_low.geojson")
+        cache_file = os.path.join(
+            _CACHE_ROOT, "alerts", "national_display_low.geojson")
     else:
         # Default to full geometry (backward compatible).
-        cache_file = os.path.join(_CACHE_ROOT, "alerts", "national_full.geojson")
+        cache_file = os.path.join(
+            _CACHE_ROOT, "alerts", "national_full.geojson")
 
     # Fallback to legacy cache if specific cache not found.
     if not os.path.exists(cache_file):
@@ -1062,10 +1091,62 @@ def get_data_alerts(
 
         features = [f for f in features if _matches(f)]
 
+    # Optional viewport-aware bbox filtering (fast feature-bounds overlap).
+    bbox_params = (west, east, south, north)
+    if all(v is not None for v in bbox_params):
+        try:
+            w = float(west)
+            e = float(east)
+            s = float(south)
+            n = float(north)
+            if w > e:
+                w, e = e, w
+            if s > n:
+                s, n = n, s
+
+            def _iter_coords(node):
+                if isinstance(node, (list, tuple)):
+                    if len(node) >= 2 and all(
+                        isinstance(v, (int, float)) for v in node[:2]
+                    ):
+                        yield float(node[0]), float(node[1])
+                    else:
+                        for child in node:
+                            yield from _iter_coords(child)
+
+            def _feature_overlaps_bbox(feat: dict) -> bool:
+                geom = (feat or {}).get("geometry") or {}
+                coords = geom.get("coordinates")
+                if not coords:
+                    return False
+                min_x = float("inf")
+                max_x = float("-inf")
+                min_y = float("inf")
+                max_y = float("-inf")
+                seen = False
+                for x, y in _iter_coords(coords):
+                    seen = True
+                    if x < min_x:
+                        min_x = x
+                    if x > max_x:
+                        max_x = x
+                    if y < min_y:
+                        min_y = y
+                    if y > max_y:
+                        max_y = y
+                if not seen:
+                    return False
+                return not (max_x < w or min_x > e or max_y < s or min_y > n)
+
+            features = [f for f in features if _feature_overlaps_bbox(f)]
+        except Exception:
+            pass
+
     # Count simplified features (only relevant for display mode).
     simplified_count = 0
     if mode == "display" and bucket == "low":
-        simplified_count = sum(1 for f in features if f.get("_simplified") is True)
+        simplified_count = sum(
+            1 for f in features if f.get("_simplified") is True)
 
     # Clean up internal metadata flags from response (don't expose to client).
     for feat in features:
@@ -1141,7 +1222,8 @@ def get_data_surface(region: str = "NC", product: str = "temperature"):
 
     surface_cache_dir = os.path.join(_CACHE_ROOT, "surface")
     os.makedirs(surface_cache_dir, exist_ok=True)
-    cache_file = os.path.join(surface_cache_dir, f"{region_upper}_{product_lower}.json")
+    cache_file = os.path.join(
+        surface_cache_dir, f"{region_upper}_{product_lower}.json")
 
     if os.path.exists(cache_file):
         age = _time.time() - os.path.getmtime(cache_file)
@@ -1155,7 +1237,8 @@ def get_data_surface(region: str = "NC", product: str = "temperature"):
     try:
         df = surface_utils.fetch_metar_data(region_upper)
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Surface data unavailable: {exc}")
+        raise HTTPException(
+            status_code=503, detail=f"Surface data unavailable: {exc}")
 
     stations = _build_surface_stations(df, product_lower)
     result = {
@@ -1286,7 +1369,8 @@ def get_data_mrms(
     ).hexdigest()[:10]
     png_path = os.path.join(product_cache_dir, f"overlay_{bounds_key}.png")
     grib_mtime = os.path.getmtime(grib_path)
-    png_stale = not os.path.exists(png_path) or os.path.getmtime(png_path) < grib_mtime
+    png_stale = not os.path.exists(
+        png_path) or os.path.getmtime(png_path) < grib_mtime
 
     if png_stale:
         try:
@@ -1294,7 +1378,8 @@ def get_data_mrms(
                 grib_path, product, [west, east, south, north], png_path
             )
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"MRMS render error: {exc}")
+            raise HTTPException(
+                status_code=500, detail=f"MRMS render error: {exc}")
     else:
         # Read bounds from sidecar file
         sidecar = png_path.replace(".png", "_bounds.json")
@@ -1406,7 +1491,8 @@ def _render_mrms_png(
     )
     fig.patch.set_alpha(0)
     ax.patch.set_alpha(0)
-    fig.savefig(out_path, dpi=dpi, bbox_inches=None, transparent=True, format="png")
+    fig.savefig(out_path, dpi=dpi, bbox_inches=None,
+                transparent=True, format="png")
     plt.close(fig)
 
     # Write bounds sidecar
@@ -1543,7 +1629,8 @@ def archive_mrms(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     if dt_to <= dt_from:
-        raise HTTPException(status_code=400, detail="date_to must be after date_from.")
+        raise HTTPException(
+            status_code=400, detail="date_to must be after date_from.")
     if (dt_to - dt_from).total_seconds() > 72 * 3600:
         raise HTTPException(
             status_code=400, detail="Max MRMS archive span is 72 hours."
@@ -1608,7 +1695,8 @@ def archive_mrms(
                 return
             if len(all_files) > max_frames:
                 step = len(all_files) / max_frames
-                all_files = [all_files[int(i * step)] for i in range(max_frames)]
+                all_files = [all_files[int(i * step)]
+                             for i in range(max_frames)]
             total = len(all_files)
             disk_dir = os.path.join(_ARCHIVE_ROOT, skey)
             frames = []
@@ -1632,7 +1720,8 @@ def archive_mrms(
                         local_gz, product, [west, east, south, north], png_path
                     )
                 except Exception as render_err:
-                    print(f"[archive/mrms] Render failed frame {idx}: {render_err}")
+                    print(
+                        f"[archive/mrms] Render failed frame {idx}: {render_err}")
                     continue
                 finally:
                     try:
@@ -1662,7 +1751,8 @@ def archive_mrms(
             with _archive_lock:
                 session["status"] = "error"
                 session["error"] = str(exc)
-            active_tasks[tid] = {"percent": 100, "stage": "error", "message": str(exc)}
+            active_tasks[tid] = {"percent": 100,
+                                 "stage": "error", "message": str(exc)}
 
     threading.Thread(target=_worker, daemon=True).start()
     return {
@@ -1680,7 +1770,8 @@ def archive_result(session_id: str):
     with _archive_lock:
         session = _archive_sessions.get(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found or expired.")
+        raise HTTPException(
+            status_code=404, detail="Session not found or expired.")
     return {
         "status": session["status"],
         "session_id": session_id,
@@ -1804,7 +1895,8 @@ def _fetch_iem_alerts_range(
     LOOKBACK = timedelta(hours=72)
     query_from = utc_from - LOOKBACK
 
-    headers = {"User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"}
+    headers = {
+        "User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"}
 
     def _build_url(with_state: bool) -> str:
         url = (
@@ -1852,7 +1944,8 @@ def _fetch_iem_alerts_range(
             except Exception:
                 continue
             attrs = rec.attributes
-            event = _event_name_from_attrs(attrs) or str(attrs.get("PHENOM", ""))
+            event = _event_name_from_attrs(
+                attrs) or str(attrs.get("PHENOM", ""))
 
             # Convert IEM YYYYMMDDHHMM timestamps to ISO-8601
             def _iem_to_iso(raw: str) -> str:
@@ -1920,7 +2013,8 @@ def archive_surface(
             status_code=400, detail="date_from and date_to are required."
         )
     if not 1 <= int(max_frames) <= 120:
-        raise HTTPException(status_code=400, detail="max_frames must be 1-120.")
+        raise HTTPException(
+            status_code=400, detail="max_frames must be 1-120.")
 
     try:
         dt_from = _parse_archive_dt(date_from)
@@ -1929,7 +2023,8 @@ def archive_surface(
         raise HTTPException(status_code=400, detail=str(exc))
 
     if dt_to <= dt_from:
-        raise HTTPException(status_code=400, detail="date_to must be after date_from.")
+        raise HTTPException(
+            status_code=400, detail="date_to must be after date_from.")
     validate_archive_range("surface", dt_from, dt_to)
 
     product_key = str(product or "").strip().lower()
@@ -2037,13 +2132,16 @@ def archive_spc(
     Tries 1200, 1630, 2000, 0100 UTC issue times in order.
     """
     if not date:
-        raise HTTPException(status_code=400, detail="date is required (YYYY-MM-DD).")
+        raise HTTPException(
+            status_code=400, detail="date is required (YYYY-MM-DD).")
     try:
-        target_dt = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        target_dt = datetime.strptime(
+            date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     except ValueError:
         raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD.")
     if not 1 <= day <= 3:
-        raise HTTPException(status_code=400, detail="day must be 1-3 for SPC archive.")
+        raise HTTPException(
+            status_code=400, detail="day must be 1-3 for SPC archive.")
 
     hazard = (hazard or "cat").strip().lower()
     day12_hazards = {"cat", "torn", "wind", "hail", "prob", "sig"}
@@ -2077,7 +2175,8 @@ def archive_spc(
             tried_urls.append(url)
             try:
                 with _ur.urlopen(url, timeout=15) as r:
-                    geojson = json.loads(r.read().decode("utf-8", errors="replace"))
+                    geojson = json.loads(
+                        r.read().decode("utf-8", errors="replace"))
                 break
             except Exception:
                 continue
@@ -2272,7 +2371,8 @@ def get_radar_latest(
         requested_product = str(product or "N0B").strip().upper()
         requested_source = str(source or "auto").strip().lower()
         view_render_mode = str(view_mode or "image").strip().lower()
-        data_only_mode = str(render_mode or "full").strip().lower() == "data_only"
+        data_only_mode = str(
+            render_mode or "full").strip().lower() == "data_only"
 
         if view_render_mode not in {"image", "layers"}:
             view_render_mode = "image"
@@ -2413,7 +2513,8 @@ def get_radar_latest(
                 level_str = level.replace(" ", "")
                 rel_path = os.path.relpath(
                     rendered_path,
-                    os.path.join(DIRS["radar"], f"radar_level{level_str}_images"),
+                    os.path.join(
+                        DIRS["radar"], f"radar_level{level_str}_images"),
                 ).replace("\\", "/")
                 image_url = f"/img/radar_level{level_str}_images/{rel_path}"
 
@@ -2461,7 +2562,8 @@ def get_radar_latest(
             for k, v in raw_styles.items():
                 try:
                     float_v = float(v)
-                    parsed_styles[k] = int(float_v) if float_v.is_integer() else float_v
+                    parsed_styles[k] = int(
+                        float_v) if float_v.is_integer() else float_v
                 except (ValueError, TypeError):
                     parsed_styles[k] = v
 
@@ -2486,9 +2588,12 @@ def get_radar_latest(
         )
         site_candidates = [site]
         if custom_extent:
-            center_lat = (custom_extent[0] + custom_extent[1]) / 2  # (s + n) / 2
-            center_lon = (custom_extent[2] + custom_extent[3]) / 2  # (w + e) / 2
-            site_candidates = find_nearest_radar_sites(center_lat, center_lon, limit=8)
+            center_lat = (custom_extent[0] +
+                          custom_extent[1]) / 2  # (s + n) / 2
+            center_lon = (custom_extent[2] +
+                          custom_extent[3]) / 2  # (w + e) / 2
+            site_candidates = find_nearest_radar_sites(
+                center_lat, center_lon, limit=8)
             site = site_candidates[0]
             print(
                 f"[INFO] Custom extent active — auto-selected closest radar: {site} "
@@ -2646,7 +2751,8 @@ def get_radar_latest(
         else:
             attempted_sites = ", ".join(site_candidates)
             details = (
-                " | ".join(site_attempt_errors[-3:]) if site_attempt_errors else ""
+                " | ".join(site_attempt_errors[-3:]
+                           ) if site_attempt_errors else ""
             )
             raise RuntimeError(
                 f"No radar data found for requested extent after trying sites: {attempted_sites}"
@@ -2654,7 +2760,8 @@ def get_radar_latest(
             )
 
         # Use custom logo path from style config, or fall back to default
-        logo_path_to_use = resolve_logo_path(parsed_styles, BASE_DIR, LOGO_PATH)
+        logo_path_to_use = resolve_logo_path(
+            parsed_styles, BASE_DIR, LOGO_PATH)
 
         _t_render = _time.perf_counter()
         result_path = radar_module.generate_radar_image(
@@ -2686,7 +2793,8 @@ def get_radar_latest(
             }
 
         # Extract the level-specific path (radar_level2_images or radar_level3_images)
-        rel_path = os.path.relpath(result_path, DIRS["radar"]).replace("\\", "/")
+        rel_path = os.path.relpath(
+            result_path, DIRS["radar"]).replace("\\", "/")
         return {
             "status": "success",
             "image_url": f"/img/{rel_path}",
@@ -2905,7 +3013,8 @@ def get_radar_archive(
         download_windows = []
         if latest_only and single_target_utc is not None:
             half_span_minutes = 30
-            near_start = single_target_utc - timedelta(minutes=half_span_minutes)
+            near_start = single_target_utc - \
+                timedelta(minutes=half_span_minutes)
             near_end = single_target_utc + timedelta(minutes=half_span_minutes)
             download_windows.append((near_start, near_end))
 
@@ -2956,9 +3065,12 @@ def get_radar_archive(
         )
         site_candidates = [site]
         if custom_extent:
-            center_lat = (custom_extent[0] + custom_extent[1]) / 2  # (s + n) / 2
-            center_lon = (custom_extent[2] + custom_extent[3]) / 2  # (w + e) / 2
-            site_candidates = find_nearest_radar_sites(center_lat, center_lon, limit=8)
+            center_lat = (custom_extent[0] +
+                          custom_extent[1]) / 2  # (s + n) / 2
+            center_lon = (custom_extent[2] +
+                          custom_extent[3]) / 2  # (w + e) / 2
+            site_candidates = find_nearest_radar_sites(
+                center_lat, center_lon, limit=8)
             site = site_candidates[0]
             print(
                 f"[INFO] Custom extent active — auto-selected closest radar: {site} "
@@ -2969,7 +3081,8 @@ def get_radar_archive(
         if parsed_styles:
             lp = parsed_styles.get("logo_path")
             if lp:
-                abs_lp = lp if os.path.isabs(lp) else os.path.join(BASE_DIR, lp)
+                abs_lp = lp if os.path.isabs(
+                    lp) else os.path.join(BASE_DIR, lp)
                 if os.path.exists(abs_lp):
                     logo_path_to_use = abs_lp
 
@@ -2986,7 +3099,8 @@ def get_radar_archive(
             # Direct THREDDS download — skip NODD entirely
             try:
                 _now_utc = datetime.now(timezone.utc)
-                _thredds_lb = max(0.5, (_now_utc - parsed_from).total_seconds() / 3600)
+                _thredds_lb = max(
+                    0.5, (_now_utc - parsed_from).total_seconds() / 3600)
                 _td, _tt, _ = radar_thredds_utils.download_radar_data(
                     level,
                     site,
@@ -3069,7 +3183,8 @@ def get_radar_archive(
                     break
 
                 if candidate_error is not None:
-                    site_attempt_errors.append(f"{candidate_site}: {candidate_error}")
+                    site_attempt_errors.append(
+                        f"{candidate_site}: {candidate_error}")
                     if len(site_candidates) > 1:
                         print(
                             f"[WARN] Radar site {candidate_site} unavailable: {candidate_error}"
@@ -3112,7 +3227,8 @@ def get_radar_archive(
                 del active_tasks[request_id]
             attempted_sites = ", ".join(site_candidates)
             details = (
-                " | ".join(site_attempt_errors[-3:]) if site_attempt_errors else ""
+                " | ".join(site_attempt_errors[-3:]
+                           ) if site_attempt_errors else ""
             )
             return {
                 "status": "warning",
@@ -3225,7 +3341,8 @@ def get_radar_archive(
                     return None
                 norm_path = os.path.normpath(abs_path)
                 if norm_path.startswith(radar_root_abs):
-                    rel = os.path.relpath(norm_path, radar_root_abs).replace("\\", "/")
+                    rel = os.path.relpath(
+                        norm_path, radar_root_abs).replace("\\", "/")
                     return f"/img/{rel}"
                 if norm_path.startswith(basemap_cache_root_abs):
                     rel = os.path.relpath(norm_path, basemap_cache_root_abs).replace(
@@ -3284,7 +3401,8 @@ def get_radar_archive(
                 frame_path = entry.get("path")
                 if not frame_path:
                     continue
-                rel_path = os.path.relpath(frame_path, DIRS["radar"]).replace("\\", "/")
+                rel_path = os.path.relpath(
+                    frame_path, DIRS["radar"]).replace("\\", "/")
                 radar_rel = None
                 alerts_rel = None
                 cities_rel = None
@@ -3305,7 +3423,8 @@ def get_radar_archive(
                         entry["cities_path"], DIRS["radar"]
                     ).replace("\\", "/")
                 if entry.get("counties_path"):
-                    counties_rel = _resolve_frame_layer_rel(entry["counties_path"])
+                    counties_rel = _resolve_frame_layer_rel(
+                        entry["counties_path"])
                 states_rel = None
                 if entry.get("states_path"):
                     states_rel = _resolve_frame_layer_rel(entry["states_path"])
@@ -3351,7 +3470,8 @@ def get_radar_archive(
 
             layer_rel = None
             if layer_dir:
-                layer_rel = os.path.relpath(layer_dir, DIRS["radar"]).replace("\\", "/")
+                layer_rel = os.path.relpath(
+                    layer_dir, DIRS["radar"]).replace("\\", "/")
 
             first_frame = frames_payload[0]
             layers_payload = {
@@ -3612,7 +3732,8 @@ def get_satellite_latest(
             }
 
         # Use custom logo path from style config, or fall back to default
-        logo_path_to_use = resolve_logo_path(parsed_styles, BASE_DIR, LOGO_PATH)
+        logo_path_to_use = resolve_logo_path(
+            parsed_styles, BASE_DIR, LOGO_PATH)
 
         movie_path, image_path = sat_module.generate_satellite_animation(
             sat_id=sat_id,
@@ -3893,7 +4014,8 @@ def get_satellite_archive(
         if custom_extent:
             sector = "CONUS"  # Force CONUS when custom extent is active
 
-        logo_path_to_use = resolve_logo_path(parsed_styles, BASE_DIR, LOGO_PATH)
+        logo_path_to_use = resolve_logo_path(
+            parsed_styles, BASE_DIR, LOGO_PATH)
 
         provider_candidates = [requested_source]
 
@@ -3947,7 +4069,8 @@ def get_satellite_archive(
                                 # Construct relative path from satellite_archive to layer file
                                 layer_rel = os.path.relpath(
                                     os.path.join(
-                                        os.path.dirname(entry["path"]), layer_filename
+                                        os.path.dirname(
+                                            entry["path"]), layer_filename
                                     ),
                                     sat_archive_dir,
                                 ).replace("\\", "/")
@@ -3955,7 +4078,8 @@ def get_satellite_archive(
                                     f"/img/satellite_archive/{layer_rel}"
                                 )
                         frame_items.append(frame_item)
-                    frames_ref = manifest.get("frames_ref") or manifest.get("frame_dir")
+                    frames_ref = manifest.get(
+                        "frames_ref") or manifest.get("frame_dir")
                     frames_dir_rel = os.path.relpath(
                         frames_ref, sat_archive_dir
                     ).replace("\\", "/")
@@ -4116,13 +4240,15 @@ def purge_old_files(hours: float = 168, categories: str = ""):
                 os.path.join(sat_base, "satellite_downloads"),
                 os.path.join(sat_base, "satellite_images"),
                 os.path.join(sat_base, "satellite_archive_images"),
-                os.path.join(sat_base, "satellite_archive", "satellite_downloads"),
+                os.path.join(sat_base, "satellite_archive",
+                             "satellite_downloads"),
                 DIRS.get("satellite_archive"),
             ]
             sat_purged, sat_errors = _purge_targets(cutoff, targets)
             results["satellite"] = {"purged": sat_purged, "errors": sat_errors}
         except Exception as e:
-            results["satellite"] = {"purged": 0, "errors": 0, "message": str(e)}
+            results["satellite"] = {"purged": 0,
+                                    "errors": 0, "message": str(e)}
     else:
         results["satellite"] = {"purged": 0, "errors": 0, "skipped": True}
 
@@ -4137,7 +4263,8 @@ def purge_old_files(hours: float = 168, categories: str = ""):
                 DIRS["surface"],
                 DIRS["surface_archive"],
                 os.path.join(BASE_DIR, "surface", "surface_data"),
-                os.path.join(BASE_DIR, "surface", "surface_archive", "surface_data"),
+                os.path.join(BASE_DIR, "surface",
+                             "surface_archive", "surface_data"),
             ]
             for target in targets:
                 if not os.path.exists(target):
@@ -4173,7 +4300,8 @@ def purge_old_files(hours: float = 168, categories: str = ""):
                 DIRS["alerts"],
                 DIRS["alerts_archive"],
                 os.path.join(BASE_DIR, "alerts", "alert_data"),
-                os.path.join(BASE_DIR, "alerts", "alerts_archive", "alert_data"),
+                os.path.join(BASE_DIR, "alerts",
+                             "alerts_archive", "alert_data"),
                 os.path.join(
                     BASE_DIR, "alerts", "alert_archive"
                 ),  # Legacy/Structure variation
@@ -4195,7 +4323,8 @@ def purge_old_files(hours: float = 168, categories: str = ""):
                             os.rmdir(root)
                         except Exception:
                             pass
-            results["alerts"] = {"purged": alert_purged, "errors": alert_errors}
+            results["alerts"] = {
+                "purged": alert_purged, "errors": alert_errors}
         except Exception as e:
             results["alerts"] = {"purged": 0, "errors": 0, "message": str(e)}
     else:
@@ -4369,7 +4498,8 @@ def api_weather(
         )
 
     # Validate product group and product
-    valid, err_msg = weather_utils.validate_product_group(product_group, product)
+    valid, err_msg = weather_utils.validate_product_group(
+        product_group, product)
     if not valid:
         raise HTTPException(status_code=400, detail=error_payload(err_msg))
 
@@ -4389,7 +4519,8 @@ def api_weather(
     if data_mode == "archive":
         start_utc = parse_utc_datetime(date_from)
         end_utc = parse_utc_datetime(date_to)
-        max_days = float(weather_utils.MAX_ARCHIVE_SPAN.get(product_group.lower(), 7))
+        max_days = float(weather_utils.MAX_ARCHIVE_SPAN.get(
+            product_group.lower(), 7))
         if (end_utc - start_utc) > timedelta(days=max_days):
             raise HTTPException(
                 status_code=400,
@@ -4464,7 +4595,8 @@ def api_weather(
         def _layer_url(path_value):
             if not path_value:
                 return None
-            rel = os.path.relpath(path_value, archive_layers_dir).replace("\\", "/")
+            rel = os.path.relpath(
+                path_value, archive_layers_dir).replace("\\", "/")
             rel = quote(rel, safe="/")
             return f"/img/weather_archive_layers/{rel}"
 
@@ -4573,17 +4705,21 @@ if __name__ == "__main__":
         "yes",
         "on",
     }
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=use_reload,
-        reload_includes=["*.py"],  # only restart on Python file changes
-        reload_excludes=[
+    # Pass reload-related options ONLY when reload is enabled — otherwise
+    # uvicorn warns "Current configuration will not reload as not all
+    # conditions are met" because reload_includes/excludes are ignored.
+    run_kwargs = {
+        "host": "0.0.0.0",
+        "port": 8000,
+        "reload": use_reload,
+    }
+    if use_reload:
+        run_kwargs["reload_includes"] = ["*.py"]
+        run_kwargs["reload_excludes"] = [
             "radar/*",
             "satellite/*",
             "surface/*",
             "alerts/*",
             "__pycache__/*",
-        ],
-    )
+        ]
+    uvicorn.run("main:app", **run_kwargs)
