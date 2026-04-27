@@ -22,7 +22,7 @@ CACHE_FILE = CACHE_DIR / "national.geojson"
 # Skip the run if a sentinel touch indicates a recent successful refresh.
 # Threshold = 75% of the 60s scheduler interval, so an external Task Scheduler
 # invocation will preempt the in-process tick (and vice versa).
-_FRESH_WINDOW_SEC = 45
+_FRESH_WINDOW_SEC = 20
 
 
 def run_alerts_worker(force: bool = False) -> None:
@@ -112,6 +112,12 @@ def run_alerts_worker(force: bool = False) -> None:
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Run the alerts worker once.")
-    parser.add_argument("--force", action="store_true", help="Bypass freshness gate.")
+    parser.add_argument("--force", action="store_true",
+                        help="Bypass freshness gate.")
+    parser.add_argument("--log-to-file", action="store_true",
+                        help="Redirect stdout/stderr to logs/scheduled/alerts.log (for headless task runs).")
     args = parser.parse_args()
+    if args.log_to_file:
+        from workers._freshness import redirect_stdio_to_log
+        redirect_stdio_to_log("alerts")
     run_alerts_worker(force=args.force)

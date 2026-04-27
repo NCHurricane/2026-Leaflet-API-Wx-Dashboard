@@ -3,6 +3,7 @@ import html
 import io
 import os
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from dateutil import tz
@@ -29,6 +30,12 @@ register_montserrat_fonts()
 plt.rcParams["hatch.linewidth"] = 2.0
 
 SPC_BASE = "https://www.spc.noaa.gov"
+IEM_BASE = "https://mesonet.agron.iastate.edu"
+_IEM_LIST_TIMEOUT_SECONDS = 4
+_IEM_LIST_RETRIES = 1
+_IEM_TEXT_TIMEOUT_SECONDS = 4
+_IEM_TEXT_RETRIES = 1
+_IEM_FETCH_BUDGET_SECONDS = 8
 _SPC_WX_MAPSERVER = (
     "https://mapservices.weather.noaa.gov/vector/rest/services"
     "/outlooks/SPC_wx_outlks/MapServer"
@@ -147,10 +154,55 @@ def _request_json(url: str, timeout: int = 20, retries: int = 3):
 
 
 def _cached_text(namespace: str, key: str, url: str, ttl_seconds: int = 90) -> str:
+    return _cached_text_custom(
+        namespace,
+        key,
+        url,
+        ttl_seconds=ttl_seconds,
+        timeout=20,
+        retries=3,
+    )
+
+
+def _cached_text_custom(
+    namespace: str,
+    key: str,
+    url: str,
+    ttl_seconds: int = 90,
+    timeout: int = 20,
+    retries: int = 3,
+) -> str:
     return cached_call(
         namespace,
         key,
-        lambda: _request_text(url),
+        lambda: _request_text(url, timeout=timeout, retries=retries),
+        ttl_seconds=ttl_seconds,
+    )
+
+
+def _cached_json(namespace: str, key: str, url: str, ttl_seconds: int = 90):
+    return _cached_json_custom(
+        namespace,
+        key,
+        url,
+        ttl_seconds=ttl_seconds,
+        timeout=20,
+        retries=3,
+    )
+
+
+def _cached_json_custom(
+    namespace: str,
+    key: str,
+    url: str,
+    ttl_seconds: int = 90,
+    timeout: int = 20,
+    retries: int = 3,
+):
+    return cached_call(
+        namespace,
+        key,
+        lambda: _request_json(url, timeout=timeout, retries=retries),
         ttl_seconds=ttl_seconds,
     )
 
@@ -159,6 +211,22 @@ def _clean_spc_text(text: str) -> str:
     raw = str(text or "")
     if not raw:
         return ""
+    pre_blocks = re.findall(r"<pre\b[^>]*>(.*?)</pre>", raw, re.IGNORECASE | re.DOTALL)
+    if pre_blocks:
+        raw = "\n\n".join(pre_blocks)
+    else:
+        raw = re.sub(
+            r"<script\b[^>]*>.*?</script>", " ", raw, flags=re.IGNORECASE | re.DOTALL
+        )
+        raw = re.sub(
+            r"<style\b[^>]*>.*?</style>", " ", raw, flags=re.IGNORECASE | re.DOTALL
+        )
+        raw = re.sub(
+            r"<noscript\b[^>]*>.*?</noscript>",
+            " ",
+            raw,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
     cleaned = re.sub(r"<[^>]+>", " ", raw)
     cleaned = html.unescape(cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
@@ -533,16 +601,194 @@ def _parse_md_valid_window(detail_text: str):
         return None, None
 
 
-def _extract_watch_type(detail_text: str, fallback_title: str = "") -> str:
-    content = f"{detail_text or ''} {fallback_title or ''}".upper()
-    if "TORNADO WATCH" in content:
-        return "Tornado Watch"
-    if "SEVERE THUNDERSTORM WATCH" in content:
+def _extract_watch_type(
+    detail_text: str, fallback_title: str = "", watch_id: str = ""
+) -> str:
+    # Prefer explicit title/listing context first; detail bodies can mention
+    # other watch numbers/types in continuation text.
+    fallback_upper = (fallback_title or "").upper()
+    if "SEVERE THUNDERSTORM WATCH" in fallback_upper:
         return "Severe Thunderstorm Watch"
+    if "TORNADO WATCH" in fallback_upper:
+        return "Tornado Watch"
+
+    detail = detail_text or ""
+    detail_upper = detail.upper()
+
+    # Use the canonical SPC headline line when present.
+    # Example: "Severe Thunderstorm Watch Number 142"
+    number_pattern = rf"\b(SEVERE\s+THUNDERSTORM|TORNADO)\s+WATCH\s+NUMBER\s+0*{re.escape(str(watch_id or ''))}\b"
+    header_match = re.search(number_pattern, detail_upper)
+    if header_match:
+        if "SEVERE THUNDERSTORM" in header_match.group(1):
+            return "Severe Thunderstorm Watch"
+        return "Tornado Watch"
+
+    # Fallback: use only the first chunk of the product body where the issuing
+    # header appears, before continuation references to other watches.
+    head_upper = detail_upper[:1600]
+    if re.search(r"\bSEVERE\s+THUNDERSTORM\s+WATCH\s+NUMBER\b", head_upper):
+        return "Severe Thunderstorm Watch"
+    if re.search(r"\bTORNADO\s+WATCH\s+NUMBER\b", head_upper):
+        return "Tornado Watch"
+
+    # Last-resort broad match.
+    if "SEVERE THUNDERSTORM WATCH" in detail_upper:
+        return "Severe Thunderstorm Watch"
+    if "TORNADO WATCH" in detail_upper:
+        return "Tornado Watch"
     return "Watch"
 
 
-def fetch_active_watch_items(ttl_seconds: int = 90):
+def _watch_id_from_text(product_text: str):
+    text = str(product_text or "")
+    patterns = [
+        r"\bWatch\s+Number\s+0*(\d{1,4})\b",
+        r"\bWW\s+0*(\d{1,4})\b",
+        r"\bSEL\s*0*(\d{1,4})\b",
+        r"\bWOU\s*0*(\d{1,4})\b",
+        r"\bWWP\s*0*(\d{1,4})\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            continue
+        try:
+            return str(int(match.group(1))).zfill(4)
+        except Exception:
+            continue
+    return ""
+
+
+def _iem_recent_utc_dates(days: int = 2):
+    now = datetime.now(timezone.utc)
+    return [
+        (now - timedelta(days=offset)).strftime("%Y-%m-%d")
+        for offset in range(max(1, int(days)))
+    ]
+
+
+def _fetch_iem_afos_rows(pil_prefix: str, ttl_seconds: int = 90):
+    rows = []
+    seen_product_ids = set()
+    deadline = time.monotonic() + _IEM_FETCH_BUDGET_SECONDS
+    for date_token in _iem_recent_utc_dates(days=2):
+        if time.monotonic() >= deadline:
+            break
+        list_url = (
+            f"{IEM_BASE}/api/1/nws/afos/list.json?cccc=KWNS"
+            f"&pil={pil_prefix}&date={date_token}"
+        )
+        try:
+            payload = _cached_json_custom(
+                "iem_afos_list",
+                f"{pil_prefix}:{date_token}",
+                list_url,
+                ttl_seconds=ttl_seconds,
+                timeout=_IEM_LIST_TIMEOUT_SECONDS,
+                retries=_IEM_LIST_RETRIES,
+            )
+        except Exception:
+            continue
+        for row in payload.get("data", []) if isinstance(payload, dict) else []:
+            product_id = str(row.get("product_id") or "").strip()
+            if not product_id or product_id in seen_product_ids:
+                continue
+            seen_product_ids.add(product_id)
+            rows.append(row)
+    rows.sort(key=lambda row: str(row.get("entered") or ""), reverse=True)
+    return rows
+
+
+def _build_iem_watch_text_map(pil_prefix: str, ttl_seconds: int = 90):
+    mapped = {}
+    deadline = time.monotonic() + _IEM_FETCH_BUDGET_SECONDS
+    for row in _fetch_iem_afos_rows(pil_prefix, ttl_seconds=ttl_seconds):
+        if time.monotonic() >= deadline:
+            break
+        product_id = str(row.get("product_id") or "").strip()
+        text_url = str(row.get("text_link") or "").strip()
+        if not product_id or not text_url:
+            continue
+        try:
+            product_text = _cached_text_custom(
+                "iem_afos_text",
+                product_id,
+                text_url,
+                ttl_seconds=ttl_seconds,
+                timeout=_IEM_TEXT_TIMEOUT_SECONDS,
+                retries=_IEM_TEXT_RETRIES,
+            )
+        except Exception:
+            continue
+        watch_id = _watch_id_from_text(product_text)
+        if not watch_id or watch_id in mapped:
+            continue
+        mapped[watch_id] = {
+            "text": product_text,
+            "product_id": product_id,
+            "text_link": text_url,
+            "link": str(row.get("link") or "").strip(),
+        }
+    return mapped
+
+
+def _md_id_from_text(product_text: str):
+    text = str(product_text or "")
+    patterns = [
+        r"\bMesoscale\s+Discussion\s*#?\s*0*(\d{1,4})\b",
+        r"\bMD\s*#?\s*0*(\d{1,4})\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            continue
+        try:
+            return str(int(match.group(1))).zfill(4)
+        except Exception:
+            continue
+    return ""
+
+
+def _build_iem_md_text_map(ttl_seconds: int = 90):
+    mapped = {}
+    deadline = time.monotonic() + _IEM_FETCH_BUDGET_SECONDS
+    for row in _fetch_iem_afos_rows("SWOMCD", ttl_seconds=ttl_seconds):
+        if time.monotonic() >= deadline:
+            break
+        product_id = str(row.get("product_id") or "").strip()
+        text_url = str(row.get("text_link") or "").strip()
+        if not product_id or not text_url:
+            continue
+        try:
+            product_text = _cached_text_custom(
+                "iem_afos_text",
+                product_id,
+                text_url,
+                ttl_seconds=ttl_seconds,
+                timeout=_IEM_TEXT_TIMEOUT_SECONDS,
+                retries=_IEM_TEXT_RETRIES,
+            )
+        except Exception:
+            continue
+        md_id = _md_id_from_text(product_text)
+        if not md_id or md_id in mapped:
+            continue
+        mapped[md_id] = {
+            "text": product_text,
+            "product_id": product_id,
+            "text_link": text_url,
+            "link": str(row.get("link") or "").strip(),
+        }
+    return mapped
+
+
+def _fetch_active_watch_items_from_spc(
+    ttl_seconds: int = 90,
+    iem_sel_map: Optional[dict] = None,
+    iem_wou_map: Optional[dict] = None,
+    iem_wwp_map: Optional[dict] = None,
+):
     listing_url = f"{SPC_BASE}/products/watch/"
     listing_html = _cached_text("spc_watch_listing", "active", listing_url, ttl_seconds)
 
@@ -556,6 +802,10 @@ def fetch_active_watch_items(ttl_seconds: int = 90):
             continue
         seen.add(watch_id)
         watch_ids.append(watch_id)
+
+    iem_sel_map = iem_sel_map or {}
+    iem_wou_map = iem_wou_map or {}
+    iem_wwp_map = iem_wwp_map or {}
 
     items = []
     for watch_id in watch_ids[:24]:
@@ -572,6 +822,7 @@ def fetch_active_watch_items(ttl_seconds: int = 90):
         issue_utc = None
         expire_utc = None
         watch_probabilities = {}
+        watch_full_text = ""
 
         wou_match = re.search(
             r'href="((?:/products/watch/)?wou\d{4}\.(?:html|txt))"',
@@ -590,6 +841,7 @@ def fetch_active_watch_items(ttl_seconds: int = 90):
                 wou_text = _cached_text("spc_watch_wou", watch_id, wou_url, ttl_seconds)
                 county_fips = _parse_watch_county_fips_from_wou(wou_text)
                 issue_utc, expire_utc = _parse_watch_window_from_wou(wou_text)
+                watch_full_text = _clean_spc_text(wou_text)
                 if not polygon:
                     polygon = _parse_lat_lon_block(wou_text)
             except Exception:
@@ -598,15 +850,19 @@ def fetch_active_watch_items(ttl_seconds: int = 90):
         if not polygon and not county_fips:
             continue
 
-        wwp_url = f"{SPC_BASE}/products/watch/wwp{watch_id}.txt"
-        try:
-            wwp_text = _cached_text("spc_watch_wwp", watch_id, wwp_url, ttl_seconds)
-            watch_probabilities = _parse_watch_probability_table(wwp_text)
-        except Exception:
-            watch_probabilities = {}
+        iem_wwp_text = str((iem_wwp_map.get(watch_id) or {}).get("text") or "")
+        if iem_wwp_text:
+            watch_probabilities = _parse_watch_probability_table(iem_wwp_text)
+        if not watch_probabilities:
+            wwp_url = f"{SPC_BASE}/products/watch/wwp{watch_id}.txt"
+            try:
+                wwp_text = _cached_text("spc_watch_wwp", watch_id, wwp_url, ttl_seconds)
+                watch_probabilities = _parse_watch_probability_table(wwp_text)
+            except Exception:
+                watch_probabilities = {}
 
         watch_num = str(int(watch_id))
-        watch_type = _extract_watch_type(detail_text)
+        watch_type = _extract_watch_type(detail_text, watch_id=watch_id)
         concerning_match = re.search(
             r"Concerning\.\.\.(.+?)\n", detail_text, re.IGNORECASE
         )
@@ -622,21 +878,114 @@ def fetch_active_watch_items(ttl_seconds: int = 90):
         if expire_utc and expire_utc < datetime.now(timezone.utc):
             continue
 
+        iem_sel_text = str((iem_sel_map.get(watch_id) or {}).get("text") or "")
+        iem_wou_text = str((iem_wou_map.get(watch_id) or {}).get("text") or "")
+        preferred_text = _clean_spc_text(iem_sel_text or iem_wou_text)
+
         items.append(
             {
                 "id": watch_id,
                 "title": f"{watch_type} #{watch_num}",
                 "label": label,
                 "short_label": f"WW #{watch_num}",
+                "type": watch_type,
                 "polygon": polygon,
                 "county_fips": county_fips,
                 "issue_utc": issue_utc,
                 "expire_utc": expire_utc,
                 "probabilities": watch_probabilities,
+                "full_text": preferred_text
+                or watch_full_text
+                or _clean_spc_text(detail_text),
+                "detail_url": detail_url,
             }
         )
 
-    return items, "SPC Watches"
+    source_label = "SPC Watches"
+    if iem_sel_map or iem_wou_map or iem_wwp_map:
+        source_label = "SPC Watches (IEM text preferred)"
+    return items, source_label
+
+
+_IEM_WATCH_GEOJSON_URL = f"{IEM_BASE}/api/1/spc_watch_outline.geojson"
+_IEM_MCD_GEOJSON_URL = f"{IEM_BASE}/api/1/nws/spc_mcd.geojson"
+
+
+def _extract_polygon_from_geom(geom: dict) -> list:
+    """Return a flat [[lon, lat], ...] ring from a GeoJSON geometry."""
+    geom_type = geom.get("type") if geom else ""
+    coords = geom.get("coordinates") or [] if geom else []
+    if geom_type == "Polygon" and coords:
+        return coords[0]
+    if geom_type == "MultiPolygon" and coords:
+        return coords[0][0]
+    return []
+
+
+def fetch_active_watch_items(ttl_seconds: int = 90):
+    """Fetch active SPC watches from IEM GeoJSON — single fast request."""
+    data = _cached_json(
+        "iem_watch_outline", "active", _IEM_WATCH_GEOJSON_URL, ttl_seconds
+    )
+    features = data.get("features") or []
+    now = datetime.now(timezone.utc)
+    items = []
+
+    for feat in features:
+        props = feat.get("properties") or {}
+        geom = feat.get("geometry") or {}
+
+        watch_num_raw = props.get("num")
+        if watch_num_raw is None:
+            continue
+        watch_num = int(watch_num_raw)
+        watch_id = f"{watch_num:04d}"
+
+        type_code = str(props.get("type") or "").upper()
+        if type_code == "TOR":
+            watch_type = "Tornado Watch"
+        elif type_code == "SVR":
+            watch_type = "Severe Thunderstorm Watch"
+        else:
+            watch_type = f"Watch ({type_code})" if type_code else "Watch"
+
+        def _parse_iso(s: str):
+            try:
+                return datetime.fromisoformat(s.replace("Z", "+00:00")) if s else None
+            except Exception:
+                return None
+
+        issue_utc = _parse_iso(str(props.get("utc_issued") or ""))
+        expire_utc = _parse_iso(str(props.get("utc_expired") or ""))
+
+        if expire_utc and expire_utc < now:
+            continue
+
+        polygon = _extract_polygon_from_geom(geom)
+        if not polygon:
+            continue
+
+        label = f"{watch_type} #{watch_num}"
+        detail_url = f"https://www.spc.noaa.gov/products/watch/ww{watch_id}.html"
+
+        items.append(
+            {
+                "id": watch_id,
+                "title": watch_type,
+                "label": label,
+                "short_label": f"WW #{watch_num}",
+                "type": watch_type,
+                "polygon": polygon,
+                "county_fips": [],
+                "issue_utc": issue_utc,
+                "expire_utc": expire_utc,
+                "probabilities": {},
+                "full_text": "",
+                "detail_url": detail_url,
+            }
+        )
+
+    return items, "SPC Watches (IEM)"
 
 
 def fetch_active_watch_options(ttl_seconds: int = 90):
@@ -667,62 +1016,60 @@ def fetch_active_watch_options(ttl_seconds: int = 90):
 
 
 def fetch_active_md_items(ttl_seconds: int = 90):
-    listing_url = f"{SPC_BASE}/products/md/"
-    listing_html = _cached_text("spc_md_listing", "active", listing_url, ttl_seconds)
-
-    md_ids = []
-    seen = set()
-    for match in re.finditer(
-        r"/products/md/md(\d{4})\.html", listing_html, re.IGNORECASE
-    ):
-        md_id = match.group(1)
-        if md_id in seen:
-            continue
-        seen.add(md_id)
-        md_ids.append(md_id)
-
+    """Fetch active SPC MDs from IEM GeoJSON — single fast request."""
+    data = _cached_json("iem_mcd_outline", "active", _IEM_MCD_GEOJSON_URL, ttl_seconds)
+    features = data.get("features") or []
+    now = datetime.now(timezone.utc)
     items = []
-    for md_id in md_ids[:32]:
-        detail_url = f"{SPC_BASE}/products/md/md{md_id}.html"
-        try:
-            detail_text = _cached_text("spc_md_detail", md_id, detail_url, ttl_seconds)
-        except Exception:
+
+    for feat in features:
+        props = feat.get("properties") or {}
+        geom = feat.get("geometry") or {}
+
+        md_num_raw = props.get("num")
+        if md_num_raw is None:
+            continue
+        md_num = int(md_num_raw)
+        md_id = f"{md_num:04d}"
+
+        def _parse_iso(s: str):
+            try:
+                return datetime.fromisoformat(s.replace("Z", "+00:00")) if s else None
+            except Exception:
+                return None
+
+        issue_utc = _parse_iso(str(props.get("issue") or ""))
+        expire_utc = _parse_iso(str(props.get("expire") or ""))
+
+        if expire_utc and expire_utc < now:
             continue
 
-        polygon = _parse_lat_lon_block(detail_text)
+        polygon = _extract_polygon_from_geom(geom)
         if not polygon:
             continue
 
-        issue_utc, expire_utc = _parse_md_valid_window(detail_text)
-
-        md_num = str(int(md_id))
-        concerning_match = re.search(
-            r"Concerning\.\.\.(.+?)\n", detail_text, re.IGNORECASE
-        )
-        concerning_text = ""
-        if concerning_match:
-            concerning_text = _clean_spc_text(concerning_match.group(1))
-
+        concerning = str(props.get("concerning") or "").strip()
         label = f"Mesoscale Discussion #{md_num}"
-        if concerning_text:
-            label = f"{label} - {concerning_text}"
+        if concerning:
+            label = f"{label} - {concerning}"
 
-        # Skip expired MDs
-        if expire_utc and expire_utc < datetime.now(timezone.utc):
-            continue
+        detail_url = f"https://www.spc.noaa.gov/products/md/md{md_id}.html"
 
         items.append(
             {
                 "id": md_id,
+                "title": f"Mesoscale Discussion #{md_num}",
                 "label": label,
                 "short_label": f"MD #{md_num}",
                 "polygon": polygon,
                 "issue_utc": issue_utc,
                 "expire_utc": expire_utc,
+                "full_text": "",
+                "detail_url": detail_url,
             }
         )
 
-    return items, "SPC Mesoscale Discussions"
+    return items, "SPC Mesoscale Discussions (IEM)"
 
 
 def fetch_active_md_options(ttl_seconds: int = 90):
@@ -1234,7 +1581,36 @@ def _add_outlook_polygons(
     features = (
         outlook_geojson.get("features", []) if isinstance(outlook_geojson, dict) else []
     )
-    for feature in features:
+
+    def _cat_rank(label: str) -> int:
+        label = (label or "").upper()
+        if "HIGH" in label:
+            return 6
+        if "MDT" in label or "MODERATE" in label:
+            return 5
+        if "ENH" in label or "ENHANCED" in label:
+            return 4
+        if "SLGT" in label or "SLIGHT" in label:
+            return 3
+        if "MRGL" in label or "MARGINAL" in label:
+            return 2
+        if "TSTM" in label or "GENERAL" in label:
+            return 1
+        return 0
+
+    # Sort features so lowest category is drawn first, highest last (on top)
+    sorted_features = sorted(
+        features,
+        key=lambda f: _cat_rank(
+            str(
+                (f.get("properties") or {}).get("LABEL")
+                or (f.get("properties") or {}).get("LABEL2")
+                or ""
+            )
+        ),
+    )
+
+    for feature in sorted_features:
         geometry = feature.get("geometry") or {}
         gtype = geometry.get("type")
         coords = geometry.get("coordinates", [])
@@ -2840,25 +3216,26 @@ def generate_spc_map(
         facecolor=ocean_color,
         zorder=0,
     )
+    # Draw country, state, and county borders after polygons for proper z-order
     if show_country:
         ax_comp.add_feature(
             cfeature.BORDERS.with_scale(base_feature_resolution),
             edgecolor=to_rgba(country_color, country_alpha),
             linewidth=country_width,
-            zorder=10,
+            zorder=100,
         )
         ax_comp.add_feature(
             cfeature.LAKES.with_scale(base_feature_resolution),
             facecolor=ocean_color,
             edgecolor="none",
-            zorder=10.5,
+            zorder=100.5,
         )
     if show_states:
         ax_comp.add_feature(
             cfeature.STATES.with_scale(base_feature_resolution),
             edgecolor=to_rgba(state_color, state_alpha),
             linewidth=state_width,
-            zorder=91,
+            zorder=101,
         )
     if show_counties and county_feature is not None:
         ax_comp.add_feature(
@@ -2866,7 +3243,7 @@ def generate_spc_map(
             edgecolor=to_rgba(county_color, county_alpha),
             facecolor="none",
             linewidth=county_width,
-            zorder=93,
+            zorder=102,
         )
     ax_comp.coastlines(
         resolution=base_feature_resolution,
@@ -2938,7 +3315,7 @@ def generate_spc_map(
             (render_extent[0], render_extent[1], render_extent[2], render_extent[3]),
             filename=style_config.get("cities_file", "us-cities.json"),
             style_config=style_config,
-            z_cities=94,
+            z_cities=103,
         )
     _add_selected_region_outline(
         ax_comp,

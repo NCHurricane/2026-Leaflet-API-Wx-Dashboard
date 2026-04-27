@@ -41,10 +41,12 @@ $LogDir = Join-Path $RepoRoot 'logs\scheduled'
 New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 
 if (-not $PythonExe) {
-    $PythonExe = Join-Path $RepoRoot '.venv\Scripts\python.exe'
+    # Use pythonw.exe — no console window, ever. Required to avoid popups
+    # over the dashboard during livestream.
+    $PythonExe = Join-Path $RepoRoot '.venv\Scripts\pythonw.exe'
 }
 if (-not (Test-Path -LiteralPath $PythonExe)) {
-    throw "Python executable not found: $PythonExe"
+    throw "pythonw.exe not found: $PythonExe (the venv must include pythonw.exe to run silently)"
 }
 
 Write-Host "Repo root  : $RepoRoot"
@@ -109,25 +111,22 @@ function New-WeeklyTrigger {
 
 foreach ($t in $tasks) {
     $name = $t.Name
-    $logFile = Join-Path $LogDir "$name.log"
 
+    # Build the Python argument string. Each task launches pythonw.exe
+    # directly (no PowerShell wrapper), so there is no console window. The
+    # worker handles its own stdout/stderr redirection via --log-to-file,
+    # writing to logs\scheduled\<name>.log.
     if ($t.Module) {
-        $argLine = "-m $($t.Module)"
+        $pyArgs = "-u -m $($t.Module) --log-to-file"
     }
     else {
-        $argLine = "`"$(Join-Path $RepoRoot $t.Script)`""
+        $scriptPath = Join-Path $RepoRoot $t.Script
+        $pyArgs = "-u `"$scriptPath`" --log-to-file"
     }
 
-    # PowerShell wrapper: cd to repo, append timestamped header, run python.
-    # Append both stdout and stderr to the per-task log.
-    $cmdLine = "& `"$PythonExe`" $argLine *>> `"$logFile`""
-    $wrapper = "Set-Location -LiteralPath `"$RepoRoot`"; " +
-               "Add-Content -Path `"$logFile`" -Value (`"`n=== `" + (Get-Date -Format 's') + `" $name ===`"); " +
-               "$cmdLine"
-
     $action = New-ScheduledTaskAction `
-        -Execute 'powershell.exe' `
-        -Argument "-NoProfile -ExecutionPolicy Bypass -Command `"$wrapper`"" `
+        -Execute $PythonExe `
+        -Argument $pyArgs `
         -WorkingDirectory $RepoRoot
 
     switch -Regex ($t.Trigger) {
@@ -161,7 +160,7 @@ foreach ($t in $tasks) {
         -LogonType Interactive `
         -RunLevel Limited
 
-    Write-Host ("[+] Registering {0,-30} -> {1}" -f $name, $argLine)
+    Write-Host ("[+] Registering {0,-30} -> {1}" -f $name, $pyArgs)
 
     # Replace any prior version atomically.
     if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) {

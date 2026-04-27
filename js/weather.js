@@ -8,39 +8,15 @@
         const spcDaySelect = byId('weather-spc-day');
         if (spcDaySelect) {
             spcDaySelect.addEventListener('change', () => {
-                _syncSpcConvectiveOptions(true);
+                _syncSpcConvectiveOptions(_shouldResetSpcConvectiveDaySelection());
                 refreshSpc();
             });
         }
         const fireDaySelect = byId('weather-spc-fire-day');
         if (fireDaySelect) {
             fireDaySelect.addEventListener('change', () => {
-                _syncSpcFireWeatherOptions(true);
+                _syncSpcFireWeatherOptions(_shouldResetSpcFireDaySelection());
                 refreshSpc();
-            });
-        }
-        // Delegate event handling for convective and fire weather toggles
-        const spcOpts = byId('weather-spc-opts');
-        if (spcOpts) {
-            spcOpts.addEventListener('change', (evt) => {
-                const target = evt.target;
-                if (target.classList.contains('weather-spc-convective-toggle')) {
-                    // Convective checked → clear all fire weather toggles
-                    if (target.checked) {
-                        document.querySelectorAll('.weather-spc-fire-toggle').forEach((el) => { el.checked = false; });
-                    }
-                    refreshSpc();
-                } else if (target.classList.contains('weather-spc-fire-toggle')) {
-                    if (target.checked) {
-                        // Uncheck all convective toggles
-                        document.querySelectorAll('.weather-spc-convective-toggle').forEach((el) => { el.checked = false; });
-                        // Uncheck all other fire weather toggles (radio-like)
-                        document.querySelectorAll('.weather-spc-fire-toggle').forEach((el) => {
-                            if (el !== target) el.checked = false;
-                        });
-                    }
-                    refreshSpc();
-                }
             });
         }
     }
@@ -636,11 +612,14 @@
     let mrmsOpacity = 0.8;
     let _alertsRequestSeq = 0;
     let _spcRequestSeq = 0;
+    let _spcAbortController = null;
     let _spcReportsRequestSeq = 0;
     let _spcMdsRequestSeq = 0;
     let _spcWatchesRequestSeq = 0;
     let _surfaceRequestSeq = 0;
     let _mrmsRequestSeq = 0;
+    const _SPC_PRIMARY_TIMEOUT_MS = 10_000;
+    const _SPC_SUPPLEMENTAL_TIMEOUT_MS = 20_000;
     const _SPC_REPORT_COLORS = {
         torn: '#ff4d4f',
         wind: '#26a9ff',
@@ -838,7 +817,11 @@
     function _alertExternalUrl(feat, preferredLatLng = null) {
         const forecastUrl = _alertForecastUrl(feat, preferredLatLng);
         if (forecastUrl) return forecastUrl;
-        return _alertWwaFallbackUrl(feat);
+        const wwaUrl = _alertWwaFallbackUrl(feat);
+        if (wwaUrl) return wwaUrl;
+        // Fallback: use source_url (e.g. SPC watch/MD detail page)
+        const sourceUrl = String(feat?.properties?.source_url || '').trim();
+        return sourceUrl || '';
     }
 
     function _alertExternalLinkHtml(feat, preferredLatLng = null) {
@@ -2898,54 +2881,216 @@
         }
     }
 
-    function _spcWatchTypeParam() {
-        const torOn = !!byId('weather-spc-watch-type-tor')?.checked;
-        const svrOn = !!byId('weather-spc-watch-type-svr')?.checked;
-        if (torOn && svrOn) return 'all';
-        if (torOn) return 'tor';
-        if (svrOn) return 'svr';
-        return '';
-    }
-
     function _spcSupplementalSelections() {
+        const reportsDays = [];
+        if (byId('weather-spc-reports-today')?.checked) reportsDays.push('today');
+        if (byId('weather-spc-reports-yesterday')?.checked) reportsDays.push('yesterday');
+
+        const reportTypes = [];
+        if (byId('weather-spc-report-type-torn')?.checked) reportTypes.push('torn');
+        if (byId('weather-spc-report-type-wind')?.checked) reportTypes.push('wind');
+        if (byId('weather-spc-report-type-hail')?.checked) reportTypes.push('hail');
+
+        const watchLayers = [];
+        if (byId('weather-spc-watch-tor-polygon')?.checked) watchLayers.push({ type: 'tor', mode: 'polygon' });
+        else if (byId('weather-spc-watch-tor-counties')?.checked) watchLayers.push({ type: 'tor', mode: 'counties' });
+        if (byId('weather-spc-watch-svr-polygon')?.checked) watchLayers.push({ type: 'svr', mode: 'polygon' });
+        else if (byId('weather-spc-watch-svr-counties')?.checked) watchLayers.push({ type: 'svr', mode: 'counties' });
+
         return {
-            reportsEnabled: !!byId('weather-spc-show-reports')?.checked,
-            reportsDay: String(byId('weather-spc-reports-day')?.value || 'today').toLowerCase(),
-            reportsType: String(byId('weather-spc-reports-type')?.value || 'all').toLowerCase(),
+            reportsEnabled: reportsDays.length > 0 && reportTypes.length > 0,
+            reportsDays,
+            reportTypes,
             mdsEnabled: !!byId('weather-spc-show-mds')?.checked,
-            watchesEnabled: !!byId('weather-spc-show-watches')?.checked,
-            watchMode: String(byId('weather-spc-watch-mode')?.value || 'polygon').toLowerCase(),
-            watchTypes: _spcWatchTypeParam(),
+            watchesEnabled: watchLayers.length > 0,
+            watchLayers,
         };
     }
 
-    async function _fetchSpcReportsGeoJson(requestSeq, dayKey, reportType) {
+    function _clearSpcConvectiveSelections() {
+        document.querySelectorAll('.weather-spc-convective-toggle').forEach((el) => {
+            el.checked = false;
+        });
+    }
+
+    function _clearSpcWatchSelections() {
+        [
+            'weather-spc-watch-tor-polygon',
+            'weather-spc-watch-tor-counties',
+            'weather-spc-watch-svr-polygon',
+            'weather-spc-watch-svr-counties',
+        ].forEach((id) => {
+            const el = byId(id);
+            if (el) el.checked = false;
+        });
+    }
+
+    function _clearSpcMdSelection() {
+        const el = byId('weather-spc-show-mds');
+        if (el) el.checked = false;
+    }
+
+    function _updateSpcReportFilterState() {
+        const hasReportDay = !!byId('weather-spc-reports-today')?.checked
+            || !!byId('weather-spc-reports-yesterday')?.checked;
+        ['weather-spc-report-type-torn', 'weather-spc-report-type-wind', 'weather-spc-report-type-hail']
+            .forEach((filterId) => {
+                const filterEl = byId(filterId);
+                if (!filterEl) return;
+                if (!hasReportDay) filterEl.checked = false;
+                filterEl.disabled = !hasReportDay;
+            });
+    }
+
+    function _hasActiveSpcSupplementalSelections() {
+        const supplemental = _spcSupplementalSelections();
+        return supplemental.reportsEnabled || supplemental.mdsEnabled || supplemental.watchesEnabled;
+    }
+
+    function _shouldResetSpcConvectiveDaySelection() {
+        return !_getCheckedSpcFireHazards().length && !_hasActiveSpcSupplementalSelections();
+    }
+
+    function _shouldResetSpcFireDaySelection() {
+        return !_getCheckedSpcConvectiveHazards().length && !_hasActiveSpcSupplementalSelections();
+    }
+
+    function _clearSpcReportSelections() {
+        ['weather-spc-reports-today', 'weather-spc-reports-yesterday'].forEach((id) => {
+            const el = byId(id);
+            if (el) el.checked = false;
+        });
+        _updateSpcReportFilterState();
+    }
+
+    function _clearSpcFireSelections(keepTarget = null) {
+        document.querySelectorAll('.weather-spc-fire-toggle').forEach((el) => {
+            if (keepTarget && el === keepTarget) return;
+            el.checked = false;
+        });
+    }
+
+    function _clearSpcExclusivePeers(group, options = {}) {
+        if (group !== 'convective') _clearSpcConvectiveSelections();
+        if (group !== 'watches') _clearSpcWatchSelections();
+        if (group !== 'mds') _clearSpcMdSelection();
+        if (group !== 'reports') _clearSpcReportSelections();
+        if (group !== 'fire') _clearSpcFireSelections(options.keepFireTarget || null);
+    }
+
+    function _normalizeSpcWatchLayersForKey(watchLayers) {
+        return (watchLayers || [])
+            .map((w) => `${String(w?.type || '').toLowerCase()}:${String(w?.mode || '').toLowerCase()}`)
+            .sort();
+    }
+
+    function _spcSelectionKey(day, fireDay, hazards, supplemental) {
+        const sortedHazards = (hazards || []).map((h) => String(h)).sort();
+        const watchLayers = _normalizeSpcWatchLayersForKey(supplemental?.watchLayers || []);
+        const reportsDays = [...(supplemental?.reportsDays || [])].map((d) => String(d)).sort();
+        const reportTypes = [...(supplemental?.reportTypes || [])].map((t) => String(t)).sort();
+        return JSON.stringify({
+            day: Number(day || 1),
+            fireDay: Number(fireDay || 1),
+            hazards: sortedHazards,
+            reportsDays,
+            reportTypes,
+            mdsEnabled: !!supplemental?.mdsEnabled,
+            watchesEnabled: !!supplemental?.watchesEnabled,
+            watchLayers,
+        });
+    }
+
+    function _currentSpcSelectionKey() {
+        const day = _getSpcDay();
+        const fireDay = _getSpcFireDay();
+        const hazards = _getSelectedSpcHazards(day);
+        const supplemental = _spcSupplementalSelections();
+        return _spcSelectionKey(day, fireDay, hazards, supplemental);
+    }
+
+    function _isActiveSpcRequest(requestSeq, selectionKey) {
+        return requestSeq === _spcRequestSeq
+            && _canApplySpcResponse()
+            && selectionKey === _currentSpcSelectionKey();
+    }
+
+    function _isAbortLikeError(err) {
+        if (!err) return false;
+        const name = String(err.name || '');
+        if (name === 'AbortError' || name === 'TimeoutError') return true;
+        const msg = String(err.message || '').toLowerCase();
+        return msg.includes('abort') || msg.includes('timed out');
+    }
+
+    async function _fetchJsonWithTimeout(url, options = {}) {
+        const parentSignal = options.signal || null;
+        const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 10_000;
+        const controller = new AbortController();
+        let timeoutId = null;
+        const abortFromParent = () => controller.abort();
+
+        if (parentSignal) {
+            if (parentSignal.aborted) controller.abort();
+            else parentSignal.addEventListener('abort', abortFromParent, { once: true });
+        }
+
+        if (timeoutMs > 0) {
+            timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        }
+
+        try {
+            const resp = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            return await resp.json();
+        } catch (err) {
+            const parentAborted = !!(parentSignal && parentSignal.aborted);
+            const timedOut = !!(timeoutId && !parentAborted && controller.signal.aborted);
+            if (timedOut) {
+                const timeoutErr = new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`);
+                timeoutErr.name = 'TimeoutError';
+                throw timeoutErr;
+            }
+            throw err;
+        } finally {
+            if (timeoutId) clearTimeout(timeoutId);
+            if (parentSignal) parentSignal.removeEventListener('abort', abortFromParent);
+        }
+    }
+
+    async function _fetchSpcReportsGeoJson(requestSeq, selectionKey, signal, dayKey, reportType) {
         const url = apiUrl(
             `/api/data/spc/reports?day=${encodeURIComponent(dayKey)}`
             + `&report_type=${encodeURIComponent(reportType || 'all')}`
             + `&report_mode=filtered`
         );
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const geojson = await resp.json();
-        if (requestSeq !== _spcRequestSeq || !_canApplySpcResponse()) return null;
+        const geojson = await _fetchJsonWithTimeout(url, {
+            signal,
+            timeoutMs: _SPC_SUPPLEMENTAL_TIMEOUT_MS,
+        });
+        if (!_isActiveSpcRequest(requestSeq, selectionKey)) return null;
         return geojson;
     }
 
-    async function _fetchSpcActiveProductGeoJson(requestSeq, product, query = '') {
+    async function _fetchSpcActiveProductGeoJson(requestSeq, selectionKey, signal, product, query = '') {
         const url = apiUrl(`/api/data/spc/active?product=${encodeURIComponent(product)}${query}`);
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const geojson = await resp.json();
-        if (requestSeq !== _spcRequestSeq || !_canApplySpcResponse()) return null;
+        const geojson = await _fetchJsonWithTimeout(url, {
+            signal,
+            timeoutMs: _SPC_SUPPLEMENTAL_TIMEOUT_MS,
+        });
+        if (!_isActiveSpcRequest(requestSeq, selectionKey)) return null;
         return geojson;
     }
 
-    async function _fetchSpcHazardGeoJson(requestSeq, day, hazard) {
-        const resp = await fetch(apiUrl(`/api/data/spc?day=${day}&hazard=${hazard}`));
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const geojson = await resp.json();
-        if (requestSeq !== _spcRequestSeq || !_canApplySpcResponse()) return null;
+    async function _fetchSpcHazardGeoJson(requestSeq, selectionKey, signal, day, hazard) {
+        const geojson = await _fetchJsonWithTimeout(
+            apiUrl(`/api/data/spc?day=${day}&hazard=${hazard}`),
+            {
+                signal,
+                timeoutMs: _SPC_PRIMARY_TIMEOUT_MS,
+            },
+        );
+        if (!_isActiveSpcRequest(requestSeq, selectionKey)) return null;
         return { hazard, geojson };
     }
 
@@ -2956,8 +3101,14 @@
         const supplemental = _spcSupplementalSelections();
         const hasSupplementalLayers = supplemental.reportsEnabled
             || supplemental.mdsEnabled
-            || (supplemental.watchesEnabled && !!supplemental.watchTypes);
+            || supplemental.watchesEnabled;
         const requestSeq = ++_spcRequestSeq;
+        const selectionKey = _spcSelectionKey(day, fireDay, hazards, supplemental);
+        if (_spcAbortController) {
+            _spcAbortController.abort();
+        }
+        _spcAbortController = new AbortController();
+        const requestSignal = _spcAbortController.signal;
         if (spcLayer) { map.removeLayer(spcLayer); spcLayer = null; }
 
         const countEl = byId('weather-spc-count');
@@ -2974,61 +3125,139 @@
         const effectiveDay = areFireHazards ? fireDay : day;
         const loadingParts = [];
         if (hazards.length) loadingParts.push(`day ${effectiveDay} (${hazards.join(', ')})`);
-        if (supplemental.reportsEnabled) loadingParts.push(`reports:${supplemental.reportsDay}/${supplemental.reportsType}`);
+        if (supplemental.reportsEnabled) {
+            const reportTypesLabel = supplemental.reportTypes.length === 3
+                ? 'all'
+                : supplemental.reportTypes.join(',');
+            loadingParts.push(`reports:${supplemental.reportsDays.join('+')}/${reportTypesLabel}`);
+        }
         if (supplemental.mdsEnabled) loadingParts.push('mds');
-        if (supplemental.watchesEnabled && supplemental.watchTypes) {
-            loadingParts.push(`watches:${supplemental.watchMode}/${supplemental.watchTypes}`);
+        if (supplemental.watchesEnabled) {
+            loadingParts.push(`watches:${supplemental.watchLayers.map((w) => `${w.type}-${w.mode}`).join(',')}`);
         }
         setStatus(`Loading SPC ${loadingParts.join(' + ')}...`);
+        if (!hazards.length && hasSupplementalLayers) {
+            setMapEmptyMessage('Loading SPC supplemental overlays...');
+        }
         try {
             const requestedHazards = hazards.length ? _buildSpcRequestHazards(effectiveDay, hazards) : [];
             const results = requestedHazards.length
                 ? await Promise.allSettled(
                     requestedHazards.map((item) =>
-                        _fetchSpcHazardGeoJson(requestSeq, effectiveDay, item.hazard)
+                        _fetchSpcHazardGeoJson(requestSeq, selectionKey, requestSignal, effectiveDay, item.hazard)
                             .then((value) => ({ ...item, value }))
                     )
                 )
                 : [];
 
-            if (requestSeq !== _spcRequestSeq || !_canApplySpcResponse()) return;
+            if (!_isActiveSpcRequest(requestSeq, selectionKey)) return;
 
             const failures = results.filter((result) => result.status === 'rejected');
-            failures.forEach((result) => console.error('[spc] Load error:', result.reason));
+            failures.forEach((result) => {
+                if (_isAbortLikeError(result.reason)) return;
+                console.error('[spc] Load error:', result.reason);
+            });
 
             const payloads = results
                 .filter((result) => result.status === 'fulfilled' && result.value?.value)
                 .map((result) => result.value);
 
+            const reportsFeatureMap = new Map();
             let reportsGeojson = null;
             let mdsGeojson = null;
+            const watchFeatureMap = new Map();
             let watchesGeojson = null;
             const supplementalFetches = [];
+            let supplementalTimedOut = false;
             if (supplemental.reportsEnabled) {
-                supplementalFetches.push(
-                    _fetchSpcReportsGeoJson(requestSeq, supplemental.reportsDay, supplemental.reportsType)
-                        .then((geojson) => { reportsGeojson = geojson; })
-                );
+                const reportTypeQueries = supplemental.reportTypes.length === 3
+                    ? ['all']
+                    : supplemental.reportTypes;
+                supplemental.reportsDays.forEach((dayKey) => {
+                    reportTypeQueries.forEach((reportType) => {
+                        supplementalFetches.push(
+                            _fetchSpcReportsGeoJson(requestSeq, selectionKey, requestSignal, dayKey, reportType)
+                                .then((geojson) => {
+                                    (geojson?.features || []).forEach((feat) => {
+                                        const props = feat?.properties || {};
+                                        const coords = Array.isArray(feat?.geometry?.coordinates)
+                                            ? feat.geometry.coordinates
+                                            : [];
+                                        const dedupeKey = [
+                                            dayKey,
+                                            props.event || '',
+                                            props.time || '',
+                                            coords[0] ?? '',
+                                            coords[1] ?? '',
+                                            props.location || '',
+                                            props.county || '',
+                                            props.state || '',
+                                        ].join('|');
+                                        if (!reportsFeatureMap.has(dedupeKey)) {
+                                            reportsFeatureMap.set(dedupeKey, {
+                                                ...feat,
+                                                properties: { ...props, report_day: props.report_day || dayKey },
+                                            });
+                                        }
+                                    });
+                                })
+                        );
+                    });
+                });
             }
             if (supplemental.mdsEnabled) {
                 supplementalFetches.push(
-                    _fetchSpcActiveProductGeoJson(requestSeq, 'mds')
+                    _fetchSpcActiveProductGeoJson(requestSeq, selectionKey, requestSignal, 'mds')
                         .then((geojson) => { mdsGeojson = geojson; })
                 );
             }
-            if (supplemental.watchesEnabled && supplemental.watchTypes) {
-                const q = `&watch_mode=${encodeURIComponent(supplemental.watchMode || 'polygon')}`
-                    + `&watch_types=${encodeURIComponent(supplemental.watchTypes)}`;
-                supplementalFetches.push(
-                    _fetchSpcActiveProductGeoJson(requestSeq, 'watches', q)
-                        .then((geojson) => { watchesGeojson = geojson; })
-                );
+            if (supplemental.watchesEnabled) {
+                supplemental.watchLayers.forEach((watchCfg) => {
+                    const q = `&watch_mode=${encodeURIComponent(watchCfg.mode)}`
+                        + `&watch_types=${encodeURIComponent(watchCfg.type)}`;
+                    supplementalFetches.push(
+                        _fetchSpcActiveProductGeoJson(requestSeq, selectionKey, requestSignal, 'watches', q)
+                            .then((geojson) => {
+                                (geojson?.features || []).forEach((feat) => {
+                                    const props = feat?.properties || {};
+                                    const dedupeKey = String(
+                                        feat?.id
+                                        || `${props.id || ''}|${props.watch_type || ''}|${watchCfg.type}|${watchCfg.mode}`,
+                                    );
+                                    if (!watchFeatureMap.has(dedupeKey)) watchFeatureMap.set(dedupeKey, feat);
+                                });
+                            })
+                    );
+                });
             }
             if (supplementalFetches.length) {
                 const supplementalResults = await Promise.allSettled(supplementalFetches);
                 supplementalResults
                     .filter((r) => r.status === 'rejected')
-                    .forEach((r) => console.error('[spc] Supplemental overlay load error:', r.reason));
+                    .forEach((r) => {
+                        if (_isAbortLikeError(r.reason)) {
+                            if (String(r.reason?.name || '') === 'TimeoutError') {
+                                supplementalTimedOut = true;
+                            }
+                            return;
+                        }
+                        console.error('[spc] Supplemental overlay load error:', r.reason);
+                    });
+            }
+
+            if (!_isActiveSpcRequest(requestSeq, selectionKey)) return;
+
+            if (reportsFeatureMap.size) {
+                reportsGeojson = {
+                    type: 'FeatureCollection',
+                    features: Array.from(reportsFeatureMap.values()),
+                };
+            }
+            if (watchFeatureMap.size) {
+                watchesGeojson = {
+                    type: 'FeatureCollection',
+                    features: Array.from(watchFeatureMap.values()),
+                };
             }
 
             if (!payloads.length && !hasSupplementalLayers) {
@@ -3180,23 +3409,35 @@
                         ? `SPC Day ${effectiveDay} ${hazardLabels}: ${uniqueLabels.join(' · ')}`
                         : `No SPC data available for Day ${effectiveDay} ${hazardLabels}`;
                 } else {
-                    msg = 'No SPC supplemental overlays available for the current selection.';
+                    msg = supplementalTimedOut
+                        ? 'SPC supplemental overlays timed out. Try again.'
+                        : 'No SPC supplemental overlays available for the current selection.';
                 }
-                setMapEmptyMessage(msg);
+                if (_isActiveSpcRequest(requestSeq, selectionKey)) {
+                    setMapEmptyMessage(msg);
+                }
             } else {
-                setMapEmptyMessage(null);
+                if (_isActiveSpcRequest(requestSeq, selectionKey)) {
+                    setMapEmptyMessage(null);
+                }
             }
             const statusBits = [];
             if (hazards.length) statusBits.push(`Day ${effectiveDay}: ${hazards.join(', ')}`);
-            if (supplemental.reportsEnabled) statusBits.push(`Reports ${supplemental.reportsDay}/${supplemental.reportsType}`);
+            if (supplemental.reportsEnabled) {
+                const reportTypesLabel = supplemental.reportTypes.length === 3
+                    ? 'all'
+                    : supplemental.reportTypes.join(',');
+                statusBits.push(`Reports ${supplemental.reportsDays.join('+')}/${reportTypesLabel}`);
+            }
             if (supplemental.mdsEnabled) statusBits.push('MDs');
-            if (supplemental.watchesEnabled && supplemental.watchTypes) {
-                statusBits.push(`Watches ${supplemental.watchMode}/${supplemental.watchTypes}`);
+            if (supplemental.watchesEnabled) {
+                statusBits.push(`Watches ${supplemental.watchLayers.map((w) => `${w.type}-${w.mode}`).join(',')}`);
             }
             setStatus(`SPC ${statusBits.join(' + ')} updated at ${new Date().toLocaleTimeString()}.`);
             _setReliability(`SPC ${statusBits.join(' + ')}`, 'NOAA SPC', Date.now());
         } catch (err) {
-            if (requestSeq !== _spcRequestSeq) return;
+            if (!_isActiveSpcRequest(requestSeq, selectionKey)) return;
+            if (_isAbortLikeError(err)) return;
             console.error('[spc] Load error:', err);
             setMapEmptyMessage(null);
             setStatus(`SPC error: ${err.message}`);
@@ -3389,7 +3630,13 @@
         if (!surfaceEnabled && surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
         if (!mrmsEnabled && mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
 
-        if (!spcEnabled) setMapEmptyMessage(null);
+        if (!spcEnabled) {
+            if (_spcAbortController) {
+                _spcAbortController.abort();
+                _spcAbortController = null;
+            }
+            setMapEmptyMessage(null);
+        }
 
         // Hide warnings panel when alerts are disabled.
         if (!alertsEnabled) _renderActiveWarningsPanel();
@@ -5422,14 +5669,13 @@
     });
 
     byId('weather-spc-day')?.addEventListener('change', () => {
-        _syncSpcConvectiveOptions(true);
-        _syncSpcFireWeatherOptions(true);
+        _syncSpcConvectiveOptions(_shouldResetSpcConvectiveDaySelection());
         if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) refreshSpc();
     });
 
     document.querySelectorAll('.weather-spc-convective-toggle').forEach((el) => {
         el.addEventListener('change', () => {
-            if (el.checked && byId('weather-spc-fire')) byId('weather-spc-fire').value = '';
+            if (el.checked) _clearSpcExclusivePeers('convective');
             const BASE_HAZARDS = ['cat', 'torn', 'wind', 'hail'];
             const day = _getSpcDay();
             // For Day 3, make Categorical and Probabilistic mutually exclusive
@@ -5472,18 +5718,68 @@
         });
     });
 
+    const _refreshSpcIfVisible = () => {
+        if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) refreshSpc();
+    };
+
+    const _enforceMutuallyExclusiveChecks = (idA, idB) => {
+        const elA = byId(idA);
+        const elB = byId(idB);
+        if (!elA || !elB) return;
+        elA.addEventListener('change', () => {
+            if (elA.checked) {
+                elB.checked = false;
+                _clearSpcExclusivePeers('watches');
+            }
+            _refreshSpcIfVisible();
+        });
+        elB.addEventListener('change', () => {
+            if (elB.checked) {
+                elA.checked = false;
+                _clearSpcExclusivePeers('watches');
+            }
+            _refreshSpcIfVisible();
+        });
+    };
+
+    _enforceMutuallyExclusiveChecks('weather-spc-watch-tor-polygon', 'weather-spc-watch-tor-counties');
+    _enforceMutuallyExclusiveChecks('weather-spc-watch-svr-polygon', 'weather-spc-watch-svr-counties');
+
+    ['weather-spc-reports-today', 'weather-spc-reports-yesterday'].forEach((id) => {
+        byId(id)?.addEventListener('change', (evt) => {
+            if (evt?.target?.checked) {
+                _clearSpcExclusivePeers('reports');
+                ['weather-spc-report-type-torn', 'weather-spc-report-type-wind', 'weather-spc-report-type-hail']
+                    .forEach((filterId) => {
+                        const filterEl = byId(filterId);
+                        if (filterEl) filterEl.checked = true;
+                    });
+            }
+            _updateSpcReportFilterState();
+            _refreshSpcIfVisible();
+        });
+    });
+
     [
-        'weather-spc-show-reports',
-        'weather-spc-reports-day',
-        'weather-spc-reports-type',
         'weather-spc-show-mds',
-        'weather-spc-show-watches',
-        'weather-spc-watch-mode',
-        'weather-spc-watch-type-tor',
-        'weather-spc-watch-type-svr',
+        'weather-spc-report-type-torn',
+        'weather-spc-report-type-wind',
+        'weather-spc-report-type-hail',
     ].forEach((id) => {
-        byId(id)?.addEventListener('change', () => {
-            if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) refreshSpc();
+        byId(id)?.addEventListener('change', (evt) => {
+            if (id === 'weather-spc-show-mds' && evt?.target?.checked) {
+                _clearSpcExclusivePeers('mds');
+            }
+            _refreshSpcIfVisible();
+        });
+    });
+
+    document.querySelectorAll('.weather-spc-fire-toggle').forEach((el) => {
+        el.addEventListener('change', () => {
+            if (el.checked) {
+                _clearSpcExclusivePeers('fire', { keepFireTarget: el });
+            }
+            _refreshSpcIfVisible();
         });
     });
 
@@ -5869,12 +6165,14 @@
         if (!byId('weather-show-spc')?.checked) return;
         const supplemental = _spcSupplementalSelections();
         const needsActiveRefresh = supplemental.mdsEnabled
-            || (supplemental.watchesEnabled && !!supplemental.watchTypes);
+            || supplemental.watchesEnabled;
         if (!needsActiveRefresh) return;
         refreshSpc();
     }, SPC_AUTO_REFRESH_MS);
 
     init();
+
+    _updateSpcReportFilterState();
 
 }());
 

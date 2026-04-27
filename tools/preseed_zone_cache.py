@@ -93,4 +93,14 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Preseed the NWS zone-geometry disk cache.")
+    parser.add_argument("--log-to-file", action="store_true",
+                        help="Redirect stdout/stderr to logs/scheduled/zone_preseed.log (for headless task runs).")
+    args = parser.parse_args()
+    if args.log_to_file:
+        from workers._freshness import redirect_stdio_to_log
+        redirect_stdio_to_log("zone_preseed")
     raise SystemExit(main())

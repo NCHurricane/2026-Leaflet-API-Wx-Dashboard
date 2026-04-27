@@ -1,5 +1,15 @@
-"""APScheduler configuration and job registration for background data workers."""
+"""APScheduler configuration and (optional) job registration for background data workers.
 
+Default mode: **OS-only fetching**. Windows Task Scheduler (see
+``tools/install_tasks.ps1``) is the source of truth for refreshing the
+alerts / SPC / surface / MRMS caches. ``main.py`` simply reads from disk.
+
+To temporarily bring the in-process fallback scheduler back (e.g. while
+developing on a machine without the OS tasks installed), set the env var
+``WX_INPROC_WORKERS=1`` before launching the server.
+"""
+
+import os
 from datetime import datetime, timezone, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -13,14 +23,32 @@ _scheduler = BackgroundScheduler(
     job_defaults={"coalesce": True, "max_instances": 1},
 )
 
+# Opt-in flag to restore the legacy in-process behavior.
+_INPROC_ENABLED = os.environ.get("WX_INPROC_WORKERS", "").strip().lower() in (
+    "1", "true", "yes", "on"
+)
+
 
 def start_scheduler() -> None:
-    """Register background jobs and start the scheduler.
+    """Start the scheduler. Job registration is gated on ``WX_INPROC_WORKERS``.
 
-    All workers are scheduled with `next_run_time=now` so their first tick
-    fires immediately on background scheduler threads — the FastAPI startup
-    handler returns in milliseconds instead of blocking on initial cache fills.
+    When the env var is unset (the default), no data-worker jobs are registered.
+    The OS-level Windows Task Scheduler tasks installed by
+    ``tools/install_tasks.ps1`` are responsible for keeping caches warm.
+
+    When the env var is set to ``1`` / ``true``, the legacy APScheduler jobs
+    are registered as a fallback. The shared sentinel-file gate
+    (``workers/_freshness.py``) prevents double fetches if the OS tasks are
+    also active.
     """
+    if not _INPROC_ENABLED:
+        print(
+            "[scheduler] In-process workers disabled (default). "
+            "Cache refresh is delegated to Windows Task Scheduler. "
+            "Set WX_INPROC_WORKERS=1 to enable the in-process fallback."
+        )
+        return
+
     from workers.alerts_worker import run_alerts_worker
     from workers.spc_worker import run_spc_worker
     from workers.mrms_worker import run_mrms_worker
@@ -70,14 +98,15 @@ def start_scheduler() -> None:
     _scheduler.start()
 
     print(
-        "[scheduler] Background workers scheduled: alerts (1 min), spc (30 min), "
-        "mrms (15 min, +30s delay), surface (30 min) — first ticks running now in background"
+        "[scheduler] In-process fallback ENABLED — alerts (1 min), spc (30 min), "
+        "mrms (15 min, +30s delay), surface (30 min)"
     )
 
 
 def stop_scheduler() -> None:
-    """Shutdown the scheduler gracefully."""
+    """Shutdown the scheduler gracefully (no-op when never started)."""
     try:
-        _scheduler.shutdown(wait=False)
+        if _scheduler.running:
+            _scheduler.shutdown(wait=False)
     except Exception:
         pass

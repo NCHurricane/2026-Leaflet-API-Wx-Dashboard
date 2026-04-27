@@ -460,9 +460,22 @@
             }
 
             #weather-spc-overlay-opts {
-                margin-top: 14px;
-                padding-top: 8px;
                 border-top: 1px solid var(--wx-border);
+            }
+
+            #weather-spc-overlay-opts>label+.weather-spc-dual-row,
+            #weather-spc-overlay-opts>label+.wx-check-row,
+            #weather-spc-overlay-opts>label+.weather-spc-inline-filters {
+                margin-top: 4px;
+                margin-bottom: 3px;
+            }
+
+            .weather-spc-subhead {
+                margin: 8px 0 4px;
+                font-size: 0.7rem;
+                color: var(--wx-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
             }
 
             .weather-spc-overlay-subopts {
@@ -471,6 +484,78 @@
 
             .weather-spc-watch-type-rows {
                 margin-top: 4px;
+            }
+
+            .weather-spc-dual-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto auto;
+                align-items: center;
+                gap: 8px;
+                padding: 2px 0;
+                font-size: 0.8rem;
+                line-height: 1.08;
+            }
+
+            .weather-spc-dual-row .weather-spc-dual-label {
+                display: block;
+                color: #ffffff;
+                font-weight: 800;
+            }
+
+            #weather-spc-overlay-opts .weather-spc-dual-row label {
+                display: inline-flex;
+                align-items: center;
+                align-self: center;
+                gap: 8px;
+                margin: 0;
+                padding: 0;
+                font-size: 0.72rem;
+                color: var(--wx-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+                line-height: 1;
+                cursor: pointer;
+            }
+
+            #weather-spc-overlay-opts .weather-spc-dual-row input[type="checkbox"] {
+                width: 16px;
+                height: 16px;
+                margin: 0;
+                vertical-align: middle;
+            }
+
+            #weather-spc-watch-tor-polygon,
+            #weather-spc-watch-tor-counties,
+            #weather-spc-watch-svr-polygon,
+            #weather-spc-watch-svr-counties {
+                font-weight: no;
+            }
+
+            .weather-spc-inline-filters {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                padding: 2px 0;
+            }
+
+            .weather-spc-inline-filters label {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                margin: 0;
+                padding: 0;
+                font-size: 0.74rem;
+                color: var(--wx-text);
+                text-transform: none;
+                letter-spacing: 0;
+                cursor: pointer;
+            }
+
+            .weather-spc-inline-filters input[type="checkbox"] {
+                width: 16px;
+                height: 16px;
+                margin: 0;
             }
 
             #weather-spc-convective-list>.wx-check-row,
@@ -1016,6 +1101,17 @@
                 .wx-alert-pager {
                     min-width: 0;
                     max-width: 88vw;
+                }
+
+                .weather-spc-dual-row {
+                    grid-template-columns: minmax(0, 1fr);
+                    gap: 5px;
+                }
+
+                .weather-spc-inline-filters {
+                    justify-content: flex-start;
+                    flex-wrap: wrap;
+                    gap: 8px 12px;
                 }
             }
 
@@ -2340,6 +2436,41 @@
                                     </div>
                                 </div>
                             </div>
+                            <div id="weather-spc-overlay-opts">
+                                <label>Watches</label>
+                                <div class="weather-spc-dual-row">
+                                    <span class="weather-spc-dual-label weather-spc-convective-label">Tornado</span>
+                                    <label><input id="weather-spc-watch-tor-polygon" type="checkbox">Polygon</label>
+                                    <label><input id="weather-spc-watch-tor-counties" type="checkbox">Counties</label>
+                                </div>
+                                <div class="weather-spc-dual-row">
+                                    <span class="weather-spc-dual-label weather-spc-convective-label">SVR
+                                        T-Storm</span>
+                                    <label><input id="weather-spc-watch-svr-polygon" type="checkbox">Polygon</label>
+                                    <label><input id="weather-spc-watch-svr-counties" type="checkbox">Counties</label>
+                                </div>
+                                <label style="margin-top: 18px;">Mesoscale Discussions</label>
+
+                                <div class="wx-check-row"><span>Mesoscale Discussions</span><input
+                                        id="weather-spc-show-mds" type="checkbox"></div>
+
+
+                                <label style="margin-top: 18px;">Storm Reports</label>
+                                <div class="wx-check-row"><span>Today</span><input id="weather-spc-reports-today"
+                                        type="checkbox"></div>
+                                <div class="wx-check-row"><span>Yesterday</span><input
+                                        id="weather-spc-reports-yesterday" type="checkbox"></div>
+
+                                <div class="weather-spc-inline-filters">
+                                    <label style="padding-top: 0;"><input id="weather-spc-report-type-torn"
+                                            type="checkbox" checked>Tornado</label>
+                                    <label style="padding-top: 0;"><input id="weather-spc-report-type-wind"
+                                            type="checkbox" checked>Wind</label>
+                                    <label style="padding-top: 0;"><input id="weather-spc-report-type-hail"
+                                            type="checkbox" checked>Hail</label>
+                                </div>
+                            </div>
+
                             <div style="margin-top: 18px;">
                                 <label for="weather-spc-fire-day">Fire Weather Day</label>
                                 <select id="weather-spc-fire-day">
@@ -2381,44 +2512,6 @@
                                         data-categorical="1" style="display:none;">
                                         <span class="weather-spc-fire-label">Dry Thunderstorm Probabilistic</span>
                                         <input class="weather-spc-fire-toggle" type="checkbox" value="drytprob">
-                                    </div>
-                                </div>
-                            </div>
-                            <div id="weather-spc-overlay-opts">
-                                <label>Additional SPC Overlays</label>
-                                <div class="wx-check-row"><span>Storm Reports</span><input id="weather-spc-show-reports"
-                                        type="checkbox"></div>
-                                <div class="weather-spc-overlay-subopts">
-                                    <label for="weather-spc-reports-day">Reports Day</label>
-                                    <select id="weather-spc-reports-day">
-                                        <option value="today" selected>Today</option>
-                                        <option value="yesterday">Yesterday</option>
-                                    </select>
-                                    <label for="weather-spc-reports-type">Report Type</label>
-                                    <select id="weather-spc-reports-type">
-                                        <option value="all" selected>All</option>
-                                        <option value="torn">Tornado</option>
-                                        <option value="wind">Wind</option>
-                                        <option value="hail">Hail</option>
-                                    </select>
-                                </div>
-
-                                <div class="wx-check-row"><span>Mesoscale Discussions</span><input
-                                        id="weather-spc-show-mds" type="checkbox"></div>
-
-                                <div class="wx-check-row"><span>Watches</span><input id="weather-spc-show-watches"
-                                        type="checkbox"></div>
-                                <div class="weather-spc-overlay-subopts">
-                                    <label for="weather-spc-watch-mode">Watch Display</label>
-                                    <select id="weather-spc-watch-mode">
-                                        <option value="polygon" selected>Polygon</option>
-                                        <option value="counties">Counties</option>
-                                    </select>
-                                    <div class="weather-spc-watch-type-rows">
-                                        <div class="wx-check-row"><span>Tornado Watch</span><input
-                                                id="weather-spc-watch-type-tor" type="checkbox" checked></div>
-                                        <div class="wx-check-row"><span>Severe Thunderstorm Watch</span><input
-                                                id="weather-spc-watch-type-svr" type="checkbox" checked></div>
                                     </div>
                                 </div>
                             </div>

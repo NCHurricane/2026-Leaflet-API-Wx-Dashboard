@@ -722,3 +722,53 @@ input[type="range"] {
     font-size: 0.72rem;
     padding: 0.35rem;
 }
+
+/* Pulse severe alert polygon stroke (outline) instead of fill */
+.wx-alert-pulse {
+  stroke: #ff0000 !important;
+  stroke-width: 4 !important;
+  animation: wx-pulse-stroke 1s infinite alternate;
+}
+
+@keyframes wx-pulse-stroke {
+  from { stroke-width: 4; stroke-opacity: 1; }
+  to   { stroke-width: 10; stroke-opacity: 0.5; }
+}
+
+/* Warning filter row (TOR, SVR, FFW checkboxes below Severe Weather Warnings) */
+.wx-warn-filter-row {
+    display: none;
+    flex-direction: row;
+        gap: 0.6rem;
+    padding: 0 0.4rem;
+        flex-wrap: nowrap;
+}
+
+.wx-warn-filter-row .wx-check-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.wx-warn-filter-row label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.wx-warn-filter-row input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+}
+
+.wx-warn-filter-count {
+    display: inline-block;
+    margin-left: 0.2rem;
+    font-size: 0.65rem;
+    opacity: 0.85;
+}

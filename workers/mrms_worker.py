@@ -92,7 +92,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--force", action="store_true",
                         help="Bypass freshness gate.")
+    parser.add_argument("--log-to-file", action="store_true",
+                        help="Redirect stdout/stderr to logs/scheduled/mrms.log (for headless task runs).")
     args = parser.parse_args()
+    if args.log_to_file:
+        from workers._freshness import redirect_stdio_to_log
+        redirect_stdio_to_log("mrms")
     if args.product:
         set_active_product(args.product)
     run_mrms_worker(force=args.force)

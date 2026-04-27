@@ -93,5 +93,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the SPC worker once.")
     parser.add_argument("--force", action="store_true",
                         help="Bypass freshness gate.")
+    parser.add_argument("--log-to-file", action="store_true",
+                        help="Redirect stdout/stderr to logs/scheduled/spc.log (for headless task runs).")
     args = parser.parse_args()
+    if args.log_to_file:
+        from workers._freshness import redirect_stdio_to_log
+        redirect_stdio_to_log("spc")
     run_spc_worker(force=args.force)
