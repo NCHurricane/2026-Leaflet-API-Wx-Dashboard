@@ -3,6 +3,48 @@
 
     const byId = (id) => document.getElementById(id);
 
+    // Wire up event handlers for SPC controls (Fire Weather UI parity)
+    function _wireSpcUiParityHandlers() {
+        const spcDaySelect = byId('weather-spc-day');
+        if (spcDaySelect) {
+            spcDaySelect.addEventListener('change', () => {
+                _syncSpcConvectiveOptions(true);
+                refreshSpc();
+            });
+        }
+        const fireDaySelect = byId('weather-spc-fire-day');
+        if (fireDaySelect) {
+            fireDaySelect.addEventListener('change', () => {
+                _syncSpcFireWeatherOptions(true);
+                refreshSpc();
+            });
+        }
+        // Delegate event handling for convective and fire weather toggles
+        const spcOpts = byId('weather-spc-opts');
+        if (spcOpts) {
+            spcOpts.addEventListener('change', (evt) => {
+                const target = evt.target;
+                if (target.classList.contains('weather-spc-convective-toggle')) {
+                    // Convective checked → clear all fire weather toggles
+                    if (target.checked) {
+                        document.querySelectorAll('.weather-spc-fire-toggle').forEach((el) => { el.checked = false; });
+                    }
+                    refreshSpc();
+                } else if (target.classList.contains('weather-spc-fire-toggle')) {
+                    if (target.checked) {
+                        // Uncheck all convective toggles
+                        document.querySelectorAll('.weather-spc-convective-toggle').forEach((el) => { el.checked = false; });
+                        // Uncheck all other fire weather toggles (radio-like)
+                        document.querySelectorAll('.weather-spc-fire-toggle').forEach((el) => {
+                            if (el !== target) el.checked = false;
+                        });
+                    }
+                    refreshSpc();
+                }
+            });
+        }
+    }
+
     // ── State Bounds [west, east, south, north] from geo_config.py ──────────
     // Leaflet fitBounds expects [[south, west], [north, east]]
     const STATE_BOUNDS = {
@@ -309,7 +351,7 @@
         'Coastal Alerts': ['Coastal Flood Warning', 'Coastal Flood Watch', 'Coastal Flood Advisory', 'High Surf Warning', 'High Surf Advisory', 'Rip Current Statement', 'Storm Surge Warning', 'Storm Surge Watch', 'Beach Hazards Statement'],
         'Marine Alerts': ['Special Marine Warning', 'Marine Weather Statement', 'Gale Warning', 'Gale Watch', 'Hurricane Force Wind Warning', 'Storm Warning', 'Small Craft Advisory', 'Hazardous Seas Warning', 'Hazardous Seas Watch', 'Heavy Freezing Spray Warning', 'Brisk Wind Advisory', 'Freezing Spray Advisory', 'Low Water Advisory', 'Storm Watch'],
         'Tropical Cyclone Alerts': ['Hurricane Warning', 'Hurricane Watch', 'Tropical Storm Warning', 'Tropical Storm Watch', 'Storm Surge Warning', 'Storm Surge Watch', 'Extreme Wind Warning', 'Tropical Cyclone Local Statement', 'Hurricane Force Wind Warning', 'Hurricane Force Wind Watch', 'Typhoon Warning', 'Typhoon Watch'],
-        'Non-Precipitation Alerts': ['High Wind Warning', 'High Wind Watch', 'Wind Advisory', 'Dense Fog Advisory', 'Dense Smoke Advisory', 'Dust Storm Warning', 'Blowing Dust Advisory', 'Air Quality Alert', 'Ashfall Warning', 'Ashfall Advisory', 'Air Stagnation Advisory', 'Blowing Dust Warning', 'Dust Advisory', 'Lake Wind Advisory'],
+        'Non-Precipitation Alerts': ['High Wind Warning', 'High Wind Watch', 'Wind Advisory', 'Dense Fog Advisory', 'Dense Smoke Advisory', 'Dust Storm Warning', 'Blowing Dust Warning', 'Air Quality Alert', 'Ashfall Warning', 'Ashfall Advisory', 'Air Stagnation Advisory', 'Blowing Dust Warning', 'Dust Advisory', 'Lake Wind Advisory'],
         'Geophysical Alerts': ['Earthquake Warning', 'Tsunami Advisory', 'Tsunami Watch', 'Tsunami Warning', 'Volcano Warning'],
         'Public Safety Alerts': ['Civil Danger Warning', 'Hazardous Materials Warning', 'Local Area Emergency', 'Radiological Hazard Warning'],
         'Informational Alerts': ['Hazardous Weather Outlook', 'Short Term Forecast', 'Special Weather Statement'],
@@ -357,9 +399,10 @@
         subdomains: 'abcd',
         maxZoom: 19,
     };
-    const INITIAL_VIEW_CENTER = [35.74674, -96.70241];
-    const INITIAL_VIEW_ZOOM = 5;
-    const CONUS_DEFAULT_BOUNDS = [[17.81173, -143.8777], [50.4017, -49.52712]];
+    // CONUS framing is driven entirely by CONUS_DEFAULT_BOUNDS via fitBounds(),
+    // so the visible extent adapts to the viewport size instead of being fixed
+    // by a center/zoom pair.
+    const CONUS_DEFAULT_BOUNDS = [[23.0, -127.0], [50.5, -65.0]];
     const WORLD_DEFAULT_BOUNDS = [[-60, -179.9], [85, 179.9]];
     const REGION_FIT_BOTTOM_PADDING_PX = 120;
 
@@ -381,7 +424,7 @@
     );
 
     const map = L.map('weather-map', { layers: [tilesDarkNoLabels] });
-    map.setView(INITIAL_VIEW_CENTER, INITIAL_VIEW_ZOOM);
+    map.fitBounds(CONUS_DEFAULT_BOUNDS, { animate: false });
 
     function _ensureSpcCigPatternDefs(svgRoot) {
         if (!svgRoot) return;
@@ -532,7 +575,7 @@
             btn.type = 'button';
             btn.title = 'Reset to default view';
             btn.innerHTML = '<i class="fa-solid fa-house fa-2xl"></i>';
-            L.DomEvent.on(btn, 'click', () => m.setView(INITIAL_VIEW_CENTER, INITIAL_VIEW_ZOOM));
+            L.DomEvent.on(btn, 'click', () => m.fitBounds(CONUS_DEFAULT_BOUNDS));
             return container;
         },
     });
@@ -587,20 +630,36 @@
     let _activeAlertsPopup = null;
     let alertsOpacity = 0.75;
     let spcOpacity = 0.60;
+    let spcStrokeOpacity = 1.0;
     let surfaceValueOpacity = 0.9;
     let surfaceGradientOpacity = 0.9;
     let mrmsOpacity = 0.8;
     let _alertsRequestSeq = 0;
     let _spcRequestSeq = 0;
+    let _spcReportsRequestSeq = 0;
+    let _spcMdsRequestSeq = 0;
+    let _spcWatchesRequestSeq = 0;
     let _surfaceRequestSeq = 0;
     let _mrmsRequestSeq = 0;
+    const _SPC_REPORT_COLORS = {
+        torn: '#ff4d4f',
+        wind: '#26a9ff',
+        hail: '#66e06a',
+        other: '#f5d06b',
+    };
     const _FREEZING_ISOTHERM_ENABLED = true; // temporary diagnostic overlay
     const _FREEZING_ISOTHERM_PRODUCTS = new Set(['station_plot', 'temperature', 'feels_like', 'dew_point']);
 
     // ── Style functions ──────────────────────────────────────────────────────
     function alertStyle(feat) {
-        const color = ALERT_COLORS[feat?.properties?.event || ''] || ALERT_DEFAULT;
-        return { color, weight: 1.5, fillColor: color, fillOpacity: alertsOpacity * 0.5, opacity: alertsOpacity };
+        const event = feat?.properties?.event || '';
+        const color = ALERT_COLORS[event] || ALERT_DEFAULT;
+        // Z-order: Tornado > Severe Thunderstorm > Flash Flood > others
+        let zIndex = 200; // default for all other alerts
+        if (event === 'Flash Flood Warning') zIndex = 220;
+        if (event === 'Severe Thunderstorm Warning') zIndex = 240;
+        if (event === 'Tornado Warning') zIndex = 260;
+        return { color, weight: 1.5, fillColor: color, fillOpacity: alertsOpacity * 0.5, opacity: alertsOpacity, zIndex };
     }
 
     function _spcFeatureColors(feat, fallback) {
@@ -612,13 +671,13 @@
     function spcCatStyle(feat) {
         const label = (feat?.properties?.LABEL || feat?.properties?.label || '').toUpperCase();
         const c = _spcFeatureColors(feat, SPC_CAT_COLORS[label] || { fill: '#aaaaaa', stroke: '#555' });
-        return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: 1 };
+        return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: spcStrokeOpacity };
     }
 
     function spcFireStyle(feat) {
         const label = feat?.properties?.LABEL || feat?.properties?.label || '';
         const c = _spcFeatureColors(feat, SPC_FIRE_COLORS[label] || { fill: '#aaaaaa', stroke: '#555' });
-        return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: 1 };
+        return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: spcStrokeOpacity };
     }
 
     function spcProbStyle(feat) {
@@ -626,7 +685,7 @@
         const label = (feat?.properties?.LABEL || '').replace('%', '');
         const key = dn || label;
         const c = _spcFeatureColors(feat, SPC_PROB_COLORS[key] || { fill: '#aaaaaa', stroke: '#555' });
-        return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: 1 };
+        return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: spcStrokeOpacity };
     }
 
     // Style function for both probability and CIG zones
@@ -651,7 +710,7 @@
                 weight: 2,
                 fillColor: c.fill,
                 fillOpacity: spcOpacity,
-                opacity: 1,
+                opacity: spcStrokeOpacity,
             };
         }
 
@@ -660,7 +719,7 @@
             weight: 1,
             fillColor: c.fill,
             fillOpacity: spcOpacity,
-            opacity: 1,
+            opacity: spcStrokeOpacity,
         };
     }
 
@@ -897,7 +956,15 @@
     }
 
     function _filterAlertsByCategories(rawFeatures, checkedCategories) {
-        return (rawFeatures || []).filter((f) => _matchesCheckedCategories(f, checkedCategories));
+        return (rawFeatures || []).filter((f) => _matchesCheckedCategories(f, checkedCategories) && _matchesWarningSubtypeFilter(f));
+    }
+
+    function _matchesWarningSubtypeFilter(feat) {
+        const event = String(feat?.properties?.event || '');
+        if (event === _WARN_FILTER_EVENT_TYPES.tor) return _warningsFilterEnabled.has('tor');
+        if (event === _WARN_FILTER_EVENT_TYPES.svr) return _warningsFilterEnabled.has('svr');
+        if (event === _WARN_FILTER_EVENT_TYPES.ffw) return _warningsFilterEnabled.has('ffw');
+        return true;
     }
 
     function _buildAlertsLayer(displayFeatures) {
@@ -909,7 +976,9 @@
                 });
                 // Throttled hover — PIP is expensive at CONUS scale with many polygons.
                 // Click is immediate; hover is deduplicated within _HOVER_THROTTLE_MS window.
-                layer.on('mouseover', _makeThrottledHoverHandler(() => feat, () => layer));
+                // Use mousemove so the tooltip recomputes as the cursor crosses overlapping
+                // polygons (e.g. a Severe Tstorm Warning sitting inside a Tornado Watch).
+                layer.on('mousemove', _makeThrottledHoverHandler(() => feat, () => layer));
                 layer.on('mouseout', () => layer.closeTooltip());
                 // Pulse high-priority polygons.
                 if (ALERT_PULSE_EVENTS.has(feat?.properties?.event || '')) {
@@ -937,6 +1006,7 @@
             const countEl = byId('weather-alerts-count');
             if (countEl) countEl.textContent = '0 active alert(s)';
             setLegend(null);
+            _renderActiveWarningsPanel();
             return;
         }
 
@@ -952,6 +1022,7 @@
         buildAlertsLegend(fullFeatures);
         const countEl = byId('weather-alerts-count');
         if (countEl) countEl.textContent = `${fullFeatures.length} active alert(s)`;
+        _renderActiveWarningsPanel();
     }
 
     // Re-fetch only the display geometry and swap the Leaflet render layer.
@@ -987,6 +1058,7 @@
             _swapAlertsLayer(nextLayer);
 
             buildAlertsLegend(fullFeatures);
+            _renderActiveWarningsPanel();
             const countEl = byId('weather-alerts-count');
             if (countEl) countEl.textContent = `${fullFeatures.length} active alert(s)`;
         } catch (err) {
@@ -1045,7 +1117,7 @@
     const _HOVER_THROTTLE_MS = 80;
     let _hoverThrottleTimer = null;
 
-    // Returns a mouseover handler that throttles the expensive PIP call.
+    // Returns a mousemove handler that throttles the expensive PIP call.
     // `layerRef` is expected to have .bindTooltip() / .openTooltip() methods.
     function _makeThrottledHoverHandler(getFeat, getLayer) {
         return function (e) {
@@ -1061,7 +1133,15 @@
                     const color = ALERT_COLORS[ev] || ALERT_DEFAULT;
                     return `<span style="color:${color};font-weight:700">\u25cf</span> ${_escapeHtml(ev)}`;
                 }).join('<br>');
-            lyr.bindTooltip(lines, { sticky: true, opacity: 0.95, className: 'wx-alert-hover-tip' }).openTooltip(e.latlng);
+            // If the tooltip already exists on this layer, update its content in
+            // place so overlapping polygons recompute as the cursor moves; only
+            // bind on first hover.
+            if (lyr.getTooltip()) {
+                lyr.setTooltipContent(lines);
+            } else {
+                lyr.bindTooltip(lines, { sticky: true, opacity: 0.95, className: 'wx-alert-hover-tip' });
+            }
+            lyr.openTooltip(e.latlng);
         };
     }
 
@@ -1171,11 +1251,11 @@
     function _openAlertsPagerAt(latlng) {
         const features = _sortedAlertsForPoint(latlng);
         if (!features.length) return;
-        const popup = L.popup({ maxWidth: 440, className: 'wx-alerts-pager-popup' })
-            .setLatLng(latlng)
-            .setContent(_buildAlertsPagerContent(features, 0, latlng));
-        _activeAlertsPopup = { popup, features, index: 0, latlng };
-        popup.openOn(map);
+        // Unified popup style: every alert click opens the immersive detail
+        // panel. Pagination across overlapping alerts at the click point uses
+        // the panel's built-in next/prev nav. The New Alert flow continues to
+        // call _openNewAlertDetail directly with its own source feature.
+        _openNewAlertDetail(latlng, features[0]);
     }
 
     // ── Immersive new-alert detail panel ─────────────────────────────────────
@@ -1333,81 +1413,19 @@
         if (keyHandler) document.removeEventListener('keydown', keyHandler);
         if (mapClickHandler) map.off('click', mapClickHandler);
         if (mapMoveHandler) map.off('movestart zoomstart', mapMoveHandler);
-        _stopNewAlertRadarLoop();
         if (panel?.parentElement) panel.parentElement.removeChild(panel);
         _activeNewAlertDetail = null;
     }
 
-    // ── Short radar loop that auto-plays during the new-alert detail view ────
-    // 4 frames at 5-min cadence ending at the most recent slot. Skipped when
-    // the user already has the alerts-radar tile layer enabled.
-    const _NEW_ALERT_RADAR_FRAMES = 4;
-    const _NEW_ALERT_RADAR_STEP_MIN = 5;
-    const _NEW_ALERT_RADAR_FRAME_MS = 700;
-    const _NEW_ALERT_RADAR_PAUSE_MS = 900;
-    const _NEW_ALERT_RADAR_OPACITY = 0.6;
-    let _newAlertRadarState = null;
-
-    function _newAlertRadarTimestamps() {
-        // IEM tile cache uses relative-minute slugs (-m05, -m10, ...) for past
-        // frames; the most recent frame is the un-suffixed current tile.
-        // Returns offsets in 5-minute increments, oldest first, ending at 0.
-        const out = [];
-        const stepMin = _NEW_ALERT_RADAR_STEP_MIN;
-        for (let i = _NEW_ALERT_RADAR_FRAMES - 1; i >= 0; i--) {
-            out.push(i * stepMin);
-        }
-        return out;
-    }
-
-    function _formatNexradTimestamp(_) {
-        // Kept for compatibility but unused with the relative-minute URL form.
-        return '';
-    }
-
-    function _startNewAlertRadarLoop() {
-        _stopNewAlertRadarLoop();
-        // Skip if user already has the persistent alerts-radar overlay on.
-        if (byId('weather-alerts-radar')?.checked) return;
-
-        const offsets = _newAlertRadarTimestamps();
-        const layers = offsets.map((mins) => {
-            // IEM layer naming: nexrad-n0q-mXXm (trailing 'm') for past frames,
-            // followed by the -900913 (EPSG:3857) projection suffix.
-            const slug = mins === 0
-                ? 'nexrad-n0q-900913'
-                : `nexrad-n0q-m${String(mins).padStart(2, '0')}m-900913`;
-            const url = `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/${slug}/{z}/{x}/{y}.png`;
-            return L.tileLayer(url, {
-                opacity: 0,
-                zIndex: 305,
-                attribution: '&copy; Iowa State Mesonet / NWS',
-            }).addTo(map);
-        });
-
-        let idx = 0;
-        const tick = () => {
-            const ctx = _newAlertRadarState;
-            if (!ctx) return;
-            ctx.layers.forEach((lyr, i) => lyr.setOpacity(i === idx ? _NEW_ALERT_RADAR_OPACITY : 0));
-            // Hold longer on the freshest frame so the loop "lands" on current.
-            const hold = idx === ctx.layers.length - 1 ? _NEW_ALERT_RADAR_PAUSE_MS : _NEW_ALERT_RADAR_FRAME_MS;
-            idx = (idx + 1) % ctx.layers.length;
-            ctx.timer = setTimeout(tick, hold);
-        };
-
-        _newAlertRadarState = { layers, timer: null };
-        tick();
-    }
-
-    function _stopNewAlertRadarLoop() {
-        const ctx = _newAlertRadarState;
-        if (!ctx) return;
-        if (ctx.timer) clearTimeout(ctx.timer);
-        ctx.layers.forEach((lyr) => {
-            try { if (map.hasLayer(lyr)) map.removeLayer(lyr); } catch (_) { /* ignore */ }
-        });
-        _newAlertRadarState = null;
+    // Auto-enable the persistent Radar Overlay when the user zooms into a new
+    // alert polygon. Replaces the former transient new-alert radar loop — same
+    // IEM tile source, but persists after the warning popup closes and reuses
+    // the existing opacity slider.
+    function _ensureRadarOverlayOn() {
+        const cb = byId('weather-alerts-radar');
+        if (!cb || cb.checked) return;
+        cb.checked = true;
+        cb.dispatchEvent(new Event('change'));
     }
 
     function _renderNewAlertDetail() {
@@ -1435,7 +1453,9 @@
         }
     }
 
-    function _openNewAlertDetail(latlng, sourceFeat) {
+    function _openNewAlertDetail(latlng, sourceFeat, options = {}) {
+        const ensureRadar = options.ensureRadar !== false;
+        const useAlertStack = options.useAlertStack !== false;
         _closeNewAlertDetail();
         // Close any normal alerts pager so views don't stack.
         if (_activeAlertsPopup?.popup) {
@@ -1446,15 +1466,23 @@
         const wrap = document.querySelector('.weather-map-wrap');
         if (!wrap) return;
 
-        // Step through all alerts containing this point, but make sure the
-        // triggering alert is shown first.
-        let features = _sortedAlertsForPoint(latlng);
-        if (!features.length) features = [sourceFeat];
-        const sourceId = sourceFeat?.id || sourceFeat?.properties?.id;
-        let startIdx = features.findIndex((f) => (f?.id || f?.properties?.id) === sourceId);
-        if (startIdx < 0) {
-            features = [sourceFeat, ...features.filter((f) => (f?.id || f?.properties?.id) !== sourceId)];
-            startIdx = 0;
+        let features = [];
+        let startIdx = 0;
+        if (useAlertStack) {
+            // Step through all alerts containing this point, but make sure the
+            // triggering alert is shown first.
+            features = _sortedAlertsForPoint(latlng);
+            if (!features.length) features = [sourceFeat];
+            const sourceId = sourceFeat?.id || sourceFeat?.properties?.id;
+            startIdx = features.findIndex((f) => (f?.id || f?.properties?.id) === sourceId);
+            if (startIdx < 0) {
+                features = [sourceFeat, ...features.filter((f) => (f?.id || f?.properties?.id) !== sourceId)];
+                startIdx = 0;
+            }
+        } else {
+            features = Array.isArray(options.features) && options.features.length
+                ? options.features
+                : [sourceFeat];
         }
 
         const panel = document.createElement('div');
@@ -1491,7 +1519,68 @@
             _positioned: false,
         };
         _renderNewAlertDetail();
-        _startNewAlertRadarLoop();
+        if (ensureRadar) _ensureRadarOverlayOn();
+    }
+
+    function _spcReportTypeKey(eventText) {
+        const event = String(eventText || '').toLowerCase();
+        if (event.includes('torn')) return 'torn';
+        if (event.includes('wind')) return 'wind';
+        if (event.includes('hail')) return 'hail';
+        return 'other';
+    }
+
+    function _spcReportMarkerStyle(feat) {
+        const key = _spcReportTypeKey(feat?.properties?.event);
+        const color = _SPC_REPORT_COLORS[key] || _SPC_REPORT_COLORS.other;
+        return {
+            radius: 5,
+            color: '#08111d',
+            weight: 1,
+            fillColor: color,
+            fillOpacity: 0.95,
+            opacity: 1,
+        };
+    }
+
+    function _spcReportPopup(feat) {
+        const p = feat?.properties || {};
+        const event = p.event || 'Storm Report';
+        const magnitude = p.magnitude ? ` (${_escapeHtml(p.magnitude)})` : '';
+        const place = [p.location, p.county, p.state].filter(Boolean).join(', ');
+        const when = p.time ? `<br><em>Time:</em> ${_escapeHtml(p.time)}` : '';
+        const where = place ? `<br><em>Location:</em> ${_escapeHtml(place)}` : '';
+        const remarks = p.remarks ? `<br><small>${_escapeHtml(p.remarks)}</small>` : '';
+        return `<strong>${_escapeHtml(event)}${magnitude}</strong>${when}${where}${remarks}`;
+    }
+
+    function _openSpcTextDetail(latlng, feat) {
+        if (!latlng || !feat) return;
+        _openNewAlertDetail(latlng, feat, { ensureRadar: false, useAlertStack: false });
+    }
+
+    function _spcWatchStyle(feat) {
+        const type = String(feat?.properties?.watch_type || feat?.properties?.event || '').toLowerCase();
+        const isTor = type.includes('tornado');
+        const edge = isTor ? '#ffe066' : '#ff8ec7';
+        const fill = isTor ? '#ffe066' : '#ff8ec7';
+        return {
+            color: edge,
+            weight: 2,
+            fillColor: fill,
+            fillOpacity: 0.16,
+            opacity: 1,
+        };
+    }
+
+    function _spcMdStyle() {
+        return {
+            color: '#63d8ff',
+            weight: 1.8,
+            fillColor: '#63d8ff',
+            fillOpacity: 0.12,
+            opacity: 1,
+        };
     }
 
     function spcPopup(feat) {
@@ -1652,10 +1741,32 @@
         return `<span class="legend-row" style="margin:0 6px 0 0;">${svg}&nbsp;${label}</span>`;
     }
 
-    function buildSpcProbLegend(hazard) {
-        const title = _SPC_HAZARD_TITLES[hazard] || 'Probabilistic';
-        const colors = _SPC_PROB_HAZARD_COLORS[hazard] || [];
-        const cigLevels = _SPC_HAZARD_CIG_LEVELS[hazard] || 0;
+    function buildSpcProbLegend(hazard, day = null) {
+        // Allow day override for Day 3 and Days 4-8
+        let title = _SPC_HAZARD_TITLES[hazard] || 'Probabilistic';
+        let colors = _SPC_PROB_HAZARD_COLORS[hazard] || [];
+        let cigLevels = _SPC_HAZARD_CIG_LEVELS[hazard] || 0;
+
+        // Day 3 Probabilistic: 60, 45, 30, 15, 5; Intensity 1 & 2 only
+        if (day === 3) {
+            colors = [
+                ['60%', '#104E8B'],
+                ['45%', '#912CEE'],
+                ['30%', '#FF00FF'],
+                ['15%', '#FF9696'],
+                ['5%', '#BD998A'],
+            ];
+            cigLevels = 2;
+        }
+        // Days 4-8: Only 30% and 15%, no intensity
+        if (day >= 4 && day <= 8) {
+            colors = [
+                ['30%', '#FF00FF'],
+                ['15%', '#FF9696'],
+            ];
+            cigLevels = 0;
+            title = 'Severe Weather Outlook';
+        }
 
         const probRow = colors.map(([label, color]) => _spcInlineSwatch(color, label)).join('');
         const intensityRow = Array.from({ length: cigLevels }, (_, i) => i + 1)
@@ -1802,7 +1913,10 @@
             if (banner.classList.contains('is-dismissing')) return;
             if (banner._dismissTimer) clearTimeout(banner._dismissTimer);
             banner.classList.add('is-dismissing');
-            banner.addEventListener('animationend', () => banner.remove(), { once: true });
+            banner.addEventListener('animationend', () => {
+                banner.remove();
+                _updateBannerOverflowIndicator();
+            }, { once: true });
         });
     }
 
@@ -1888,7 +2002,6 @@
         const p = feat?.properties || {};
         const event = p.event || 'Unknown Alert';
         const color = ALERT_COLORS[event] || ALERT_DEFAULT;
-        const area = (p.areaDesc || '').replace(/\s*;\s*/g, ', ');
 
         _triggerNewAlertBorderFlash(color);
         _playNewAlertSound();
@@ -1896,23 +2009,30 @@
         const banner = document.createElement('div');
         banner.className = 'wx-new-alert-banner';
         banner.style.borderColor = color;
+        // Compose location summary using _summarizeAreaDesc for consistency with sidebar
+        let locText = p.areaDesc || p.locations || '';
+        let summary = _summarizeAreaDesc(locText);
+        // Always render the location div, even if empty, for debugging
+        let locHtml = `<div class="wx-new-alert-pill-location" style="color:${color};font-size:0.92em;">${_escapeHtml(summary || '')}</div>`;
+
         banner.innerHTML = [
-            `<div class="wx-new-alert-banner-header">New Alert</div>`,
-            `<div class="wx-new-alert-banner-event" style="color:${color}">${_escapeHtml(event)}</div>`,
-            area ? `<div class="wx-new-alert-banner-area">${_escapeHtml(area)}</div>` : '',
-            `<div class="wx-new-alert-banner-buttons">`,
-            `  <button type="button" class="wx-new-alert-banner-view" style="color:${color}">View</button>`,
-            `</div>`,
+            `<span class="wx-new-alert-pill-label" style="color:${color}">New Alert:</span>`,
+            `<span class="wx-new-alert-pill-event" style="color:${color}">${_escapeHtml(event)}</span>`,
+            `<button type="button" class="wx-new-alert-banner-view" style="color:${color}">View</button>`,
+            `<div class="wx-new-alert-pill-text">${locHtml}</div>`,
             `<div class="wx-new-alert-banner-progress" style="background:${color}"></div>`,
         ].join('');
 
         const dismiss = () => {
             if (banner._dismissTimer) clearTimeout(banner._dismissTimer);
             banner.classList.add('is-dismissing');
-            banner.addEventListener('animationend', () => banner.remove(), { once: true });
+            banner.addEventListener('animationend', () => {
+                banner.remove();
+                _updateBannerOverflowIndicator();
+            }, { once: true });
         };
 
-        banner.querySelector('.wx-new-alert-banner-view').addEventListener('click', () => {
+        const activateBannerAction = () => {
             const center = _alertFeatureCenterLatLng(feat);
             if (!center) return;
             // Dismiss every other queued banner — user committed to this one.
@@ -1926,11 +2046,469 @@
                     _openAlertsPagerAt(center);
                 }
             });
+        };
+
+        // Explicitly wire the View button to the same action path used by banner clicks.
+        const viewBtn = banner.querySelector('.wx-new-alert-banner-view');
+        if (viewBtn) {
+            viewBtn.addEventListener('click', (evt) => {
+                evt.preventDefault();
+                evt.stopPropagation();
+                activateBannerAction();
+            });
+        }
+
+        // Click anywhere on the banner to zoom — inner View button still works
+        // because both now call the same shared action path.
+        banner.style.cursor = 'pointer';
+        banner.addEventListener('click', (evt) => {
+            // Ignore clicks on the progress bar (purely decorative).
+            if (evt.target.closest('.wx-new-alert-banner-progress')) return;
+            activateBannerAction();
         });
 
         banner._dismissTimer = setTimeout(dismiss, ALERT_NOTIFY_DISMISS_MS);
         stack.appendChild(banner);
+        _updateBannerOverflowIndicator();
     }
+
+    // Stacked pill banners are capped at MAX_VISIBLE; older queued banners hide
+    // and a "+N more" pill replaces them. Banners self-dismiss on timeout.
+    const _BANNER_MAX_VISIBLE = 3;
+    function _updateBannerOverflowIndicator() {
+        const stack = byId('wx-new-alert-stack');
+        if (!stack) return;
+        const banners = Array.from(stack.querySelectorAll('.wx-new-alert-banner'))
+            .filter((b) => !b.classList.contains('is-dismissing'));
+        let overflow = stack.querySelector('.wx-new-alert-overflow');
+        banners.forEach((b, i) => {
+            b.style.display = i < _BANNER_MAX_VISIBLE ? '' : 'none';
+        });
+        const hidden = Math.max(0, banners.length - _BANNER_MAX_VISIBLE);
+        if (hidden > 0) {
+            if (!overflow) {
+                overflow = document.createElement('div');
+                overflow.className = 'wx-new-alert-overflow';
+                stack.appendChild(overflow);
+            } else if (overflow.parentNode !== stack || overflow !== stack.lastElementChild) {
+                stack.appendChild(overflow);
+            }
+            overflow.textContent = `+${hidden} more new alert${hidden === 1 ? '' : 's'}`;
+        } else if (overflow) {
+            overflow.remove();
+        }
+    }
+
+    // ── Active Warnings Panel (third sidebar column) ─────────────────────────
+    // Persistent index of currently-active warnings. Populated from
+    // _allAlertFeatures whenever alerts refresh. Auto-shows when ≥1 row
+    // matches the active filter; user-collapsed state is preserved.
+    const ACTIVE_WARNING_SEVERE_EVENTS = new Set([
+        'Tornado Warning',
+        'Severe Thunderstorm Warning',
+        'Flash Flood Warning',
+    ]);
+    // Per-pill event matchers for the Warnings tab (TOR / SVR / FFW / ALL).
+    const _WARN_FILTER_EVENT_TYPES = {
+        tor: 'Tornado Warning',
+        svr: 'Severe Thunderstorm Warning',
+        ffw: 'Flash Flood Warning',
+    };
+    const _warningsFilterEnabled = new Set(['tor', 'svr', 'ffw']); // all enabled by default
+    const _warningsKnownIds = new Set(); // ids we've already rendered (to flag is-new)
+
+    function _formatRelativeTime(ms) {
+        if (!Number.isFinite(ms)) return '';
+        const sec = Math.round(ms / 1000);
+        const abs = Math.abs(sec);
+        if (abs < 60) return `${sec}s`;
+        const min = Math.round(sec / 60);
+        if (Math.abs(min) < 60) return `${min}m`;
+        const hr = Math.round(min / 60);
+        if (Math.abs(hr) < 24) return `${hr}h`;
+        const day = Math.round(hr / 24);
+        return `${day}d`;
+    }
+
+    // Format an absolute timestamp as "HH:mm TZ" (24-hr, browser locale TZ
+    // abbreviation, e.g. "14:32 EDT"). Used by the Warnings list "Issued ..."
+    // line so users see both relative age and exact issuance time.
+    function _formatLocalTimeWithTz(ms) {
+        if (!Number.isFinite(ms)) return '';
+        const d = new Date(ms);
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        let tz = '';
+        try {
+            const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(d);
+            tz = parts.find(p => p.type === 'timeZoneName')?.value || '';
+        } catch (_) { /* fallback to no tz */ }
+        return tz ? `${hh}:${mm} ${tz}` : `${hh}:${mm}`;
+    }
+
+    function _formatCountdown(ms) {
+        if (!Number.isFinite(ms) || ms <= 0) return 'expired';
+        const sec = Math.floor(ms / 1000);
+        const min = Math.floor(sec / 60);
+        if (min < 60) return `${min}m`;
+        const hr = Math.floor(min / 60);
+        const remMin = min - hr * 60;
+        return remMin ? `${hr}h ${remMin}m` : `${hr}h`;
+    }
+
+    function _summarizeAreaDesc(areaDesc) {
+        const raw = String(areaDesc || '').replace(/\s*;\s*/g, ', ').trim();
+        if (!raw) return '';
+        const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
+        const byState = new Map();
+        const states = [];
+        let lastState = null;
+        for (const part of parts) {
+            const m = part.match(/^([A-Z]{2})$/);
+            if (m) {
+                lastState = m[1];
+                if (!byState.has(lastState)) {
+                    byState.set(lastState, []);
+                    states.push(lastState);
+                }
+                continue;
+            }
+            // County name preceding a state token; we'll attach it when we hit one.
+            if (lastState === null) lastState = '__';
+            if (!byState.has(lastState)) {
+                byState.set(lastState, []);
+                states.push(lastState);
+            }
+            byState.get(lastState).push(part);
+        }
+        // Fall back if parsing yielded nothing useful.
+        if (!states.length) return raw;
+        const stateNames = states.filter((s) => s !== '__');
+        const stateLabel = stateNames.length ? stateNames.join(' · ') : '';
+        // Show first up to 3 counties across all states; truncate with "+N".
+        const allCounties = states.flatMap((s) => byState.get(s) || []);
+        const head = allCounties.slice(0, 3).join(', ');
+        const more = allCounties.length > 3 ? ` +${allCounties.length - 3}` : '';
+        const counties = head ? `${head}${more}` : '';
+        if (counties && stateLabel) return `${counties} · ${stateLabel}`;
+        return counties || stateLabel || raw;
+    }
+
+    function _activeWarningsForFilter() {
+        const features = Array.isArray(_allAlertFeatures) ? _allAlertFeatures : [];
+        const now = Date.now();
+        const filtered = features.filter((f) => {
+            const p = f?.properties || {};
+            if (!_matchesWarningSubtypeFilter(f)) return false;
+            const expiresMs = p.expires ? Date.parse(p.expires) : NaN;
+            if (Number.isFinite(expiresMs) && expiresMs <= now) return false;
+            return true;
+        });
+        // Sort: active Tornado Warnings always pinned to the top (newest first),
+        // then everything else by issuance time descending.
+        filtered.sort((a, b) => {
+            const aTor = String(a?.properties?.event || '') === 'Tornado Warning' ? 0 : 1;
+            const bTor = String(b?.properties?.event || '') === 'Tornado Warning' ? 0 : 1;
+            if (aTor !== bTor) return aTor - bTor;
+            const sa = Date.parse(a?.properties?.sent || '') || 0;
+            const sb = Date.parse(b?.properties?.sent || '') || 0;
+            return sb - sa;
+        });
+        return filtered;
+    }
+
+    // Refresh the tiny count badge on each warning-filter pill (TOR/SVR/FFW/ALL).
+    // Counts ignore the active filter so users can see all buckets at a glance.
+    function _updateWarningFilterCounts(alertsEnabled) {
+        const features = (alertsEnabled && Array.isArray(_allAlertFeatures)) ? _allAlertFeatures : [];
+        const now = Date.now();
+        const counts = { tor: 0, svr: 0, ffw: 0 };
+        for (const f of features) {
+            const p = f?.properties || {};
+            const expiresMs = p.expires ? Date.parse(p.expires) : NaN;
+            if (Number.isFinite(expiresMs) && expiresMs <= now) continue;
+            const event = String(p.event || '');
+            if (event === 'Tornado Warning') counts.tor += 1;
+            else if (event === 'Severe Thunderstorm Warning') counts.svr += 1;
+            else if (event === 'Flash Flood Warning') counts.ffw += 1;
+        }
+        document.querySelectorAll('[data-warn-filter-count]').forEach((el) => {
+            const key = el.getAttribute('data-warn-filter-count');
+            el.textContent = String(counts[key] ?? 0);
+        });
+    }
+
+    function _updateWarningFilterRowVisibility() {
+        const filterRow = byId('wx-warn-filter-row');
+        if (!filterRow) return;
+        const filterContainer = byId('weather-alerts-filter-options');
+        if (filterContainer?.hidden) {
+            filterRow.style.display = 'none';
+            return;
+        }
+        const checkedCategories = _getCheckedAlertCategories();
+        // Only show filter row if ONLY "Severe Weather Warnings" is checked
+        const onlyShowSWW = checkedCategories.length === 1 && checkedCategories[0] === 'Severe Weather Warnings';
+        filterRow.style.display = onlyShowSWW ? 'flex' : 'none';
+    }
+
+    function _updateAlertFilterOptionsVisibility() {
+        const allAlertsEl = byId('weather-alerts-all');
+        const showFiltersEl = byId('weather-alerts-show-filters');
+        const filterContainer = byId('weather-alerts-filter-options');
+        if (!allAlertsEl || !showFiltersEl || !filterContainer) return;
+
+        // If all alerts are selected, default to hidden filters unless user explicitly toggles on.
+        const shouldShow = !allAlertsEl.checked || !!showFiltersEl.checked;
+        filterContainer.hidden = !shouldShow;
+        _updateWarningFilterRowVisibility();
+    }
+
+    function _renderActiveWarningsPanel() {
+        const list = byId('wx-warnings-list');
+        const empty = byId('wx-warnings-empty');
+        const countEl = byId('wx-warnings-count');
+        const tabBtn = byId('wx-right-tab-btn-warnings');
+        if (!list) return;
+
+        const alertsEnabled = _isTypeEnabled('alerts');
+        const items = alertsEnabled ? _activeWarningsForFilter() : [];
+
+        // Update per-pill counts (TOR/SVR/FFW/ALL) and the tab badge.
+        _updateWarningFilterCounts(alertsEnabled);
+
+        // Sync sidebar checkboxes with current filter state
+        document.querySelectorAll('.wx-warn-filter-ck').forEach((ck) => {
+            const key = ck.getAttribute('data-warn-filter');
+            const isEnabled = _warningsFilterEnabled.has(key);
+            ck.checked = isEnabled;
+        });
+
+        // Sync right panel buttons with current filter state
+        document.querySelectorAll('[data-warn-filter]').forEach((el) => {
+            const key = el.getAttribute('data-warn-filter');
+            if (key === 'tor' || key === 'svr' || key === 'ffw') {
+                const isEnabled = _warningsFilterEnabled.has(key);
+                el.classList.toggle('is-active', isEnabled);
+                el.setAttribute('aria-pressed', isEnabled ? 'true' : 'false');
+            }
+        });
+
+        // Update count badge on the Warnings tab.
+        if (countEl) {
+            if (items.length > 0) {
+                countEl.textContent = String(items.length);
+                countEl.hidden = false;
+            } else {
+                countEl.hidden = true;
+            }
+        }
+
+        if (items.length === 0) {
+            list.innerHTML = '';
+            if (empty) empty.style.display = 'block';
+            if (tabBtn) tabBtn.classList.remove('has-attention');
+            _warningsKnownIds.clear();
+            return;
+        }
+        if (empty) empty.style.display = 'none';
+
+        // Pulse the Warnings tab when a brand-new severe row arrives while the
+        // user is on a different tab.
+        const prevIds = new Set(_warningsKnownIds);
+        const hasNewSevere = items.some((feat) => {
+            const p = feat?.properties || {};
+            const id = feat.id || `${p.event || ''}|${p.sent || ''}|${p.areaDesc || ''}`;
+            return ACTIVE_WARNING_SEVERE_EVENTS.has(String(p.event || '')) && !prevIds.has(id);
+        });
+        if (tabBtn) {
+            const active = tabBtn.classList.contains('is-active');
+            if (hasNewSevere && !active) tabBtn.classList.add('has-attention');
+        }
+
+        const now = Date.now();
+        const seenIdsThisRender = new Set();
+        list.innerHTML = items.map((feat) => {
+            const p = feat.properties || {};
+            const id = feat.id || `${p.event || ''}|${p.sent || ''}|${p.areaDesc || ''}`;
+            seenIdsThisRender.add(id);
+            const isNew = !_warningsKnownIds.has(id);
+            const event = p.event || 'Unknown Alert';
+            const color = ALERT_COLORS[event] || ALERT_DEFAULT;
+            const area = _summarizeAreaDesc(p.areaDesc);
+            const expiresMs = p.expires ? Date.parse(p.expires) : NaN;
+            const sentMs = p.sent ? Date.parse(p.sent) : NaN;
+            const countdownMs = Number.isFinite(expiresMs) ? expiresMs - now : NaN;
+            const urgent = Number.isFinite(countdownMs) && countdownMs <= 15 * 60_000;
+            const issuedRel = Number.isFinite(sentMs) ? `Issued ${_formatRelativeTime(now - sentMs)} ago at ${_formatLocalTimeWithTz(sentMs)}` : '';
+            return [
+                `<div class="wx-warn-row${isNew ? ' is-new' : ''}" data-feat-id="${_escapeHtml(id)}" style="border-left-color:${color}">`,
+                `  <div class="wx-warn-row-head">`,
+                `    <span class="wx-warn-event" style="color:${color}">${_escapeHtml(event)}</span>`,
+                `    <span class="wx-warn-countdown${urgent ? ' is-urgent' : ''}">${_escapeHtml(_formatCountdown(countdownMs))}</span>`,
+                `  </div>`,
+                area ? `  <div class="wx-warn-area">${_escapeHtml(area)}</div>` : '',
+                `  <div class="wx-warn-actions">`,
+                `    <span class="wx-warn-issued">${_escapeHtml(issuedRel)}</span>`,
+                `    <button type="button" class="wx-warn-zoom" data-warn-zoom="${_escapeHtml(id)}">Zoom To Alert</button>`,
+                `  </div>`,
+                `</div>`,
+            ].join('');
+        }).join('');
+
+        // Refresh known-ids set so next render only flashes truly new rows.
+        _warningsKnownIds.clear();
+        seenIdsThisRender.forEach((id) => _warningsKnownIds.add(id));
+    }
+
+    function _wireActiveWarningsPanel() {
+        const pane = byId('wx-right-pane-warnings');
+        const list = byId('wx-warnings-list');
+        if (!pane || !list) return;
+
+        // Filter buttons in the right pane
+        const filterBtns = pane.querySelectorAll('[data-warn-filter]');
+        filterBtns.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const key = btn.getAttribute('data-warn-filter');
+                if (key === 'tor' || key === 'svr' || key === 'ffw') {
+                    // Multi-select: toggle this filter on/off
+                    if (_warningsFilterEnabled.has(key)) {
+                        _warningsFilterEnabled.delete(key);
+                    } else {
+                        _warningsFilterEnabled.add(key);
+                    }
+                    btn.classList.toggle('is-active', _warningsFilterEnabled.has(key));
+                    btn.setAttribute('aria-pressed', _warningsFilterEnabled.has(key) ? 'true' : 'false');
+                    // Update sidebar checkboxes to match
+                    const sidebarCk = document.querySelector(`.wx-warn-filter-ck[data-warn-filter="${key}"]`);
+                    if (sidebarCk) sidebarCk.checked = _warningsFilterEnabled.has(key);
+                    _warningsKnownIds.clear();
+                    if (_alertsFullBaseFeatures.length || _alertsDisplayBaseFeatures.length) {
+                        _applyInMemoryAlertCategoryFilter();
+                    } else {
+                        _renderActiveWarningsPanel();
+                    }
+                }
+            });
+        });
+
+        // Zoom-to-alert delegation — clicking anywhere on the row triggers the
+        // same action as the inner Zoom button (which still works via bubbling).
+        list.addEventListener('click', (evt) => {
+            const row = evt.target.closest('.wx-warn-row');
+            if (!row) return;
+            evt.preventDefault();
+            const id = row.getAttribute('data-feat-id');
+            if (!id) return;
+            const feat = (_allAlertFeatures || []).find((f) => {
+                const fId = f.id || `${f.properties?.event || ''}|${f.properties?.sent || ''}|${f.properties?.areaDesc || ''}`;
+                return fId === id;
+            });
+            if (!feat) return;
+            const center = _alertFeatureCenterLatLng(feat);
+            if (!center) return;
+            map.flyTo(center, Math.max(map.getZoom(), 9), { duration: 1.0 });
+            map.once('moveend', () => {
+                _openAlertsPagerAt(center);
+                _ensureRadarOverlayOn();
+            });
+        });
+    }
+
+    function _wireSidebarWarningFilterCheckboxes() {
+        const filterCheckboxes = document.querySelectorAll('.wx-warn-filter-ck');
+        if (!filterCheckboxes.length) return;
+        filterCheckboxes.forEach((ck) => {
+            ck.addEventListener('change', () => {
+                const key = ck.getAttribute('data-warn-filter');
+                if (ck.checked) {
+                    _warningsFilterEnabled.add(key);
+                } else {
+                    _warningsFilterEnabled.delete(key);
+                }
+                _warningsKnownIds.clear();
+                if (_alertsFullBaseFeatures.length || _alertsDisplayBaseFeatures.length) {
+                    _applyInMemoryAlertCategoryFilter();
+                } else {
+                    _renderActiveWarningsPanel();
+                }
+            });
+        });
+    }
+
+    function _wireRightSidebarTabs() {
+        const tabs = document.querySelectorAll('.wx-right-tab[data-right-tab]');
+        if (!tabs.length) return;
+        const panes = {
+            layers: byId('wx-right-pane-layers'),
+            warnings: byId('wx-right-pane-warnings'),
+            styling: byId('wx-right-pane-styling'),
+        };
+        tabs.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                if (btn.hidden) return;
+                const target = btn.getAttribute('data-right-tab');
+                tabs.forEach((b) => {
+                    const active = b === btn;
+                    b.classList.toggle('is-active', active);
+                    b.setAttribute('aria-selected', active ? 'true' : 'false');
+                    if (active) b.classList.remove('has-attention');
+                });
+                Object.entries(panes).forEach(([key, el]) => {
+                    if (!el) return;
+                    const show = key === target;
+                    el.hidden = !show;
+                    el.classList.toggle('is-active', show);
+                });
+            });
+        });
+    }
+
+    // Show/hide secondary tabs based on which weather mode is active.
+    // Alerts mode -> Warnings tab; Current/SPC/MRMS -> Styling placeholder.
+    // If the currently active tab becomes hidden, fall back to Layers.
+    function _updateRightTabsAvailability() {
+        const alertsOn = _isTypeEnabled('alerts');
+        const styleModeOn = _isTypeEnabled('current') || _isTypeEnabled('spc') || _isTypeEnabled('mrms');
+
+        const warnBtn = byId('wx-right-tab-btn-warnings');
+        const styleBtn = byId('wx-right-tab-btn-styling');
+        const warnPane = byId('wx-right-pane-warnings');
+        const stylePane = byId('wx-right-pane-styling');
+
+        const showWarn = alertsOn;
+        const showStyle = !alertsOn && styleModeOn;
+
+        if (warnBtn) warnBtn.hidden = !showWarn;
+        if (styleBtn) styleBtn.hidden = !showStyle;
+
+        // If active tab is now hidden, switch to Layers.
+        const tabs = [
+            { btn: byId('wx-right-tab-btn-layers'), pane: byId('wx-right-pane-layers'), key: 'layers' },
+            { btn: warnBtn, pane: warnPane, key: 'warnings' },
+            { btn: styleBtn, pane: stylePane, key: 'styling' },
+        ];
+        const active = tabs.find((t) => t.btn?.classList.contains('is-active'));
+        if (active && active.btn?.hidden) {
+            tabs.forEach((t) => {
+                if (!t.btn || !t.pane) return;
+                const isLayers = t.key === 'layers';
+                t.btn.classList.toggle('is-active', isLayers);
+                t.btn.setAttribute('aria-selected', isLayers ? 'true' : 'false');
+                t.pane.hidden = !isLayers;
+                t.pane.classList.toggle('is-active', isLayers);
+            });
+        }
+    }
+
+    // Ticker: refresh the panel once a minute so countdown text stays current
+    // even between alert refreshes.
+    setInterval(() => {
+        if (byId('wx-right-pane-warnings')) {
+            _renderActiveWarningsPanel();
+        }
+    }, 60_000);
 
     // ── Console test helpers (always exposed on window) ──────────────────────
     // _testAlertBanner(eventOrFeat?, areaDesc?, severity?)
@@ -2044,6 +2622,7 @@
             const countEl = byId('weather-alerts-count');
             if (countEl) countEl.textContent = '0 active alert(s)';
             setLegend(null);
+            _renderActiveWarningsPanel();
             return;
         }
         if (!silentStatus) setStatus('Loading alerts...');
@@ -2117,6 +2696,7 @@
             buildAlertsLegend(fullFeatures);
             const countEl = byId('weather-alerts-count');
             if (countEl) countEl.textContent = `${fullFeatures.length} active alert(s)`;
+            _renderActiveWarningsPanel();
             if (!silentStatus) setStatus(`Alerts updated at ${new Date().toLocaleTimeString()}.`);
             _setReliability('Alerts', 'NWS, IEM', Date.now());
         } catch (err) {
@@ -2235,6 +2815,10 @@
         return parseInt(byId('weather-spc-day')?.value || '1', 10);
     }
 
+    function _getSpcFireDay() {
+        return parseInt(byId('weather-spc-fire-day')?.value || '1', 10);
+    }
+
     function _getAllowedSpcConvectiveHazards(day = _getSpcDay()) {
         if (day <= 2) return ['cat', 'torn', 'cigtorn', 'wind', 'cigwind', 'hail', 'cighail'];
         if (day === 3) return ['cat', 'prob'];
@@ -2254,9 +2838,13 @@
         return Array.from(document.querySelectorAll('.weather-spc-convective-toggle:checked')).map((el) => el.value);
     }
 
+    function _getCheckedSpcFireHazards() {
+        return Array.from(document.querySelectorAll('.weather-spc-fire-toggle:checked')).map((el) => el.value);
+    }
+
     function _getSelectedSpcHazards(day = _getSpcDay()) {
-        const fireHazard = byId('weather-spc-fire')?.value || '';
-        if (fireHazard) return [fireHazard];
+        const fireHazards = _getCheckedSpcFireHazards();
+        if (fireHazards.length) return fireHazards;
         const allowed = new Set(_getAllowedSpcConvectiveHazards(day));
         return _getCheckedSpcConvectiveHazards().filter((hazard) => allowed.has(hazard));
     }
@@ -2285,33 +2873,72 @@
         });
 
         if (resetSelection) {
-            const fireSelect = byId('weather-spc-fire');
-            if (fireSelect) fireSelect.value = '';
+            // Clear all fire weather checkboxes
+            document.querySelectorAll('.weather-spc-fire-toggle').forEach((el) => { el.checked = false; });
         }
     }
 
     function _syncSpcFireWeatherOptions(resetSelection = false) {
-        const day = _getSpcDay();
-        const dayStr = String(day);
-        const fireSelect = byId('weather-spc-fire');
-        if (!fireSelect) return;
+        const fireDay = parseInt(byId('weather-spc-fire-day')?.value || '1', 10);
+        const fireList = byId('weather-spc-fire-list');
+        if (!fireList) return;
 
-        // Show/hide fire weather options based on selected day
-        fireSelect.querySelectorAll('option').forEach((opt) => {
-            const daysAttr = opt.dataset.days || '';
-            const allowed = daysAttr.split(',').includes(dayStr);
-            opt.style.display = allowed ? '' : 'none';
+        // Show categorical fire weather products only for Days 3–8
+        fireList.querySelectorAll('.weather-spc-fire-row[data-categorical="1"]').forEach((row) => {
+            const visible = fireDay >= 3 && fireDay <= 8;
+            row.style.display = visible ? '' : 'none';
+            if (!visible) {
+                const input = row.querySelector('input[type="checkbox"]');
+                if (input) input.checked = false;
+            }
         });
 
-        // Clear selection if current option is not valid for this day
         if (resetSelection) {
-            fireSelect.value = '';
-        } else {
-            const currentDays = fireSelect.selectedOptions[0]?.dataset?.days || '';
-            if (currentDays && !currentDays.split(',').includes(dayStr)) {
-                fireSelect.value = '';
-            }
+            fireList.querySelectorAll('.weather-spc-fire-toggle').forEach((el) => { el.checked = false; });
         }
+    }
+
+    function _spcWatchTypeParam() {
+        const torOn = !!byId('weather-spc-watch-type-tor')?.checked;
+        const svrOn = !!byId('weather-spc-watch-type-svr')?.checked;
+        if (torOn && svrOn) return 'all';
+        if (torOn) return 'tor';
+        if (svrOn) return 'svr';
+        return '';
+    }
+
+    function _spcSupplementalSelections() {
+        return {
+            reportsEnabled: !!byId('weather-spc-show-reports')?.checked,
+            reportsDay: String(byId('weather-spc-reports-day')?.value || 'today').toLowerCase(),
+            reportsType: String(byId('weather-spc-reports-type')?.value || 'all').toLowerCase(),
+            mdsEnabled: !!byId('weather-spc-show-mds')?.checked,
+            watchesEnabled: !!byId('weather-spc-show-watches')?.checked,
+            watchMode: String(byId('weather-spc-watch-mode')?.value || 'polygon').toLowerCase(),
+            watchTypes: _spcWatchTypeParam(),
+        };
+    }
+
+    async function _fetchSpcReportsGeoJson(requestSeq, dayKey, reportType) {
+        const url = apiUrl(
+            `/api/data/spc/reports?day=${encodeURIComponent(dayKey)}`
+            + `&report_type=${encodeURIComponent(reportType || 'all')}`
+            + `&report_mode=filtered`
+        );
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const geojson = await resp.json();
+        if (requestSeq !== _spcRequestSeq || !_canApplySpcResponse()) return null;
+        return geojson;
+    }
+
+    async function _fetchSpcActiveProductGeoJson(requestSeq, product, query = '') {
+        const url = apiUrl(`/api/data/spc/active?product=${encodeURIComponent(product)}${query}`);
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const geojson = await resp.json();
+        if (requestSeq !== _spcRequestSeq || !_canApplySpcResponse()) return null;
+        return geojson;
     }
 
     async function _fetchSpcHazardGeoJson(requestSeq, day, hazard) {
@@ -2324,12 +2951,17 @@
 
     async function refreshSpc() {
         const day = _getSpcDay();
+        const fireDay = _getSpcFireDay();
         const hazards = _getSelectedSpcHazards(day);
+        const supplemental = _spcSupplementalSelections();
+        const hasSupplementalLayers = supplemental.reportsEnabled
+            || supplemental.mdsEnabled
+            || (supplemental.watchesEnabled && !!supplemental.watchTypes);
         const requestSeq = ++_spcRequestSeq;
         if (spcLayer) { map.removeLayer(spcLayer); spcLayer = null; }
 
         const countEl = byId('weather-spc-count');
-        if (!hazards.length) {
+        if (!hazards.length && !hasSupplementalLayers) {
             if (countEl) countEl.textContent = '0 feature(s)';
             setLegend(null);
             setMapEmptyMessage(null);
@@ -2337,15 +2969,27 @@
             return;
         }
 
-        setStatus(`Loading SPC day ${day} (${hazards.join(', ')})...`);
+        // Fire hazards use the fire day selector; convective hazards use the convective day
+        const areFireHazards = hazards.length > 0 && hazards.every((h) => _isSpcFireHazard(h));
+        const effectiveDay = areFireHazards ? fireDay : day;
+        const loadingParts = [];
+        if (hazards.length) loadingParts.push(`day ${effectiveDay} (${hazards.join(', ')})`);
+        if (supplemental.reportsEnabled) loadingParts.push(`reports:${supplemental.reportsDay}/${supplemental.reportsType}`);
+        if (supplemental.mdsEnabled) loadingParts.push('mds');
+        if (supplemental.watchesEnabled && supplemental.watchTypes) {
+            loadingParts.push(`watches:${supplemental.watchMode}/${supplemental.watchTypes}`);
+        }
+        setStatus(`Loading SPC ${loadingParts.join(' + ')}...`);
         try {
-            const requestedHazards = _buildSpcRequestHazards(day, hazards);
-            const results = await Promise.allSettled(
-                requestedHazards.map((item) =>
-                    _fetchSpcHazardGeoJson(requestSeq, day, item.hazard)
-                        .then((value) => ({ ...item, value }))
+            const requestedHazards = hazards.length ? _buildSpcRequestHazards(effectiveDay, hazards) : [];
+            const results = requestedHazards.length
+                ? await Promise.allSettled(
+                    requestedHazards.map((item) =>
+                        _fetchSpcHazardGeoJson(requestSeq, effectiveDay, item.hazard)
+                            .then((value) => ({ ...item, value }))
+                    )
                 )
-            );
+                : [];
 
             if (requestSeq !== _spcRequestSeq || !_canApplySpcResponse()) return;
 
@@ -2356,7 +3000,38 @@
                 .filter((result) => result.status === 'fulfilled' && result.value?.value)
                 .map((result) => result.value);
 
-            if (!payloads.length) {
+            let reportsGeojson = null;
+            let mdsGeojson = null;
+            let watchesGeojson = null;
+            const supplementalFetches = [];
+            if (supplemental.reportsEnabled) {
+                supplementalFetches.push(
+                    _fetchSpcReportsGeoJson(requestSeq, supplemental.reportsDay, supplemental.reportsType)
+                        .then((geojson) => { reportsGeojson = geojson; })
+                );
+            }
+            if (supplemental.mdsEnabled) {
+                supplementalFetches.push(
+                    _fetchSpcActiveProductGeoJson(requestSeq, 'mds')
+                        .then((geojson) => { mdsGeojson = geojson; })
+                );
+            }
+            if (supplemental.watchesEnabled && supplemental.watchTypes) {
+                const q = `&watch_mode=${encodeURIComponent(supplemental.watchMode || 'polygon')}`
+                    + `&watch_types=${encodeURIComponent(supplemental.watchTypes)}`;
+                supplementalFetches.push(
+                    _fetchSpcActiveProductGeoJson(requestSeq, 'watches', q)
+                        .then((geojson) => { watchesGeojson = geojson; })
+                );
+            }
+            if (supplementalFetches.length) {
+                const supplementalResults = await Promise.allSettled(supplementalFetches);
+                supplementalResults
+                    .filter((r) => r.status === 'rejected')
+                    .forEach((r) => console.error('[spc] Supplemental overlay load error:', r.reason));
+            }
+
+            if (!payloads.length && !hasSupplementalLayers) {
                 const err = failures[0]?.reason || new Error('No SPC data returned');
                 throw err;
             }
@@ -2425,20 +3100,72 @@
                 layerGroup.addLayer(geoLayer);
             });
 
+            if (reportsGeojson?.features?.length) {
+                const reportsLayer = L.geoJSON(reportsGeojson, {
+                    pointToLayer: (feat, latlng) => L.circleMarker(latlng, _spcReportMarkerStyle(feat)),
+                    onEachFeature: (feat, layer) => {
+                        layer.bindPopup(_spcReportPopup(feat));
+                    },
+                });
+                count += reportsGeojson.features.length;
+                layerGroup.addLayer(reportsLayer);
+            }
+
+            if (watchesGeojson?.features?.length) {
+                const watchesLayer = L.geoJSON(watchesGeojson, {
+                    style: _spcWatchStyle,
+                    onEachFeature: (feat, layer) => {
+                        layer.on('click', (evt) => _openSpcTextDetail(evt?.latlng, feat));
+                        layer.bindTooltip(String(feat?.properties?.short_label || feat?.properties?.event || 'Watch'), {
+                            sticky: true,
+                            opacity: 0.9,
+                            className: 'wx-alert-hover-tip',
+                        });
+                    },
+                });
+                count += watchesGeojson.features.length;
+                layerGroup.addLayer(watchesLayer);
+            }
+
+            if (mdsGeojson?.features?.length) {
+                const mdsLayer = L.geoJSON(mdsGeojson, {
+                    style: _spcMdStyle,
+                    onEachFeature: (feat, layer) => {
+                        layer.on('click', (evt) => _openSpcTextDetail(evt?.latlng, feat));
+                        layer.bindTooltip(String(feat?.properties?.short_label || feat?.properties?.event || 'MD'), {
+                            sticky: true,
+                            opacity: 0.9,
+                            className: 'wx-alert-hover-tip',
+                        });
+                    },
+                });
+                count += mdsGeojson.features.length;
+                layerGroup.addLayer(mdsLayer);
+            }
+
             spcLayer = layerGroup;
             if (byId('weather-show-spc')?.checked) {
                 spcLayer.addTo(map);
                 _applySpcCigPatternsToGroup(spcLayer);
             }
 
-            if (hazards.length === 1 && _isSpcFireHazard(hazards[0])) buildSpcFireLegend(hazards[0]);
-            else if (hazards.includes('cat')) buildSpcCatLegend();
-            else {
-                // Pick a single hazard-specific prob legend based on the base
-                // probabilistic hazard selected (cigtorn etc. map back to torn).
-                const baseProbHazard = _getSpcProbLegendHazard(hazards);
-                if (baseProbHazard) buildSpcProbLegend(baseProbHazard);
-                else setLegend(null);
+            if (hazards.length === 1 && _isSpcFireHazard(hazards[0])) {
+                buildSpcFireLegend(hazards[0]);
+            } else {
+                if (hazards.includes('cat')) {
+                    // For Day 4–8, use unique legend; otherwise, use categorical
+                    if (effectiveDay >= 4 && effectiveDay <= 8) {
+                        buildSpcProbLegend('cat', effectiveDay);
+                    } else {
+                        buildSpcCatLegend();
+                    }
+                } else {
+                    // Pick a single hazard-specific prob legend based on the base
+                    // probabilistic hazard selected (cigtorn etc. map back to torn).
+                    const baseProbHazard = _getSpcProbLegendHazard(hazards);
+                    if (baseProbHazard) buildSpcProbLegend(baseProbHazard, effectiveDay);
+                    else setLegend(null);
+                }
             }
 
             if (countEl) countEl.textContent = `${count} feature(s)`;
@@ -2446,16 +3173,28 @@
                 // Prefer the SPC source LABEL (e.g. "Less Than 2% All Areas")
                 // when the outlook returned a placeholder feature.
                 const uniqueLabels = Array.from(new Set(placeholderLabels));
-                const hazardLabels = hazards.map((h) => _getSpcConvectiveLabel(h, day) || h).join(', ');
-                const msg = uniqueLabels.length
-                    ? `SPC Day ${day} ${hazardLabels}: ${uniqueLabels.join(' · ')}`
-                    : `No SPC data available for Day ${day} ${hazardLabels}`;
+                const hazardLabels = hazards.map((h) => _getSpcConvectiveLabel(h, effectiveDay) || h).join(', ');
+                let msg = '';
+                if (hazards.length > 0) {
+                    msg = uniqueLabels.length
+                        ? `SPC Day ${effectiveDay} ${hazardLabels}: ${uniqueLabels.join(' · ')}`
+                        : `No SPC data available for Day ${effectiveDay} ${hazardLabels}`;
+                } else {
+                    msg = 'No SPC supplemental overlays available for the current selection.';
+                }
                 setMapEmptyMessage(msg);
             } else {
                 setMapEmptyMessage(null);
             }
-            setStatus(`SPC day ${day} (${hazards.join(', ')}) updated at ${new Date().toLocaleTimeString()}.`);
-            _setReliability(`SPC Day ${day} ${hazards.join(', ')}`, 'NOAA SPC', Date.now());
+            const statusBits = [];
+            if (hazards.length) statusBits.push(`Day ${effectiveDay}: ${hazards.join(', ')}`);
+            if (supplemental.reportsEnabled) statusBits.push(`Reports ${supplemental.reportsDay}/${supplemental.reportsType}`);
+            if (supplemental.mdsEnabled) statusBits.push('MDs');
+            if (supplemental.watchesEnabled && supplemental.watchTypes) {
+                statusBits.push(`Watches ${supplemental.watchMode}/${supplemental.watchTypes}`);
+            }
+            setStatus(`SPC ${statusBits.join(' + ')} updated at ${new Date().toLocaleTimeString()}.`);
+            _setReliability(`SPC ${statusBits.join(' + ')}`, 'NOAA SPC', Date.now());
         } catch (err) {
             if (requestSeq !== _spcRequestSeq) return;
             console.error('[spc] Load error:', err);
@@ -2557,7 +3296,7 @@
     }
 
     function _updateTypeSections() {
-        ['current', 'alerts', 'spc', 'mrms'].forEach((type) => {
+        ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'].forEach((type) => {
             const section = byId(`wx-section-${type}`);
             if (section) section.style.display = _isTypeEnabled(type) ? '' : 'none';
         });
@@ -2597,6 +3336,7 @@
         });
         const empty = byId('wx-side-groups-empty');
         if (empty) empty.style.display = anyVisible ? 'none' : '';
+        _updateRightTabsAvailability();
     }
 
     function _updateSubOptionVisibility() {
@@ -2651,6 +3391,9 @@
 
         if (!spcEnabled) setMapEmptyMessage(null);
 
+        // Hide warnings panel when alerts are disabled.
+        if (!alertsEnabled) _renderActiveWarningsPanel();
+
         if (alertsEnabled) {
             loadAlerts();
         }
@@ -2674,6 +3417,25 @@
 
     function applySpcOpacity(val) {
         spcOpacity = parseFloat(val);
+        if (spcLayer) {
+            if (typeof spcLayer.eachLayer === 'function') {
+                spcLayer.eachLayer((layer) => {
+                    if (typeof layer.setStyle === 'function') {
+                        const styleFn = layer._spcStyleFn || _getSpcStyleFn(layer._spcHazard || 'cat');
+                        layer.setStyle(styleFn);
+                    }
+                });
+                _applySpcCigPatternsToGroup(spcLayer);
+            } else if (typeof spcLayer.setStyle === 'function') {
+                spcLayer.setStyle(_getSpcStyleFn(_getPrimarySpcHazard()));
+            }
+        }
+    }
+
+    function applySpcStrokeOpacity(val) {
+        const parsed = parseFloat(val);
+        if (!Number.isFinite(parsed)) return;
+        spcStrokeOpacity = parsed;
         if (spcLayer) {
             if (typeof spcLayer.eachLayer === 'function') {
                 spcLayer.eachLayer((layer) => {
@@ -3368,29 +4130,30 @@
         const requestSeq = ++_surfaceRequestSeq;
         setStatus(`Loading surface ${product} for ${region}...`);
         try {
-            const url = apiUrl(`/api/data/surface?region=${encodeURIComponent(region)}&product=${encodeURIComponent(product)}`);
+            const url = apiUrl(`/api/data/surface?region=${encodeURIComponent(region)}` +
+                `&product=${encodeURIComponent(product)}`);
             const resp = await fetch(url);
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json();
-
-            // Ignore stale responses that complete after product/tab changes.
-            if (requestSeq !== _surfaceRequestSeq || !_canApplySurfaceResponse(region, product)) return;
-
-            _surfaceStations = data.stations || [];
-            if (_activeSurfaceGradient()) {
-                await _ensureGradientStations(product, region);
-                if (requestSeq !== _surfaceRequestSeq || !_canApplySurfaceResponse(region, product)) return;
+            if (!resp.ok) {
+                const e = await resp.json().catch(() => ({}));
+                throw new Error(e.detail || resp.statusText);
             }
-            _renderSurfaceMarkers(_surfaceStations);
+            const data = await resp.json();
+            if (!_canApplySurfaceResponse(region, product)) return;
 
-            // Legend
-            const anchors = _SURFACE_COLORMAPS[product] || _SURFACE_COLORMAPS['temperature'];
-            buildSurfaceLegend(data.unit || '°F', anchors, product);
+            const stations = Array.isArray(data?.stations) ? data.stations : [];
+            _surfaceStations = stations;
+            _renderSurfaceMarkers(stations);
+
+            const unit = _SURFACE_PRODUCTS_UNITS[product] || '';
+            const anchors = _SURFACE_COLORMAPS[product] || _SURFACE_COLORMAPS.temperature;
+            buildSurfaceLegend(unit, anchors, product);
 
             const countEl = byId('weather-surface-count');
-            if (countEl) countEl.textContent = `${_surfaceStations.length} station(s)`;
-            setStatus(`Surface ${product} updated at ${new Date().toLocaleTimeString()}.`);
-            _setReliability(`Surface ${product}`, 'IEM ASOS, AWC METAR', Date.now());
+            if (countEl) countEl.textContent = `${stations.length} station(s)`;
+            setStatus(`Surface ${product} for ${region} updated at ${new Date().toLocaleTimeString()}.`);
+            _setReliability(`Surface ${product}`, 'IEM', Date.now());
+
+            await _ensureGradientStations(product, region);
         } catch (err) {
             if (requestSeq !== _surfaceRequestSeq) return;
             console.error('[surface] Load error:', err);
@@ -3889,6 +4652,7 @@
             _allAlertFeatures = filtered;
             _alertsDisplayFeatures = filtered;
             buildAlertsLegend(filtered);
+            _renderActiveWarningsPanel();
         } else if (layerType === 'spc') {
             if (spcLayer) { map.removeLayer(spcLayer); spcLayer = null; }
             const hazard = _getPrimarySpcHazard();
@@ -3981,7 +4745,8 @@
         const reqId = `arc_mrms_${Date.now()}`;
         const url = apiUrl(
             `/api/archive/mrms?product=${encodeURIComponent(product)}` +
-            `&date_from=${encodeURIComponent(dtFrom)}&date_to=${encodeURIComponent(dtTo)}` +
+            `&date_from=${encodeURIComponent(dtFrom)}` +
+            `&date_to=${encodeURIComponent(dtTo)}` +
             `&max_frames=12&south=${bounds.getSouth().toFixed(4)}&west=${bounds.getWest().toFixed(4)}` +
             `&north=${bounds.getNorth().toFixed(4)}&east=${bounds.getEast().toFixed(4)}` +
             `&request_id=${reqId}`
@@ -4637,6 +5402,8 @@
             } else {
                 _syncAllAlertsMaster();
             }
+            _updateAlertFilterOptionsVisibility();
+            _updateWarningFilterRowVisibility();
             if (_archiveMode && _archiveProductType === 'alerts' && _archiveFrames.length) {
                 renderArchiveFrame(_archiveFrameIndex);
             } else if (_isTypeEnabled('alerts')) {
@@ -4650,6 +5417,10 @@
         });
     });
 
+    byId('weather-alerts-show-filters')?.addEventListener('change', () => {
+        _updateAlertFilterOptionsVisibility();
+    });
+
     byId('weather-spc-day')?.addEventListener('change', () => {
         _syncSpcConvectiveOptions(true);
         _syncSpcFireWeatherOptions(true);
@@ -4659,12 +5430,19 @@
     document.querySelectorAll('.weather-spc-convective-toggle').forEach((el) => {
         el.addEventListener('change', () => {
             if (el.checked && byId('weather-spc-fire')) byId('weather-spc-fire').value = '';
-            // When a base hazard (cat/torn/wind/hail) is selected, deselect
-            // the other base hazards so only one legend is active at a time.
-            // CIG siblings (cigtorn/cigwind/cighail) are preserved when they
-            // belong to the newly-checked base hazard.
             const BASE_HAZARDS = ['cat', 'torn', 'wind', 'hail'];
-            if (el.checked && BASE_HAZARDS.includes(el.value)) {
+            const day = _getSpcDay();
+            // For Day 3, make Categorical and Probabilistic mutually exclusive
+            if (day === 3 && (el.value === 'cat' || el.value === 'prob')) {
+                if (el.checked) {
+                    document.querySelectorAll('.weather-spc-convective-toggle').forEach((other) => {
+                        if (other === el) return;
+                        if ((other.value === 'cat' || other.value === 'prob') && other.checked) {
+                            other.checked = false;
+                        }
+                    });
+                }
+            } else if (el.checked && BASE_HAZARDS.includes(el.value)) {
                 const keepCig = _SPC_CIG_OVERLAY_BY_HAZARD[el.value] || null;
                 document.querySelectorAll('.weather-spc-convective-toggle').forEach((other) => {
                     if (other === el) return;
@@ -4672,7 +5450,6 @@
                     if (BASE_HAZARDS.includes(val)) {
                         if (other.checked) other.checked = false;
                     } else if (val && val.startsWith('cig') && val !== keepCig) {
-                        // Drop CIG siblings belonging to the previously-selected base hazard
                         if (other.checked) other.checked = false;
                     }
                 });
@@ -4681,7 +5458,6 @@
             // probabilistic hazard is checked on Day 1 or Day 2. Users can still
             // uncheck it manually to hide the Sig layer.
             if (el.checked) {
-                const day = _getSpcDay();
                 if (day <= 2) {
                     const cigHazard = _SPC_CIG_OVERLAY_BY_HAZARD[el.value];
                     if (cigHazard) {
@@ -4696,13 +5472,19 @@
         });
     });
 
-    byId('weather-spc-fire')?.addEventListener('change', () => {
-        if (byId('weather-spc-fire')?.value) {
-            document.querySelectorAll('.weather-spc-convective-toggle').forEach((el) => {
-                el.checked = false;
-            });
-        }
-        if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) refreshSpc();
+    [
+        'weather-spc-show-reports',
+        'weather-spc-reports-day',
+        'weather-spc-reports-type',
+        'weather-spc-show-mds',
+        'weather-spc-show-watches',
+        'weather-spc-watch-mode',
+        'weather-spc-watch-type-tor',
+        'weather-spc-watch-type-svr',
+    ].forEach((id) => {
+        byId(id)?.addEventListener('change', () => {
+            if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) refreshSpc();
+        });
     });
 
     document.querySelectorAll('.weather-surface-product').forEach((el) => {
@@ -4732,6 +5514,7 @@
 
     byId('weather-opacity-alerts')?.addEventListener('input', (e) => applyAlertsOpacity(e.target.value));
     byId('weather-opacity-spc')?.addEventListener('input', (e) => applySpcOpacity(e.target.value));
+    byId('weather-opacity-spc-stroke')?.addEventListener('input', (e) => applySpcStrokeOpacity(e.target.value));
     byId('weather-opacity-surface-values')?.addEventListener('input', (e) => applySurfaceValueOpacity(e.target.value));
     byId('weather-opacity-surface-gradient')?.addEventListener('input', (e) => applySurfaceGradientOpacity(e.target.value));
     byId('weather-opacity-mrms')?.addEventListener('input', (e) => applyMrmsOpacity(e.target.value));
@@ -4877,9 +5660,6 @@
         const opacitySlider = byId('weather-alerts-radar-opacity');
         if (this.checked) {
             const opacity = parseFloat(opacitySlider?.value ?? 0.6);
-            // If a transient new-alert loop is running, retire it; the persistent
-            // overlay loop takes over.
-            _stopNewAlertRadarLoop();
             _radarOverlayStartLoop(opacity);
             if (opacityLabel) opacityLabel.style.display = '';
             if (opacitySlider) opacitySlider.style.display = '';
@@ -5013,7 +5793,7 @@
                 map.flyTo(center, Math.max(map.getZoom(), 9), { duration: 0.9 });
                 map.once('moveend', () => {
                     _openAlertsPagerAt(center);
-                    _startNewAlertRadarLoop();
+                    _ensureRadarOverlayOn();
                 });
                 return;
             }
@@ -5039,9 +5819,6 @@
 
     map.on('popupclose', () => {
         _activeAlertsPopup = null;
-        // Stop the short alert-context radar loop when the user dismisses
-        // the popup that triggered it (Zoom To Alert flow).
-        _stopNewAlertRadarLoop();
     });
 
     // ── Init ─────────────────────────────────────────────────────────────────
@@ -5056,6 +5833,12 @@
         updateMrmsSubControls();
         _wireSidebarToggle('weather-side-left', 'weather-side-toggle-left', '‹', '›');
         _wireSidebarToggle('weather-side-right', 'weather-side-toggle-right', '›', '‹');
+        _wireRightSidebarTabs();
+        _wireActiveWarningsPanel();
+        _wireSidebarWarningFilterCheckboxes();
+        _updateAlertFilterOptionsVisibility();
+        _updateWarningFilterRowVisibility();
+        _wireSpcUiParityHandlers();
         _citiesDensity = _readCitiesDensity();
         _updateCitiesDensityLabel();
         _surfaceDensity = _readObsDensity();
@@ -5068,14 +5851,28 @@
         _startReliabilityTicker();
     }
 
-    // ── Auto-refresh alerts every 15s for faster new-alert pickup ──
-    const ALERTS_AUTO_REFRESH_MS = 15_000;
+    // ── Auto-refresh alerts every 30s to match the OS-task backend cadence ──
+    const ALERTS_AUTO_REFRESH_MS = 30_000;
     setInterval(() => {
         if (_archiveMode) return;
         if (!_isTypeEnabled('alerts')) return;
         if (!_getCheckedAlertCategories().length) return;
         loadAlerts();
     }, ALERTS_AUTO_REFRESH_MS);
+
+    // Keep active SPC MD/watch overlays current so newly issued items appear
+    // and expired products are removed without a manual refresh.
+    const SPC_AUTO_REFRESH_MS = 60_000;
+    setInterval(() => {
+        if (_archiveMode) return;
+        if (!_isTypeEnabled('spc')) return;
+        if (!byId('weather-show-spc')?.checked) return;
+        const supplemental = _spcSupplementalSelections();
+        const needsActiveRefresh = supplemental.mdsEnabled
+            || (supplemental.watchesEnabled && !!supplemental.watchTypes);
+        if (!needsActiveRefresh) return;
+        refreshSpc();
+    }, SPC_AUTO_REFRESH_MS);
 
     init();
 
