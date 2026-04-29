@@ -1,11 +1,19 @@
 from config.geo_config import STATE_BOUNDS
 from font_utils import resolve_logo_path
 from satellite import satellite_utils as satellite_thredds_utils
-from radar import radar_utils as radar_thredds_utils
+import sys
+from io import StringIO as _StringIO
+
+# Suppress Py-ART license banner that prints to stderr on first import
+_stderr_cap = _StringIO()
+sys.stderr, _real_stderr = _stderr_cap, sys.stderr
+from radar import radar_utils as radar_thredds_utils  # noqa: E402
+
+sys.stderr = _real_stderr
+del _stderr_cap, _real_stderr, _StringIO
 import threading
 import shutil
 import os
-import sys
 import time as _time
 import uvicorn
 import glob
@@ -20,15 +28,6 @@ from io import StringIO
 
 # --- IMPORT YOUR UTILITIES ---
 from surface import surface_utils
-
-# Suppress Py-ART license header during threshold utils imports
-_old_stdout = sys.stdout
-_old_stderr = sys.stderr
-sys.stdout = StringIO()
-sys.stderr = StringIO()
-
-sys.stdout = _old_stdout
-sys.stderr = _old_stderr
 
 
 # Module state — initialized at startup
@@ -842,6 +841,10 @@ _SURFACE_PRODUCTS = {
     "visibility": {"col": "visibility", "unit": "mi", "anchors": "visibility"},
 }
 
+_SURFACE_CACHE_TTL_SECONDS = 300
+_surface_refresh_lock = threading.Lock()
+_surface_refresh_inflight = set()
+
 
 def _interpolate_color(anchors: list, value: float) -> str:
     """Map a numeric value to a hex color via piecewise linear interpolation."""
@@ -918,6 +921,51 @@ def _build_surface_stations(df, product: str) -> list:
         }
         stations.append(station)
     return stations
+
+
+def _refresh_surface_cache_async(
+    region_upper: str, product_lower: str, cache_file: str
+) -> None:
+    """Refresh stale surface cache in background (stale-while-revalidate)."""
+    cache_key = f"{region_upper}:{product_lower}"
+    try:
+        df = surface_utils.fetch_metar_data(region_upper)
+        stations = _build_surface_stations(df, product_lower)
+        result = {
+            "stations": stations,
+            "product": product_lower,
+            "unit": _SURFACE_PRODUCTS[product_lower]["unit"],
+            "region": region_upper,
+            "count": len(stations),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            with open(cache_file, "w", encoding="utf-8") as fh:
+                json.dump(result, fh)
+        except Exception:
+            pass
+    except Exception as exc:
+        print(f"[WARN] Surface background refresh failed ({cache_key}): {exc}")
+    finally:
+        with _surface_refresh_lock:
+            _surface_refresh_inflight.discard(cache_key)
+
+
+def _kickoff_surface_refresh_if_needed(
+    region_upper: str, product_lower: str, cache_file: str
+) -> None:
+    """Start at most one background refresh per region/product cache key."""
+    cache_key = f"{region_upper}:{product_lower}"
+    with _surface_refresh_lock:
+        if cache_key in _surface_refresh_inflight:
+            return
+        _surface_refresh_inflight.add(cache_key)
+    threading.Thread(
+        target=_refresh_surface_cache_async,
+        args=(region_upper, product_lower, cache_file),
+        name=f"surface-refresh-{region_upper}-{product_lower}",
+        daemon=True,
+    ).start()
 
 
 def _safe_float(row, col: str):
@@ -1365,14 +1413,19 @@ def get_data_spc_active(
         show_all or "svr" in watch_type_tokens or "severe" in watch_type_tokens
     )
 
+    # Pre-load county shapefile before parallel WOU fetch so threads don't race.
+    if watch_mode_key == "counties":
+        CensusCounties.load()
+
     try:
-        items, source = fetch_active_watch_items()
+        items, source = fetch_active_watch_items(
+            with_counties=(watch_mode_key == "counties")
+        )
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"SPC watches unavailable: {exc}")
 
     county_geoms = {}
     if watch_mode_key == "counties":
-        CensusCounties.load()
         county_geoms = getattr(CensusCounties, "_fips_map", {}) or {}
 
     features = []
@@ -1463,7 +1516,7 @@ def get_data_spc_active(
 
 @app.get("/api/data/surface")
 def get_data_surface(region: str = "NC", product: str = "temperature"):
-    """Return surface observations JSON with per-station colors, lazy-cached 5 min."""
+    """Return surface observations JSON with stale-while-revalidate caching."""
     region_upper = region.upper().strip()
     product_lower = product.lower().strip()
     if product_lower not in _SURFACE_PRODUCTS:
@@ -1477,13 +1530,17 @@ def get_data_surface(region: str = "NC", product: str = "temperature"):
     cache_file = os.path.join(surface_cache_dir, f"{region_upper}_{product_lower}.json")
 
     if os.path.exists(cache_file):
-        age = _time.time() - os.path.getmtime(cache_file)
-        if age < 300:
-            try:
-                with open(cache_file, "r", encoding="utf-8") as fh:
-                    return json.load(fh)
-            except Exception:
-                pass
+        try:
+            with open(cache_file, "r", encoding="utf-8") as fh:
+                cached = json.load(fh)
+            age = _time.time() - os.path.getmtime(cache_file)
+            if age >= _SURFACE_CACHE_TTL_SECONDS:
+                _kickoff_surface_refresh_if_needed(
+                    region_upper, product_lower, cache_file
+                )
+            return cached
+        except Exception:
+            pass
 
     try:
         df = surface_utils.fetch_metar_data(region_upper)
@@ -1534,6 +1591,27 @@ def get_colormap(product: str = "temperature"):
         "unit": meta["unit"],
         "anchors": [{"value": a[0], "color": a[1]} for a in anchors],
     }
+
+
+def _load_mrms_render_meta(meta_sidecar: str) -> dict:
+    if not os.path.exists(meta_sidecar):
+        return {}
+    with open(meta_sidecar, "r") as f:
+        data = json.load(f)
+    return data if isinstance(data, dict) else {}
+
+
+def _write_mrms_render_meta(meta_sidecar: str, render_meta: dict) -> None:
+    with open(meta_sidecar, "w") as f:
+        json.dump(render_meta, f)
+
+
+def _build_mrms_meta_from_grib(grib_path: str, product: str, crop_extent: list) -> dict:
+    from mrms.legend_utils import build_mrms_overlay_meta
+    from mrms.mrms_utils import read_mrms_grib2
+
+    data, _meta = read_mrms_grib2(grib_path, product, crop_extent=crop_extent)
+    return build_mrms_overlay_meta(product, data)
 
 
 # ── Phase 3: MRMS Endpoints ──────────────────────────────────────────────────
@@ -1621,9 +1699,11 @@ def get_data_mrms(
     grib_mtime = os.path.getmtime(grib_path)
     png_stale = not os.path.exists(png_path) or os.path.getmtime(png_path) < grib_mtime
 
+    meta_sidecar = png_path.replace(".png", "_meta.json")
+
     if png_stale:
         try:
-            png_path, actual_bounds = _render_mrms_png(
+            png_path, actual_bounds, render_meta = _render_mrms_png(
                 grib_path, product, [west, east, south, north], png_path
             )
         except Exception as exc:
@@ -1636,6 +1716,12 @@ def get_data_mrms(
                 actual_bounds = json.load(f)
         else:
             actual_bounds = [west, east, south, north]
+        render_meta = _load_mrms_render_meta(meta_sidecar)
+        if not render_meta:
+            render_meta = _build_mrms_meta_from_grib(
+                grib_path, product, [west, east, south, north]
+            )
+            _write_mrms_render_meta(meta_sidecar, render_meta)
 
     # Build URL relative to /cache mount
     rel = os.path.relpath(png_path, _CACHE_ROOT).replace("\\", "/")
@@ -1651,6 +1737,7 @@ def get_data_mrms(
         "colormap": prod_info.get("colormap", ""),
         "vmin": prod_info.get("vmin", 0),
         "vmax": prod_info.get("vmax", 100),
+        "legend": render_meta.get("legend"),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -1672,6 +1759,7 @@ def _render_mrms_png(
     import matplotlib.pyplot as plt
     import matplotlib.colors as mcolors
 
+    from mrms.legend_utils import build_mrms_overlay_meta, mask_mrms_data
     from mrms.mrms_utils import read_mrms_grib2
     from config.mrms_config import MRMS_PRODUCTS, MRMS_COLORMAPS
 
@@ -1686,12 +1774,8 @@ def _render_mrms_png(
 
     data, meta = read_mrms_grib2(grib_path, product, crop_extent=crop_extent)
 
-    # Mask fill/missing values
-    data = np.where(
-        (data == missing_value) | (data == no_coverage) | (data < vmin),
-        np.nan,
-        data,
-    )
+    # Mask fill/missing/no-precip values (0 = no precip for all rate/accumulation products)
+    data = mask_mrms_data(data, prod_info)
 
     lat = meta.get("latitude")
     lon = meta.get("longitude")
@@ -1747,7 +1831,10 @@ def _render_mrms_png(
     with open(sidecar, "w") as f:
         json.dump(actual_bounds, f)
 
-    return out_path, actual_bounds
+    render_meta = build_mrms_overlay_meta(product, data)
+    _write_mrms_render_meta(out_path.replace(".png", "_meta.json"), render_meta)
+
+    return out_path, actual_bounds, render_meta
 
 
 # ── Phase 4: Archive Endpoints ───────────────────────────────────────────────

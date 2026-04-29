@@ -372,14 +372,12 @@ def generate_basemap(
     """
     style_config = style_config or {}
     cache_key = _basemap_cache_key(region, custom_extent, style_config)
-    cache_path = os.path.join(WEATHER_BASEMAP_CACHE,
-                              f"basemap_{cache_key}.png")
+    cache_path = os.path.join(WEATHER_BASEMAP_CACHE, f"basemap_{cache_key}.png")
 
     if not force and os.path.exists(cache_path):
         return cache_path
 
-    projection, extent, fig_w, fig_h = compute_lambert_params(
-        region, custom_extent)
+    projection, extent, fig_w, fig_h = compute_lambert_params(region, custom_extent)
     land_color = style_config.get("land_color", "#5c5c5c")
     ocean_color = style_config.get("ocean_color", "#152238")
 
@@ -607,8 +605,7 @@ def _create_transparent_axes(projection, extent, fig_w, fig_h):
     """
     fig = plt.figure(figsize=(fig_w, fig_h), dpi=OUTPUT_DPI)
     ax = fig.add_axes(LAYOUT_MAP_RECT, projection=projection)
-    ax.set_extent([extent[0], extent[1], extent[2],
-                  extent[3]], crs=ccrs.PlateCarree())
+    ax.set_extent([extent[0], extent[1], extent[2], extent[3]], crs=ccrs.PlateCarree())
     ax.set_facecolor("none")
     fig.patch.set_alpha(0.0)
     ax.set_frame_on(False)
@@ -659,8 +656,7 @@ def _format_weather_product_line(
             return f"Fire Weather Outlook Day {max(1, int(day or 1))}"
         if p == "reports":
             suffix = (
-                "Yesterday" if str(report_day or "").lower(
-                ) == "yesterday" else "Today"
+                "Yesterday" if str(report_day or "").lower() == "yesterday" else "Today"
             )
             return f"Storm Reports ({suffix})"
         if p == "watches":
@@ -739,8 +735,7 @@ def _render_hud_left_logo(
     hud_left_bg_color = style_config.get("hud_left_bg_color", "#000000")
     hud_left_edge_color = style_config.get("hud_left_edge_color", "#555555")
     hud_left_alpha = float(style_config.get("hud_left_alpha", 0.7))
-    hud_left_box_style = style_config.get(
-        "hud_left_box_style", "round,pad=0.5")
+    hud_left_box_style = style_config.get("hud_left_box_style", "round,pad=0.5")
 
     logo_user_size = float(style_config.get("logo_user_size", 0.08))
     logo_user_x = float(style_config.get("logo_user_x", 0.98))
@@ -826,8 +821,7 @@ def _render_hud_right(
     hud_right_bg_color = style_config.get("hud_right_bg_color", "#000000")
     hud_right_edge_color = style_config.get("hud_right_edge_color", "#555555")
     hud_right_alpha = float(style_config.get("hud_right_alpha", 0.7))
-    hud_right_box_style = style_config.get(
-        "hud_right_box_style", "round,pad=0.4")
+    hud_right_box_style = style_config.get("hud_right_box_style", "round,pad=0.4")
 
     ax.annotate(
         hud_text,
@@ -875,15 +869,13 @@ def _render_alerts_product(
     from cartopy.feature import ShapelyFeature
     from matplotlib.colors import to_rgba
 
-    product_path = os.path.join(
-        session_path, "product", f"frame_{frame_index:04d}.png")
+    product_path = os.path.join(session_path, "product", f"frame_{frame_index:04d}.png")
     fig, ax = _create_transparent_axes(projection, extent, fig_w, fig_h)
     active_types = []
 
     try:
         state_param = None if region.upper() == "CONUS" else region.upper()
-        features, _ = fetch_active_alerts_with_source(
-            state=state_param, source="iem")
+        features, _ = fetch_active_alerts_with_source(state=state_param, source="iem")
 
         w, e, s, n = extent
         bbox = (s, n, w, e)
@@ -1014,8 +1006,7 @@ def _render_surface_product(
     from matplotlib.patheffects import withStroke
     import pandas as pd
 
-    product_path = os.path.join(
-        session_path, "product", f"frame_{frame_index:04d}.png")
+    product_path = os.path.join(session_path, "product", f"frame_{frame_index:04d}.png")
     fig, ax = _create_transparent_axes(projection, extent, fig_w, fig_h)
 
     try:
@@ -1038,8 +1029,7 @@ def _render_surface_product(
             if product == "Station Plot":
                 # Full MetPy StationPlot glyph model
                 density_km = int(style_config.get("station_density_km", 30))
-                df_plot = _thin_surface_stations(
-                    df, projection, extent, density_km)
+                df_plot = _thin_surface_stations(df, projection, extent, density_km)
 
                 if df_plot.empty:
                     _save_transparent(fig, product_path)
@@ -1063,10 +1053,8 @@ def _render_surface_product(
                         .values
                     )
 
-                station_font_size = int(
-                    style_config.get("station_font_size", 8))
-                station_spacing = float(style_config.get(
-                    "station_spacing_factor", 1.2))
+                station_font_size = int(style_config.get("station_font_size", 8))
+                station_spacing = float(style_config.get("station_spacing_factor", 1.2))
 
                 sp = StationPlot(
                     ax,
@@ -1096,8 +1084,7 @@ def _render_surface_product(
                 sp.plot_parameter(
                     "SW",
                     df_plot["dew_point_temperature"].values,
-                    color=style_config.get(
-                        "station_dewpoint_color", "#00796B"),
+                    color=style_config.get("station_dewpoint_color", "#00796B"),
                     weight=stn_weight,
                 ).set_path_effects(halo)
 
@@ -1119,10 +1106,8 @@ def _render_surface_product(
                     sp.plot_parameter(
                         "E",
                         df_plot["visibility"].values,
-                        color=style_config.get(
-                            "station_visibility_color", "purple"),
-                        formatter=lambda v: f"{v:.0f}" if not pd.isna(
-                            v) else "",
+                        color=style_config.get("station_visibility_color", "purple"),
+                        formatter=lambda v: f"{v:.0f}" if not pd.isna(v) else "",
                     ).set_path_effects(halo)
 
                 # C: Sky cover symbol
@@ -1158,8 +1143,7 @@ def _render_surface_product(
                     grid_x = np.linspace(w, e, 200)
                     grid_y = np.linspace(s, n, 200)
                     gx, gy = np.meshgrid(grid_x, grid_y)
-                    grid_z = _griddata((lons, lats), vals,
-                                       (gx, gy), method="linear")
+                    grid_z = _griddata((lons, lats), vals, (gx, gy), method="linear")
                     grid_z = _gaussian(
                         np.nan_to_num(grid_z, nan=np.nanmean(vals)), sigma=2
                     )
@@ -1179,8 +1163,7 @@ def _render_surface_product(
 
                     if "Values" in product:
                         # Thin stations for value labels
-                        density_km = int(style_config.get(
-                            "station_density_km", 30))
+                        density_km = int(style_config.get("station_density_km", 30))
                         thinned = _thin_surface_stations(
                             valid, projection, extent, density_km
                         )
@@ -1199,8 +1182,7 @@ def _render_surface_product(
                                         ha="center",
                                         va="center",
                                         path_effects=[
-                                            withStroke(
-                                                linewidth=2, foreground="black")
+                                            withStroke(linewidth=2, foreground="black")
                                         ],
                                         zorder=31,
                                     )
@@ -1210,8 +1192,7 @@ def _render_surface_product(
                 col, cmap_name, vmin, vmax = param_info
                 valid = df.dropna(subset=[col, "latitude", "longitude"])
                 if not valid.empty:
-                    density_km = int(style_config.get(
-                        "station_density_km", 30))
+                    density_km = int(style_config.get("station_density_km", 30))
                     thinned = _thin_surface_stations(
                         valid, projection, extent, density_km
                     )
@@ -1231,8 +1212,7 @@ def _render_surface_product(
                             zorder=30,
                         )
                         # Number value labels
-                        fmt = ".1f" if col in (
-                            "altimeter", "visibility") else ".0f"
+                        fmt = ".1f" if col in ("altimeter", "visibility") else ".0f"
                         for _, row in thinned.iterrows():
                             val = row[col]
                             if pd.notna(val):
@@ -1247,8 +1227,7 @@ def _render_surface_product(
                                     ha="center",
                                     va="bottom",
                                     path_effects=[
-                                        withStroke(
-                                            linewidth=2, foreground="black")
+                                        withStroke(linewidth=2, foreground="black")
                                     ],
                                     zorder=31,
                                 )
@@ -1309,8 +1288,7 @@ def _render_mrms_product(
     from mrms.mrms_utils import read_mrms_grib2
     from config.mrms_config import MRMS_PRODUCTS, MRMS_COLORMAPS
 
-    product_path = os.path.join(
-        session_path, "product", f"frame_{frame_index:04d}.png")
+    product_path = os.path.join(session_path, "product", f"frame_{frame_index:04d}.png")
     fig, ax = _create_transparent_axes(projection, extent, fig_w, fig_h)
     mrms_legend_data = None
 
@@ -1346,8 +1324,7 @@ def _render_mrms_product(
         # Read GRIB2 data
         w, e, s, n = extent
         crop_extent = [w, e, s, n]
-        data, metadata = read_mrms_grib2(
-            file_path, product, crop_extent=crop_extent)
+        data, metadata = read_mrms_grib2(file_path, product, crop_extent=crop_extent)
 
         # Get colormap
         cmap_key = product_info.get("colormap", "qpe")
@@ -1471,8 +1448,7 @@ def _render_spc_product(
         fetch_fire_wx_geojson,
     )
 
-    product_path = os.path.join(
-        session_path, "product", f"frame_{frame_index:04d}.png")
+    product_path = os.path.join(session_path, "product", f"frame_{frame_index:04d}.png")
     fig, ax = _create_transparent_axes(projection, extent, fig_w, fig_h)
 
     try:
@@ -1497,8 +1473,7 @@ def _render_spc_product(
                     va="center",
                     bbox=dict(
                         facecolor="black",
-                        alpha=float(style_config.get(
-                            "no_items_bg_alpha", 0.6)),
+                        alpha=float(style_config.get("no_items_bg_alpha", 0.6)),
                         pad=10,
                     ),
                     zorder=100,
@@ -1550,8 +1525,7 @@ def _render_spc_product(
                     va="center",
                     bbox=dict(
                         facecolor="black",
-                        alpha=float(style_config.get(
-                            "no_items_bg_alpha", 0.6)),
+                        alpha=float(style_config.get("no_items_bg_alpha", 0.6)),
                         pad=10,
                     ),
                     zorder=100,
@@ -1597,8 +1571,7 @@ def _render_spc_product(
                     "hail": style_config.get("report_hail_color", "#00FF00"),
                     "wind": style_config.get("report_wind_color", "#0088FF"),
                 }
-                default_color = style_config.get(
-                    "report_default_color", "#FFFFFF")
+                default_color = style_config.get("report_default_color", "#FFFFFF")
                 marker_size = int(style_config.get("report_marker_size", 4))
                 report_alpha = float(style_config.get("report_alpha", 0.8))
                 for row in rows:
@@ -1640,8 +1613,7 @@ def _render_spc_product(
 
                 fill_color = (props.get("fill") or "").strip() or "#ffd700"
                 edge_color = (props.get("stroke") or "").strip() or "#ffd700"
-                poly_alpha = float(style_config.get(
-                    "outlook_fill_alpha", 0.9))
+                poly_alpha = float(style_config.get("outlook_fill_alpha", 0.9))
                 line_width = float(style_config.get("outlook_line_width", 1.0))
 
                 def _plot_fire_rings(ax, coord_rings, fc, ec, a, lw):
@@ -1683,13 +1655,17 @@ def _render_spc_product(
 
             # Define SPC severity order for z-ordering
             spc_severity_order = [
-                "High", "Moderate", "Enhanced", "Slight", "Marginal", "General Thunderstorms"
+                "High",
+                "Moderate",
+                "Enhanced",
+                "Slight",
+                "Marginal",
+                "General Thunderstorms",
             ]
 
             def get_severity_rank(props):
                 # Try to match on 'label', 'level', or fallback to last
-                label = (props.get("label") or props.get(
-                    "level") or "").strip().lower()
+                label = (props.get("label") or props.get("level") or "").strip().lower()
                 for idx, name in enumerate(spc_severity_order):
                     if name.lower() in label:
                         return idx
@@ -1697,7 +1673,8 @@ def _render_spc_product(
 
             # Sort features so lowest severity is drawn first (bottom), highest last (top)
             features_sorted = sorted(
-                features, key=lambda f: get_severity_rank(f.get("properties", {})))
+                features, key=lambda f: get_severity_rank(f.get("properties", {}))
+            )
 
             for feature in features_sorted:
                 geometry = feature.get("geometry") or {}
@@ -1707,8 +1684,7 @@ def _render_spc_product(
 
                 fill_color = props.get("fill") or "#ffd700"
                 edge_color = props.get("stroke") or "#ffd700"
-                poly_alpha = float(style_config.get(
-                    "outlook_fill_alpha", 0.45))
+                poly_alpha = float(style_config.get("outlook_fill_alpha", 0.45))
                 line_width = float(style_config.get("outlook_line_width", 1.0))
 
                 # Assign z-order based on severity (higher index = higher z-order)
@@ -1734,7 +1710,13 @@ def _render_spc_product(
 
                 if gtype == "Polygon":
                     _plot_rings(
-                        ax, coords, fill_color, edge_color, poly_alpha, line_width, zorder
+                        ax,
+                        coords,
+                        fill_color,
+                        edge_color,
+                        poly_alpha,
+                        line_width,
+                        zorder,
                     )
                 elif gtype == "MultiPolygon":
                     for polygon_coords in coords:
@@ -1752,12 +1734,15 @@ def _render_spc_product(
         # (Assumes Cartopy is used and ccrs is imported)
         try:
             import cartopy.feature as cfeature
+
             # Country borders
-            ax.add_feature(cfeature.BORDERS, edgecolor='white',
-                           linewidth=0.8, zorder=100)
+            ax.add_feature(
+                cfeature.BORDERS, edgecolor="white", linewidth=0.8, zorder=100
+            )
             # State borders
-            ax.add_feature(cfeature.STATES, edgecolor='white',
-                           linewidth=0.6, zorder=101)
+            ax.add_feature(
+                cfeature.STATES, edgecolor="white", linewidth=0.6, zorder=101
+            )
             # County borders (if available)
             # If you have a county shapefile, add it here with zorder=102
             # City borders: typically not available as a feature, but can be added similarly
@@ -1856,8 +1841,7 @@ def _render_surface_legend(
     Station Plot -> static station-model key.
     Gradient / Scatter -> horizontal colorbar.
     """
-    legend_path = os.path.join(
-        session_path, "legend", f"frame_{frame_index:04d}.png")
+    legend_path = os.path.join(session_path, "legend", f"frame_{frame_index:04d}.png")
 
     ftr = LAYOUT_FOOTER_FRAC
     param_info = _SURFACE_PARAM_MAP.get(product)
@@ -1865,8 +1849,7 @@ def _render_surface_legend(
     if product == "Station Plot":
         # Use the static station-model reference image
         static_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)
-                            ), "img", "station_plot_legend.png"
+            os.path.dirname(os.path.dirname(__file__)), "img", "station_plot_legend.png"
         )
         if not os.path.exists(static_path):
             return None
@@ -1938,8 +1921,7 @@ def _render_alerts_legend(
     session_path, frame_index, product, style_config, fig_w, fig_h, legend_data=None
 ):
     """Render legend for alerts showing active hazard type colors."""
-    legend_path = os.path.join(
-        session_path, "legend", f"frame_{frame_index:04d}.png")
+    legend_path = os.path.join(session_path, "legend", f"frame_{frame_index:04d}.png")
 
     active_types = (legend_data or {}).get("active_types", [])
     if not active_types:
@@ -2010,8 +1992,7 @@ def _render_mrms_legend(
 
     For MESH Track and Rotation Track, adds a per-frame max-value indicator.
     """
-    legend_path = os.path.join(
-        session_path, "legend", f"frame_{frame_index:04d}.png")
+    legend_path = os.path.join(session_path, "legend", f"frame_{frame_index:04d}.png")
 
     ld = legend_data or {}
     cmap = ld.get("cmap")
@@ -2037,8 +2018,7 @@ def _render_mrms_legend(
         categories = product_info.get("categories", {})
         if categories:
             bounds = cat_norm.boundaries
-            mids = [(bounds[i] + bounds[i + 1]) /
-                    2 for i in range(len(bounds) - 1)]
+            mids = [(bounds[i] + bounds[i + 1]) / 2 for i in range(len(bounds) - 1)]
             cat_labels = [categories.get(int(m), str(int(m))) for m in mids]
             cb.set_ticks(mids)
             cb.set_ticklabels(cat_labels)
@@ -2079,8 +2059,7 @@ def _render_mrms_legend(
                 clamped = max(float(vmin), min(float(vmax), max_mm))
                 max_in = max_mm / 25.4
                 nws_label, _ = _nws_hail_size_reference(max_in)
-                cb.ax.axvline(clamped, color="#ff0000",
-                              linewidth=2.0, alpha=0.95)
+                cb.ax.axvline(clamped, color="#ff0000", linewidth=2.0, alpha=0.95)
                 cb.ax.text(
                     clamped,
                     1.15,
@@ -2118,8 +2097,7 @@ def _render_mrms_legend(
             unit = product_info.get("units", "")
             display_name = product_info.get("full_name", product)
             label = f"{display_name} ({unit})" if unit else display_name
-            cb.set_label(label, fontsize=9,
-                         color=_MARGIN_FG, fontweight="bold")
+            cb.set_label(label, fontsize=9, color=_MARGIN_FG, fontweight="bold")
 
     _save_legend(fig, legend_path)
     return legend_path
@@ -2132,8 +2110,7 @@ def _render_spc_legend(
     session_path, frame_index, product, style_config, fig_w, fig_h, legend_data=None
 ):
     """Render legend for SPC products in the footer margin."""
-    legend_path = os.path.join(
-        session_path, "legend", f"frame_{frame_index:04d}.png")
+    legend_path = os.path.join(session_path, "legend", f"frame_{frame_index:04d}.png")
 
     hazard = product.lower()
     ftr = LAYOUT_FOOTER_FRAC
@@ -2295,7 +2272,7 @@ def _render_spc_legend(
             # CIG1 = broken diag upper-right to lower-left (sparse /)
             # CIG2 = solid diag upper-left to lower-right (dense \)
             # CIG3 = solid cross-hatch both directions   (dense x)
-            cig_levels = [("1", "/", 0.6), ("2", "\\\\\\\\", 1.2)]
+            cig_levels = [("1", "/", 0.6), ("2", "///", 1.2)]
             if hazard in ("torn", "wind"):
                 cig_levels.append(("3", "xx", 1.8))
             cat_y = 0.68
@@ -2585,8 +2562,7 @@ def generate_weather_layers(
     Returns a dict with session metadata and frame info, or None on failure.
     """
     # Merge: WEATHER base → per-group defaults → user overrides
-    style_config = resolve_weather_group_style_config(
-        product_group, style_config)
+    style_config = resolve_weather_group_style_config(product_group, style_config)
 
     # Cleanup old sessions before creating new one
     cleanup_sessions()
@@ -2600,8 +2576,7 @@ def generate_weather_layers(
     )
 
     # Compute projection once for all layers
-    projection, extent, fig_w, fig_h = compute_lambert_params(
-        region, custom_extent)
+    projection, extent, fig_w, fig_h = compute_lambert_params(region, custom_extent)
 
     if progress_callback:
         progress_callback(10, "Generating basemap...", "basemap")
@@ -2633,8 +2608,7 @@ def generate_weather_layers(
         total_frames = 1
 
     if progress_callback:
-        progress_callback(
-            20, f"Rendering {total_frames} frame(s)...", "render")
+        progress_callback(20, f"Rendering {total_frames} frame(s)...", "render")
 
     # Resolve timezone for display
     from dateutil import tz as tz_module

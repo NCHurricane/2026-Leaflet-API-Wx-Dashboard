@@ -3,6 +3,74 @@
 
     const byId = (id) => document.getElementById(id);
 
+    function _asDate(value) {
+        if (value == null || value === '') return null;
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime()) ? null : value;
+        }
+        if (typeof value === 'number') {
+            const d = new Date(value);
+            return Number.isNaN(d.getTime()) ? null : d;
+        }
+        if (typeof value === 'string') {
+            const raw = value.trim();
+            if (!raw) return null;
+            const iso = new Date(raw);
+            if (!Number.isNaN(iso.getTime())) return iso;
+            if (/^\d{12}$/.test(raw)) {
+                const d = new Date(Date.UTC(
+                    Number(raw.slice(0, 4)),
+                    Number(raw.slice(4, 6)) - 1,
+                    Number(raw.slice(6, 8)),
+                    Number(raw.slice(8, 10)),
+                    Number(raw.slice(10, 12)),
+                ));
+                return Number.isNaN(d.getTime()) ? null : d;
+            }
+        }
+        return null;
+    }
+
+    function _part(parts, type, fallback = '') {
+        return parts.find((p) => p.type === type)?.value || fallback;
+    }
+
+    function _formatViewerTimestamp(value) {
+        const dt = _asDate(value) || new Date();
+        const localParts = new Intl.DateTimeFormat('en-US', {
+            month: '2-digit',
+            day: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZoneName: 'short',
+        }).formatToParts(dt);
+        const utcParts = new Intl.DateTimeFormat('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: 'UTC',
+        }).formatToParts(dt);
+
+        const mm = _part(localParts, 'month', '--');
+        const dd = _part(localParts, 'day', '--');
+        const yyyy = _part(localParts, 'year', '----');
+        const hh = _part(localParts, 'hour', '--');
+        const min = _part(localParts, 'minute', '--');
+        const tz = _part(localParts, 'timeZoneName', 'LOCAL');
+        const utcH = _part(utcParts, 'hour', '--');
+        const utcM = _part(utcParts, 'minute', '--');
+
+        return `${mm}/${dd}/${yyyy}, ${hh}:${min} ${tz}, (${utcH}:${utcM} UTC)`;
+    }
+
+    function _setViewerTimestamp(value) {
+        const el = byId('wx-global-timestamp');
+        if (!el) return;
+        el.textContent = _formatViewerTimestamp(value);
+    }
+
     // Wire up event handlers for SPC controls (Fire Weather UI parity)
     function _wireSpcUiParityHandlers() {
         const spcDaySelect = byId('weather-spc-day');
@@ -355,6 +423,22 @@
         allEl.indeterminate = !allChecked && !noneChecked;
     }
 
+    function _applyDefaultAlertSelection() {
+        const allEl = byId('weather-alerts-all');
+        const defaultCategory = 'Severe Weather Warnings';
+
+        _getAlertCategoryCheckboxes().forEach((el) => {
+            if (el === allEl) return;
+            el.checked = el.value === defaultCategory;
+        });
+
+        document.querySelectorAll('.wx-warn-filter-ck').forEach((el) => {
+            el.checked = true;
+        });
+
+        _syncAllAlertsMaster();
+    }
+
     function _getCheckedAlertCategories() {
         return [...document.querySelectorAll('.weather-alerts-category:checked')]
             .map((el) => el.value)
@@ -439,7 +523,7 @@
             pattern2.setAttribute('patternUnits', 'userSpaceOnUse');
             pattern2.setAttribute('width', '18');
             pattern2.setAttribute('height', '18');
-            pattern2.setAttribute('patternTransform', 'rotate(45)');
+            pattern2.setAttribute('patternTransform', 'rotate(-45)');
             const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             line2.setAttribute('x1', '0');
             line2.setAttribute('y1', '0');
@@ -565,8 +649,10 @@
             const img = L.DomUtil.create('img', '', div);
             img.src = 'img/nchurricane_logo.png';
             img.alt = 'NCHurricane.com';
-            img.style.height = '40px';       // adjust as needed
             img.loading = 'lazy';
+            const ts = L.DomUtil.create('div', 'wx-global-timestamp', div);
+            ts.id = 'wx-global-timestamp';
+            ts.textContent = _formatViewerTimestamp(Date.now());
             return div;
         },
     });
@@ -1513,17 +1599,34 @@
         return 'other';
     }
 
-    function _spcReportMarkerStyle(feat) {
+    // FA icon class for tornado/wind; null = use circleMarker
+    const _SPC_REPORT_FA_ICON = {
+        torn: 'fa-solid fa-tornado',
+        wind: 'fa-solid fa-wind',
+    };
+
+    function _spcReportMarker(feat, latlng) {
         const key = _spcReportTypeKey(feat?.properties?.event);
         const color = _SPC_REPORT_COLORS[key] || _SPC_REPORT_COLORS.other;
-        return {
+        const faClass = _SPC_REPORT_FA_ICON[key];
+        if (faClass) {
+            const icon = L.divIcon({
+                className: '',
+                html: `<i class="${faClass}" style="color:${color};font-size:16px;-webkit-text-stroke:0.5px #08111d;text-shadow:0 0 3px rgba(0,0,0,0.7);"></i>`,
+                iconSize: [16, 16],
+                iconAnchor: [8, 8],
+                popupAnchor: [0, -10],
+            });
+            return L.marker(latlng, { icon });
+        }
+        return L.circleMarker(latlng, {
             radius: 5,
             color: '#08111d',
             weight: 1,
             fillColor: color,
             fillOpacity: 0.95,
             opacity: 1,
-        };
+        });
     }
 
     function _spcReportPopup(feat) {
@@ -1589,6 +1692,48 @@
         return `<div class="legend-row"><span class="legend-swatch" style="background:${color}"></span>${label}</div>`;
     }
 
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    function renderMrmsLegendTitle(legend) {
+        const title = escapeHtml(legend?.title || 'MRMS');
+        const stat = legend?.stat
+            ? `<span class="mrms-legend-stat">${escapeHtml(legend.stat.label)}: ${escapeHtml(legend.stat.text)}</span>`
+            : '';
+        return `<div class="mrms-legend-head"><h4>${title}</h4>${stat}</div>`;
+    }
+
+    function renderMrmsScaleLegend(legend) {
+        const scale = Array.isArray(legend?.scale) ? legend.scale : [];
+        if (!scale.length) return '';
+        const segments = scale
+            .map((item) => `<span class="mrms-legend-segment" style="background:${item.color}"></span>`)
+            .join('');
+        const labels = scale
+            .map((item) => `<span class="mrms-legend-tick">${escapeHtml(item.label)}</span>`)
+            .join('');
+        const units = legend?.display_units
+            ? `<div class="mrms-legend-units">${escapeHtml(legend.display_units)}</div>`
+            : '';
+        return `<div class="mrms-legend-scale">${units}<div class="mrms-legend-scale-bar">${segments}</div><div class="mrms-legend-scale-labels">${labels}</div></div>`;
+    }
+
+    function renderMrmsCategoricalLegend(legend) {
+        const items = Array.isArray(legend?.items) ? legend.items : [];
+        if (!items.length) return '';
+        const isPrecipType = String(legend?.title || '').toLowerCase().includes('surface precipitation type');
+        const colClass = Number(legend?.columns) === 3 || isPrecipType
+            ? 'legend-grid legend-grid-3'
+            : 'legend-grid';
+        return `<div class="${colClass}">${items.map((item) => swatch(item.color, escapeHtml(item.label))).join('')}</div>`;
+    }
+
     // Center-of-map "no data" overlay used when an SPC (or similar) layer
     // has no visible features for the current selection.
     function setMapEmptyMessage(msg) {
@@ -1651,6 +1796,22 @@
         }
     }
 
+    function buildSpcReportsLegend(reportTypes) {
+        const allTypes = ['torn', 'wind', 'hail'];
+        const active = Array.isArray(reportTypes) && reportTypes.length ? reportTypes : allTypes;
+        const labels = { torn: 'Tornado', wind: 'Wind', hail: 'Hail', other: 'Other' };
+        const rows = active.map((t) => {
+            const color = _SPC_REPORT_COLORS[t] || _SPC_REPORT_COLORS.other;
+            const label = labels[t] || t;
+            const faClass = _SPC_REPORT_FA_ICON[t];
+            if (faClass) {
+                return `<div class="legend-row"><i class="${faClass}" style="color:${color};font-size:14px;width:16px;text-align:center;flex-shrink:0;"></i>&nbsp;${label}</div>`;
+            }
+            return swatch(color, label);
+        }).join('');
+        setLegend('<h4>SPC Storm Reports</h4>' + rows);
+    }
+
     // Authoritative SPC probabilistic fill colors (per-hazard scale).
     // Colors taken from SPC's published outlook legends.
     const _SPC_PROB_HAZARD_COLORS = {
@@ -1706,7 +1867,7 @@
         } else if (intensity === 2) {
             // Legend: 50% tighter than map pattern (tile 18 → 9)
             patternBody = `
-                <pattern id="${patternId}" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(45)">
+                <pattern id="${patternId}" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(-45)">
                     <line x1="0" y1="0" x2="0" y2="9" stroke="black" stroke-width="4"/>
                 </pattern>`;
         } else {
@@ -1826,19 +1987,15 @@
     function _canApplyMrmsResponse() {
         return !_archiveMode
             && _isTypeEnabled('mrms')
-            && !!byId('weather-show-mrms')?.checked;
+            && !!_activeMrmsProduct();
     }
 
     // ── New-alert notification banners ───────────────────────────────────────
     const ALERT_NOTIFY_EVENTS = new Set([
         'Tornado Warning',
         'Severe Thunderstorm Warning',
-        'Tornado Watch',
-        'Severe Thunderstorm Watch',
         'Special Marine Warning',
         'Flash Flood Warning',
-        'Snow Squall Warning',
-        'Flash Flood Watch',
     ]);
     const ALERT_NOTIFY_DISMISS_MS = 20_000;
     // Polygons for these events pulse on the map to draw attention.
@@ -1985,6 +2142,10 @@
         const p = feat?.properties || {};
         const event = p.event || 'Unknown Alert';
         const color = ALERT_COLORS[event] || ALERT_DEFAULT;
+        const testDismissMs = Number(p.__testDismissMs);
+        const dismissMs = Number.isFinite(testDismissMs) && testDismissMs > 0
+            ? testDismissMs
+            : ALERT_NOTIFY_DISMISS_MS;
 
         _triggerNewAlertBorderFlash(color);
         _playNewAlertSound();
@@ -1992,27 +2153,35 @@
         const banner = document.createElement('div');
         banner.className = 'wx-new-alert-banner';
         banner.style.borderColor = color;
+        const bannerItem = document.createElement('div');
+        bannerItem.className = 'wx-new-alert-item';
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'wx-new-alert-close';
+        closeBtn.setAttribute('aria-label', 'Dismiss alert');
+        closeBtn.textContent = '\u00d7';
         // Compose location summary using _summarizeAreaDesc for consistency with sidebar
         let locText = p.areaDesc || p.locations || '';
         let summary = _summarizeAreaDesc(locText);
         // Always render the location div, even if empty, for debugging
-        let locHtml = `<div class="wx-new-alert-pill-location" style="color:${color};font-size:0.92em;">${_escapeHtml(summary || '')}</div>`;
+        let locHtml = `<div class="wx-new-alert-pill-location">${_escapeHtml(summary || '')}</div>`;
 
         banner.innerHTML = [
-            `<span class="wx-new-alert-pill-label" style="color:${color}">New Alert:</span>`,
+            `<span class="wx-new-alert-pill-label" style="color:yellow">New Alert:</span>`,
             `<span class="wx-new-alert-pill-event" style="color:${color}">${_escapeHtml(event)}</span>`,
             `<button type="button" class="wx-new-alert-banner-view" style="color:${color}">View</button>`,
             `<div class="wx-new-alert-pill-text">${locHtml}</div>`,
-            `<div class="wx-new-alert-banner-progress" style="background:${color}"></div>`,
+            `<div class="wx-new-alert-banner-progress" style="background:${color};animation-duration:${dismissMs}ms"></div>`,
         ].join('');
 
         const dismiss = () => {
             if (banner._dismissTimer) clearTimeout(banner._dismissTimer);
             banner.classList.add('is-dismissing');
-            banner.addEventListener('animationend', () => {
-                banner.remove();
+            banner.addEventListener('animationend', (evt) => {
+                if (evt.animationName !== 'wx-alert-slide-out') return;
+                bannerItem.remove();
                 _updateBannerOverflowIndicator();
-            }, { once: true });
+            });
         };
 
         const activateBannerAction = () => {
@@ -2050,24 +2219,32 @@
             activateBannerAction();
         });
 
-        banner._dismissTimer = setTimeout(dismiss, ALERT_NOTIFY_DISMISS_MS);
-        stack.appendChild(banner);
+        closeBtn.addEventListener('click', (evt) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            dismiss();
+        });
+
+        banner._dismissTimer = setTimeout(dismiss, dismissMs);
+        bannerItem.appendChild(banner);
+        bannerItem.appendChild(closeBtn);
+        stack.appendChild(bannerItem);
         _updateBannerOverflowIndicator();
     }
 
     // Stacked pill banners are capped at MAX_VISIBLE; older queued banners hide
     // and a "+N more" pill replaces them. Banners self-dismiss on timeout.
-    const _BANNER_MAX_VISIBLE = 3;
+    const _BANNER_MAX_VISIBLE = 2;
     function _updateBannerOverflowIndicator() {
         const stack = byId('wx-new-alert-stack');
         if (!stack) return;
-        const banners = Array.from(stack.querySelectorAll('.wx-new-alert-banner'))
-            .filter((b) => !b.classList.contains('is-dismissing'));
+        const items = Array.from(stack.querySelectorAll('.wx-new-alert-item'))
+            .filter((item) => !item.querySelector('.wx-new-alert-banner')?.classList.contains('is-dismissing'));
         let overflow = stack.querySelector('.wx-new-alert-overflow');
-        banners.forEach((b, i) => {
-            b.style.display = i < _BANNER_MAX_VISIBLE ? '' : 'none';
+        items.forEach((item, i) => {
+            item.style.display = i < _BANNER_MAX_VISIBLE ? '' : 'none';
         });
-        const hidden = Math.max(0, banners.length - _BANNER_MAX_VISIBLE);
+        const hidden = Math.max(0, items.length - _BANNER_MAX_VISIBLE);
         if (hidden > 0) {
             if (!overflow) {
                 overflow = document.createElement('div');
@@ -2098,6 +2275,7 @@
         ffw: 'Flash Flood Warning',
     };
     const _warningsFilterEnabled = new Set(['tor', 'svr', 'ffw']); // all enabled by default
+    let _warningsPanelFilter = 'all';
     const _warningsKnownIds = new Set(); // ids we've already rendered (to flag is-new)
 
     function _formatRelativeTime(ms) {
@@ -2129,14 +2307,21 @@
         return tz ? `${hh}:${mm} ${tz}` : `${hh}:${mm}`;
     }
 
-    function _formatCountdown(ms) {
-        if (!Number.isFinite(ms) || ms <= 0) return 'expired';
-        const sec = Math.floor(ms / 1000);
-        const min = Math.floor(sec / 60);
-        if (min < 60) return `${min}m`;
-        const hr = Math.floor(min / 60);
-        const remMin = min - hr * 60;
-        return remMin ? `${hr}h ${remMin}m` : `${hr}h`;
+    function _formatExpiresInVerbose(ms) {
+        if (!Number.isFinite(ms) || ms <= 0) return 'Expired';
+        const totalMinutes = Math.max(0, Math.ceil(ms / 60_000));
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes - (hours * 60);
+        if (hours < 1) {
+            const minuteLabel = minutes === 1 ? 'minute' : 'minutes';
+            return `Expires in ${minutes} ${minuteLabel}`;
+        }
+        const hourLabel = hours === 1 ? 'hour' : 'hours';
+        if (minutes === 0) {
+            return `Expires in ${hours} ${hourLabel}`;
+        }
+        const minuteLabel = minutes === 1 ? 'minute' : 'minutes';
+        return `Expires in ${hours} ${hourLabel}, and ${minutes} ${minuteLabel}`;
     }
 
     function _summarizeAreaDesc(areaDesc) {
@@ -2177,22 +2362,20 @@
         return counties || stateLabel || raw;
     }
 
-    function _activeWarningsForFilter() {
-        const features = Array.isArray(_allAlertFeatures) ? _allAlertFeatures : [];
+    function _activeAlertsForWarningsPanel() {
+        const features = Array.isArray(_alertsFullBaseFeatures) && _alertsFullBaseFeatures.length
+            ? _alertsFullBaseFeatures
+            : (Array.isArray(_allAlertFeatures) ? _allAlertFeatures : []);
         const now = Date.now();
         const filtered = features.filter((f) => {
             const p = f?.properties || {};
-            if (!_matchesWarningSubtypeFilter(f)) return false;
             const expiresMs = p.expires ? Date.parse(p.expires) : NaN;
             if (Number.isFinite(expiresMs) && expiresMs <= now) return false;
-            return true;
+            if (_warningsPanelFilter === 'all') return true;
+            const event = String(p.event || '');
+            return event === _WARN_FILTER_EVENT_TYPES[_warningsPanelFilter];
         });
-        // Sort: active Tornado Warnings always pinned to the top (newest first),
-        // then everything else by issuance time descending.
         filtered.sort((a, b) => {
-            const aTor = String(a?.properties?.event || '') === 'Tornado Warning' ? 0 : 1;
-            const bTor = String(b?.properties?.event || '') === 'Tornado Warning' ? 0 : 1;
-            if (aTor !== bTor) return aTor - bTor;
             const sa = Date.parse(a?.properties?.sent || '') || 0;
             const sb = Date.parse(b?.properties?.sent || '') || 0;
             return sb - sa;
@@ -2200,23 +2383,38 @@
         return filtered;
     }
 
+    function _warningPanelEmptyText() {
+        if (_warningsPanelFilter === 'tor') return 'No active tornado warnings.';
+        if (_warningsPanelFilter === 'svr') return 'No active severe thunderstorm warnings.';
+        if (_warningsPanelFilter === 'ffw') return 'No active flash flood warnings.';
+        return 'No active alerts.';
+    }
+
     // Refresh the tiny count badge on each warning-filter pill (TOR/SVR/FFW/ALL).
     // Counts ignore the active filter so users can see all buckets at a glance.
-    function _updateWarningFilterCounts(alertsEnabled) {
-        const features = (alertsEnabled && Array.isArray(_allAlertFeatures)) ? _allAlertFeatures : [];
+    function _warningPanelCounts(alertsEnabled) {
+        const features = (alertsEnabled && Array.isArray(_alertsFullBaseFeatures) && _alertsFullBaseFeatures.length)
+            ? _alertsFullBaseFeatures
+            : ((alertsEnabled && Array.isArray(_allAlertFeatures)) ? _allAlertFeatures : []);
         const now = Date.now();
-        const counts = { tor: 0, svr: 0, ffw: 0 };
+        const counts = { all: 0, tor: 0, svr: 0, ffw: 0 };
         for (const f of features) {
             const p = f?.properties || {};
             const expiresMs = p.expires ? Date.parse(p.expires) : NaN;
             if (Number.isFinite(expiresMs) && expiresMs <= now) continue;
+            counts.all += 1;
             const event = String(p.event || '');
-            if (event === 'Tornado Warning') counts.tor += 1;
-            else if (event === 'Severe Thunderstorm Warning') counts.svr += 1;
-            else if (event === 'Flash Flood Warning') counts.ffw += 1;
+            if (event === _WARN_FILTER_EVENT_TYPES.tor) counts.tor += 1;
+            else if (event === _WARN_FILTER_EVENT_TYPES.svr) counts.svr += 1;
+            else if (event === _WARN_FILTER_EVENT_TYPES.ffw) counts.ffw += 1;
         }
-        document.querySelectorAll('[data-warn-filter-count]').forEach((el) => {
-            const key = el.getAttribute('data-warn-filter-count');
+        return counts;
+    }
+
+    function _updateWarningFilterCounts(alertsEnabled) {
+        const counts = _warningPanelCounts(alertsEnabled);
+        document.querySelectorAll('[data-warn-filter-count], [data-warn-panel-filter-count]').forEach((el) => {
+            const key = el.getAttribute('data-warn-filter-count') || el.getAttribute('data-warn-panel-filter-count');
             el.textContent = String(counts[key] ?? 0);
         });
     }
@@ -2224,11 +2422,6 @@
     function _updateWarningFilterRowVisibility() {
         const filterRow = byId('wx-warn-filter-row');
         if (!filterRow) return;
-        const filterContainer = byId('weather-alerts-filter-options');
-        if (filterContainer?.hidden) {
-            filterRow.style.display = 'none';
-            return;
-        }
         const checkedCategories = _getCheckedAlertCategories();
         // Only show filter row if ONLY "Severe Weather Warnings" is checked
         const onlyShowSWW = checkedCategories.length === 1 && checkedCategories[0] === 'Severe Weather Warnings';
@@ -2236,14 +2429,9 @@
     }
 
     function _updateAlertFilterOptionsVisibility() {
-        const allAlertsEl = byId('weather-alerts-all');
-        const showFiltersEl = byId('weather-alerts-show-filters');
         const filterContainer = byId('weather-alerts-filter-options');
-        if (!allAlertsEl || !showFiltersEl || !filterContainer) return;
-
-        // If all alerts are selected, default to hidden filters unless user explicitly toggles on.
-        const shouldShow = !allAlertsEl.checked || !!showFiltersEl.checked;
-        filterContainer.hidden = !shouldShow;
+        if (!filterContainer) return;
+        filterContainer.hidden = false;
         _updateWarningFilterRowVisibility();
     }
 
@@ -2255,26 +2443,17 @@
         if (!list) return;
 
         const alertsEnabled = _isTypeEnabled('alerts');
-        const items = alertsEnabled ? _activeWarningsForFilter() : [];
+        const items = alertsEnabled ? _activeAlertsForWarningsPanel() : [];
 
         // Update per-pill counts (TOR/SVR/FFW/ALL) and the tab badge.
         _updateWarningFilterCounts(alertsEnabled);
 
-        // Sync sidebar checkboxes with current filter state
-        document.querySelectorAll('.wx-warn-filter-ck').forEach((ck) => {
-            const key = ck.getAttribute('data-warn-filter');
-            const isEnabled = _warningsFilterEnabled.has(key);
-            ck.checked = isEnabled;
-        });
-
         // Sync right panel buttons with current filter state
-        document.querySelectorAll('[data-warn-filter]').forEach((el) => {
-            const key = el.getAttribute('data-warn-filter');
-            if (key === 'tor' || key === 'svr' || key === 'ffw') {
-                const isEnabled = _warningsFilterEnabled.has(key);
-                el.classList.toggle('is-active', isEnabled);
-                el.setAttribute('aria-pressed', isEnabled ? 'true' : 'false');
-            }
+        document.querySelectorAll('#wx-right-pane-warnings [data-warn-filter], #wx-right-pane-warnings [data-warn-panel-filter]').forEach((el) => {
+            const key = el.getAttribute('data-warn-panel-filter') || el.getAttribute('data-warn-filter');
+            const isActive = key === _warningsPanelFilter;
+            el.classList.toggle('is-active', isActive);
+            el.setAttribute('aria-pressed', isActive ? 'true' : 'false');
         });
 
         // Update count badge on the Warnings tab.
@@ -2289,6 +2468,7 @@
 
         if (items.length === 0) {
             list.innerHTML = '';
+            if (empty) empty.textContent = _warningPanelEmptyText();
             if (empty) empty.style.display = 'block';
             if (tabBtn) tabBtn.classList.remove('has-attention');
             _warningsKnownIds.clear();
@@ -2328,11 +2508,11 @@
                 `<div class="wx-warn-row${isNew ? ' is-new' : ''}" data-feat-id="${_escapeHtml(id)}" style="border-left-color:${color}">`,
                 `  <div class="wx-warn-row-head">`,
                 `    <span class="wx-warn-event" style="color:${color}">${_escapeHtml(event)}</span>`,
-                `    <span class="wx-warn-countdown${urgent ? ' is-urgent' : ''}">${_escapeHtml(_formatCountdown(countdownMs))}</span>`,
                 `  </div>`,
                 area ? `  <div class="wx-warn-area">${_escapeHtml(area)}</div>` : '',
                 `  <div class="wx-warn-actions">`,
                 `    <span class="wx-warn-issued">${_escapeHtml(issuedRel)}</span>`,
+                `    <span class="wx-warn-expires${urgent ? ' is-urgent' : ''}">${_escapeHtml(_formatExpiresInVerbose(countdownMs))}</span>`,
                 `    <button type="button" class="wx-warn-zoom" data-warn-zoom="${_escapeHtml(id)}">Zoom To Alert</button>`,
                 `  </div>`,
                 `</div>`,
@@ -2350,29 +2530,14 @@
         if (!pane || !list) return;
 
         // Filter buttons in the right pane
-        const filterBtns = pane.querySelectorAll('[data-warn-filter]');
+        const filterBtns = pane.querySelectorAll('[data-warn-filter], [data-warn-panel-filter]');
         filterBtns.forEach((btn) => {
             btn.addEventListener('click', () => {
-                const key = btn.getAttribute('data-warn-filter');
-                if (key === 'tor' || key === 'svr' || key === 'ffw') {
-                    // Multi-select: toggle this filter on/off
-                    if (_warningsFilterEnabled.has(key)) {
-                        _warningsFilterEnabled.delete(key);
-                    } else {
-                        _warningsFilterEnabled.add(key);
-                    }
-                    btn.classList.toggle('is-active', _warningsFilterEnabled.has(key));
-                    btn.setAttribute('aria-pressed', _warningsFilterEnabled.has(key) ? 'true' : 'false');
-                    // Update sidebar checkboxes to match
-                    const sidebarCk = document.querySelector(`.wx-warn-filter-ck[data-warn-filter="${key}"]`);
-                    if (sidebarCk) sidebarCk.checked = _warningsFilterEnabled.has(key);
-                    _warningsKnownIds.clear();
-                    if (_alertsFullBaseFeatures.length || _alertsDisplayBaseFeatures.length) {
-                        _applyInMemoryAlertCategoryFilter();
-                    } else {
-                        _renderActiveWarningsPanel();
-                    }
-                }
+                const key = btn.getAttribute('data-warn-panel-filter') || btn.getAttribute('data-warn-filter');
+                if (key !== 'all' && key !== 'tor' && key !== 'svr' && key !== 'ffw') return;
+                _warningsPanelFilter = key;
+                _warningsKnownIds.clear();
+                _renderActiveWarningsPanel();
             });
         });
 
@@ -2384,11 +2549,36 @@
             evt.preventDefault();
             const id = row.getAttribute('data-feat-id');
             if (!id) return;
-            const feat = (_allAlertFeatures || []).find((f) => {
+            const idMatch = (f) => {
                 const fId = f.id || `${f.properties?.event || ''}|${f.properties?.sent || ''}|${f.properties?.areaDesc || ''}`;
                 return fId === id;
-            });
+            };
+            // Search the unfiltered base list first so clicks work even when
+            // the alert's category filter is currently off.
+            const feat = (_alertsFullBaseFeatures || []).find(idMatch)
+                || (_allAlertFeatures || []).find(idMatch);
             if (!feat) return;
+
+            // If this alert's category is not currently enabled, auto-enable it
+            // so the layer renders and the pager can find the feature.
+            const event = feat?.properties?.event || '';
+            const checkedCategories = _getCheckedAlertCategories();
+            const isVisible = !ALERT_CATEGORY_EVENT_SET.has(event)
+                || checkedCategories.some((cat) => (ALERT_CATEGORIES[cat] || []).includes(event));
+            if (!isVisible) {
+                const matchingCat = Object.entries(ALERT_CATEGORIES)
+                    .find(([, events]) => events.includes(event))?.[0];
+                if (matchingCat) {
+                    const ckBox = [...document.querySelectorAll('.weather-alerts-category')]
+                        .find((el) => el.value === matchingCat);
+                    if (ckBox) {
+                        ckBox.checked = true;
+                        _syncAllAlertsMaster();
+                        _applyInMemoryAlertCategoryFilter();
+                    }
+                }
+            }
+
             const center = _alertFeatureCenterLatLng(feat);
             if (!center) return;
             map.flyTo(center, Math.max(map.getZoom(), 9), { duration: 1.0 });
@@ -2557,11 +2747,64 @@
         return feat;
     }
 
+    // Single toggle for all top-bar "Test New Alert" UI behavior.
+    const ENABLE_TEST_ALERT_UI = true;
+
+    // Built-in test sample used when file:// fetches are blocked by browser CORS.
+    const _TEST_STW_ALERT_COLLECTION = {
+        type: 'FeatureCollection',
+        features: [
+            {
+                id: 'https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.76c0a170e6903c6a299dd412c2961289702eb43b.001.1',
+                type: 'Feature',
+                geometry: {
+                    type: 'Polygon',
+                    coordinates: [[[-81.03, 25.33], [-80.88, 25.41], [-80.77, 25.29], [-80.94, 25.2], [-81.03, 25.33]]],
+                },
+                properties: {
+                    id: 'urn:oid:2.49.0.1.840.0.76c0a170e6903c6a299dd412c2961289702eb43b.001.1',
+                    areaDesc: 'Miami-Dade, FL; Monroe, FL',
+                    sent: '2026-04-20T18:07:00-04:00',
+                    effective: '2026-04-20T18:07:00-04:00',
+                    onset: '2026-04-20T18:07:00-04:00',
+                    expires: '2026-04-20T18:22:44-04:00',
+                    ends: '2026-04-20T18:30:00-04:00',
+                    status: 'Actual',
+                    messageType: 'Cancel',
+                    category: 'Met',
+                    severity: 'Minor',
+                    certainty: 'Observed',
+                    urgency: 'Past',
+                    event: 'Severe Thunderstorm Warning',
+                    senderName: 'NWS Miami FL',
+                    headline: 'The Severe Thunderstorm Warning has been cancelled.',
+                    description: 'The Severe Thunderstorm Warning has been cancelled and is no longer in effect.',
+                    instruction: null,
+                    response: 'AllClear',
+                    parameters: {
+                        AWIPSidentifier: ['SVSMFL'],
+                        WMOidentifier: ['WWUS52 KMFL 202207'],
+                        NWSheadline: ['THE SEVERE THUNDERSTORM WARNING FOR SOUTHERN MAINLAND MONROE AND MIAMI-DADE COUNTIES IS CANCELLED'],
+                        eventMotionDescription: ['2026-04-20T22:05:00-00:00...storm...323DEG...15KT...25.29,-80.91'],
+                        BLOCKCHANNEL: ['EAS', 'NWEM', 'CMAS'],
+                        'EAS-ORG': ['WXR'],
+                        VTEC: ['/O.CAN.KMFL.SV.W.0020.000000T0000Z-260420T2230Z/'],
+                        eventEndingTime: ['2026-04-20T18:30:00-04:00'],
+                    },
+                    eventCode: {
+                        SAME: ['SVS'],
+                        NationalWeatherService: ['SVW'],
+                    },
+                },
+            },
+        ],
+    };
+
     // _testAlertBannerFromJson(sourceOrUrl, severityOverride?)
     //   Fires a banner for every feature in a FeatureCollection. Accepts a URL
     //   or an inline GeoJSON object. Pass severityOverride to force the
     //   immersive detail flow regardless of the source severity.
-    async function _testAlertBannerFromJson(sourceOrUrl, severityOverride) {
+    async function _testAlertBannerFromJson(sourceOrUrl, severityOverride, dismissMsOverride) {
         let coll = sourceOrUrl;
         if (typeof sourceOrUrl === 'string') {
             const resp = await fetch(sourceOrUrl, { cache: 'no-store' });
@@ -2569,9 +2812,12 @@
         }
         const feats = Array.isArray(coll?.features) ? coll.features : [];
         feats.forEach((f) => {
-            const feat = severityOverride
-                ? { ...f, properties: { ...(f.properties || {}), severity: severityOverride } }
-                : f;
+            const nextProps = { ...(f.properties || {}) };
+            if (severityOverride) nextProps.severity = severityOverride;
+            if (Number.isFinite(dismissMsOverride) && dismissMsOverride > 0) {
+                nextProps.__testDismissMs = dismissMsOverride;
+            }
+            const feat = { ...f, properties: nextProps };
             _showNewAlertBanner(feat);
         });
         return feats.length;
@@ -2681,6 +2927,7 @@
             if (countEl) countEl.textContent = `${fullFeatures.length} active alert(s)`;
             _renderActiveWarningsPanel();
             if (!silentStatus) setStatus(`Alerts updated at ${new Date().toLocaleTimeString()}.`);
+            _setViewerTimestamp(fullGeojson?._updated || displayGeojson?._updated || Date.now());
             _setReliability('Alerts', 'NWS, IEM', Date.now());
         } catch (err) {
             if (requestSeq !== _alertsRequestSeq) return;
@@ -3331,7 +3578,7 @@
 
             if (reportsGeojson?.features?.length) {
                 const reportsLayer = L.geoJSON(reportsGeojson, {
-                    pointToLayer: (feat, latlng) => L.circleMarker(latlng, _spcReportMarkerStyle(feat)),
+                    pointToLayer: (feat, latlng) => _spcReportMarker(feat, latlng),
                     onEachFeature: (feat, layer) => {
                         layer.bindPopup(_spcReportPopup(feat));
                     },
@@ -3378,7 +3625,9 @@
                 _applySpcCigPatternsToGroup(spcLayer);
             }
 
-            if (hazards.length === 1 && _isSpcFireHazard(hazards[0])) {
+            if (supplemental.reportsEnabled && !hazards.length) {
+                buildSpcReportsLegend(supplemental.reportTypes);
+            } else if (hazards.length === 1 && _isSpcFireHazard(hazards[0])) {
                 buildSpcFireLegend(hazards[0]);
             } else {
                 if (hazards.includes('cat')) {
@@ -3434,6 +3683,11 @@
                 statusBits.push(`Watches ${supplemental.watchLayers.map((w) => `${w.type}-${w.mode}`).join(',')}`);
             }
             setStatus(`SPC ${statusBits.join(' + ')} updated at ${new Date().toLocaleTimeString()}.`);
+            const spcUpdated = payloads.map(({ value }) => value?.geojson?._updated).find(Boolean)
+                || mdsGeojson?._updated
+                || watchesGeojson?._updated
+                || Date.now();
+            _setViewerTimestamp(spcUpdated);
             _setReliability(`SPC ${statusBits.join(' + ')}`, 'NOAA SPC', Date.now());
         } catch (err) {
             if (!_isActiveSpcRequest(requestSeq, selectionKey)) return;
@@ -3488,25 +3742,6 @@
         return !!byId(`weather-type-${type}`)?.checked;
     }
 
-    function _activeSurfaceProduct() {
-        const checked = Array.from(document.querySelectorAll('.weather-surface-product:checked'));
-        if (!checked.length) return null;
-        return checked[0].value || null;
-    }
-
-    function _activeSurfaceGradient() {
-        const product = _activeSurfaceProduct();
-        if (!product) return false;
-        const el = document.querySelector(`.weather-surface-gradient[data-product="${product}"]`);
-        return el?.checked ?? false;
-    }
-
-    function _readGradientBlurScale() {
-        const raw = parseFloat(byId('weather-gradient-blur')?.value || '0.35');
-        if (!Number.isFinite(raw)) return 0.35;
-        return Math.max(0, Math.min(2, raw));
-    }
-
     function _updateGradientBlurLabel() {
         const label = document.querySelector('label[for="weather-gradient-blur"]');
         if (!label) return;
@@ -3515,25 +3750,22 @@
         label.textContent = `${baseLabel} (${_gradientBlurScale.toFixed(2)}x)`;
     }
 
+    function _activeSurfaceProduct() {
+        return document.querySelector('.weather-surface-product:checked')?.value || null;
+    }
+
+    function _activeSurfaceGradient() {
+        const product = _activeSurfaceProduct();
+        if (!product) return false;
+        const grad = document.querySelector(`.weather-surface-gradient[data-product="${product}"]`);
+        return !!grad?.checked;
+    }
+
     function _updateGradientBlurControlVisibility() {
         const wrap = byId('weather-gradient-blur-wrap');
         if (!wrap) return;
         const show = _isTypeEnabled('current') && _activeSurfaceGradient();
         wrap.style.display = show ? '' : 'none';
-    }
-
-    function _activeArchiveProduct() {
-        const enabled = [];
-        if (_isTypeEnabled('current') && _activeSurfaceProduct()) enabled.push('surface');
-        if (_isTypeEnabled('mrms') && byId('weather-show-mrms')?.checked) enabled.push('mrms');
-        if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0) enabled.push('alerts');
-        if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) enabled.push('spc');
-        if (enabled.length === 1) return enabled[0];
-        if (enabled.includes('mrms')) return 'mrms';
-        if (enabled.includes('alerts')) return 'alerts';
-        if (enabled.includes('spc')) return 'spc';
-        if (enabled.includes('surface')) return 'surface';
-        return null;
     }
 
     function _updateTypeSections() {
@@ -3584,9 +3816,6 @@
         const spcOpts = byId('weather-spc-opts');
         if (spcOpts) spcOpts.style.display = byId('weather-show-spc')?.checked ? '' : 'none';
 
-        const mrmsOpts = byId('weather-mrms-opts');
-        if (mrmsOpts) mrmsOpts.style.display = byId('weather-show-mrms')?.checked ? '' : 'none';
-
         const surfaceOpts = byId('weather-surface-opts');
         if (surfaceOpts) surfaceOpts.style.display = '';
 
@@ -3614,13 +3843,22 @@
         setLegend(null);
     }
 
+    function _resetTransientAlertUiForTabChange() {
+        _closeNewAlertDetail();
+        _dismissAllNewAlertBanners();
+        if (_activeAlertsPopup?.popup) {
+            try { map.closePopup(_activeAlertsPopup.popup); } catch (_) { /* ignore */ }
+        }
+        _activeAlertsPopup = null;
+    }
+
     function refreshActiveLayers() {
         if (_archiveMode) return;
         const alertsEnabled = _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0;
         const spcEnabled = _isTypeEnabled('spc') && byId('weather-show-spc')?.checked;
         const surfaceProduct = _activeSurfaceProduct();
         const surfaceEnabled = _isTypeEnabled('current') && !!surfaceProduct;
-        const mrmsEnabled = _isTypeEnabled('mrms') && byId('weather-show-mrms')?.checked;
+        const mrmsEnabled = _isTypeEnabled('mrms') && !!_activeMrmsProduct();
 
         // Clear legend at the start to ensure old legend doesn't persist when switching products
         setLegend(null);
@@ -4339,7 +4577,7 @@
         }
     }
 
-    async function _ensureGradientStations(product, regionCode = null) {
+    async function _ensureGradientStations(product, regionCode = null, prefetchedStations = null) {
         if (_archiveMode || !product) return;
         const sourceRegion = _getGradientSourceRegion(regionCode);
         if (
@@ -4351,11 +4589,17 @@
         }
 
         try {
-            const url = apiUrl(`/api/data/surface?region=${encodeURIComponent(sourceRegion)}&product=${encodeURIComponent(product)}`);
-            const resp = await fetch(url);
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json();
-            const allStations = Array.isArray(data?.stations) ? data.stations : [];
+            let allStations;
+            if (prefetchedStations) {
+                // Reuse stations already fetched by loadSurface — avoids a duplicate request.
+                allStations = prefetchedStations;
+            } else {
+                const url = apiUrl(`/api/data/surface?region=${encodeURIComponent(sourceRegion)}&product=${encodeURIComponent(product)}`);
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                allStations = Array.isArray(data?.stations) ? data.stations : [];
+            }
             // Use ASOS-only for gradient interpolation — more reliable sensors,
             // fewer outliers from COOP/DCP/RWIS that can distort the surface.
             _surfaceGradientStations = allStations.filter(s => (s.network || 'ASOS') === 'ASOS');
@@ -4398,9 +4642,12 @@
             const countEl = byId('weather-surface-count');
             if (countEl) countEl.textContent = `${stations.length} station(s)`;
             setStatus(`Surface ${product} for ${region} updated at ${new Date().toLocaleTimeString()}.`);
+            _setViewerTimestamp(data?.timestamp || Date.now());
             _setReliability(`Surface ${product}`, 'IEM', Date.now());
 
-            await _ensureGradientStations(product, region);
+            // Pass the already-fetched stations so _ensureGradientStations
+            // doesn't fire a duplicate request for the same endpoint.
+            await _ensureGradientStations(product, region, stations);
         } catch (err) {
             if (requestSeq !== _surfaceRequestSeq) return;
             console.error('[surface] Load error:', err);
@@ -4500,57 +4747,64 @@
 
     // ── MRMS layer ────────────────────────────────────────────────────────────
 
+    // ── MRMS helpers ─────────────────────────────────────────────────────────
+    function _activeMrmsProduct() {
+        return document.querySelector('.mrms-product-check:checked')?.value || null;
+    }
+
     // composeMrmsProductKey: mirrors Python MRMS_PRODUCTS key structure
     function composeMrmsProductKey() {
-        const family = byId('weather-mrms-family')?.value || 'PrecipFlag';
-        // Standalone products (no sub-selector)
+        const family = _activeMrmsProduct();
+        if (!family) return null;
         const standalone = ['PrecipRate', 'PrecipFlag', 'SHI', 'POSH', 'RadarQualityIndex'];
         if (standalone.includes(family)) return family;
 
         if (family === 'QPE') {
-            const src = byId('mrms-qpe-source')?.value || 'MS2';
-            const per = byId('mrms-qpe-period')?.value || '01H';
+            const src = document.querySelector('input[name="mrms-qpe-source"]:checked')?.value || 'MS2';
+            const per = document.querySelector('input[name="mrms-qpe-period"]:checked')?.value || '01H';
             return `QPE_${src}_${per}`;
         }
         if (family === 'RotationTrack') {
-            const lvl = byId('mrms-rotation-level')?.value || 'LL';
-            const time = byId('mrms-rotation-time')?.value || '60min';
+            const lvl = document.querySelector('input[name="mrms-rotation-level"]:checked')?.value || 'LL';
+            const time = document.querySelector('input[name="mrms-rotation-time"]:checked')?.value || '60min';
             return `RotationTrack_${lvl}_${time}`;
         }
         if (family === 'MESH') {
-            const t = byId('mrms-mesh-time')?.value || 'Instant';
+            const t = document.querySelector('input[name="mrms-mesh-time"]:checked')?.value || 'Instant';
             return t === 'Instant' ? 'MESH_Instant' : `MESH_${t}`;
         }
         if (family === 'AzShear') {
-            const lvl = byId('mrms-azshear-level')?.value || 'Low';
+            const lvl = document.querySelector('input[name="mrms-azshear-level"]:checked')?.value || 'Low';
             return `AzShear_${lvl}`;
         }
         if (family === 'EchoTop') {
-            const thr = byId('mrms-echotop-threshold')?.value || '18';
+            const thr = document.querySelector('input[name="mrms-echotop-threshold"]:checked')?.value || '18';
             return `EchoTop_${thr}`;
         }
         if (family === 'VIL') {
-            const t = byId('mrms-vil-type')?.value || 'Instant';
-            return t === 'Instant' ? 'VIL' : `VIL_${t}`;
+            const t = document.querySelector('input[name="mrms-vil-type"]:checked')?.value || 'Instant';
+            return t === 'Instant' ? 'VIL_Instant' : `VIL_${t}`;
         }
         if (family === 'Reflectivity') {
-            const v = byId('mrms-refl-variant')?.value || 'HSR';
-            return `Reflectivity_${v}`;
+            const v = document.querySelector('input[name="mrms-refl-variant"]:checked')?.value || 'HSR';
+            return `Refl_${v}`;
         }
         if (family === 'Lightning') {
-            const w = byId('mrms-lightning-window')?.value || '30min';
-            return `LightningProbability_${w}`;
+            const w = document.querySelector('input[name="mrms-lightning-window"]:checked')?.value || '30min';
+            return `Lightning_${w}`;
         }
         if (family === 'Model') {
-            const f = byId('mrms-model-field')?.value || 'FreezingLevel';
+            const f = document.querySelector('input[name="mrms-model-field"]:checked')?.value || 'FreezingLevel';
             return `Model_${f}`;
         }
         return family;
     }
 
-    // Show/hide sub-selectors for the selected MRMS family
+    // Show/hide sub-panels for the active MRMS product
     function updateMrmsSubControls() {
-        const family = byId('weather-mrms-family')?.value || 'PrecipFlag';
+        const family = _activeMrmsProduct();
+        document.querySelectorAll('.mrms-sub-panel').forEach((el) => { el.style.display = 'none'; });
+        if (!family) return;
         const subMap = {
             QPE: 'mrms-sub-qpe', RotationTrack: 'mrms-sub-rotation',
             MESH: 'mrms-sub-mesh', AzShear: 'mrms-sub-azshear',
@@ -4558,7 +4812,6 @@
             Reflectivity: 'mrms-sub-reflectivity', Lightning: 'mrms-sub-lightning',
             Model: 'mrms-sub-model',
         };
-        document.querySelectorAll('.mrms-sub').forEach(el => { el.style.display = 'none'; });
         const subId = subMap[family];
         if (subId) {
             const sub = byId(subId);
@@ -4569,6 +4822,7 @@
     async function loadMrms() {
         const requestSeq = ++_mrmsRequestSeq;
         const product = composeMrmsProductKey();
+        if (!product) return;
         const bounds = map.getBounds();
         const s = bounds.getSouth().toFixed(4);
         const w = bounds.getWest().toFixed(4);
@@ -4595,13 +4849,14 @@
             // Leaflet imageOverlay: [[south, west], [north, east]]
             const b = data.bounds; // [west, east, south, north]
             const leafletBounds = [[b[2], b[0]], [b[3], b[1]]];
-            mrmsOverlay = L.imageOverlay(data.image_url, leafletBounds, { opacity: mrmsOpacity });
-            if (byId('weather-show-mrms')?.checked) mrmsOverlay.addTo(map);
+            mrmsOverlay = L.imageOverlay(apiUrl(data.image_url), leafletBounds, { opacity: mrmsOpacity });
+            if (_activeMrmsProduct()) mrmsOverlay.addTo(map);
 
             buildMrmsLegend(data);
 
             if (statusEl) statusEl.textContent = `${data.full_name} at ${new Date().toLocaleTimeString()}`;
             setStatus(`MRMS ${product} updated at ${new Date().toLocaleTimeString()}.`);
+            _setViewerTimestamp(data?.timestamp || Date.now());
             _setReliability(`MRMS ${product}`, 'NOAA MRMS', Date.now());
         } catch (err) {
             if (requestSeq !== _mrmsRequestSeq) return;
@@ -4612,12 +4867,20 @@
     }
 
     function buildMrmsLegend(data) {
-        // Simple min/max legend bar; colormap-specific entries added in Phase 4
-        const rows = [
-            swatch('#b0d4f0', `≤ ${data.vmin} ${data.units}`),
-            swatch('#ff4f4f', `≥ ${data.vmax} ${data.units}`),
-        ].join('');
-        setLegend(`<h4>${data.full_name}</h4>${rows}`);
+        const legend = data?.legend;
+        if (!legend) {
+            const rows = [
+                swatch('#b0d4f0', `≤ ${data.vmin} ${data.units}`),
+                swatch('#ff4f4f', `≥ ${data.vmax} ${data.units}`),
+            ].join('');
+            setLegend(`<h4>${escapeHtml(data.full_name)}</h4>${rows}`);
+            return;
+        }
+
+        const body = legend.kind === 'categorical'
+            ? renderMrmsCategoricalLegend(legend)
+            : renderMrmsScaleLegend(legend);
+        setLegend(`${renderMrmsLegendTitle(legend)}${body}`);
     }
 
     function applyMrmsOpacity(val) {
@@ -4829,6 +5092,7 @@
             } else {
                 tsEl.textContent = '—';
             }
+            _setViewerTimestamp(frame?.timestamp || Date.now());
         }
     }
 
@@ -4867,9 +5131,9 @@
         const leafletBounds = [[b[2], b[0]], [b[3], b[1]]];
         if (mrmsOverlay) {
             mrmsOverlay.setBounds(leafletBounds);
-            mrmsOverlay.setUrl(frame.image_url);
+            mrmsOverlay.setUrl(apiUrl(frame.image_url));
         } else {
-            mrmsOverlay = L.imageOverlay(frame.image_url, leafletBounds, { opacity: mrmsOpacity });
+            mrmsOverlay = L.imageOverlay(apiUrl(frame.image_url), leafletBounds, { opacity: mrmsOpacity });
             mrmsOverlay.addTo(map);
         }
     }
@@ -5454,6 +5718,12 @@
         return Math.max(0.01, Math.min(1, raw));
     }
 
+    function _readGradientBlurScale() {
+        const raw = parseFloat(byId('weather-gradient-blur')?.value || '0.35');
+        if (!Number.isFinite(raw)) return 0.35;
+        return Math.max(0, Math.min(2, raw));
+    }
+
     function _updateObsDensityLabel() {
         const label = document.querySelector('label[for="weather-obs-density"]');
         if (!label) return;
@@ -5628,6 +5898,13 @@
                     }
                 });
             }
+            if (e.target.checked) {
+                _resetTransientAlertUiForTabChange();
+                fitRegion(byId('weather-region')?.value || 'CONUS');
+                if (['radar', 'satellite', 'rtma', 'drought', 'tropical'].includes(type)) {
+                    _setViewerTimestamp(Date.now());
+                }
+            }
             _updateTypeSections();
             _updateRightSidebarGroups();
             if (_archiveMode) {
@@ -5662,10 +5939,6 @@
                 }
             }
         });
-    });
-
-    byId('weather-alerts-show-filters')?.addEventListener('change', () => {
-        _updateAlertFilterOptionsVisibility();
     });
 
     byId('weather-spc-day')?.addEventListener('change', () => {
@@ -5803,10 +6076,26 @@
         _updateSubOptionVisibility();
         refreshActiveLayers();
     });
-    byId('weather-show-mrms')?.addEventListener('change', () => {
-        _updateSubOptionVisibility();
-        refreshActiveLayers();
+    document.querySelectorAll('.mrms-product-check').forEach((cb) => {
+        cb.addEventListener('change', () => {
+            if (cb.checked) {
+                document.querySelectorAll('.mrms-product-check').forEach((other) => {
+                    if (other !== cb) other.checked = false;
+                });
+            }
+            updateMrmsSubControls();
+            refreshActiveLayers();
+            if (cb.checked && _isTypeEnabled('mrms')) loadMrms();
+        });
     });
+
+    document.querySelectorAll('.mrms-sub-radio').forEach((radio) => {
+        radio.addEventListener('change', () => {
+            if (_isTypeEnabled('mrms') && _activeMrmsProduct()) loadMrms();
+        });
+    });
+
+    byId('weather-refresh-mrms')?.addEventListener('click', loadMrms);
 
     byId('weather-opacity-alerts')?.addEventListener('input', (e) => applyAlertsOpacity(e.target.value));
     byId('weather-opacity-spc')?.addEventListener('input', (e) => applySpcOpacity(e.target.value));
@@ -5844,43 +6133,63 @@
             _renderSurfaceMarkers(_surfaceStations);
         }
     });
-
-    byId('weather-mrms-family')?.addEventListener('change', () => {
-        updateMrmsSubControls();
-        if (_isTypeEnabled('mrms') && byId('weather-show-mrms')?.checked) loadMrms();
-    });
-
-    ['mrms-qpe-source', 'mrms-qpe-period', 'mrms-rotation-level', 'mrms-rotation-time',
-        'mrms-mesh-time', 'mrms-azshear-level', 'mrms-echotop-threshold', 'mrms-vil-type',
-        'mrms-refl-variant', 'mrms-lightning-window', 'mrms-model-field'].forEach((id) => {
-            byId(id)?.addEventListener('change', () => {
-                if (_isTypeEnabled('mrms') && byId('weather-show-mrms')?.checked) loadMrms();
-            });
-        });
-
-    byId('weather-refresh-mrms')?.addEventListener('click', loadMrms);
     byId('weather-refresh-alerts')?.addEventListener('click', () => loadAlerts());
+
+    const _testNewAlertBtn = byId('weather-test-new-alert');
+    if (_testNewAlertBtn) {
+        if (!ENABLE_TEST_ALERT_UI) {
+            _testNewAlertBtn.style.display = 'none';
+        } else {
+            _testNewAlertBtn.addEventListener('click', async () => {
+                if (!_isTypeEnabled('alerts')) {
+                    setStatus('Enable Alerts first to test New Alert banners.');
+                    return;
+                }
+                try {
+                    const testDismissMs = 2 * 10_000;
+                    let count = 0;
+                    try {
+                        count = await _testAlertBannerFromJson('data/test_severe_thunderstorm_warning.json', 'Severe', testDismissMs);
+                    } catch (_) {
+                        count = await _testAlertBannerFromJson(_TEST_STW_ALERT_COLLECTION, 'Severe', testDismissMs);
+                    }
+                    setStatus(`Test New Alert fired (${count} feature${count === 1 ? '' : 's'}), held for 2 minutes.`);
+                } catch (err) {
+                    setStatus(`Test New Alert failed: ${err?.message || err}`);
+                }
+            });
+        }
+    }
 
     // ── Persistent radar-overlay loop (Alerts panel "Radar Overlay" checkbox) ─
     // 4-frame loop reusing the same IEM tile naming as the new-alert loop, but
     // with its own state so opacity can be driven by the sidebar slider and
     // the frames refresh every 5 minutes so "now" keeps moving forward.
-    const _RADAR_OVERLAY_FRAMES = 4;
+    const _RADAR_OVERLAY_FRAMES = 10;
     const _RADAR_OVERLAY_STEP_MIN = 5;
     const _RADAR_OVERLAY_FRAME_MS = 700;
     const _RADAR_OVERLAY_PAUSE_MS = 900;
     let _radarOverlayLoop = null;
+
+    // Returns a cache-bust token rounded to the nearest 5-minute boundary so
+    // tiles refresh in sync with the IEM scan cycle without hammering with a
+    // new token every second.
+    function _radarCacheBust() {
+        const bucket = _RADAR_OVERLAY_STEP_MIN * 60 * 1000; // 5 min in ms
+        return Math.floor(Date.now() / bucket);
+    }
 
     function _radarOverlayBuildLayers(opacity) {
         const offsets = [];
         for (let i = _RADAR_OVERLAY_FRAMES - 1; i >= 0; i--) {
             offsets.push(i * _RADAR_OVERLAY_STEP_MIN);
         }
+        const cb = _radarCacheBust();
         return offsets.map((mins) => {
             const slug = mins === 0
                 ? 'nexrad-n0q-900913'
                 : `nexrad-n0q-m${String(mins).padStart(2, '0')}m-900913`;
-            const url = `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/${slug}/{z}/{x}/{y}.png`;
+            const url = `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/${slug}/{z}/{x}/{y}.png?_cb=${cb}`;
             return L.tileLayer(url, {
                 opacity: 0,
                 zIndex: 300,
@@ -5936,6 +6245,19 @@
         });
         _radarOverlayLoop = null;
     }
+
+    // When the browser tab returns to the foreground, force a full layer
+    // rebuild so throttled/suspended timers don't leave stale tiles on screen.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return;
+        if (!_radarOverlayLoop) return;
+        const op = _radarOverlayLoop.opacity;
+        _radarOverlayLoop.layers.forEach((lyr) => {
+            try { if (map.hasLayer(lyr)) map.removeLayer(lyr); } catch (_) { /* ignore */ }
+        });
+        _radarOverlayLoop.layers = _radarOverlayBuildLayers(op);
+        _radarOverlayLoop.idx = 0;
+    });
 
     function _radarOverlaySetOpacity(value) {
         if (!_radarOverlayLoop) return;
@@ -6119,8 +6441,7 @@
 
     // ── Init ─────────────────────────────────────────────────────────────────
     function init() {
-        _setAllAlertCategories(true);
-        _syncAllAlertsMaster();
+        _applyDefaultAlertSelection();
         _syncSpcConvectiveOptions(false);
         _syncSpcFireWeatherOptions(false);
         _updateTypeSections();
@@ -6143,6 +6464,7 @@
         _updateGradientBlurLabel();
         _updateGradientBlurControlVisibility();
         _syncRightSidebarLayers();
+        _setViewerTimestamp(Date.now());
         refreshActiveLayers();
         _startReliabilityTicker();
     }

@@ -4,6 +4,7 @@ import io
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from dateutil import tz
@@ -922,8 +923,29 @@ def _extract_polygon_from_geom(geom: dict) -> list:
     return []
 
 
-def fetch_active_watch_items(ttl_seconds: int = 90):
-    """Fetch active SPC watches from IEM GeoJSON — single fast request."""
+def _fetch_wou_county_fips(watch_num: int, ttl_seconds: int = 300) -> list:
+    """Fetch and parse county FIPS codes from the SPC WOU text for one watch.
+
+    Results are cached per watch number for *ttl_seconds* (default 5 min) so
+    repeat calls within the same watch cycle are free.  Returns a sorted list
+    of 5-digit FIPS strings, or an empty list on any error.
+    """
+    watch_id = f"{watch_num:04d}"
+    url = f"{SPC_BASE}/products/watch/wou{watch_id}.html"
+    try:
+        wou_text = _cached_text("spc_wou_county", watch_id, url, ttl_seconds)
+        return _parse_watch_county_fips_from_wou(wou_text)
+    except Exception:
+        return []
+
+
+def fetch_active_watch_items(ttl_seconds: int = 90, with_counties: bool = False):
+    """Fetch active SPC watches from IEM GeoJSON — single fast request.
+
+    When *with_counties* is True, the WOU text for each watch is fetched in
+    parallel (up to 8 workers) and county FIPS codes are populated.  This adds
+    a small latency on the first call but results are cached per watch number.
+    """
     data = _cached_json(
         "iem_watch_outline", "active", _IEM_WATCH_GEOJSON_URL, ttl_seconds
     )
@@ -976,7 +998,7 @@ def fetch_active_watch_items(ttl_seconds: int = 90):
                 "short_label": f"WW #{watch_num}",
                 "type": watch_type,
                 "polygon": polygon,
-                "county_fips": [],
+                "county_fips": [],  # populated below if with_counties=True
                 "issue_utc": issue_utc,
                 "expire_utc": expire_utc,
                 "probabilities": {},
@@ -984,6 +1006,21 @@ def fetch_active_watch_items(ttl_seconds: int = 90):
                 "detail_url": detail_url,
             }
         )
+
+    if with_counties and items:
+        # Fetch all WOU texts in parallel; map watch_id -> fips list.
+        def _fetch(item: dict) -> tuple:
+            return item["id"], _fetch_wou_county_fips(int(item["id"]))
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {pool.submit(_fetch, item): item["id"] for item in items}
+            fips_by_id: dict = {}
+            for future in as_completed(futures):
+                watch_id_key, fips = future.result()
+                fips_by_id[watch_id_key] = fips
+
+        for item in items:
+            item["county_fips"] = fips_by_id.get(item["id"], [])
 
     return items, "SPC Watches (IEM)"
 
@@ -1834,7 +1871,7 @@ def _add_significant_hatching(
         if "CIG3" in text or "LEVEL 3" in text or "INTENSITY 3" in text:
             return "xx"
         if "CIG2" in text or "LEVEL 2" in text or "INTENSITY 2" in text:
-            return "\\\\\\\\"
+            return "/"
         if "CIG1" in text or "LEVEL 1" in text or "INTENSITY 1" in text:
             return "/"
         return "/"
@@ -1905,7 +1942,7 @@ def _add_primary_sig_hatching(
         if "CIG3" in label or "CIG3" in label2:
             return "xx"
         if "CIG2" in label or "CIG2" in label2:
-            return "\\\\\\\\"
+            return "/"
         if label.startswith("CIG") or "CONDITIONAL INTENSITY" in label2:
             return "/"
 
@@ -2377,13 +2414,13 @@ def _draw_bottom_reference(
 
         if is_hail_mode:
             intensity_items = [
-                ("\\\\\\", "2", False),
+                ("///", "2", False),
                 ("", "1", True),
             ]
         else:
             intensity_items = [
                 ("xx", "3", False),
-                ("\\\\\\", "2", False),
+                ("///", "2", False),
                 ("", "1", True),
             ]
         x_i = x_intens_row + 0.105
