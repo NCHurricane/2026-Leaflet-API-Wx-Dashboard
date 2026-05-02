@@ -68,7 +68,7 @@
     function _setViewerTimestamp(value) {
         const el = byId('wx-global-timestamp');
         if (!el) return;
-        el.textContent = _formatViewerTimestamp(value);
+        el.innerHTML = `Last Updated:<br>${_formatViewerTimestamp(value)}`;
     }
 
     // Wire up event handlers for SPC controls (Fire Weather UI parity)
@@ -113,6 +113,7 @@
         NC: [-84.8, -74.7, 33.2, 37.3], ND: [-104.4, -96.2, 45.6, 49.4],
         OH: [-85.2, -80.2, 38.1, 42.3], OK: [-103.4, -94.1, 33.3, 37.4],
         OR: [-124.9, -116.1, 41.6, 46.6], PA: [-80.9, -74.3, 39.4, 42.6],
+        PR: [-67.4, -65.1, 17.8, 18.6],
         RI: [-72.2, -70.8, 40.8, 42.4], SC: [-83.7, -78.1, 31.7, 35.6],
         SD: [-104.4, -96.1, 42.1, 46.3], TN: [-90.7, -81.3, 34.6, 37.0],
         TX: [-107.0, -93.1, 25.5, 36.9], UT: [-114.4, -108.7, 36.6, 42.4],
@@ -466,14 +467,12 @@
     const WORLD_DEFAULT_BOUNDS = [[-60, -179.9], [85, 179.9]];
     const REGION_FIT_BOTTOM_PADDING_PX = 120;
 
-    const tilesDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', tileOptions);
-    const tilesLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', tileOptions);
     const tilesDarkNoLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', tileOptions);
     const tilesLightNoLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', tileOptions);
     const tilesVoyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', tileOptions);
-    const tilesOsm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-        maxZoom: 19,
+    var USGS_USImagery = L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 20,
+        attribution: 'Tiles courtesy of the <a href="https://usgs.gov/">U.S. Geological Survey</a>'
     });
     const tilesSatellite = L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -567,12 +566,10 @@
     }
 
     const baseLayers = {
-        'Dark': tilesDark,
         'Dark (No Labels)': tilesDarkNoLabels,
-        'Light': tilesLight,
         'Light (No Labels)': tilesLightNoLabels,
         'Voyager': tilesVoyager,
-        'OpenStreetMap': tilesOsm,
+        'USGS': USGS_USImagery,
         'Satellite': tilesSatellite,
     };
     // Custom compact basemap selector (replaces Leaflet's built-in layer control)
@@ -652,7 +649,7 @@
             img.loading = 'lazy';
             const ts = L.DomUtil.create('div', 'wx-global-timestamp', div);
             ts.id = 'wx-global-timestamp';
-            ts.textContent = _formatViewerTimestamp(Date.now());
+            ts.innerHTML = `Last Updated:<br>${_formatViewerTimestamp(Date.now())}`;
             return div;
         },
     });
@@ -665,11 +662,18 @@
     const NEXRAD_TILE_URL = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png';
     const NEXRAD_REFRESH_MS = 5 * 60 * 1000;
     let spcLayer = null;
-    // Alerts-panel independent SPC Day 1 overlays
-    const _ALERTS_SPC_HAZARDS = ['cat', 'torn', 'wind', 'hail'];
-    const _alertsSpcLayers = { cat: null, torn: null, wind: null, hail: null };
-    const _alertsSpcSeq = { cat: 0, torn: 0, wind: 0, hail: 0 };
     let surfaceLayer = null;
+    let rtmaOverlay = null;
+    let rtmaPointLayer = null;
+    let rtmaGradientLayer = null;
+    let _rtmaPointsAll = [];
+    let _rtmaPointsUnits = '';
+    let _rtmaPointsKey = null;
+    // GRIB-subgrid gradient state (replaces IDW on live view)
+    let _rtmaGridPoints = [];   // [[lat, lon, value], ...]
+    let _rtmaGridKey = null;    // region|stream|product key for cache invalidation
+    let _rtmaGridSeq = 0;
+    let _rtmaGridInFlightKey = null;
     let mrmsOverlay = null;
     let statesLayer = null;
     let countiesLayer = null;
@@ -690,11 +694,39 @@
     let _lastAlertsZoomBucket = null;  // Tracks current bucket; null = uninitialized
     let _knownAlertIds = null; // null = first load; Set<string> after first load
     let _activeAlertsPopup = null;
+    let _stormTrackLayer = L.layerGroup().addTo(map);
+    let _stormTrackProjectionLayer = L.layerGroup().addTo(_stormTrackLayer);
+    let _stormTrackHandleLayer = L.layerGroup().addTo(_stormTrackLayer);
+    let _stormTrackDrawMode = false;
+    let _stormTrackBaseLatLngs = [];
+    let _stormTrackSelectedAlert = null;
+    let _stormTrackMotion = null;
+    let _stormTrackActiveBearingDeg = null;
+    let _stormTrackPivotKeyDown = false;
+    let _stormTrackDragAnchor = null;
+    let _stormTrackDragHandle = null;
+    let _stormTrackPlacesOverlayEl = null;
+    let _stormTrackPlacesDataPromise = null;
+    let _stormTrackPlacesComputeSeq = 0;
+    let _stormTrackPlaceRows = [];
+    let _stormTrackLastCorridorLatLngs = [];
+    let _stormTrackOutlineLayer = null;
+    // ── Radar Speed Calibrator state ─────────────────────────────────────────
+    let _radarCalDrawMode = false;
+    let _radarCalLatLngs = [];
+    let _radarCalLayer = null;
+    const _STORM_TRACK_INTERVAL_MIN = 15;
+    const _STORM_TRACK_WIDTH_GROWTH_PER_INTERVAL = 0.10;
+    const _STORM_TRACK_PIVOT_MAX_DEG = 45;
+    const _STORM_TRACK_MAX_PLACE_ROWS = 50;
     let alertsOpacity = 0.75;
     let spcOpacity = 0.60;
     let spcStrokeOpacity = 1.0;
     let surfaceValueOpacity = 0.9;
     let surfaceGradientOpacity = 0.9;
+    let rtmaOpacity = 0.82;
+    let rtmaGradientOpacity = 0.9;
+    let _rtmaGradientBlurScale = 0.35;
     let mrmsOpacity = 0.8;
     let _alertsRequestSeq = 0;
     let _spcRequestSeq = 0;
@@ -703,6 +735,18 @@
     let _spcMdsRequestSeq = 0;
     let _spcWatchesRequestSeq = 0;
     let _surfaceRequestSeq = 0;
+    let _rtmaRequestSeq = 0;
+    let _rtmaPointsSeq = 0;
+    let _rtmaPointsDebounceTimer = null;
+    let _rtmaPointsInFlightKey = null;
+    let _lastRtmaPointsFetchKey = null;
+    let _lastRtmaPointsFetchMs = 0;
+    let _rtmaScrubMode = false;
+    let _rtmaScrubFrames = [];
+    let _rtmaScrubFrameIndex = 0;
+    let _rtmaScrubPlayTimer = null;
+    const _rtmaScrubFrameCache = new Map();
+    const _rtmaScrubFrameErrors = new Set();
     let _mrmsRequestSeq = 0;
     const _SPC_PRIMARY_TIMEOUT_MS = 10_000;
     const _SPC_SUPPLEMENTAL_TIMEOUT_MS = 20_000;
@@ -711,6 +755,15 @@
         wind: '#26a9ff',
         hail: '#66e06a',
         other: '#f5d06b',
+    };
+    const RTMA_POINTS_DEBOUNCE_MS = 180;
+    const RTMA_POINTS_MIN_FETCH_INTERVAL_MS = 500;
+    const RTMA_SCRUB_PLAY_INTERVAL_MS = 800;
+    const RTMA_SCRUB_LOOP_HOLD_MS = 2000;
+    const RTMA_SCRUB_POINTS_ONLY = true;
+    const RTMA_STREAM_MAX_HOURS = {
+        rtma_hourly: 24,
+        rtma_rapid_update: 6,
     };
     const _FREEZING_ISOTHERM_ENABLED = true; // temporary diagnostic overlay
     const _FREEZING_ISOTHERM_PRODUCTS = new Set(['station_plot', 'temperature', 'feels_like', 'dew_point']);
@@ -1041,6 +1094,7 @@
             style: alertStyle,
             onEachFeature: (feat, layer) => {
                 layer.on('click', (e) => {
+                    if (_stormTrackDrawMode) return;
                     if (e?.latlng) _openAlertsPagerAt(e.latlng);
                 });
                 // Throttled hover — PIP is expensive at CONUS scale with many polygons.
@@ -1327,6 +1381,719 @@
         _openNewAlertDetail(latlng, features[0]);
     }
 
+    const _CARDINAL_TO_BEARING = {
+        N: 0,
+        NNE: 22.5,
+        NE: 45,
+        ENE: 67.5,
+        E: 90,
+        ESE: 112.5,
+        SE: 135,
+        SSE: 157.5,
+        S: 180,
+        SSW: 202.5,
+        SW: 225,
+        WSW: 247.5,
+        W: 270,
+        WNW: 292.5,
+        NW: 315,
+        NNW: 337.5,
+    };
+
+    function _normalizeMotionDirection(rawDir) {
+        return String(rawDir || '')
+            .toUpperCase()
+            .replace(/[^A-Z]/g, '');
+    }
+
+    function _directionToBearing(rawDir) {
+        const norm = _normalizeMotionDirection(rawDir);
+        if (_CARDINAL_TO_BEARING[norm] !== undefined) return _CARDINAL_TO_BEARING[norm];
+
+        const words = String(rawDir || '').toUpperCase().replace(/[^A-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        const alias = {
+            NORTH: 'N',
+            NORTHEAST: 'NE',
+            EAST: 'E',
+            SOUTHEAST: 'SE',
+            SOUTH: 'S',
+            SOUTHWEST: 'SW',
+            WEST: 'W',
+            NORTHWEST: 'NW',
+        };
+        if (alias[words] && _CARDINAL_TO_BEARING[alias[words]] !== undefined) {
+            return _CARDINAL_TO_BEARING[alias[words]];
+        }
+        return null;
+    }
+
+    function _extractAlertMotion(feat) {
+        const p = feat?.properties || {};
+        const params = p.parameters || {};
+        // Prefer the human-readable alert text direction first because it is
+        // generally the best "storm moving toward" source for this workflow.
+        const desc = String(p.description || '');
+        const descMatch = desc.match(/MOVING\s+([A-Z\-\s]+?)\s+AT\s+(\d{1,3})\s*(MPH|KTS?|KT)\b/i);
+        if (descMatch) {
+            const bearing = _directionToBearing(descMatch[1]);
+            const speed = Number(descMatch[2]);
+            const unit = String(descMatch[3] || '').toUpperCase();
+            if (Number.isFinite(bearing) && Number.isFinite(speed) && speed > 0) {
+                const speedMps = unit.startsWith('MPH') ? speed * 0.44704 : speed * 0.514444;
+                return { bearingDeg: bearing, speedMps, source: 'description' };
+            }
+        }
+
+        const emd = Array.isArray(params.eventMotionDescription) ? String(params.eventMotionDescription[0] || '') : '';
+        const emdMatch = emd.match(/(\d{1,3})\s*DEG[\s.]*?(\d{1,3})\s*K[TN]/i);
+        if (emdMatch) {
+            const bearing = Number(emdMatch[1]);
+            const speedKt = Number(emdMatch[2]);
+            if (Number.isFinite(bearing) && Number.isFinite(speedKt) && speedKt > 0) {
+                // eventMotionDescription bearings can be encoded opposite the
+                // intuitive "toward" direction. Flip by 180 so projected drag
+                // aligns with storm-forward motion on the map.
+                return {
+                    bearingDeg: (((bearing + 180) % 360) + 360) % 360,
+                    speedMps: speedKt * 0.514444,
+                    source: 'eventMotionDescription',
+                };
+            }
+        }
+        return null;
+    }
+
+    function _stormTrackFallbackAlert() {
+        if (featIsValid(_stormTrackSelectedAlert)) return _stormTrackSelectedAlert;
+        if (featIsValid(_activeNewAlertDetail?.features?.[_activeNewAlertDetail.index])) {
+            return _activeNewAlertDetail.features[_activeNewAlertDetail.index];
+        }
+        const severe = (_allAlertFeatures || []).find((f) => {
+            const evt = String(f?.properties?.event || '');
+            return evt === 'Tornado Warning' || evt === 'Severe Thunderstorm Warning' || evt === 'Flash Flood Warning';
+        });
+        return severe || (_allAlertFeatures || [])[0] || null;
+    }
+
+    function featIsValid(feat) {
+        return !!(feat && feat.type === 'Feature' && feat.properties);
+    }
+
+    function _offsetLatLngGeodesic(latlng, bearingDeg, distanceMeters) {
+        const R = 6371000;
+        const br = (bearingDeg * Math.PI) / 180;
+        const lat1 = (latlng.lat * Math.PI) / 180;
+        const lon1 = (latlng.lng * Math.PI) / 180;
+        const dr = distanceMeters / R;
+
+        const lat2 = Math.asin(
+            Math.sin(lat1) * Math.cos(dr)
+            + Math.cos(lat1) * Math.sin(dr) * Math.cos(br),
+        );
+        const lon2 = lon1 + Math.atan2(
+            Math.sin(br) * Math.sin(dr) * Math.cos(lat1),
+            Math.cos(dr) - Math.sin(lat1) * Math.sin(lat2),
+        );
+
+        return L.latLng((lat2 * 180) / Math.PI, (lon2 * 180) / Math.PI);
+    }
+
+    function _bearingBetweenLatLng(fromLatLng, toLatLng) {
+        const lat1 = (fromLatLng.lat * Math.PI) / 180;
+        const lat2 = (toLatLng.lat * Math.PI) / 180;
+        const dLon = ((toLatLng.lng - fromLatLng.lng) * Math.PI) / 180;
+        const y = Math.sin(dLon) * Math.cos(lat2);
+        const x = Math.cos(lat1) * Math.sin(lat2)
+            - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+        const br = (Math.atan2(y, x) * 180) / Math.PI;
+        return ((br % 360) + 360) % 360;
+    }
+
+    function _signedBearingDeltaDeg(fromBearing, toBearing) {
+        let d = (((toBearing - fromBearing) % 360) + 360) % 360;
+        if (d > 180) d -= 360;
+        return d;
+    }
+
+    function _normalizeBearingDeg(bearingDeg) {
+        return (((Number(bearingDeg) % 360) + 360) % 360);
+    }
+
+    function _pivotedBearingDeg(rawBearingDeg) {
+        const baseBearing = _stormTrackMotion?.bearingDeg;
+        if (!Number.isFinite(baseBearing)) return null;
+        if (!_stormTrackPivotKeyDown) return _normalizeBearingDeg(baseBearing);
+        const raw = _normalizeBearingDeg(rawBearingDeg);
+        const delta = _signedBearingDeltaDeg(baseBearing, raw);
+        const clamped = Math.max(-_STORM_TRACK_PIVOT_MAX_DEG, Math.min(_STORM_TRACK_PIVOT_MAX_DEG, delta));
+        return _normalizeBearingDeg(baseBearing + clamped);
+    }
+
+    function _projectMetersOnMotion(anchor, point, motionBearingDeg) {
+        const distance = anchor.distanceTo(point);
+        if (!Number.isFinite(distance) || distance <= 0) return 0;
+        const ptBearing = _bearingBetweenLatLng(anchor, point);
+        const delta = _signedBearingDeltaDeg(motionBearingDeg, ptBearing);
+        const alongPrimary = distance * Math.cos((delta * Math.PI) / 180);
+        return Math.max(0, alongPrimary);
+    }
+
+    function _stormTrackAnchor(basePts) {
+        if (!Array.isArray(basePts) || !basePts.length) return null;
+        let sumLat = 0;
+        let sumLng = 0;
+        for (const pt of basePts) {
+            sumLat += pt.lat;
+            sumLng += pt.lng;
+        }
+        return L.latLng(sumLat / basePts.length, sumLng / basePts.length);
+    }
+
+    function _stateAbbrFromPlaceRecord(rec) {
+        const iso = String(rec?.address?.['ISO3166-2-lvl4'] || '').toUpperCase();
+        const m = iso.match(/^US-([A-Z]{2})$/);
+        if (m) return m[1];
+        return '';
+    }
+
+    function _parseNdjsonPlaces(text) {
+        const rows = [];
+        const lines = String(text || '').split(/\r?\n/);
+        for (const line of lines) {
+            const raw = line.trim();
+            if (!raw) continue;
+            try {
+                const rec = JSON.parse(raw);
+                const loc = Array.isArray(rec?.location) ? rec.location : [];
+                const lng = Number(loc[0]);
+                const lat = Number(loc[1]);
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+                const name = String(rec?.name || '').trim();
+                if (!name) continue;
+                const popRaw = Number(rec?.population);
+                rows.push({
+                    name,
+                    state: _stateAbbrFromPlaceRecord(rec),
+                    lat,
+                    lng,
+                    type: String(rec?.type || '').toLowerCase(),
+                    population: Number.isFinite(popRaw) ? popRaw : null,
+                });
+            } catch (_) {
+                // Skip malformed lines.
+            }
+        }
+        return rows;
+    }
+
+    async function _loadStormTrackPlacesData() {
+        if (_stormTrackPlacesDataPromise) return _stormTrackPlacesDataPromise;
+        _stormTrackPlacesDataPromise = (async () => {
+            const paths = ['data/place-town.ndjson', 'data/place-village.ndjson'];
+            const urls = paths.map((p) => apiUrl(p));
+            const responses = await Promise.all(urls.map((u) => fetch(u, { cache: 'force-cache' })));
+            const texts = await Promise.all(responses.map(async (resp, idx) => {
+                if (!resp.ok) {
+                    const path = paths[idx] || 'places file';
+                    throw new Error(`Failed loading ${path} (${resp.status}).`);
+                }
+                return resp.text();
+            }));
+            const merged = [];
+            for (const txt of texts) merged.push(..._parseNdjsonPlaces(txt));
+            return merged;
+        })().catch((err) => {
+            _stormTrackPlacesDataPromise = null;
+            const baseMsg = String(err?.message || err || 'unknown error');
+            if (window.location.protocol === 'file:') {
+                throw new Error(`${baseMsg} Open the dashboard via http://127.0.0.1:8000/weather.html (run python main.py), not via file://.`);
+            }
+            throw err;
+        });
+        return _stormTrackPlacesDataPromise;
+    }
+
+    function _stormTrackPlaceTimeZone(place) {
+        try {
+            if (typeof window.tzlookup === 'function') {
+                return String(window.tzlookup(place.lat, place.lng) || '').trim();
+            }
+        } catch (_) {
+            // fallback below
+        }
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    }
+
+    function _formatStormTrackArrivalMs(ms, ianaTz) {
+        const d = new Date(ms);
+        try {
+            return new Intl.DateTimeFormat(undefined, {
+                hour: 'numeric',
+                minute: '2-digit',
+                timeZone: ianaTz,
+                timeZoneName: 'short',
+            }).format(d);
+        } catch (_) {
+            return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        }
+    }
+
+    function _ensureStormTrackPlacesOverlay() {
+        const wrap = document.querySelector('.weather-map-wrap');
+        if (!wrap) return null;
+        if (_stormTrackPlacesOverlayEl?.parentElement === wrap) return _stormTrackPlacesOverlayEl;
+
+        const panel = document.createElement('div');
+        panel.className = 'wx-stormtrack-places';
+        panel.innerHTML = [
+            '<div class="wx-stormtrack-places-head"><span class="wx-stormtrack-places-head-title">Projected Arrival Times</span><button type="button" class="wx-stormtrack-places-close" aria-label="Close projected arrival times">X</button>',
+            '<div class="wx-small">Times are approximate</div></div>',
+            '<div class="wx-stormtrack-places-body"><div class="wx-stormtrack-empty">No projected arrival times yet.</div></div>',
+        ].join('');
+        wrap.appendChild(panel);
+
+        const head = panel.querySelector('.wx-stormtrack-places-head');
+        const closeBtn = panel.querySelector('.wx-stormtrack-places-close');
+        let drag = null;
+        const onMove = (evt) => {
+            if (!drag) return;
+            const x = evt.clientX - drag.wrapLeft - drag.dx;
+            const y = evt.clientY - drag.wrapTop - drag.dy;
+            panel.style.left = `${x}px`;
+            panel.style.top = `${y}px`;
+            panel.style.right = 'auto';
+        };
+        const onUp = () => {
+            drag = null;
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+        };
+        head?.addEventListener('pointerdown', (evt) => {
+            if (evt.target && evt.target.closest('.wx-stormtrack-places-close')) return;
+            const wrapRect = wrap.getBoundingClientRect();
+            const rect = panel.getBoundingClientRect();
+            drag = {
+                dx: evt.clientX - rect.left,
+                dy: evt.clientY - rect.top,
+                wrapLeft: wrapRect.left,
+                wrapTop: wrapRect.top,
+            };
+            evt.preventDefault();
+            document.addEventListener('pointermove', onMove);
+            document.addEventListener('pointerup', onUp);
+        });
+        closeBtn?.addEventListener('click', (evt) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            panel.remove();
+            if (_stormTrackPlacesOverlayEl === panel) {
+                _stormTrackPlacesOverlayEl = null;
+            }
+        });
+
+        _stormTrackPlacesOverlayEl = panel;
+        return panel;
+    }
+
+    function _renderStormTrackPlacesRows(rows) {
+        const panel = _ensureStormTrackPlacesOverlay();
+        if (!panel) return;
+        const body = panel.querySelector('.wx-stormtrack-places-body');
+        if (!body) return;
+
+        if (!Array.isArray(rows) || !rows.length) {
+            body.innerHTML = '<div class="wx-stormtrack-empty">No places inside the current projected polygon.</div>';
+            return;
+        }
+
+        const listItems = rows.map((r) => {
+            const state = r.state ? `, ${r.state}` : '';
+            return [
+                '<li>',
+                `<span class="wx-stormtrack-place-name">${_escapeHtml(r.name)}${_escapeHtml(state)}</span>`,
+                `<span class="wx-stormtrack-place-time">${_escapeHtml(r.arrivalLabel)}</span>`,
+                '</li>',
+            ].join('');
+        }).join('');
+        body.innerHTML = `<ol class="wx-stormtrack-places-list">${listItems}</ol>`;
+    }
+
+    async function _computeStormTrackPlaceRows(motion, activeBearing, minsAhead, corridorLatLngs) {
+        const places = await _loadStormTrackPlacesData();
+        const anchor = _stormTrackDragAnchor;
+        if (!anchor || !Array.isArray(corridorLatLngs) || corridorLatLngs.length < 3) return [];
+
+        const ring = corridorLatLngs.map((pt) => [pt.lng, pt.lat]);
+        const nowMs = Date.now();
+        const maxMins = Math.max(0, Number(minsAhead) || 0);
+        const speedMps = Number(motion?.speedMps);
+        if (!Number.isFinite(speedMps) || speedMps <= 0) return [];
+
+        const rows = [];
+        for (const place of places) {
+            if (!_ringContainsPoint(ring, place.lng, place.lat)) continue;
+            const meters = _projectMetersOnMotion(anchor, L.latLng(place.lat, place.lng), activeBearing);
+            const mins = Math.max(0, meters / (speedMps * 60));
+            if (mins > maxMins + 1e-6) continue;
+            const arrivalMs = nowMs + (mins * 60_000);
+            const tz = _stormTrackPlaceTimeZone(place);
+            rows.push({
+                name: place.name,
+                state: place.state,
+                arrivalMins: mins,
+                arrivalLabel: `${_formatStormTrackArrivalMs(arrivalMs, tz)} (+${Math.round(mins)}m)`,
+                population: place.population,
+            });
+        }
+
+        rows.sort((a, b) => {
+            const dt = a.arrivalMins - b.arrivalMins;
+            if (Math.abs(dt) > 1e-6) return dt;
+            const ap = Number.isFinite(a.population) ? a.population : -1;
+            const bp = Number.isFinite(b.population) ? b.population : -1;
+            return bp - ap;
+        });
+
+        return rows.slice(0, _STORM_TRACK_MAX_PLACE_ROWS);
+    }
+
+    function _scalePolylineFromCentroid(latLngs, scaleFactor) {
+        if (!Array.isArray(latLngs) || latLngs.length < 2) return latLngs;
+        const scale = Number(scaleFactor);
+        if (!Number.isFinite(scale) || scale <= 0) return latLngs;
+        if (Math.abs(scale - 1) < 1e-6) return latLngs.map((pt) => L.latLng(pt.lat, pt.lng));
+
+        const centroid = _stormTrackAnchor(latLngs);
+        if (!centroid) return latLngs;
+
+        return latLngs.map((pt) => {
+            const distanceMeters = centroid.distanceTo(pt);
+            if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) {
+                return L.latLng(pt.lat, pt.lng);
+            }
+            const bearingDeg = _bearingBetweenLatLng(centroid, pt);
+            return _offsetLatLngGeodesic(centroid, bearingDeg, distanceMeters * scale);
+        });
+    }
+
+    function _clearStormTrackProjection() {
+        _stormTrackProjectionLayer.clearLayers();
+    }
+
+    function _clearStormTrackLayer() {
+        _stormTrackProjectionLayer.clearLayers();
+        _stormTrackHandleLayer.clearLayers();
+        _stormTrackDragHandle = null;
+        _stormTrackDragAnchor = null;
+        _stormTrackMotion = null;
+        _stormTrackActiveBearingDeg = null;
+        _stormTrackLastCorridorLatLngs = [];
+        _stormTrackPlaceRows = [];
+        if (_stormTrackPlacesOverlayEl) {
+            _stormTrackPlacesOverlayEl.remove();
+            _stormTrackPlacesOverlayEl = null;
+        }
+        if (_stormTrackOutlineLayer) {
+            try { map.removeLayer(_stormTrackOutlineLayer); } catch (_) { /* ignore */ }
+            _stormTrackOutlineLayer = null;
+        }
+    }
+
+    function _setStormTrackDrawMode(enabled) {
+        _stormTrackDrawMode = !!enabled;
+        const startBtn = byId('wx-stormtrack-start');
+        if (startBtn) startBtn.classList.toggle('is-active', _stormTrackDrawMode);
+        const container = map?.getContainer?.();
+        if (container) container.style.cursor = _stormTrackDrawMode ? 'crosshair' : '';
+        if (_stormTrackDrawMode) {
+            setStatus('Storm track draw mode: click map points, then click Finish Line.');
+        }
+    }
+
+    function _renderStormTrackProjectionFromMinutes(aheadMinutes, bearingOverrideDeg = null) {
+        if (_stormTrackBaseLatLngs.length < 2) {
+            setStatus('Draw at least two points before projecting storm track.');
+            return null;
+        }
+        const motion = _stormTrackMotion;
+        if (!motion || !Number.isFinite(motion.speedMps) || motion.speedMps <= 0) {
+            setStatus('No valid motion vector available for storm-track projection.');
+            return null;
+        }
+
+        const basePts = _stormTrackBaseLatLngs.map((pt) => L.latLng(pt.lat, pt.lng));
+        const minsAhead = Math.max(0, Number(aheadMinutes) || 0);
+        const activeBearing = Number.isFinite(bearingOverrideDeg)
+            ? _normalizeBearingDeg(bearingOverrideDeg)
+            : (Number.isFinite(_stormTrackActiveBearingDeg)
+                ? _normalizeBearingDeg(_stormTrackActiveBearingDeg)
+                : _normalizeBearingDeg(motion.bearingDeg));
+        _stormTrackActiveBearingDeg = activeBearing;
+        const currentMeters = motion.speedMps * minsAhead * 60;
+        const widthScaleNow = 1 + (_STORM_TRACK_WIDTH_GROWTH_PER_INTERVAL * (minsAhead / _STORM_TRACK_INTERVAL_MIN));
+        const currentFrontRaw = basePts.map((pt) => _offsetLatLngGeodesic(pt, activeBearing, currentMeters));
+        const currentFront = _scalePolylineFromCentroid(currentFrontRaw, widthScaleNow);
+        const fadeSpanMins = Math.max(_STORM_TRACK_INTERVAL_MIN, minsAhead || _STORM_TRACK_INTERVAL_MIN);
+        const nowFadeT = Math.max(0, Math.min(1, minsAhead / fadeSpanMins));
+        const currentFrontOpacity = 0.99 - (0.75 * nowFadeT);
+        const currentFrontFillOpacity = 0.50 - (0.18 * nowFadeT);
+
+        _clearStormTrackProjection();
+        let corridor = [];
+        if (minsAhead > 0 && basePts.length >= 2 && currentFront.length === basePts.length) {
+            corridor = [...basePts, ...[...currentFront].reverse()];
+            L.polygon(corridor, {
+                color: '#22e8ff',
+                weight: 1,
+                opacity: 0.5,
+                fillColor: '#22e8ff',
+                fillOpacity: Math.max(0.12, currentFrontFillOpacity),
+                interactive: false,
+            }).addTo(_stormTrackProjectionLayer);
+        }
+        L.polyline(basePts, {
+            color: '#cbd5e1',
+            weight: 1.5,
+            opacity: 0.55,
+            dashArray: '2 6',
+        }).addTo(_stormTrackProjectionLayer);
+
+        L.polyline(currentFront, {
+            color: '#22e8ff',
+            weight: 2.5,
+            opacity: Math.max(0.35, currentFrontOpacity),
+            dashArray: '9 6',
+        }).addTo(_stormTrackProjectionLayer);
+
+        if (minsAhead > 0) {
+            const liveAnchor = currentFront[currentFront.length - 1];
+            L.marker(liveAnchor, {
+                interactive: false,
+                icon: L.divIcon({
+                    className: 'wx-stormtrack-label',
+                    html: `+${Math.round(minsAhead)}m`,
+                }),
+            }).addTo(_stormTrackProjectionLayer);
+        }
+
+        const maxInterval = Math.floor(minsAhead / _STORM_TRACK_INTERVAL_MIN) * _STORM_TRACK_INTERVAL_MIN;
+        for (let mins = _STORM_TRACK_INTERVAL_MIN; mins <= maxInterval; mins += _STORM_TRACK_INTERVAL_MIN) {
+            const distanceMeters = motion.speedMps * mins * 60;
+            const widthScale = 1 + (_STORM_TRACK_WIDTH_GROWTH_PER_INTERVAL * (mins / _STORM_TRACK_INTERVAL_MIN));
+            const shiftedRaw = basePts.map((pt) => _offsetLatLngGeodesic(pt, activeBearing, distanceMeters));
+            const shifted = _scalePolylineFromCentroid(shiftedRaw, widthScale);
+            const fadeT = Math.max(0, Math.min(1, mins / fadeSpanMins));
+            const shiftedOpacity = 0.92 - (0.55 * fadeT);
+            L.polyline(shifted, {
+                color: '#7dd3fc',
+                weight: 2,
+                opacity: Math.max(0.35, shiftedOpacity),
+                dashArray: '7 7',
+            }).addTo(_stormTrackProjectionLayer);
+            const labelAnchor = shifted[shifted.length - 1];
+            L.marker(labelAnchor, {
+                interactive: false,
+                icon: L.divIcon({
+                    className: 'wx-stormtrack-label',
+                    html: `+${mins}m`,
+                }),
+            }).addTo(_stormTrackProjectionLayer);
+        }
+
+        _stormTrackLastCorridorLatLngs = corridor;
+        return {
+            minsAhead,
+            activeBearing,
+            corridorLatLngs: corridor,
+        };
+    }
+
+    function _installStormTrackDragHandle() {
+        if (!_stormTrackDragAnchor) return;
+        _stormTrackHandleLayer.clearLayers();
+        const initialMinutes = _STORM_TRACK_INTERVAL_MIN;
+        const initialMeters = _stormTrackMotion
+            ? _stormTrackMotion.speedMps * initialMinutes * 60
+            : 0;
+        const initialPos = (_stormTrackMotion && initialMeters > 0)
+            ? _offsetLatLngGeodesic(_stormTrackDragAnchor, _stormTrackMotion.bearingDeg, initialMeters)
+            : _stormTrackDragAnchor;
+
+        _stormTrackDragHandle = L.marker(initialPos, {
+            draggable: true,
+            keyboard: false,
+            icon: L.divIcon({
+                className: 'wx-stormtrack-drag-handle',
+                html: '\u25c9',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+            }),
+        });
+        _stormTrackDragHandle.addTo(_stormTrackHandleLayer);
+        _stormTrackDragHandle.on('drag', (evt) => {
+            if (!_stormTrackMotion || !_stormTrackDragAnchor) return;
+            const handleLatLng = evt?.target?.getLatLng?.();
+            if (!handleLatLng) return;
+            const rawBearing = _bearingBetweenLatLng(_stormTrackDragAnchor, handleLatLng);
+            const activeBearing = _pivotedBearingDeg(rawBearing);
+            const meters = Math.max(0, _projectMetersOnMotion(_stormTrackDragAnchor, handleLatLng, activeBearing));
+            const snappedLatLng = _offsetLatLngGeodesic(_stormTrackDragAnchor, activeBearing, meters);
+            evt.target.setLatLng(snappedLatLng);
+            const mins = meters / (_stormTrackMotion.speedMps * 60);
+            _renderStormTrackProjectionFromMinutes(mins, activeBearing);
+        });
+        _stormTrackDragHandle.on('dragend', async (evt) => {
+            if (!_stormTrackMotion || !_stormTrackDragAnchor) return;
+            const handleLatLng = evt?.target?.getLatLng?.();
+            if (!handleLatLng) return;
+            const rawBearing = _bearingBetweenLatLng(_stormTrackDragAnchor, handleLatLng);
+            const activeBearing = _pivotedBearingDeg(rawBearing);
+            const meters = Math.max(0, _projectMetersOnMotion(_stormTrackDragAnchor, handleLatLng, activeBearing));
+            const snappedLatLng = _offsetLatLngGeodesic(_stormTrackDragAnchor, activeBearing, meters);
+            evt.target.setLatLng(snappedLatLng);
+            const mins = meters / (_stormTrackMotion.speedMps * 60);
+            const renderState = _renderStormTrackProjectionFromMinutes(mins, activeBearing);
+            const baseBearing = _stormTrackMotion?.bearingDeg;
+            const pivotDelta = Number.isFinite(baseBearing)
+                ? Math.round(_signedBearingDeltaDeg(baseBearing, activeBearing))
+                : 0;
+            setStatus(`Storm-track projection updated to +${Math.round(mins)} minutes (pivot ${pivotDelta >= 0 ? '+' : ''}${pivotDelta}\u00b0).`);
+
+            if (!renderState?.corridorLatLngs?.length) {
+                _stormTrackPlaceRows = [];
+                _renderStormTrackPlacesRows(_stormTrackPlaceRows);
+                return;
+            }
+            const reqSeq = ++_stormTrackPlacesComputeSeq;
+            setStatus(`Storm-track projection updated to +${Math.round(mins)} minutes (pivot ${pivotDelta >= 0 ? '+' : ''}${pivotDelta}deg). Computing place arrivals...`);
+            try {
+                const rows = await _computeStormTrackPlaceRows(_stormTrackMotion, activeBearing, mins, renderState.corridorLatLngs);
+                if (reqSeq !== _stormTrackPlacesComputeSeq) return;
+                _stormTrackPlaceRows = rows;
+                _renderStormTrackPlacesRows(rows);
+                setStatus(`Storm-track projection updated to +${Math.round(mins)} minutes (pivot ${pivotDelta >= 0 ? '+' : ''}${pivotDelta}deg). ${rows.length} place${rows.length === 1 ? '' : 's'} listed.`);
+            } catch (err) {
+                if (reqSeq !== _stormTrackPlacesComputeSeq) return;
+                _stormTrackPlaceRows = [];
+                _renderStormTrackPlacesRows(_stormTrackPlaceRows);
+                const msg = String(err?.message || err || 'unknown error');
+                setStatus(`Place arrival computation failed: ${msg}`);
+            }
+        });
+    }
+
+    function _activateStormTrackDragProjection() {
+        if (_stormTrackBaseLatLngs.length < 2) {
+            setStatus('Draw at least two points before finishing storm track.');
+            return;
+        }
+        const alertFeat = _stormTrackFallbackAlert();
+        const motion = _extractAlertMotion(alertFeat);
+        if (!motion) {
+            setStatus('No motion vector found on the selected alert. Open an alert detail first, then try again.');
+            return;
+        }
+
+        // Apply manual speed override if the field has a valid value.
+        const overrideKt = parseFloat(byId('wx-speed-override')?.value || '');
+        if (Number.isFinite(overrideKt) && overrideKt > 0) {
+            motion.speedMps = overrideKt * 0.514444;
+        }
+
+        _stormTrackMotion = motion;
+        _stormTrackActiveBearingDeg = motion.bearingDeg;
+        _stormTrackDragAnchor = _stormTrackAnchor(_stormTrackBaseLatLngs);
+        _renderStormTrackProjectionFromMinutes(_STORM_TRACK_INTERVAL_MIN);
+        _installStormTrackDragHandle();
+
+        // Draw cyan selection outline on the alert polygon being used.
+        if (_stormTrackOutlineLayer) {
+            try { map.removeLayer(_stormTrackOutlineLayer); } catch (_) { /* ignore */ }
+            _stormTrackOutlineLayer = null;
+        }
+        if (alertFeat?.geometry) {
+            try {
+                _stormTrackOutlineLayer = L.geoJSON({ type: 'Feature', geometry: alertFeat.geometry }, {
+                    style: { color: '#22e8ff', weight: 3, opacity: 0.9, fillOpacity: 0 },
+                    interactive: false,
+                }).addTo(map);
+            } catch (_) { /* ignore malformed geometry */ }
+        }
+
+        const evt = String(alertFeat?.properties?.event || 'alert');
+        const speedNote = (Number.isFinite(overrideKt) && overrideKt > 0)
+            ? ` [speed override: ${Math.round(overrideKt)} kt]` : '';
+        setStatus(`Drag the marker forward to project ${evt} at ${_STORM_TRACK_INTERVAL_MIN}-minute intervals (${motion.source}).${speedNote} Hold Shift to pivot up to \u00b1${_STORM_TRACK_PIVOT_MAX_DEG}\u00b0.`);
+    }
+
+    // ── Radar Speed Calibrator helpers ────────────────────────────────────────
+
+    function _clearSpeedOverride() {
+        const input = byId('wx-speed-override');
+        if (input) input.value = '';
+        const resultEl = byId('wx-radarcal-result');
+        if (resultEl) resultEl.textContent = '';
+    }
+
+    function _setRadarCalDrawMode(active) {
+        _radarCalDrawMode = active;
+        const startBtn = byId('wx-radarcal-start');
+        if (startBtn) startBtn.classList.toggle('is-active', active);
+        map.getContainer().style.cursor = active ? 'crosshair' : '';
+    }
+
+    function _clearRadarCalLine() {
+        if (_radarCalLayer) {
+            try { map.removeLayer(_radarCalLayer); } catch (_) { /* ignore */ }
+            _radarCalLayer = null;
+        }
+        _radarCalLatLngs = [];
+        const resultEl = byId('wx-radarcal-result');
+        if (resultEl) resultEl.textContent = '';
+    }
+
+    function _renderRadarCalLine() {
+        if (_radarCalLayer) {
+            try { map.removeLayer(_radarCalLayer); } catch (_) { /* ignore */ }
+            _radarCalLayer = null;
+        }
+        if (!_radarCalLatLngs.length) return;
+        const layers = [];
+        layers.push(L.circleMarker(_radarCalLatLngs[0], {
+            radius: 5, color: '#facc15', fillColor: '#facc15', fillOpacity: 1, weight: 1, interactive: false,
+        }));
+        if (_radarCalLatLngs.length >= 2) {
+            layers.push(L.polyline(_radarCalLatLngs, {
+                color: '#facc15', weight: 2.5, opacity: 0.9, dashArray: '6 4', interactive: false,
+            }));
+            layers.push(L.circleMarker(_radarCalLatLngs[_radarCalLatLngs.length - 1], {
+                radius: 5, color: '#facc15', fillColor: '#facc15', fillOpacity: 1, weight: 1, interactive: false,
+            }));
+            _computeRadarCalSpeed();
+        }
+        _radarCalLayer = L.layerGroup(layers).addTo(map);
+    }
+
+    function _computeRadarCalSpeed() {
+        if (_radarCalLatLngs.length < 2) return;
+        const p1 = _radarCalLatLngs[0];
+        const p2 = _radarCalLatLngs[_radarCalLatLngs.length - 1];
+        const distKm = _haversineKm(p1.lat, p1.lng, p2.lat, p2.lng);
+        const loopMinutes = _RADAR_OVERLAY_FRAMES * _RADAR_OVERLAY_STEP_MIN;
+        if (loopMinutes <= 0 || distKm <= 0) return;
+        const speedKmh = distKm / (loopMinutes / 60);
+        const speedKt = speedKmh / 1.852;
+        const rounded = Math.round(speedKt);
+
+        const input = byId('wx-speed-override');
+        if (input) input.value = String(rounded);
+
+        const resultEl = byId('wx-radarcal-result');
+        if (resultEl) resultEl.textContent = `Est. ${rounded} kt (${Math.round(speedKmh)} km/h) over ${loopMinutes} min`;
+
+        setStatus(`Radar speed estimate: ${rounded} kt — auto-filled speed override. Use Finish Line to project.`);
+    }
+
     // ── Immersive new-alert detail panel ─────────────────────────────────────
     let _activeNewAlertDetail = null;
 
@@ -1434,6 +2201,10 @@
         const linkHtml = fullUrl
             ? `<a class="wx-nad-fulllink" href="${_escapeHtml(fullUrl)}" target="_blank" rel="noopener noreferrer">View Full NWS Alert Text</a>`
             : '';
+        const showZoomLink = map.getZoom() < 9;
+        const zoomLinkHtml = showZoomLink
+            ? `<button type="button" class="wx-nad-zoomlink" data-nad-zoom="1">Zoom to Alert</button>`
+            : '';
         const navDisabled = total <= 1;
         const counter = total > 1 ? `<span class="wx-nad-counter">${index + 1} / ${total}</span>` : '';
 
@@ -1445,13 +2216,13 @@
             badges ? `<div class="wx-nad-badges">${badges}</div>` : '',
             issuedLine ? `<div class="wx-nad-issued">${issuedLine}</div>` : '',
             expiresLine ? `<div class="wx-nad-expires">${expiresLine}</div>` : '',
+            chipsHtml ? `<div class="wx-nad-section">${chipsHtml}</div>` : '',
             `<div class="wx-nad-scroll">`,
             descHtml ? `<section class="wx-nad-section">${descHtml}</section>` : '',
             locHtml ? `<section class="wx-nad-section"><h4>Locations Impacted</h4>${locHtml}</section>` : '',
             instrHtml ? `<section class="wx-nad-section"><h4>Precautionary / Preparedness Actions</h4>${instrHtml}</section>` : '',
-            chipsHtml ? `<section class="wx-nad-section">${chipsHtml}</section>` : '',
             `</div>`,
-            linkHtml ? `<div class="wx-nad-footer">${linkHtml}</div>` : '',
+            linkHtml ? `<div class="wx-nad-footer">${linkHtml}${zoomLinkHtml ? '<br>' + zoomLinkHtml : ''}</div>` : (zoomLinkHtml ? `<div class="wx-nad-footer">${zoomLinkHtml}</div>` : ''),
             (!navDisabled || counter)
                 ? `<div class="wx-nad-nav">
                        <button type="button" class="wx-nad-nav-btn" data-nad-nav="prev" aria-label="Previous alert"${navDisabled ? ' disabled' : ''}>‹</button>
@@ -1478,10 +2249,11 @@
     function _closeNewAlertDetail() {
         const ctx = _activeNewAlertDetail;
         if (!ctx) return;
-        const { panel, keyHandler, mapClickHandler, mapMoveHandler } = ctx;
+        const { panel, keyHandler, mapClickHandler, mapMoveHandler, dragCleanup } = ctx;
         if (keyHandler) document.removeEventListener('keydown', keyHandler);
         if (mapClickHandler) map.off('click', mapClickHandler);
         if (mapMoveHandler) map.off('movestart zoomstart', mapMoveHandler);
+        if (dragCleanup) dragCleanup();
         if (panel?.parentElement) panel.parentElement.removeChild(panel);
         _activeNewAlertDetail = null;
     }
@@ -1504,6 +2276,16 @@
         const idx = ctx.index;
         panel.innerHTML = _buildNewAlertDetailHtml(features[idx], idx, features.length);
         panel.querySelector('.wx-nad-close')?.addEventListener('click', _closeNewAlertDetail);
+        const zoomBtn = panel.querySelector('[data-nad-zoom]');
+        if (zoomBtn) {
+            zoomBtn.addEventListener('click', () => {
+                const feat = ctx.features?.[ctx.index];
+                const center = _alertFeatureCenterLatLng(feat) || latlng;
+                if (!center) return;
+                map.flyTo(center, 9, { duration: 0.9 });
+                _ensureRadarOverlayOn();
+            });
+        }
         panel.querySelectorAll('[data-nad-nav]').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const dir = btn.getAttribute('data-nad-nav');
@@ -1525,6 +2307,9 @@
     function _openNewAlertDetail(latlng, sourceFeat, options = {}) {
         const ensureRadar = options.ensureRadar !== false;
         const useAlertStack = options.useAlertStack !== false;
+        _stormTrackSelectedAlert = sourceFeat || null;
+        // Clear the speed override when switching to an alert's own motion data.
+        _clearSpeedOverride();
         _closeNewAlertDetail();
         // Close any normal alerts pager so views don't stack.
         if (_activeAlertsPopup?.popup) {
@@ -1560,12 +2345,44 @@
         panel.addEventListener('click', (e) => e.stopPropagation());
         wrap.appendChild(panel);
 
+        // Make the detail panel draggable by its header, mirroring the
+        // projected-arrivals panel behavior.
+        let drag = null;
+        const onDragMove = (evt) => {
+            if (!drag) return;
+            const x = evt.clientX - drag.wrapLeft - drag.dx;
+            const y = evt.clientY - drag.wrapTop - drag.dy;
+            panel.style.left = `${x}px`;
+            panel.style.top = `${y}px`;
+            panel.style.right = 'auto';
+            panel.style.transform = 'none';
+            panel.classList.remove('is-right', 'is-left');
+        };
+        const onDragUp = () => {
+            drag = null;
+            document.removeEventListener('pointermove', onDragMove);
+            document.removeEventListener('pointerup', onDragUp);
+        };
+        const dragCleanup = () => {
+            document.removeEventListener('pointermove', onDragMove);
+            document.removeEventListener('pointerup', onDragUp);
+        };
+
         const keyHandler = (e) => {
             if (e.key === 'Escape') _closeNewAlertDetail();
         };
         document.addEventListener('keydown', keyHandler);
-        const mapClickHandler = () => _closeNewAlertDetail();
-        map.on('click', mapClickHandler);
+        const mapClickHandler = () => {
+            // Don't close while the user is placing storm-track or radar-cal points.
+            if (_stormTrackDrawMode || _radarCalDrawMode) return;
+            _closeNewAlertDetail();
+        };
+        // Defer by one tick so the click that opened this panel doesn't
+        // immediately bubble to the map and close it.
+        setTimeout(() => {
+            if (!_activeNewAlertDetail) return;
+            map.on('click', mapClickHandler);
+        }, 0);
         // Close the panel if the user pans or zooms away (including the Home
         // button). Bind on the next tick so the initial flyTo's tail-end
         // movement doesn't immediately dismiss the panel we just opened.
@@ -1585,9 +2402,31 @@
             keyHandler,
             mapClickHandler,
             mapMoveHandler: null,
+            dragCleanup,
             _positioned: false,
         };
         _renderNewAlertDetail();
+
+        const headerEl = panel.querySelector('.wx-nad-header');
+        headerEl?.addEventListener('pointerdown', (evt) => {
+            if (evt.target && evt.target.closest('.wx-nad-close, .wx-nad-nav-btn, a, button')) return;
+            const wrapRect = wrap.getBoundingClientRect();
+            const rect = panel.getBoundingClientRect();
+            panel.style.left = `${rect.left - wrapRect.left}px`;
+            panel.style.top = `${rect.top - wrapRect.top}px`;
+            panel.style.right = 'auto';
+            panel.style.transform = 'none';
+            panel.classList.remove('is-right', 'is-left');
+            drag = {
+                dx: evt.clientX - rect.left,
+                dy: evt.clientY - rect.top,
+                wrapLeft: wrapRect.left,
+                wrapTop: wrapRect.top,
+            };
+            evt.preventDefault();
+            document.addEventListener('pointermove', onDragMove);
+            document.addEventListener('pointerup', onDragUp);
+        });
         if (ensureRadar) _ensureRadarOverlayOn();
     }
 
@@ -1936,6 +2775,7 @@
     // ── Reliability bar (Last Update / Data Age / Source) ────────────────────
     const _reliability = { ts: null, source: null, label: null };
     let _reliabilityTickerStarted = false;
+    const _LIVE_DATA_STALE_MS = 90 * 60 * 1000;
 
     function _formatAge(ms) {
         if (ms == null || !isFinite(ms) || ms < 0) return '—';
@@ -1965,6 +2805,15 @@
         _renderReliability();
     }
 
+    function _resolveDataTimestampMs(rawTs) {
+        return _asDate(rawTs)?.getTime() || Date.now();
+    }
+
+    function _staleNoteForTimestamp(tsMs, thresholdMs = _LIVE_DATA_STALE_MS) {
+        const ageMs = Date.now() - tsMs;
+        return ageMs > thresholdMs ? ` [stale: ${_formatAge(ageMs)}]` : '';
+    }
+
     function _startReliabilityTicker() {
         if (_reliabilityTickerStarted) return;
         _reliabilityTickerStarted = true;
@@ -1974,20 +2823,31 @@
 
     function _canApplyAlertsResponse() {
         return !_archiveMode
+            && !_rtmaScrubMode
             && _isTypeEnabled('alerts')
             && _getCheckedAlertCategories().length > 0;
     }
 
     function _canApplySpcResponse() {
         return !_archiveMode
+            && !_rtmaScrubMode
             && _isTypeEnabled('spc')
             && !!byId('weather-show-spc')?.checked;
     }
 
     function _canApplyMrmsResponse() {
         return !_archiveMode
+            && !_rtmaScrubMode
             && _isTypeEnabled('mrms')
             && !!_activeMrmsProduct();
+    }
+
+    function _canApplyRtmaResponse() {
+        return !_archiveMode
+            && !_rtmaScrubMode
+            && _isTypeEnabled('rtma')
+            && !!_activeRtmaStream()
+            && !!_activeRtmaProduct();
     }
 
     // ── New-alert notification banners ───────────────────────────────────────
@@ -2748,7 +3608,7 @@
     }
 
     // Single toggle for all top-bar "Test New Alert" UI behavior.
-    const ENABLE_TEST_ALERT_UI = true;
+    const ENABLE_TEST_ALERT_UI = false;
 
     // Built-in test sample used when file:// fetches are blocked by browser CORS.
     const _TEST_STW_ALERT_COLLECTION = {
@@ -2926,9 +3786,11 @@
             const countEl = byId('weather-alerts-count');
             if (countEl) countEl.textContent = `${fullFeatures.length} active alert(s)`;
             _renderActiveWarningsPanel();
-            if (!silentStatus) setStatus(`Alerts updated at ${new Date().toLocaleTimeString()}.`);
-            _setViewerTimestamp(fullGeojson?._updated || displayGeojson?._updated || Date.now());
-            _setReliability('Alerts', 'NWS, IEM', Date.now());
+            const alertsTsMs = _resolveDataTimestampMs(fullGeojson?._updated || displayGeojson?._updated);
+            const alertsStaleNote = _staleNoteForTimestamp(alertsTsMs);
+            if (!silentStatus) setStatus(`Alerts valid ${new Date(alertsTsMs).toLocaleTimeString()}.${alertsStaleNote}`);
+            _setViewerTimestamp(alertsTsMs);
+            _setReliability('Alerts', 'NWS, IEM', alertsTsMs);
         } catch (err) {
             if (requestSeq !== _alertsRequestSeq) return;
             console.error('[alerts] Load error:', err);
@@ -3682,42 +4544,20 @@
             if (supplemental.watchesEnabled) {
                 statusBits.push(`Watches ${supplemental.watchLayers.map((w) => `${w.type}-${w.mode}`).join(',')}`);
             }
-            setStatus(`SPC ${statusBits.join(' + ')} updated at ${new Date().toLocaleTimeString()}.`);
-            const spcUpdated = payloads.map(({ value }) => value?.geojson?._updated).find(Boolean)
+            const spcUpdatedRaw = payloads.map(({ value }) => value?.geojson?._updated).find(Boolean)
                 || mdsGeojson?._updated
-                || watchesGeojson?._updated
-                || Date.now();
-            _setViewerTimestamp(spcUpdated);
-            _setReliability(`SPC ${statusBits.join(' + ')}`, 'NOAA SPC', Date.now());
+                || watchesGeojson?._updated;
+            const spcTsMs = _resolveDataTimestampMs(spcUpdatedRaw);
+            const spcStaleNote = _staleNoteForTimestamp(spcTsMs);
+            setStatus(`SPC ${statusBits.join(' + ')} valid ${new Date(spcTsMs).toLocaleTimeString()}.${spcStaleNote}`);
+            _setViewerTimestamp(spcTsMs);
+            _setReliability(`SPC ${statusBits.join(' + ')}`, 'NOAA SPC', spcTsMs);
         } catch (err) {
             if (!_isActiveSpcRequest(requestSeq, selectionKey)) return;
             if (_isAbortLikeError(err)) return;
             console.error('[spc] Load error:', err);
             setMapEmptyMessage(null);
             setStatus(`SPC error: ${err.message}`);
-        }
-    }
-
-    async function _loadAlertsSpcOverlay(hazard) {
-        const seq = ++_alertsSpcSeq[hazard];
-        const existing = _alertsSpcLayers[hazard];
-        if (existing && map.hasLayer(existing)) map.removeLayer(existing);
-        _alertsSpcLayers[hazard] = null;
-        try {
-            const resp = await fetch(apiUrl(`/api/data/spc?day=1&hazard=${hazard}`));
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const geojson = await resp.json();
-            if (seq !== _alertsSpcSeq[hazard]) return;
-            const styleFn = hazard === 'cat' ? spcCatStyle : _spcProbCigStyle;
-            const layer = L.geoJSON(geojson, {
-                style: styleFn,
-                onEachFeature: (feat, lyr) => lyr.bindPopup(spcPopup(feat)),
-            });
-            _alertsSpcLayers[hazard] = layer;
-            if (byId(`weather-alerts-spc-${hazard}`)?.checked) layer.addTo(map);
-        } catch (err) {
-            if (seq !== _alertsSpcSeq[hazard]) return;
-            console.error(`[alerts-spc-${hazard}]`, err);
         }
     }
 
@@ -3798,7 +4638,7 @@
     }
 
     function _updateRightSidebarGroups() {
-        const groups = ['current', 'alerts', 'spc', 'mrms'];
+        const groups = ['current', 'alerts', 'spc', 'mrms', 'rtma'];
         let anyVisible = false;
         groups.forEach((type) => {
             const panel = byId(`wx-side-group-${type}`);
@@ -3830,14 +4670,16 @@
 
         if (spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
         if (surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
+        if (rtmaOverlay && map.hasLayer(rtmaOverlay)) map.removeLayer(rtmaOverlay);
+        if (rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) map.removeLayer(rtmaGradientLayer);
+        if (rtmaPointLayer && map.hasLayer(rtmaPointLayer)) map.removeLayer(rtmaPointLayer);
         if (mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
-        for (const h of _ALERTS_SPC_HAZARDS) {
-            if (_alertsSpcLayers[h] && map.hasLayer(_alertsSpcLayers[h])) map.removeLayer(_alertsSpcLayers[h]);
-            _alertsSpcLayers[h] = null;
-        }
         alertsLayer = null;
         spcLayer = null;
         surfaceLayer = null;
+        rtmaOverlay = null;
+        rtmaGradientLayer = null;
+        rtmaPointLayer = null;
         mrmsOverlay = null;
         _surfaceStations = [];
         setLegend(null);
@@ -3852,12 +4694,27 @@
         _activeAlertsPopup = null;
     }
 
+    function _resetTransientInteractiveUiForTabChange() {
+        _resetTransientAlertUiForTabChange();
+
+        // Clear storm-track artifacts and state when changing weather tabs.
+        _setStormTrackDrawMode(false);
+        _stormTrackBaseLatLngs = [];
+        _clearStormTrackLayer();
+
+        // Clear radar speed calibrator line/state; this does not affect radar imagery.
+        _setRadarCalDrawMode(false);
+        _clearRadarCalLine();
+        _clearSpeedOverride();
+    }
+
     function refreshActiveLayers() {
-        if (_archiveMode) return;
+        if (_archiveMode || _rtmaScrubMode) return;
         const alertsEnabled = _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0;
         const spcEnabled = _isTypeEnabled('spc') && byId('weather-show-spc')?.checked;
         const surfaceProduct = _activeSurfaceProduct();
         const surfaceEnabled = _isTypeEnabled('current') && !!surfaceProduct;
+        const rtmaEnabled = _isTypeEnabled('rtma') && !!_activeRtmaStream() && !!_activeRtmaProduct();
         const mrmsEnabled = _isTypeEnabled('mrms') && !!_activeMrmsProduct();
 
         // Clear legend at the start to ensure old legend doesn't persist when switching products
@@ -3866,6 +4723,9 @@
         if (!alertsEnabled && alertsLayer && map.hasLayer(alertsLayer)) map.removeLayer(alertsLayer);
         if (!spcEnabled && spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
         if (!surfaceEnabled && surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
+        if (!rtmaEnabled && rtmaOverlay && map.hasLayer(rtmaOverlay)) map.removeLayer(rtmaOverlay);
+        if (!rtmaEnabled && rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
+        if (!rtmaEnabled && rtmaPointLayer && map.hasLayer(rtmaPointLayer)) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
         if (!mrmsEnabled && mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
 
         if (!spcEnabled) {
@@ -3888,6 +4748,9 @@
         if (surfaceEnabled) {
             const region = byId('weather-region')?.value || 'NC';
             loadSurface(region, surfaceProduct || 'temperature');
+        }
+        if (rtmaEnabled) {
+            loadRtma();
         }
         if (mrmsEnabled) {
             loadMrms();
@@ -4085,8 +4948,8 @@
         const baseKm = _baseDistKm(zoom, region);
         const factor = region === 'WORLD'
             ? (zoom <= 3 ? 0.42 : zoom <= 5 ? 0.40 : 0.38)
-            : (zoom <= 5 ? 0.48 : 0.38);
-        const floorKm = region === 'WORLD' ? (zoom <= 3 ? 16 : 14) : 12;
+            : (zoom <= 5 ? 0.36 : 0.28);
+        const floorKm = region === 'WORLD' ? (zoom <= 3 ? 16 : 14) : 8;
         const minDistKm = Math.max(floorKm, baseKm * factor);
         return _filterByMinDistKm(stations, s => s.lat, s => s.lon, minDistKm);
     }
@@ -4116,14 +4979,14 @@
             // WORLD default extent: larger cells to cap render cost.
             if (zoom <= 3) return 10;
             // Mid-world zoom: slightly coarser than regional views.
-            if (zoom <= 5) return 15;
+            if (zoom <= 5) return 12;
             // Higher world zoom: tighten grid for better local fidelity.
-            return 10;
+            return 8;
         }
         // Non-world low zoom: moderate coarsening for responsiveness.
-        if (zoom <= 5) return 12;
+        if (zoom <= 5) return 8;
         // Regional/state zoom: finer cells for best detail.
-        return 10;
+        return 6;
     }
 
     // ── Gradient Interpolation Functions ──────────────────────────────────────
@@ -4448,7 +5311,7 @@
      * @param {Array} stations - array of {lat, lon, value}
      * @param {string} product - product key for colormap
      */
-    function _renderGradientSurface(stations, product) {
+    function _renderGradientSurface(stations, product, canvasAlpha = surfaceGradientOpacity, blurScale = _gradientBlurScale) {
         if (!stations.length) return null;
 
         // Use denser thinning for interpolation than for markers.
@@ -4490,9 +5353,9 @@
         }
 
         // Blur radius ~= cell size to fully dissolve seams
-        const blurPx = Math.round(Math.max(cellWidth, cellHeight) * 1.2 * _gradientBlurScale);
+        const blurPx = Math.round(Math.max(cellWidth, cellHeight) * 1.2 * blurScale);
         ctx.filter = blurPx > 0 ? `blur(${blurPx}px)` : 'none';
-        ctx.globalAlpha = Math.max(0, Math.min(1, surfaceGradientOpacity));
+        ctx.globalAlpha = Math.max(0, Math.min(1, canvasAlpha));
         ctx.drawImage(offscreen, 0, 0);
         ctx.filter = 'none';
         ctx.globalAlpha = 1.0;
@@ -4503,6 +5366,71 @@
         }
 
         // Convert canvas to ImageOverlay and return it
+        const imageUrl = canvas.toDataURL();
+        return L.imageOverlay(imageUrl, bounds, {
+            opacity: 1.0,
+            className: 'surface-gradient-overlay'
+        });
+    }
+
+    /**
+     * Render a gradient ImageOverlay directly from GRIB-subgrid points.
+     * Skips IDW entirely: each point is projected to canvas coordinates and painted
+     * as a filled cell, giving a pixel-accurate representation of the GRIB analysis.
+     *
+     * @param {Array} gridPoints - array of [lat, lon, value] from /api/data/rtma/grid
+     * @param {string} product   - RTMA product key
+     * @param {number} canvasAlpha
+     * @param {number} blurScale
+     * @returns {L.ImageOverlay|null}
+     */
+    function _renderGradientFromGribGrid(gridPoints, product, canvasAlpha = 1.0, blurScale = _rtmaGradientBlurScale) {
+        if (!gridPoints || !gridPoints.length) return null;
+
+        const bounds = map.getBounds();
+        const canvasSize = map.getSize();
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasSize.x;
+        canvas.height = canvasSize.y;
+
+        // Estimate cell size in pixels from the nominal GRIB stride spacing (~10km for stride=8).
+        // Use Leaflet's meters-per-pixel at the grid center latitude for accuracy.
+        const refLat = gridPoints[Math.floor(gridPoints.length / 2)][0];
+        const cosLat = Math.max(0.1, Math.cos(refLat * Math.PI / 180));
+        const zoom = map.getZoom();
+        const metersPerPx = 40075016 * cosLat / Math.pow(2, zoom + 8);
+        // Nominal stride spacing: stride=8 × 2.5km/cell = 20km; add 20% overlap to fill gaps.
+        const NOMINAL_SPACING_M = 20000;
+        const cellPx = Math.max(3, (NOMINAL_SPACING_M / metersPerPx) * 1.2);
+
+        const offscreen = document.createElement('canvas');
+        offscreen.width = canvas.width;
+        offscreen.height = canvas.height;
+        const offCtx = offscreen.getContext('2d');
+
+        let minVal = Infinity;
+        let maxVal = -Infinity;
+        for (const pt of gridPoints) {
+            const v = pt[2];
+            if (v < minVal) minVal = v;
+            if (v > maxVal) maxVal = v;
+        }
+
+        const half = cellPx / 2;
+        for (const pt of gridPoints) {
+            const px = map.latLngToContainerPoint([pt[0], pt[1]]);
+            offCtx.fillStyle = _getColorAtValue(pt[2], minVal, maxVal, product);
+            offCtx.fillRect(px.x - half, px.y - half, cellPx, cellPx);
+        }
+
+        const ctx = canvas.getContext('2d');
+        const blurPx = Math.round(cellPx * 1.2 * blurScale);
+        ctx.filter = blurPx > 0 ? `blur(${blurPx}px)` : 'none';
+        ctx.globalAlpha = Math.max(0, Math.min(1, canvasAlpha));
+        ctx.drawImage(offscreen, 0, 0);
+        ctx.filter = 'none';
+        ctx.globalAlpha = 1.0;
+
         const imageUrl = canvas.toDataURL();
         return L.imageOverlay(imageUrl, bounds, {
             opacity: 1.0,
@@ -4641,9 +5569,11 @@
 
             const countEl = byId('weather-surface-count');
             if (countEl) countEl.textContent = `${stations.length} station(s)`;
-            setStatus(`Surface ${product} for ${region} updated at ${new Date().toLocaleTimeString()}.`);
-            _setViewerTimestamp(data?.timestamp || Date.now());
-            _setReliability(`Surface ${product}`, 'IEM', Date.now());
+            const surfaceTsMs = _resolveDataTimestampMs(data?.timestamp);
+            const surfaceStaleNote = _staleNoteForTimestamp(surfaceTsMs);
+            setStatus(`Surface ${product} for ${region} valid ${new Date(surfaceTsMs).toLocaleTimeString()}.${surfaceStaleNote}`);
+            _setViewerTimestamp(surfaceTsMs);
+            _setReliability(`Surface ${product}`, 'IEM', surfaceTsMs);
 
             // Pass the already-fetched stations so _ensureGradientStations
             // doesn't fire a duplicate request for the same endpoint.
@@ -4659,6 +5589,7 @@
     const _SURFACE_COLORMAPS = {
         station_plot: [[-60, '#00352C'], [-20, '#c4c4d4'], [0, '#570057'], [32, '#0000ff'], [50, '#c4c403'], [80, '#c20303'], [130, '#000000']],
         temperature: [[-60, '#00352C'], [-20, '#c4c4d4'], [0, '#570057'], [32, '#0000ff'], [50, '#c4c403'], [80, '#c20303'], [130, '#000000']],
+        temperature_change_24h: [[-40, '#4c1d95'], [-30, '#312e81'], [-20, '#1d4ed8'], [-10, '#0ea5e9'], [0, '#f8fafc'], [10, '#f59e0b'], [20, '#ef4444'], [30, '#b91c1c'], [40, '#7f1d1d']],
         feels_like: [[-60, '#00352C'], [-20, '#c4c4d4'], [0, '#570057'], [32, '#0000ff'], [50, '#c4c403'], [80, '#c20303'], [130, '#000000']],
         dew_point: [[-60, '#00352C'], [-20, '#c4c4d4'], [0, '#570057'], [32, '#0000ff'], [50, '#c4c403'], [80, '#c20303'], [130, '#000000']],
         relative_humidity: [[0, '#c8a000'], [20, '#f5dd72'], [40, '#69bb6d'], [60, '#0099cc'], [80, '#0055aa'], [100, '#003377']],
@@ -4685,6 +5616,35 @@
         return Number.isInteger(value) ? String(value) : value.toFixed(1);
     }
 
+    function renderContinuousLegend(title, axisLabel, anchors) {
+        const normalized = (Array.isArray(anchors) ? anchors : [])
+            .map((item) => Array.isArray(item)
+                ? [Number(item[0]), item[1]]
+                : [Number(item?.value), item?.color])
+            .filter(([value, color]) => Number.isFinite(value) && color);
+        if (!normalized.length) return '';
+
+        const min = normalized[0][0];
+        const max = normalized[normalized.length - 1][0];
+        const range = Math.max(1, max - min);
+        const gradient = normalized.map(([value, color]) => {
+            const pct = ((value - min) / range) * 100;
+            return `${color} ${pct.toFixed(2)}%`;
+        }).join(', ');
+        const ticks = normalized.map(([value]) => (
+            `<span>${escapeHtml(_formatSurfaceTick(value))}</span>`
+        )).join('');
+
+        return (
+            `<h4>${escapeHtml(title)}</h4>` +
+            `<div class="surface-colorbar">` +
+            `<div class="surface-colorbar-bar" style="background: linear-gradient(to right, ${gradient});"></div>` +
+            `<div class="surface-colorbar-ticks">${ticks}</div>` +
+            `<div class="surface-colorbar-label">${escapeHtml(axisLabel)}</div>` +
+            `</div>`
+        );
+    }
+
     function buildSurfaceLegend(unit, anchors, product) {
         if (!anchors?.length) {
             setLegend(null);
@@ -4692,26 +5652,8 @@
         }
 
         const label = _SURFACE_PRODUCT_LABELS[product] || product.replace(/_/g, ' ');
-        const min = anchors[0][0];
-        const max = anchors[anchors.length - 1][0];
-        const range = Math.max(1, max - min);
-        const gradient = anchors.map(([value, color]) => {
-            const pct = ((value - min) / range) * 100;
-            return `${color} ${pct.toFixed(2)}%`;
-        }).join(', ');
-        const ticks = anchors.map(([value]) => (
-            `<span>${_formatSurfaceTick(value)}</span>`
-        )).join('');
         const axisLabel = unit ? `${label} (${unit})` : label;
-
-        setLegend(
-            `<h4>Surface: ${label}</h4>` +
-            `<div class="surface-colorbar">` +
-            `<div class="surface-colorbar-bar" style="background: linear-gradient(to right, ${gradient});"></div>` +
-            `<div class="surface-colorbar-ticks">${ticks}</div>` +
-            `<div class="surface-colorbar-label">${axisLabel}</div>` +
-            `</div>`
-        );
+        setLegend(renderContinuousLegend(`Surface: ${label}`, axisLabel, anchors));
     }
 
     function applySurfaceValueOpacity(val) {
@@ -4734,6 +5676,11 @@
         if (_surfaceStations.length && _isTypeEnabled('current') && _activeSurfaceProduct()) {
             _renderSurfaceMarkers(_surfaceStations);
         }
+        if (_isTypeEnabled('rtma')) {
+            const key = `${_activeRtmaRegion()}|${_activeRtmaStream()}|${_activeRtmaProduct()}`;
+            if (_rtmaPointsAll.length && _rtmaPointsKey === key) _renderRtmaPoints();
+            else _scheduleRtmaPointsLoad();
+        }
         // Swap display geometry when crossing the zoom-bucket threshold (low ↔ high).
         // Full geometry (_allAlertFeatures) is unchanged; only the render layer is swapped.
         if (!_archiveMode && _isTypeEnabled('alerts') && _allAlertFeatures.length) {
@@ -4750,6 +5697,41 @@
     // ── MRMS helpers ─────────────────────────────────────────────────────────
     function _activeMrmsProduct() {
         return document.querySelector('.mrms-product-check:checked')?.value || null;
+    }
+
+    function _activeRtmaStream() {
+        return document.querySelector('.weather-rtma-stream:checked')?.value || null;
+    }
+
+    function _activeRtmaProduct() {
+        return document.querySelector('.weather-rtma-product:checked')?.value || null;
+    }
+
+    function _syncRtmaProductForStream() {
+        const stream = _activeRtmaStream();
+        const delta24h = document.querySelector('.weather-rtma-product[value="temperature_change_24h"]');
+        if (!delta24h) return;
+
+        const supported = stream === 'rtma_hourly';
+        delta24h.disabled = !supported;
+
+        const row = delta24h.closest('.rtma-product-row');
+        if (row) row.style.opacity = supported ? '' : '0.55';
+
+        if (!supported && delta24h.checked) {
+            delta24h.checked = false;
+            const fallback = document.querySelector('.weather-rtma-product[value="temperature"]')
+                || document.querySelector('.weather-rtma-product');
+            if (fallback) fallback.checked = true;
+            setStatus('24-hour temp change is only available on RTMA Hourly.');
+        }
+    }
+
+    function _activeRtmaRegion() {
+        const selectedRegion = String(byId('weather-region')?.value || 'CONUS').toUpperCase();
+        // RTMA regions are CONUS, AK, HI, PR. For any state selection, load CONUS product
+        const rtmaRegions = ['CONUS', 'AK', 'HI', 'PR'];
+        return rtmaRegions.includes(selectedRegion) ? selectedRegion : 'CONUS';
     }
 
     // composeMrmsProductKey: mirrors Python MRMS_PRODUCTS key structure
@@ -4820,6 +5802,7 @@
     }
 
     async function loadMrms() {
+        const MRMS_STALE_MS = 90 * 60 * 1000;
         const requestSeq = ++_mrmsRequestSeq;
         const product = composeMrmsProductKey();
         if (!product) return;
@@ -4854,15 +5837,502 @@
 
             buildMrmsLegend(data);
 
-            if (statusEl) statusEl.textContent = `${data.full_name} at ${new Date().toLocaleTimeString()}`;
-            setStatus(`MRMS ${product} updated at ${new Date().toLocaleTimeString()}.`);
-            _setViewerTimestamp(data?.timestamp || Date.now());
-            _setReliability(`MRMS ${product}`, 'NOAA MRMS', Date.now());
+            const dataTsMs = _asDate(data?.timestamp)?.getTime() || Date.now();
+            const ageMs = Date.now() - dataTsMs;
+            const staleNote = ageMs > MRMS_STALE_MS
+                ? ` [stale: ${_formatAge(ageMs)}]`
+                : '';
+
+            if (statusEl) statusEl.textContent = `${data.full_name} valid ${new Date(dataTsMs).toLocaleTimeString()}${staleNote}`;
+            setStatus(`MRMS ${product} valid ${new Date(dataTsMs).toLocaleTimeString()}.${staleNote}`);
+            _setViewerTimestamp(dataTsMs);
+            _setReliability(`MRMS ${product}`, 'NOAA MRMS', dataTsMs);
         } catch (err) {
             if (requestSeq !== _mrmsRequestSeq) return;
             console.error('[mrms] Load error:', err);
             if (statusEl) statusEl.textContent = `Error: ${err.message}`;
             setStatus(`MRMS error: ${err.message}`);
+        }
+    }
+
+    function buildRtmaLegend(data) {
+        const legend = data?.legend;
+        const title = escapeHtml(data?.full_name || 'RTMA');
+        const units = escapeHtml(data?.units || '');
+        const anchors = Array.isArray(legend?.anchors) ? legend.anchors : [];
+        if (anchors.length) {
+            const axisLabel = units ? `${title} (${units})` : title;
+            setLegend(renderContinuousLegend(`RTMA: ${title}`, axisLabel, anchors));
+            return;
+        }
+        const range = Number.isFinite(Number(data?.vmin)) && Number.isFinite(Number(data?.vmax))
+            ? `<div class="mrms-legend-units">${escapeHtml(String(data.vmin))} to ${escapeHtml(String(data.vmax))} ${units}</div>`
+            : '';
+        setLegend(`<div class="mrms-legend-head"><h4>${title}</h4></div>${range}`);
+    }
+
+    function _rtmaStaleThresholdMs(stream, product) {
+        if (stream === 'rtma_rapid_update') return 3 * 60 * 60 * 1000;
+        return 12 * 60 * 60 * 1000;
+    }
+
+    async function loadRtma() {
+        const requestSeq = ++_rtmaRequestSeq;
+        const region = _activeRtmaRegion();
+        const stream = _activeRtmaStream();
+        const product = _activeRtmaProduct();
+        if (!region || !stream || !product) return;
+
+        setStatus(`Loading ${region} ${stream} ${product}...`);
+
+        // Fire grid fetch in parallel — it will re-render gradient when it arrives.
+        loadRtmaGrid();
+
+        try {
+            const url = apiUrl(
+                `/api/data/rtma/points?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
+            );
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || resp.statusText);
+            }
+            const data = await resp.json();
+
+            if (requestSeq !== _rtmaRequestSeq || !_canApplyRtmaResponse()) return;
+
+            if (rtmaOverlay) { map.removeLayer(rtmaOverlay); rtmaOverlay = null; }
+
+            _rtmaPointsAll = Array.isArray(data.points) ? data.points : [];
+            _rtmaPointsUnits = data.units || '';
+            _rtmaPointsKey = `${region}|${stream}|${product}`;
+            _lastRtmaPointsFetchKey = _rtmaPointsKey;
+            _lastRtmaPointsFetchMs = Date.now();
+
+            _renderRtmaPoints();
+            buildRtmaLegend(data);
+
+            const dataTsMs = _asDate(data?.timestamp)?.getTime() || Date.now();
+            const ageMs = Date.now() - dataTsMs;
+            const staleNote = ageMs > _rtmaStaleThresholdMs(stream, product)
+                ? ` [stale: ${_formatAge(ageMs)}]`
+                : '';
+            const title = data?.full_name || product;
+            setStatus(`RTMA ${title} valid ${new Date(dataTsMs).toLocaleTimeString()}${staleNote}.`);
+            _setViewerTimestamp(dataTsMs);
+            _setReliability(`RTMA ${title}`, `NOAA ${stream}`, dataTsMs);
+        } catch (err) {
+            if (requestSeq !== _rtmaRequestSeq) return;
+            console.error('[rtma] Load error:', err);
+            if (rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
+            if (rtmaPointLayer && map.hasLayer(rtmaPointLayer)) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
+            setLegend(null);
+            setStatus(`RTMA error: ${err.message}`);
+        }
+    }
+
+    function _scheduleRtmaPointsLoad(delayMs = RTMA_POINTS_DEBOUNCE_MS, forceReload = false) {
+        if (_rtmaPointsDebounceTimer) clearTimeout(_rtmaPointsDebounceTimer);
+        _rtmaPointsDebounceTimer = setTimeout(() => {
+            _rtmaPointsDebounceTimer = null;
+            loadRtmaPoints(forceReload);
+        }, Math.max(0, delayMs));
+    }
+
+    function _thinRtmaPoints(points) {
+        if (!Array.isArray(points) || !points.length) return [];
+        const zoom = map.getZoom();
+        const region = (byId('weather-region')?.value || '').toUpperCase();
+        const minDistKm = _baseDistKm(zoom, region) / _surfaceDensity;
+        const bounds = map.getBounds();
+        const inView = points.filter((p) => bounds.contains([p.lat, p.lon]));
+        return _filterByMinDistKm(inView, p => p.lat, p => p.lon, minDistKm);
+    }
+
+    function _renderRtmaPoints() {
+        if (rtmaGradientLayer) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
+        if (rtmaPointLayer) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
+        if (!_rtmaPointsAll.length && !_rtmaGridPoints.length) return;
+
+        const product = _activeRtmaProduct()
+            || (_rtmaPointsKey ? _rtmaPointsKey.split('|')[2] : null);
+
+        // Gradient — prefer GRIB subgrid (accurate, no IDW) when key matches live product.
+        // Fall back to IDW from city points for scrubber frames and when grid is unavailable.
+        if (product) {
+            const currentKey = `${_activeRtmaRegion()}|${_activeRtmaStream()}|${product}`;
+            const useGrid = _rtmaGridPoints.length && _rtmaGridKey === currentKey;
+            const gradLayer = useGrid
+                ? _renderGradientFromGribGrid(_rtmaGridPoints, product, 1.0, _rtmaGradientBlurScale)
+                : (_rtmaPointsAll.length ? _renderGradientSurface(_rtmaPointsAll, product, 1.0, _rtmaGradientBlurScale) : null);
+            if (gradLayer) {
+                rtmaGradientLayer = gradLayer;
+                rtmaGradientLayer.setOpacity(rtmaGradientOpacity);
+                if (_isTypeEnabled('rtma')) rtmaGradientLayer.addTo(map);
+            }
+        }
+
+        // Value markers — checkbox-gated
+        if (byId('weather-rtma-show-values')?.checked) {
+            const thin = _thinRtmaPoints(_rtmaPointsAll);
+            if (thin.length) {
+                const markers = thin.map(p => {
+                    const icon = surfaceColoredTextIcon(p.value, _rtmaPointsUnits, 0.9);
+                    return L.marker([p.lat, p.lon], { icon });
+                });
+                rtmaPointLayer = L.layerGroup(markers);
+                if (_isTypeEnabled('rtma')) rtmaPointLayer.addTo(map);
+            }
+        }
+    }
+
+    async function loadRtmaPoints(forceReload = false) {
+        if (!byId('weather-rtma-show-values')?.checked) {
+            if (rtmaPointLayer) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
+            return;
+        }
+        const requestSeq = ++_rtmaPointsSeq;
+        const region = _activeRtmaRegion();
+        const stream = _activeRtmaStream();
+        const product = _activeRtmaProduct();
+        if (!region || !stream || !product) return;
+
+        const queryKey = `${region}|${stream}|${product}`;
+        const now = Date.now();
+
+        if (!forceReload && _rtmaPointsKey === queryKey && _rtmaPointsAll.length) {
+            _renderRtmaPoints();
+            return;
+        }
+
+        if (_rtmaPointsInFlightKey === queryKey) {
+            return;
+        }
+        if (
+            !forceReload
+            &&
+            _lastRtmaPointsFetchKey === queryKey
+            && now - _lastRtmaPointsFetchMs < RTMA_POINTS_MIN_FETCH_INTERVAL_MS
+        ) {
+            if (_rtmaPointsKey === queryKey && _rtmaPointsAll.length) _renderRtmaPoints();
+            return;
+        }
+
+        try {
+            _rtmaPointsInFlightKey = queryKey;
+            const url = apiUrl(
+                `/api/data/rtma/points?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
+            );
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || resp.statusText);
+            }
+            const data = await resp.json();
+            if (requestSeq !== _rtmaPointsSeq || !_canApplyRtmaResponse()) return;
+            _rtmaPointsAll = Array.isArray(data.points) ? data.points : [];
+            _rtmaPointsUnits = data.units || '';
+            _rtmaPointsKey = queryKey;
+            _renderRtmaPoints();
+            _lastRtmaPointsFetchKey = queryKey;
+            _lastRtmaPointsFetchMs = Date.now();
+        } catch (err) {
+            if (requestSeq !== _rtmaPointsSeq) return;
+            console.error('[rtma points] Load error:', err);
+        } finally {
+            if (_rtmaPointsInFlightKey === queryKey) _rtmaPointsInFlightKey = null;
+        }
+    }
+
+    /**
+     * Fetch GRIB-subgrid data from /api/data/rtma/grid and store in _rtmaGridPoints.
+     * Called in parallel with loadRtma() to provide the gradient data source.
+     */
+    async function loadRtmaGrid(forceReload = false) {
+        const region = _activeRtmaRegion();
+        const stream = _activeRtmaStream();
+        const product = _activeRtmaProduct();
+        if (!region || !stream || !product) return;
+
+        const queryKey = `${region}|${stream}|${product}`;
+
+        if (!forceReload && _rtmaGridKey === queryKey && _rtmaGridPoints.length) return;
+        if (_rtmaGridInFlightKey === queryKey) return;
+
+        const requestSeq = ++_rtmaGridSeq;
+        try {
+            _rtmaGridInFlightKey = queryKey;
+            const url = apiUrl(
+                `/api/data/rtma/grid?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
+            );
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || resp.statusText);
+            }
+            const data = await resp.json();
+            if (requestSeq !== _rtmaGridSeq || !_canApplyRtmaResponse()) return;
+            _rtmaGridPoints = Array.isArray(data.points) ? data.points : [];
+            _rtmaGridKey = queryKey;
+            // Re-render gradient now that grid data is available.
+            _renderRtmaPoints();
+        } catch (err) {
+            console.warn('[rtma grid] Load error:', err);
+        } finally {
+            if (_rtmaGridInFlightKey === queryKey) _rtmaGridInFlightKey = null;
+        }
+    }
+
+    function _setRtmaScrubberStatus(message) {
+        const el = byId('weather-rtma-scrubber-status');
+        if (el) el.textContent = message || '';
+    }
+
+    function _setScrubberControlsEnabled(enabled) {
+        ['scrubber-step-back', 'scrubber-play', 'scrubber-step-fwd', 'scrubber-slider'].forEach((id) => {
+            const el = byId(id);
+            if (el) el.disabled = !enabled;
+        });
+    }
+
+    function _updateRtmaScrubberUi() {
+        const slider = byId('scrubber-slider');
+        const tsEl = byId('scrubber-timestamp');
+        const cntEl = byId('scrubber-frame-count');
+        const n = _rtmaScrubFrames.length;
+        if (slider) {
+            slider.min = '0';
+            slider.max = String(n > 0 ? n - 1 : 0);
+            slider.value = String(_rtmaScrubFrameIndex);
+        }
+        if (cntEl) cntEl.textContent = n > 0 ? `${_rtmaScrubFrameIndex + 1}/${n}` : '0/0';
+        if (!n) {
+            if (tsEl) tsEl.textContent = 'No frames found';
+            return;
+        }
+        const frame = _rtmaScrubFrames[_rtmaScrubFrameIndex];
+        if (tsEl) {
+            try {
+                tsEl.textContent = new Date(frame.timestamp).toLocaleString(undefined, {
+                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+                });
+            } catch {
+                tsEl.textContent = frame.timestamp || '--';
+            }
+        }
+    }
+
+    function _stopRtmaScrubPlay() {
+        if (_rtmaScrubPlayTimer) {
+            clearInterval(_rtmaScrubPlayTimer);
+            _rtmaScrubPlayTimer = null;
+        }
+        const btn = byId('scrubber-play');
+        if (btn) btn.textContent = '▶';
+    }
+
+    function _startRtmaScrubPlay() {
+        if (!_rtmaScrubFrames.length || _rtmaScrubPlayTimer) return;
+        const btn = byId('scrubber-play');
+        if (btn) btn.textContent = '⏸';
+
+        const tick = () => {
+            if (!_rtmaScrubPlayTimer || !_rtmaScrubFrames.length) return;
+            const atLast = _rtmaScrubFrameIndex >= _rtmaScrubFrames.length - 1;
+            const next = atLast ? 0 : _rtmaScrubFrameIndex + 1;
+            _renderRtmaScrubFrame(next);
+            const delay = atLast ? RTMA_SCRUB_LOOP_HOLD_MS : RTMA_SCRUB_PLAY_INTERVAL_MS;
+            _rtmaScrubPlayTimer = setTimeout(tick, delay);
+        };
+
+        _rtmaScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+    }
+
+    function _exitRtmaScrubMode(shouldRefresh = true) {
+        _stopRtmaScrubPlay();
+        _rtmaScrubMode = false;
+        _rtmaScrubFrames = [];
+        _rtmaScrubFrameIndex = 0;
+        _rtmaScrubFrameCache.clear();
+        _setArchiveProgress(false);
+        _setArchiveScrubber(false);
+        _setScrubberControlsEnabled(false);
+        _setRtmaScrubberStatus('');
+        byId('weather-rtma-load-scrubber')?.classList.remove('active');
+        byId('weather-mode-current')?.classList.add('active');
+        const animWin = byId('rtma-animate-window');
+        if (animWin) animWin.style.display = 'none';
+        if (shouldRefresh) {
+            refreshActiveLayers();
+        }
+    }
+
+    async function _fetchRtmaFramePayload(frame) {
+        // Use the stream/region/product embedded in the frame object, not the
+        // live UI selectors. This prevents a mismatch when the user changes
+        // the stream/product after the scrubber frames were loaded.
+        const region = frame.region || _activeRtmaRegion();
+        const stream = frame.stream || _activeRtmaStream();
+        const product = frame.product || _activeRtmaProduct();
+        const cacheKey = `${region}|${stream}|${product}|${frame.source_data_key}`;
+        const existing = _rtmaScrubFrameCache.get(cacheKey);
+        if (existing) return existing;
+
+        const bounds = map.getBounds();
+        const s = bounds.getSouth().toFixed(4);
+        const w = bounds.getWest().toFixed(4);
+        const n = bounds.getNorth().toFixed(4);
+        const e = bounds.getEast().toFixed(4);
+
+        const overlayUrl = apiUrl(
+            `/api/data/rtma?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}` +
+            `&product=${encodeURIComponent(product)}&source_data_key=${encodeURIComponent(frame.source_data_key)}` +
+            `&south=${s}&west=${w}&north=${n}&east=${e}`
+        );
+        const pointsUrl = apiUrl(
+            `/api/data/rtma/points?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}` +
+            `&product=${encodeURIComponent(product)}&source_data_key=${encodeURIComponent(frame.source_data_key)}` +
+            `&south=${s}&west=${w}&north=${n}&east=${e}`
+        );
+
+        const payload = RTMA_SCRUB_POINTS_ONLY
+            ? await (async () => {
+                const pointsResp = await fetch(pointsUrl);
+                if (!pointsResp.ok) {
+                    const err = await pointsResp.json().catch(() => ({ detail: pointsResp.statusText }));
+                    throw new Error(err.detail || pointsResp.statusText);
+                }
+                const pointsData = await pointsResp.json();
+                return { overlay: null, points: pointsData };
+            })()
+            : await (async () => {
+                const [overlayResp, pointsResp] = await Promise.all([fetch(overlayUrl), fetch(pointsUrl)]);
+                if (!overlayResp.ok) {
+                    const err = await overlayResp.json().catch(() => ({ detail: overlayResp.statusText }));
+                    throw new Error(err.detail || overlayResp.statusText);
+                }
+                if (!pointsResp.ok) {
+                    const err = await pointsResp.json().catch(() => ({ detail: pointsResp.statusText }));
+                    throw new Error(err.detail || pointsResp.statusText);
+                }
+                return {
+                    overlay: await overlayResp.json(),
+                    points: await pointsResp.json(),
+                };
+            })();
+
+        _rtmaScrubFrameCache.set(cacheKey, payload);
+        return payload;
+    }
+
+    async function _renderRtmaScrubFrame(index) {
+        if (!_rtmaScrubFrames.length) return;
+        _rtmaScrubFrameIndex = Math.max(0, Math.min(index, _rtmaScrubFrames.length - 1));
+        _updateRtmaScrubberUi();
+
+        const frame = _rtmaScrubFrames[_rtmaScrubFrameIndex];
+        try {
+            const payload = await _fetchRtmaFramePayload(frame);
+            const data = payload.overlay || payload.points || {};
+            const pointsData = payload.points;
+
+            if (rtmaOverlay) {
+                map.removeLayer(rtmaOverlay);
+                rtmaOverlay = null;
+            }
+            if (!RTMA_SCRUB_POINTS_ONLY && data?.image_url && Array.isArray(data?.bounds)) {
+                const b = data.bounds;
+                const leafletBounds = [[b[2], b[0]], [b[3], b[1]]];
+                rtmaOverlay = L.imageOverlay(apiUrl(data.image_url), leafletBounds, { opacity: rtmaOpacity });
+                rtmaOverlay.addTo(map);
+            }
+
+            _rtmaPointsAll = Array.isArray(pointsData?.points) ? pointsData.points : [];
+            _rtmaPointsUnits = pointsData?.units || '';
+            _rtmaPointsKey = `${frame.region || _activeRtmaRegion()}|${frame.stream || _activeRtmaStream()}|${frame.product || _activeRtmaProduct()}`;
+            _renderRtmaPoints();
+
+            buildRtmaLegend(pointsData || data);
+            const dataTsMs = _asDate(pointsData?.timestamp || data?.timestamp)?.getTime() || Date.now();
+            const title = pointsData?.full_name || data?.full_name || frame.product || _activeRtmaProduct();
+            setStatus(`RTMA scrub ${title} (gradient) ${new Date(dataTsMs).toLocaleTimeString()}.`);
+            _setViewerTimestamp(dataTsMs);
+            _setReliability(`RTMA ${title}`, `NOAA ${frame.stream || _activeRtmaStream()}`, dataTsMs);
+            _setRtmaScrubberStatus(`Loaded ${_rtmaScrubFrameIndex + 1} of ${_rtmaScrubFrames.length} frames.`);
+        } catch (err) {
+            console.error('[rtma scrub] Frame render error:', err);
+            const frameKey = frame?.source_data_key;
+            if (frameKey) _rtmaScrubFrameErrors.add(frameKey);
+            // Auto-skip to the next valid frame rather than freezing on error.
+            const nextIndex = _rtmaScrubFrames.findIndex(
+                (f, i) => i > _rtmaScrubFrameIndex && !_rtmaScrubFrameErrors.has(f.source_data_key)
+            );
+            if (nextIndex !== -1) {
+                _setRtmaScrubberStatus(`Frame unavailable, skipping…`);
+                _renderRtmaScrubFrame(nextIndex);
+            } else {
+                setStatus(`RTMA scrubber error: ${err.message}`);
+                _setRtmaScrubberStatus(`Frame unavailable: ${err.message}`);
+            }
+        }
+    }
+
+    async function loadRtmaScrubberFrames() {
+        const region = _activeRtmaRegion();
+        const stream = _activeRtmaStream();
+        const product = _activeRtmaProduct();
+        if (!region || !stream || !product) {
+            setStatus('Select an RTMA stream and product first.');
+            return;
+        }
+
+        _rtmaScrubMode = true;
+        _stopRtmaScrubPlay();
+        _rtmaScrubFrames = [];
+        _rtmaScrubFrameErrors.clear();
+        _rtmaScrubFrameIndex = 0;
+        _rtmaScrubFrameCache.clear();
+        _setArchiveScrubber(true);
+        _setArchiveProgress(true, 10, 'Loading RTMA frame list...');
+        _setScrubberControlsEnabled(false);
+        _updateRtmaScrubberUi();
+
+        const streamMax = RTMA_STREAM_MAX_HOURS[stream] || 24;
+        const windowBtn = document.querySelector('#rtma-animate-window .wx-animate-window-btn.active');
+        const maxHours = Math.min(windowBtn ? Number(windowBtn.dataset.hours) : streamMax, streamMax);
+        try {
+            const url = apiUrl(
+                `/api/data/rtma/frames?region=${encodeURIComponent(region)}` +
+                `&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}` +
+                `&max_hours=${encodeURIComponent(maxHours)}`
+            );
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || resp.statusText);
+            }
+            const data = await resp.json();
+            _rtmaScrubFrames = Array.isArray(data.frames) ? data.frames : [];
+
+            if (!_rtmaScrubFrames.length) {
+                _setArchiveProgress(false);
+                _setArchiveScrubber(true);
+                _setScrubberControlsEnabled(false);
+                _updateRtmaScrubberUi();
+                _setRtmaScrubberStatus('No frames found for selected product/stream/window.');
+                setStatus('No RTMA frames found for the selected settings.');
+                return;
+            }
+
+            _setArchiveProgress(false);
+            _setScrubberControlsEnabled(true);
+            _setRtmaScrubberStatus(`Loaded ${_rtmaScrubFrames.length} frames (${data.hours_back}h window).`);
+            await _renderRtmaScrubFrame(0);
+        } catch (err) {
+            _setArchiveProgress(false);
+            _setScrubberControlsEnabled(false);
+            _setRtmaScrubberStatus(`Error: ${err.message}`);
+            setStatus(`RTMA scrubber load error: ${err.message}`);
         }
     }
 
@@ -5510,6 +6980,10 @@
 
     // ── Archive event wiring ──────────────────────────────────────────────────
     byId('weather-mode-current')?.addEventListener('click', () => {
+        if (_rtmaScrubMode) {
+            _exitRtmaScrubMode(true);
+            return;
+        }
         if (_archiveMode) exitArchiveMode();
     });
     byId('weather-mode-archive')?.addEventListener('click', () => {
@@ -5537,20 +7011,43 @@
     byId('archive-to')?.addEventListener('input', () => _setActivePreset('custom'));
 
     byId('scrubber-play')?.addEventListener('click', () => {
+        if (_rtmaScrubMode) {
+            if (_rtmaScrubPlayTimer) {
+                _stopRtmaScrubPlay();
+            } else {
+                _startRtmaScrubPlay();
+            }
+            return;
+        }
         if (_archivePlayTimer) { stopScrubberPlay(); } else { startScrubberPlay(); }
     });
 
     byId('scrubber-step-back')?.addEventListener('click', () => {
+        if (_rtmaScrubMode) {
+            _stopRtmaScrubPlay();
+            _renderRtmaScrubFrame(_rtmaScrubFrameIndex - 1);
+            return;
+        }
         stopScrubberPlay();
         renderArchiveFrame(_archiveFrameIndex - 1);
     });
 
     byId('scrubber-step-fwd')?.addEventListener('click', () => {
+        if (_rtmaScrubMode) {
+            _stopRtmaScrubPlay();
+            _renderRtmaScrubFrame(_rtmaScrubFrameIndex + 1);
+            return;
+        }
         stopScrubberPlay();
         renderArchiveFrame(_archiveFrameIndex + 1);
     });
 
     byId('scrubber-slider')?.addEventListener('input', (e) => {
+        if (_rtmaScrubMode) {
+            _stopRtmaScrubPlay();
+            _renderRtmaScrubFrame(parseInt(e.target.value, 10));
+            return;
+        }
         stopScrubberPlay();
         renderArchiveFrame(parseInt(e.target.value, 10));
     });
@@ -5718,6 +7215,26 @@
         return Math.max(0.01, Math.min(1, raw));
     }
 
+    function _setObsDensity(rawValue) {
+        const raw = parseFloat(String(rawValue));
+        if (!Number.isFinite(raw)) return;
+        const clamped = Math.max(0.01, Math.min(1, raw));
+        const primary = byId('weather-obs-density');
+        const rtma = byId('weather-rtma-obs-density');
+        if (primary) primary.value = String(clamped);
+        if (rtma) rtma.value = String(clamped);
+        _surfaceDensity = clamped;
+        _updateObsDensityLabel();
+        if (_surfaceStations?.length) {
+            _renderSurfaceMarkers(_surfaceStations);
+        }
+        if (_isTypeEnabled('rtma')) {
+            const key = `${_activeRtmaRegion()}|${_activeRtmaStream()}|${_activeRtmaProduct()}`;
+            if (_rtmaPointsAll.length && _rtmaPointsKey === key) _renderRtmaPoints();
+            else _scheduleRtmaPointsLoad();
+        }
+    }
+
     function _readGradientBlurScale() {
         const raw = parseFloat(byId('weather-gradient-blur')?.value || '0.35');
         if (!Number.isFinite(raw)) return 0.35;
@@ -5725,14 +7242,19 @@
     }
 
     function _updateObsDensityLabel() {
-        const label = document.querySelector('label[for="weather-obs-density"]');
-        if (!label) return;
+        const labels = [
+            document.querySelector('label[for="weather-obs-density"]'),
+            document.querySelector('label[for="weather-rtma-obs-density"]'),
+        ].filter(Boolean);
+        if (!labels.length) return;
         const zoom = map?.getZoom() ?? 5;
         const region = (byId('weather-region')?.value || '').toUpperCase();
         const distKm = Math.round(_baseDistKm(zoom, region) / _surfaceDensity);
-        const baseLabel = label.dataset.baseLabel || 'Station Density';
-        label.dataset.baseLabel = baseLabel;
-        label.textContent = `${baseLabel} (${distKm} km)`;
+        labels.forEach((label) => {
+            const baseLabel = label.dataset.baseLabel || 'Station Density';
+            label.dataset.baseLabel = baseLabel;
+            label.textContent = `${baseLabel} (${distKm} km)`;
+        });
     }
 
     function _escapeHtml(text) {
@@ -5827,6 +7349,12 @@
         fitRegion(e.target.value);
         _updateObsDensityLabel();
         _updateGradientBlurControlVisibility();
+        _clearSpeedOverride();
+        _clearRadarCalLine();
+        if (_rtmaScrubMode) {
+            loadRtmaScrubberFrames();
+            return;
+        }
         refreshActiveLayers();
     });
 
@@ -5887,19 +7415,19 @@
 
     ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'].forEach((type) => {
         byId(`weather-type-${type}`)?.addEventListener('change', (e) => {
-            // Enforce single active product group for main sidebar groups
-            const mainGroups = ['current', 'alerts', 'spc', 'mrms'];
-            if (mainGroups.includes(type) && e.target.checked) {
-                // Uncheck other main product groups
-                mainGroups.forEach((group) => {
-                    if (group !== type) {
-                        const el = byId(`weather-type-${group}`);
+            // Enforce single active weather type for all tabs
+            const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'];
+            if (e.target.checked) {
+                // Uncheck all other weather type tabs
+                allTypes.forEach((otherType) => {
+                    if (otherType !== type) {
+                        const el = byId(`weather-type-${otherType}`);
                         if (el) el.checked = false;
                     }
                 });
             }
             if (e.target.checked) {
-                _resetTransientAlertUiForTabChange();
+                _resetTransientInteractiveUiForTabChange();
                 fitRegion(byId('weather-region')?.value || 'CONUS');
                 if (['radar', 'satellite', 'rtma', 'drought', 'tropical'].includes(type)) {
                     _setViewerTimestamp(Date.now());
@@ -6072,6 +7600,76 @@
         });
     });
 
+    document.querySelectorAll('.weather-rtma-stream').forEach((el) => {
+        el.addEventListener('change', (evt) => {
+            if (evt.target.checked) {
+                document.querySelectorAll('.weather-rtma-stream').forEach((other) => {
+                    if (other !== evt.target) other.checked = false;
+                });
+            }
+
+            if (!_activeRtmaStream()) evt.target.checked = true;
+            _syncRtmaProductForStream();
+            if (_rtmaScrubMode) {
+                loadRtmaScrubberFrames();
+                return;
+            }
+            refreshActiveLayers();
+        });
+    });
+
+    document.querySelectorAll('.weather-rtma-product').forEach((el) => {
+        el.addEventListener('change', (evt) => {
+            if (evt.target.checked) {
+                if (evt.target.value === 'temperature_change_24h' && _activeRtmaStream() !== 'rtma_hourly') {
+                    const hourly = document.querySelector('.weather-rtma-stream[value="rtma_hourly"]');
+                    const rapid = document.querySelector('.weather-rtma-stream[value="rtma_rapid_update"]');
+                    if (hourly) hourly.checked = true;
+                    if (rapid) rapid.checked = false;
+                    _syncRtmaProductForStream();
+                }
+                document.querySelectorAll('.weather-rtma-product').forEach((other) => {
+                    if (other !== evt.target) other.checked = false;
+                });
+            }
+
+            if (!_activeRtmaProduct()) evt.target.checked = true;
+            if (_rtmaScrubMode) {
+                loadRtmaScrubberFrames();
+                return;
+            }
+            refreshActiveLayers();
+        });
+    });
+
+    byId('weather-rtma-load-scrubber')?.addEventListener('click', () => {
+        byId('weather-mode-current')?.classList.remove('active');
+        byId('weather-mode-archive')?.classList.remove('active');
+        byId('weather-rtma-load-scrubber')?.classList.add('active');
+        const animWin = byId('rtma-animate-window');
+        if (animWin) animWin.style.display = '';
+        loadRtmaScrubberFrames();
+    });
+
+    // Animate window pill buttons
+    document.querySelectorAll('.wx-animate-window-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.wx-animate-window-btn').forEach((b) => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (_rtmaScrubMode) loadRtmaScrubberFrames();
+        });
+    });
+
+    byId('weather-rtma-show-values')?.addEventListener('change', () => {
+        if (!_isTypeEnabled('rtma')) return;
+        // Gradient always shows; this toggle only adds/removes text markers.
+        if (_rtmaPointsAll.length) {
+            _renderRtmaPoints();
+        } else {
+            _scheduleRtmaPointsLoad(0);
+        }
+    });
+
     byId('weather-show-spc')?.addEventListener('change', () => {
         _updateSubOptionVisibility();
         refreshActiveLayers();
@@ -6127,13 +7725,110 @@
     });
 
     byId('weather-obs-density')?.addEventListener('input', (e) => {
-        _surfaceDensity = _readObsDensity();
-        _updateObsDensityLabel();
-        if (_surfaceStations?.length) {
-            _renderSurfaceMarkers(_surfaceStations);
-        }
+        _setObsDensity(e.target.value);
+    });
+    byId('weather-rtma-obs-density')?.addEventListener('input', (e) => {
+        _setObsDensity(e.target.value);
+    });
+    byId('weather-rtma-gradient-opacity')?.addEventListener('input', (e) => {
+        rtmaGradientOpacity = parseFloat(e.target.value);
+        if (rtmaGradientLayer) rtmaGradientLayer.setOpacity(rtmaGradientOpacity);
+    });
+    byId('weather-rtma-gradient-blur')?.addEventListener('input', (e) => {
+        _rtmaGradientBlurScale = Math.max(0, Math.min(2, parseFloat(e.target.value)));
+        const lbl = document.querySelector('label[for="weather-rtma-gradient-blur"]');
+        if (lbl) lbl.textContent = `Gradient Blur (${_rtmaGradientBlurScale.toFixed(2)}x)`;
+        _renderRtmaPoints();
     });
     byId('weather-refresh-alerts')?.addEventListener('click', () => loadAlerts());
+
+    byId('wx-stormtrack-start')?.addEventListener('click', () => {
+        _clearStormTrackLayer();
+        _stormTrackBaseLatLngs = [];
+        _setStormTrackDrawMode(true);
+    });
+
+    byId('wx-stormtrack-finish')?.addEventListener('click', () => {
+        _setStormTrackDrawMode(false);
+        _activateStormTrackDragProjection();
+    });
+
+    byId('wx-stormtrack-clear')?.addEventListener('click', () => {
+        _setStormTrackDrawMode(false);
+        _stormTrackBaseLatLngs = [];
+        _clearStormTrackLayer();
+        setStatus('Storm track projection cleared.');
+    });
+
+    byId('wx-radarcal-start')?.addEventListener('click', () => {
+        _clearRadarCalLine();
+        _setRadarCalDrawMode(true);
+        setStatus('Click on the map to mark where the cell was at the start of the radar loop, then click again at its current position.');
+    });
+
+    byId('wx-radarcal-clear')?.addEventListener('click', () => {
+        _setRadarCalDrawMode(false);
+        _clearRadarCalLine();
+        _clearSpeedOverride();
+        setStatus('Radar speed calibration cleared.');
+    });
+
+    byId('wx-speed-override-clear')?.addEventListener('click', () => {
+        _clearSpeedOverride();
+    });
+
+    document.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Shift') _stormTrackPivotKeyDown = true;
+    });
+    document.addEventListener('keyup', (evt) => {
+        if (evt.key === 'Shift') _stormTrackPivotKeyDown = false;
+    });
+
+    map.on('click', (evt) => {
+        // Radar speed calibrator draw mode — independent of storm-track projection.
+        if (_radarCalDrawMode) {
+            const latlng = evt?.latlng;
+            if (!latlng) return;
+            _radarCalLatLngs.push(L.latLng(latlng.lat, latlng.lng));
+            _renderRadarCalLine();
+            // Auto-finish after two points (start + end of cell movement).
+            if (_radarCalLatLngs.length >= 2) _setRadarCalDrawMode(false);
+            return;
+        }
+
+        if (!_stormTrackDrawMode) {
+            const hasProjection = !!_stormTrackMotion
+                || !!_stormTrackDragHandle
+                || (_stormTrackProjectionLayer.getLayers().length > 0)
+                || !!_stormTrackPlacesOverlayEl;
+            if (hasProjection) {
+                _stormTrackBaseLatLngs = [];
+                _clearStormTrackLayer();
+                setStatus('Storm track projection cleared.');
+            }
+            return;
+        }
+        const latlng = evt?.latlng;
+        if (!latlng) return;
+        _stormTrackBaseLatLngs.push(L.latLng(latlng.lat, latlng.lng));
+        _clearStormTrackProjection();
+        _stormTrackHandleLayer.clearLayers();
+        if (_stormTrackBaseLatLngs.length >= 2) {
+            L.polyline(_stormTrackBaseLatLngs, {
+                color: '#f8fafc',
+                weight: 2.5,
+                opacity: 0.95,
+            }).addTo(_stormTrackProjectionLayer);
+        } else {
+            L.circleMarker(_stormTrackBaseLatLngs[0], {
+                radius: 4,
+                color: '#f8fafc',
+                fillColor: '#f8fafc',
+                fillOpacity: 1,
+                weight: 1,
+            }).addTo(_stormTrackProjectionLayer);
+        }
+    });
 
     const _testNewAlertBtn = byId('weather-test-new-alert');
     if (_testNewAlertBtn) {
@@ -6168,7 +7863,7 @@
     const _RADAR_OVERLAY_FRAMES = 10;
     const _RADAR_OVERLAY_STEP_MIN = 5;
     const _RADAR_OVERLAY_FRAME_MS = 700;
-    const _RADAR_OVERLAY_PAUSE_MS = 900;
+    const _RADAR_OVERLAY_PAUSE_MS = 3000;
     let _radarOverlayLoop = null;
 
     // Returns a cache-bust token rounded to the nearest 5-minute boundary so
@@ -6324,22 +8019,6 @@
         if (nowcoastAlertsLayer) nowcoastAlertsLayer.setOpacity(parseFloat(this.value));
     });
 
-    // ── Alerts-panel SPC Day 1 overlay checkboxes ────────────────────────────
-    for (const hazard of _ALERTS_SPC_HAZARDS) {
-        byId(`weather-alerts-spc-${hazard}`)?.addEventListener('change', function () {
-            const layer = _alertsSpcLayers[hazard];
-            if (this.checked) {
-                if (layer) {
-                    layer.addTo(map);
-                } else {
-                    _loadAlertsSpcOverlay(hazard);
-                }
-            } else {
-                if (layer && map.hasLayer(layer)) map.removeLayer(layer);
-            }
-        });
-    }
-
     byId('weather-refresh-spc')?.addEventListener('click', refreshSpc);
     byId('weather-refresh-surface')?.addEventListener('click', () => {
         const region = byId('weather-region')?.value || 'NC';
@@ -6459,10 +8138,14 @@
         _citiesDensity = _readCitiesDensity();
         _updateCitiesDensityLabel();
         _surfaceDensity = _readObsDensity();
+        if (byId('weather-rtma-obs-density')) {
+            byId('weather-rtma-obs-density').value = String(_surfaceDensity);
+        }
         _updateObsDensityLabel();
         _gradientBlurScale = _readGradientBlurScale();
         _updateGradientBlurLabel();
         _updateGradientBlurControlVisibility();
+        _syncRtmaProductForStream();
         _syncRightSidebarLayers();
         _setViewerTimestamp(Date.now());
         refreshActiveLayers();
@@ -6472,7 +8155,7 @@
     // ── Auto-refresh alerts every 30s to match the OS-task backend cadence ──
     const ALERTS_AUTO_REFRESH_MS = 30_000;
     setInterval(() => {
-        if (_archiveMode) return;
+        if (_archiveMode || _rtmaScrubMode) return;
         if (!_isTypeEnabled('alerts')) return;
         if (!_getCheckedAlertCategories().length) return;
         loadAlerts();
@@ -6482,7 +8165,7 @@
     // and expired products are removed without a manual refresh.
     const SPC_AUTO_REFRESH_MS = 60_000;
     setInterval(() => {
-        if (_archiveMode) return;
+        if (_archiveMode || _rtmaScrubMode) return;
         if (!_isTypeEnabled('spc')) return;
         if (!byId('weather-show-spc')?.checked) return;
         const supplemental = _spcSupplementalSelections();

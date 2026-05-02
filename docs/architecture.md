@@ -17,18 +17,23 @@ Removed in Phase 0:
 - `legacy/` pages and JS are retained but unrouted
 - Legacy API render endpoints removed from main.py
 
-## Backend Workers (APScheduler)
+## Backend Workers (OS-first, APScheduler fallback)
 
-Two background workers poll external APIs and write GeoJSON cache files:
+Cache refresh is OS-first via Windows Task Scheduler. In-process APScheduler
+jobs are now fallback-only and are enabled only when
+`WX_INPROC_WORKERS=1`.
 
-| Worker | Interval | Cache Path |
+Current in-process fallback intervals in `workers/scheduler.py`:
+
+| Worker | Interval | Notes |
 |---|---|---|
-| alerts_worker | 2 min | `cache/alerts/national.geojson` |
-| spc_worker | 30 min | `cache/spc/{day}_{hazard}.geojson`, `cache/spc/fire_{day}_{hazard}.geojson` |
+| alerts_worker | 1 min | First run immediate when fallback mode is enabled |
+| spc_worker | 30 min | First run immediate |
+| mrms_worker | 15 min | First run delayed by 30s |
+| surface_worker | 30 min | First run immediate |
 
-Workers start on `startup` event and stop on `shutdown`. First run is triggered immediately at startup to warm the cache. Implemented in `workers/scheduler.py`, `workers/alerts_worker.py`, `workers/spc_worker.py`.
-
-If APScheduler import fails, the app starts with `_SCHEDULER_AVAILABLE = False` and workers are simply skipped (cache files are populated on first request via cold-cache fallback).
+Default runtime behavior (no env var): no APScheduler jobs are registered and
+cache freshness is delegated to OS tasks.
 
 ## Data Endpoints
 
@@ -58,6 +63,13 @@ Responsibilities:
 - Alert category filter applied client-side against `properties.event`
 
 `js/shared.js` — exports `window.apiUrl`, `window.initNav`, and progress/output helpers (progress helpers are no-ops for the weather page since weather no longer uses the render pipeline).
+
+Weather alerts interaction model:
+
+- Clicking an alert polygon opens the immersive alert detail panel.
+- Clicking an alert row in the right WWA list opens the same panel for that row.
+- The panel closes on outside map click, Escape, or map move/zoom start.
+- Storm-track projection controls live in the right-side alerts styling group.
 
 ## Pipeline Separation
 

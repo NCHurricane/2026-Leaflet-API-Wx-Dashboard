@@ -13,13 +13,17 @@ Used by: `/api/data/alerts`, `/api/data/spc`.
 
 ## Worker / Scheduler Pattern
 
-Background workers run on APScheduler `BackgroundScheduler`. Each worker:
-- Has a fixed interval (alerts: 2 min, SPC: 30 min).
-- Writes a single cache file per product per run.
-- Is called synchronously on cold-cache miss from an endpoint.
+Default mode is OS-scheduled cache refresh (Windows Task Scheduler). In-process
+APScheduler is fallback-only and opt-in via `WX_INPROC_WORKERS=1`.
 
-Startup: `start_scheduler()` registers jobs and triggers an immediate first run.
-Shutdown: `stop_scheduler()` shuts down gracefully.
+When fallback mode is enabled, `workers/scheduler.py` registers:
+- alerts: 1 min
+- spc: 30 min
+- mrms: 15 min (first tick delayed 30s)
+- surface: 30 min
+
+Workers write cache artifacts that API endpoints read directly. Cold-cache
+endpoint fallbacks can still run workers synchronously when needed.
 
 Guard pattern — import is wrapped in try/except so app starts without APScheduler if it is not installed:
 
@@ -30,6 +34,30 @@ try:
 except ImportError:
     _SCHEDULER_AVAILABLE = False
 ```
+
+## Storm Track Projection Pattern
+
+Storm-track base line is point-driven (map clicks append points), then a drag
+handle projects movement intervals from alert-derived motion vectors.
+
+- Hold Shift while dragging to pivot the projection bearing.
+- Pivot is clamped by `_STORM_TRACK_PIVOT_MAX_DEG` (currently 45 degrees).
+- Place-arrival overlay rows are sorted by arrival time and capped.
+
+Core implementation: `js/weather.js` (`_activateStormTrackDragProjection`,
+`_installStormTrackDragHandle`, `_pivotedBearingDeg`).
+
+## Alert Detail Open/Close Pattern
+
+Alert polygon clicks and WWA list row clicks open the immersive alert detail
+panel (`_openNewAlertDetail`).
+
+- Map click closes the panel.
+- Map move/zoom start closes the panel.
+- Escape closes the panel.
+
+To avoid immediate close on the opening click, map-level close handlers are
+bound after panel mount (deferred registration).
 
 ## Endpoint Progress Pattern
 

@@ -4,7 +4,7 @@
     perpetually warm so the FastAPI server starts with hot data.
 
 .DESCRIPTION
-    Creates one task per data worker (alerts, SPC, surface, MRMS) plus a
+    Creates one task per data worker (alerts, SPC, surface, MRMS, RTMA) plus a
     weekly NWS zone-geometry preseed task. All tasks:
       - Run as the current user, only when logged on.
       - Use the project's venv Python explicitly.
@@ -78,6 +78,12 @@ $tasks = @(
         Name        = 'Wx-Dashboard-MRMS'
         Description = 'Refresh MRMS GRIB2 cache (cache/mrms/<active product>).'
         Module      = 'workers.mrms_worker'
+        Trigger     = 'minutes-15'
+    },
+    @{
+        Name        = 'Wx-Dashboard-RTMA'
+        Description = 'Refresh RTMA city-point GeoJSON cache (cache/rtma/points/).'
+        Module      = 'workers.rtma_worker'
         Trigger     = 'minutes-15'
     },
     @{

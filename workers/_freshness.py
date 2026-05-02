@@ -20,9 +20,7 @@ import time
 from pathlib import Path
 
 # Repo root → cache/.workers/<name>.last_run sentinel files
-_SENTINEL_DIR = (
-    Path(__file__).resolve().parent.parent / "cache" / ".workers"
-)
+_SENTINEL_DIR = Path(__file__).resolve().parent.parent / "cache" / ".workers"
 
 
 def _sentinel_path(worker_name: str) -> Path:
@@ -94,12 +92,13 @@ def redirect_stdio_to_log(log_name: str) -> None:
 # A sentinel older than its threshold suggests the corresponding
 # Wx-Dashboard-* scheduled task is broken / disabled / not yet installed.
 _HEALTH_THRESHOLDS = {
-    "alerts":           5 * 60,        # task fires every 1 min
-    "spc":              60 * 60,       # task fires every 30 min
-    "surface":          60 * 60,       # task fires every 30 min
+    "alerts": 5 * 60,  # task fires every 1 min
+    "spc": 60 * 60,  # task fires every 30 min
+    "surface": 60 * 60,  # task fires every 30 min
+    "rtma": 30 * 60,  # task fires every 15 min
     # MRMS sentinels are per-product; we check whichever exists. See below.
 }
-_MRMS_THRESHOLD = 30 * 60              # task fires every 15 min
+_MRMS_THRESHOLD = 30 * 60  # task fires every 15 min
 
 
 def check_cache_freshness() -> list[str]:
@@ -129,8 +128,9 @@ def check_cache_freshness() -> list[str]:
 
     # MRMS: check the newest of any mrms_* sentinel, since only one product is
     # active at a time and the active product changes by user toggle.
-    mrms_sentinels = list(_SENTINEL_DIR.glob("mrms_*.last_run")) \
-        if _SENTINEL_DIR.exists() else []
+    mrms_sentinels = (
+        list(_SENTINEL_DIR.glob("mrms_*.last_run")) if _SENTINEL_DIR.exists() else []
+    )
     if not mrms_sentinels:
         warnings.append(
             "No MRMS sentinel found \u2014 is the Wx-Dashboard-MRMS task installed "

@@ -2,7 +2,7 @@
 
 Default mode: **OS-only fetching**. Windows Task Scheduler (see
 ``tools/install_tasks.ps1``) is the source of truth for refreshing the
-alerts / SPC / surface / MRMS caches. ``main.py`` simply reads from disk.
+alerts / SPC / surface / MRMS / RTMA caches. ``main.py`` simply reads from disk.
 
 To temporarily bring the in-process fallback scheduler back (e.g. while
 developing on a machine without the OS tasks installed), set the env var
@@ -25,7 +25,10 @@ _scheduler = BackgroundScheduler(
 
 # Opt-in flag to restore the legacy in-process behavior.
 _INPROC_ENABLED = os.environ.get("WX_INPROC_WORKERS", "").strip().lower() in (
-    "1", "true", "yes", "on"
+    "1",
+    "true",
+    "yes",
+    "on",
 )
 
 
@@ -52,6 +55,7 @@ def start_scheduler() -> None:
     from workers.alerts_worker import run_alerts_worker
     from workers.spc_worker import run_spc_worker
     from workers.mrms_worker import run_mrms_worker
+    from workers.rtma_worker import run_rtma_worker
     from workers.surface_worker import run_surface_worker
 
     now = datetime.now(timezone.utc)
@@ -86,6 +90,15 @@ def start_scheduler() -> None:
         next_run_time=now + timedelta(seconds=30),
     )
     _scheduler.add_job(
+        run_rtma_worker,
+        "interval",
+        minutes=15,
+        id="rtma_worker",
+        max_instances=1,
+        misfire_grace_time=60,
+        next_run_time=now + timedelta(seconds=45),
+    )
+    _scheduler.add_job(
         run_surface_worker,
         "interval",
         minutes=30,
@@ -99,7 +112,7 @@ def start_scheduler() -> None:
 
     print(
         "[scheduler] In-process fallback ENABLED — alerts (1 min), spc (30 min), "
-        "mrms (15 min, +30s delay), surface (30 min)"
+        "mrms (15 min, +30s delay), rtma (15 min, +45s delay), surface (30 min)"
     )
 
 

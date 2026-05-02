@@ -26,7 +26,7 @@ Never dump large code blocks without confirmation.
 
 **HTML** — Semantic HTML5, WCAG 2.1 AA, descriptive `alt` attributes, `loading="lazy"` on below-fold images
 
-**CSS** — Grid/Flexbox/Container Queries, CSS custom properties, mobile-first, no inline styles except dynamic values
+**CSS** — Grid/Flexbox/Container Queries, CSS custom properties, follow project direction for responsive strategy (desktop-first unless explicitly requested otherwise), no inline styles except dynamic values
 
 **JavaScript** — ES6+, `async/await`, ES modules, `const`/`let` (no `var`), clean up listeners/timers
 
