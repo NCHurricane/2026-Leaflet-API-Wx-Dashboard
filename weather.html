@@ -18,6 +18,40 @@
                 --wx-line: #b7d2df;
                 --wx-text: #f4f7fb;
                 --wx-muted: #a9c2cf;
+                --wx-top-types-gap: 10px;
+                --wx-top-types-justify: flex-end;
+            }
+
+            .weather-header {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(340px, 1fr);
+                align-items: center;
+                gap: 14px;
+                margin-bottom: 0.75rem;
+                text-align: left;
+            }
+
+            .weather-header-left {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                min-width: 0;
+            }
+
+            .weather-header .banner-logo {
+                width: min(340px, 100%);
+                max-width: 100%;
+            }
+
+            .weather-header h1 {
+                margin: 0;
+                white-space: nowrap;
+            }
+
+            .weather-header-right {
+                display: flex;
+                justify-content: flex-end;
+                min-width: 0;
             }
 
             .weather-shell {
@@ -31,13 +65,14 @@
             .weather-top-types {
                 display: flex;
                 flex-wrap: wrap;
-                gap: 10px;
+                gap: var(--wx-top-types-gap);
                 align-items: center;
-                justify-content: center;
+                justify-content: var(--wx-top-types-justify);
                 padding: 8px 14px;
-                border-top: 2px solid #1b2e63;
-                border-bottom: 2px solid var(--wx-line);
+                border: 2px solid var(--wx-line);
+                border-radius: 8px;
                 background: #0c1538;
+                width: 100%;
             }
 
             .weather-type-pill {
@@ -79,9 +114,31 @@
                 outline: none;
             }
 
+            @media (max-width: 1280px) {
+                .weather-header {
+                    grid-template-columns: 1fr;
+                    gap: 10px;
+                }
+
+                .weather-header-left {
+                    justify-content: center;
+                }
+
+                .weather-header h1 {
+                    white-space: normal;
+                }
+
+                .weather-header-right {
+                    justify-content: center;
+                }
+
+                .weather-top-types {
+                    --wx-top-types-justify: center;
+                }
+            }
+
             .weather-map-wrap {
                 position: relative;
-                min-height: 700px;
                 background: #030812;
                 overflow: hidden;
                 --wx-side-top: 6rem;
@@ -94,7 +151,7 @@
             #weather-map {
                 width: 100%;
                 height: 100%;
-                min-height: 680px;
+                min-height: 95vh;
             }
 
             .weather-map-empty-overlay {
@@ -440,6 +497,236 @@
 
             #weather-alerts-opts {
                 margin-top: 4px;
+            }
+
+            .wx-stormtrack-tools {
+                margin-top: 8px;
+                padding-top: 8px;
+                border-top: 1px solid rgba(148, 163, 184, 0.35);
+                display: grid;
+                gap: 6px;
+            }
+
+            .wx-stormtrack-tools button {
+                background: #1e293b;
+                border: 1px solid #475569;
+                border-radius: 4px;
+                color: #e2e8f0;
+                font-size: 0.68rem;
+                font-weight: 700;
+                letter-spacing: 0.02em;
+                text-transform: uppercase;
+                padding: 5px 6px;
+                cursor: pointer;
+            }
+
+            .wx-stormtrack-tools button:hover {
+                background: #334155;
+            }
+
+            .wx-stormtrack-tools button.is-active {
+                border-color: #22e8ff;
+                color: #22e8ff;
+                box-shadow: 0 0 0 1px rgba(34, 232, 255, 0.35) inset;
+            }
+
+            .wx-stormtrack-label {
+                pointer-events: none;
+                color: #d6f5ff;
+                font-size: 0.62rem;
+                font-weight: 800;
+                letter-spacing: 0.02em;
+                text-shadow: 0 0 3px rgba(0, 0, 0, 0.95);
+                white-space: nowrap;
+            }
+
+            .wx-stormtrack-drag-handle {
+                color: #22e8ff;
+                font-size: 2rem;
+                font-weight: 900;
+                line-height: 1;
+                text-shadow: 0 0 4px rgba(0, 0, 0, 0.95);
+                cursor: move;
+                user-select: none;
+                width: 32px;
+                height: 32px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .wx-stormtrack-places {
+                position: absolute;
+                top: 90px;
+                right: 100px;
+                width: min(92vw, 400px);
+                max-height: min(70vh, 625px);
+                z-index: 1205;
+                display: flex;
+                flex-direction: column;
+                border: 1px solid rgba(34, 232, 255, 0.45);
+                border-radius: 8px;
+                background: rgba(4, 14, 30, 0.9);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+                color: #e2e8f0;
+                backdrop-filter: blur(2px);
+            }
+
+            .wx-stormtrack-places-head {
+                cursor: move;
+                user-select: none;
+                padding: 8px 12px 7px;
+                min-height: 44px;
+                border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+                font-size: 1.1rem;
+                font-weight: 800;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: #141933;
+                background: rgba(241, 242, 27, 0.95);
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                grid-template-areas:
+                    "title close"
+                    "meta meta";
+                align-items: center;
+                row-gap: 3px;
+                column-gap: 10px;
+                border-radius: 5px 5px 0 0;
+            }
+
+            .wx-stormtrack-places-head .wx-small {
+                grid-area: meta;
+                width: 100%;
+                margin: 0;
+                color: #3b3f12;
+                font-size: 0.68rem;
+                line-height: 1.15;
+                text-transform: none;
+                letter-spacing: 0;
+                opacity: 0.95;
+            }
+
+            .wx-stormtrack-places-head-title {
+                grid-area: title;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .wx-stormtrack-places-close {
+                grid-area: close;
+                justify-self: end;
+                border: 1px solid rgba(125, 211, 252, 0.45);
+                background: rgba(15, 23, 42, 0.75);
+                color: #bae6fd;
+                width: 26px;
+                height: 26px;
+                border-radius: 4px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 0.86rem;
+                line-height: 1;
+                cursor: pointer;
+                flex: 0 0 auto;
+            }
+
+            .wx-stormtrack-places-close:hover {
+                background: rgba(30, 41, 59, 0.95);
+                color: #e0f2fe;
+                border-color: rgba(186, 230, 253, 0.75);
+            }
+
+            .wx-stormtrack-places-body {
+                overflow: auto;
+                padding: 6px 8px 8px;
+            }
+
+            .wx-stormtrack-places-list {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .wx-stormtrack-places-list li {
+                display: grid;
+                grid-template-columns: 1fr auto;
+                gap: 6px;
+                align-items: baseline;
+                padding: 4px 6px;
+                border: 1px solid rgba(148, 163, 184, 0.22);
+                border-radius: 4px;
+                background: rgba(15, 23, 42, 0.55);
+                font-size: 0.72rem;
+                line-height: 1.2;
+            }
+
+            .wx-stormtrack-place-name {
+                color: #e2e8f0;
+                font-weight: 700;
+            }
+
+            .wx-stormtrack-place-time {
+                color: #22e8ff;
+                font-weight: 800;
+                white-space: nowrap;
+            }
+
+            .wx-stormtrack-empty {
+                font-size: 0.72rem;
+                color: #94a3b8;
+                padding: 6px;
+            }
+
+            .wx-speed-override-row {
+                display: flex;
+                gap: 6px;
+                align-items: center;
+                /* margin-top: 4px; */
+            }
+
+            .wx-speed-override-row input[type="number"] {
+                flex: 1;
+                background: #1e293b;
+                border: 1px solid #475569;
+                border-radius: 4px;
+                color: #e2e8f0;
+                font-size: 0.72rem;
+                padding: 4px 6px;
+                min-width: 0;
+            }
+
+            .wx-speed-override-row button {
+                flex: 0 0 auto;
+                width: 28px;
+                height: 28px;
+                background: #1e293b;
+                border: 1px solid #475569;
+                border-radius: 4px;
+                color: #94a3b8;
+                font-size: 0.72rem;
+                padding: 0;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .wx-speed-override-row button:hover {
+                background: #334155;
+                color: #e2e8f0;
+            }
+
+            #wx-radarcal-result {
+                font-size: 0.68rem;
+                color: #22e8ff;
+                margin-top: 4px;
+                min-height: 1.2em;
             }
 
             #weather-alerts-filter-options[hidden] {
@@ -803,6 +1090,57 @@
                 line-height: 1.08;
             }
 
+            #wx-section-rtma .wx-check-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 20px;
+                align-items: center;
+                gap: 12px;
+                padding: 2px 0;
+                font-size: 0.8rem;
+                line-height: 1.08;
+            }
+
+            #wx-section-rtma .wx-check-row span {
+                display: block;
+            }
+
+            #wx-section-rtma .wx-check-row input[type="checkbox"] {
+                width: 18px;
+                height: 18px;
+                margin: 0;
+                justify-self: end;
+                accent-color: var(--wx-cyan);
+            }
+
+            .rtma-sub-panel {
+                margin: 0 0 6px;
+                padding: 4px 0 2px 12px;
+                border-left: 2px solid rgba(100, 180, 220, 0.22);
+            }
+
+            .rtma-sub-panel+.rtma-sub-panel {
+                margin-top: 8px;
+            }
+
+            .rtma-sub-group {
+                margin-bottom: 6px;
+            }
+
+            .rtma-sub-group:last-child {
+                margin-bottom: 0;
+            }
+
+            .rtma-sub-group-label {
+                display: block;
+                font-size: 0.66rem;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                color: var(--wx-cyan);
+                margin-bottom: 2px;
+                opacity: 0.8;
+            }
+
             #wx-section-mrms .wx-check-row span {
                 display: block;
             }
@@ -1037,27 +1375,17 @@
             }
 
             .leaflet-control-logo .wx-global-timestamp {
-                margin-top: 4px;
                 margin-left: auto;
-                padding: 10px 10px;
+                padding: 5px 10px;
                 border: 1px solid rgba(218, 227, 7, 0.85);
                 border-radius: 5px;
                 background: rgba(10, 26, 74, 0.84);
                 color: #dae307;
-                font-size: 1rem;
                 font-weight: 900;
-                letter-spacing: 0.02em;
-                line-height: 1;
-                text-align: center;
-                text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+                letter-spacing: 0.2em;
+                line-height: 1.2;
+                text-align: right;
                 white-space: nowrap;
-            }
-
-            @media (max-width: 980px) {
-                .leaflet-control-logo .wx-global-timestamp {
-                    font-size: 0.58rem;
-                    padding: 3px 8px;
-                }
             }
 
             .leaflet-control-attribution {
@@ -1065,7 +1393,7 @@
                 color: #dce8f1 !important;
                 border-top-left-radius: 6px;
                 z-index: 550 !important;
-                bottom: 2rem !important;
+                bottom: 4rem !important;
                 right: 1rem !important;
             }
 
@@ -1253,24 +1581,6 @@
                 display: none;
             }
 
-            @media (max-width: 800px) {
-                .wx-alert-pager {
-                    min-width: 0;
-                    max-width: 88vw;
-                }
-
-                .weather-spc-dual-row {
-                    grid-template-columns: minmax(0, 1fr);
-                    gap: 5px;
-                }
-
-                .weather-spc-inline-filters {
-                    justify-content: flex-start;
-                    flex-wrap: wrap;
-                    gap: 8px 12px;
-                }
-            }
-
             .leaflet-tooltip.city-name-label {
                 background: transparent;
                 border: 0;
@@ -1345,6 +1655,11 @@
                 z-index: 530;
             }
 
+            #weather-mode-archive,
+            #wx-archive-actions {
+                display: none !important;
+            }
+
             .wx-sidebar-label {
                 display: flex;
                 flex-direction: column;
@@ -1356,8 +1671,8 @@
 
             .wx-mode-tabs {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 8px;
+                grid-template-columns: 1fr;
+                gap: 6px;
             }
 
             .wx-mode-tab {
@@ -1434,6 +1749,40 @@
                 border-color: var(--wx-cyan);
             }
 
+            .wx-animate-window {
+                margin-top: 6px;
+            }
+
+            .wx-animate-presets {
+                display: flex;
+                gap: 4px;
+            }
+
+            .wx-animate-window-btn {
+                flex: 1 1 0;
+                background: #1e293b;
+                border: 1px solid #475569;
+                border-radius: 4px;
+                color: #94a3b8;
+                font-size: 0.65rem;
+                font-weight: 700;
+                padding: 5px 2px;
+                cursor: pointer;
+                text-align: center;
+                transition: background 120ms, color 120ms, border-color 120ms;
+            }
+
+            .wx-animate-window-btn:hover {
+                background: #334155;
+                color: #e2e8f0;
+            }
+
+            .wx-animate-window-btn.active {
+                background: var(--wx-cyan);
+                color: #0a1230;
+                border-color: var(--wx-cyan);
+            }
+
             .wx-sidebar-select,
             .wx-sidebar-input {
                 width: 100%;
@@ -1463,7 +1812,7 @@
 
             #archive-progress-track {
                 flex: 1;
-                height: 6px;
+                height: 20px;
                 background: #1e293b;
                 border-radius: 3px;
                 overflow: hidden;
@@ -1478,8 +1827,8 @@
             }
 
             #archive-progress-text {
-                font-size: 0.65rem;
-                color: #94a3b8;
+                font-size: 0.8rem;
+                color: var(--wx-yellow);
             }
 
             #archive-scrubber-row {
@@ -1572,47 +1921,13 @@
 
             #scrubber-frame-count {
                 font-size: 0.65rem;
-                color: #64748b;
+                color: var(--wx-yellow);
+                font-weight: 800;
             }
 
             @media (max-width: 1180px) {
                 .weather-side {
                     width: 220px;
-                }
-            }
-
-            @media (max-width: 980px) {
-                .weather-map-wrap {
-                    min-height: 760px;
-                }
-
-                .weather-side {
-                    position: static;
-                    width: auto;
-                    max-height: none;
-                    margin: 8px;
-                    transform: none !important;
-                }
-
-                .weather-side-toggle {
-                    display: none;
-                }
-
-                .weather-colorbar {
-                    left: 8px;
-                    right: 8px;
-                    transform: none;
-                    min-width: 0;
-                    max-width: none;
-                    bottom: 210px;
-                }
-
-                #weather-map {
-                    min-height: 520px;
-                }
-
-                #weather-archive-bar {
-                    position: static;
                 }
             }
 
@@ -2139,6 +2454,8 @@
                 gap: 10px;
                 padding: 10px 12px;
                 border-bottom: 2px solid;
+                cursor: move;
+                user-select: none;
             }
 
             .wx-nad-title {
@@ -2244,11 +2561,12 @@
                 display: flex;
                 flex-wrap: wrap;
                 gap: 6px;
+                padding: 0 10px;
             }
 
             .wx-nad-chip {
                 padding: 3px 8px;
-                font-size: 0.7rem;
+                font-size: 1rem;
                 background: rgba(251, 191, 36, 0.12);
                 border: 1px solid rgba(251, 191, 36, 0.4);
                 border-radius: 3px;
@@ -2319,31 +2637,38 @@
     </head>
 
     <body>
-        <header>
-            <img src="img/nchurricane_logo.png" class="banner-logo" alt="NCHurricane.com Logo">
-            <h1><a href="index.html">Weather Graphics Dashboard 2026</a></h1>
+        <header class="weather-header">
+            <div class="weather-header-left">
+                <img src="img/nchurricane_logo.png" class="banner-logo" alt="NCHurricane.com Logo">
+                <h1><a href="index.html">Weather Graphics Dashboard 2026</a></h1>
+            </div>
+            <div class="weather-header-right">
+                <div class="weather-top-types">
+                    <label class="weather-type-pill"><span>Current</span><input id="weather-type-current"
+                            type="checkbox" checked></label>
+                    <label class="weather-type-pill"><span>Alerts</span><input id="weather-type-alerts"
+                            type="checkbox"></label>
+                    <label class="weather-type-pill"><span>Radar</span><input id="weather-type-radar"
+                            type="checkbox"></label>
+                    <label class="weather-type-pill"><span>Satellite</span><input id="weather-type-satellite"
+                            type="checkbox"></label>
+                    <label class="weather-type-pill"><span>SPC</span><input id="weather-type-spc"
+                            type="checkbox"></label>
+                    <label class="weather-type-pill"><span>RTMA</span><input id="weather-type-rtma"
+                            type="checkbox"></label>
+                    <label class="weather-type-pill"><span>MRMS</span><input id="weather-type-mrms"
+                            type="checkbox"></label>
+                    <label class="weather-type-pill"><span>Drought</span><input id="weather-type-drought"
+                            type="checkbox"></label>
+                    <label class="weather-type-pill"><span>Tropical</span><input id="weather-type-tropical"
+                            type="checkbox"></label>
+                    <button id="weather-test-new-alert" class="weather-top-test-btn" type="button">Test New
+                        Alert</button>
+                </div>
+            </div>
         </header>
 
         <div class="weather-shell">
-            <div class="weather-top-types">
-                <label class="weather-type-pill"><span>Current</span><input id="weather-type-current" type="checkbox"
-                        checked></label>
-                <label class="weather-type-pill"><span>Alerts</span><input id="weather-type-alerts"
-                        type="checkbox"></label>
-                <label class="weather-type-pill"><span>Radar</span><input id="weather-type-radar"
-                        type="checkbox"></label>
-                <label class="weather-type-pill"><span>Satellite</span><input id="weather-type-satellite"
-                        type="checkbox"></label>
-                <label class="weather-type-pill"><span>SPC</span><input id="weather-type-spc" type="checkbox"></label>
-                <label class="weather-type-pill"><span>RTMA</span><input id="weather-type-rtma" type="checkbox"></label>
-                <label class="weather-type-pill"><span>MRMS</span><input id="weather-type-mrms" type="checkbox"></label>
-                <label class="weather-type-pill"><span>Drought</span><input id="weather-type-drought"
-                        type="checkbox"></label>
-                <label class="weather-type-pill"><span>Tropical</span><input id="weather-type-tropical"
-                        type="checkbox"></label>
-                <button id="weather-test-new-alert" class="weather-top-test-btn" type="button">Test New Alert</button>
-            </div>
-
             <div class="weather-map-wrap">
                 <div id="weather-map"></div>
                 <div id="weather-map-empty-overlay" class="weather-map-empty-overlay" hidden>
@@ -2424,6 +2749,7 @@
                             <option value="WV">West Virginia</option>
                             <option value="WI">Wisconsin</option>
                             <option value="WY">Wyoming</option>
+                            <option value="PR">Puerto Rico</option>
                         </select>
                     </div>
 
@@ -2488,6 +2814,11 @@
                                     type="checkbox" value="mslp">
                                 <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
                                     type="checkbox" data-product="mslp">
+                            </div>
+                            <div class="wx-check-row"><span>Visibility</span><input class="weather-surface-product"
+                                    type="checkbox" value="visibility">
+                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
+                                    type="checkbox" data-product="visibility">
                             </div>
 
                         </div>
@@ -2717,6 +3048,78 @@
                         </div>
                     </div>
 
+                    <div id="wx-section-rtma" class="wx-block" data-type="rtma" style="display:none;">
+
+                        <div id="weather-rtma-opts">
+                            <div class="wx-check-row" style="margin-bottom:6px;">
+                                <span>Show Values</span>
+                                <input id="weather-rtma-show-values" type="checkbox">
+                            </div>
+                            <div class="wx-obs-density-head" style="margin-bottom:4px;">
+                                <label for="weather-rtma-obs-density">Station Density</label>
+                            </div>
+                            <input id="weather-rtma-obs-density" type="range" min="0.01" max="1" step="0.005"
+                                value="0.25">
+                            <div class="rtma-sub-panel">
+                                <div class="rtma-sub-group">
+                                    <span class="rtma-sub-group-label">Data Stream</span>
+                                    <div class="wx-check-row rtma-stream-row">
+                                        <span>RTMA Hourly (Analysis)</span>
+                                        <input class="weather-rtma-stream" type="checkbox" value="rtma_hourly" checked>
+                                    </div>
+                                    <div class="wx-check-row rtma-stream-row">
+                                        <span>RTMA Rapid Update 15-Min</span>
+                                        <input class="weather-rtma-stream" type="checkbox" value="rtma_rapid_update">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="rtma-sub-panel">
+                                <div class="rtma-sub-group">
+                                    <span class="rtma-sub-group-label">Core Surface Fields</span>
+                                    <div class="wx-check-row rtma-product-row">
+                                        <span>Temperature</span>
+                                        <input class="weather-rtma-product" type="checkbox" value="temperature" checked>
+                                    </div>
+                                    <div class="wx-check-row rtma-product-row">
+                                        <span>24-Hour Temp Change</span>
+                                        <input class="weather-rtma-product" type="checkbox"
+                                            value="temperature_change_24h">
+                                    </div>
+                                    <div class="wx-check-row rtma-product-row">
+                                        <span>Dew Point</span>
+                                        <input class="weather-rtma-product" type="checkbox" value="dew_point">
+                                    </div>
+                                    <div class="wx-check-row rtma-product-row">
+                                        <span>Surface Pressure</span>
+                                        <input class="weather-rtma-product" type="checkbox" value="surface_pressure">
+                                    </div>
+                                    <div class="wx-check-row rtma-product-row">
+                                        <span>Wind Speed</span>
+                                        <input class="weather-rtma-product" type="checkbox" value="wind_speed">
+                                    </div>
+                                    <div class="wx-check-row rtma-product-row">
+                                        <span>Wind Gust</span>
+                                        <input class="weather-rtma-product" type="checkbox" value="wind_gust">
+                                    </div>
+                                    <div class="wx-check-row rtma-product-row">
+                                        <span>Wind Direction</span>
+                                        <input class="weather-rtma-product" type="checkbox" value="wind_direction">
+                                    </div>
+                                    <div class="wx-check-row rtma-product-row">
+                                        <span>Visibility</span>
+                                        <input class="weather-rtma-product" type="checkbox" value="visibility">
+                                    </div>
+                                    <div class="wx-check-row rtma-product-row">
+                                        <span>Total Cloud Cover</span>
+                                        <input class="weather-rtma-product" type="checkbox" value="total_cloud_cover">
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
                     <div id="wx-section-mrms" class="wx-block" data-type="mrms" style="display:none;">
                         <div class="wx-check-row mrms-product-row">
                             <span>Surface Precip Type</span>
@@ -2929,6 +3332,19 @@
                         <div class="wx-mode-tabs">
                             <button id="weather-mode-current" class="wx-mode-tab active" type="button">Current</button>
                             <button id="weather-mode-archive" class="wx-mode-tab" type="button">Archive</button>
+                            <button id="weather-rtma-load-scrubber" class="wx-mode-tab" type="button">Animate</button>
+                        </div>
+                        <span id="weather-rtma-scrubber-status" class="wx-small"
+                            style="display:block; margin-top:4px;"></span>
+                        <div id="rtma-animate-window" class="wx-animate-window" style="display:none;">
+                            <label class="wx-small" style="color:#94a3b8; display:block; margin-bottom:3px;">Animation
+                                Window</label>
+                            <div class="wx-animate-presets">
+                                <button class="wx-animate-window-btn active" type="button" data-hours="3">3h</button>
+                                <button class="wx-animate-window-btn" type="button" data-hours="6">6h</button>
+                                <button class="wx-animate-window-btn" type="button" data-hours="12">12h</button>
+                                <button class="wx-animate-window-btn" type="button" data-hours="24">24h</button>
+                            </div>
                         </div>
                         <div id="wx-archive-actions" style="display:none; margin-top:8px;">
                             <label style="margin-bottom:4px;">Lookback Options</label>
@@ -3030,18 +3446,35 @@
                                 <input id="weather-opacity-alerts" type="range" min="0.1" max="1" step="0.05"
                                     value="0.75">
                             </div>
-                            <h3>Overlays</h3>
                             <div class="wx-block">
-                                <label for="weather-alerts-spc">SPC Day 1
-                                    Overlays</label>
-                                <div class="wx-check-row"><span>Categorical</span><input id="weather-alerts-spc-cat"
-                                        type="checkbox"></div>
-                                <div class="wx-check-row"><span>Tornado (+ CIG)</span><input
-                                        id="weather-alerts-spc-torn" type="checkbox"></div>
-                                <div class="wx-check-row"><span>Wind (+ CIG)</span><input id="weather-alerts-spc-wind"
-                                        type="checkbox"></div>
-                                <div class="wx-check-row"><span>Hail (+ CIG)</span><input id="weather-alerts-spc-hail"
-                                        type="checkbox"></div>
+                                <h3>PROJECTED ARRIVAL TOOL</h3>
+                                <div class="wx-stormtrack-tools" id="wx-stormtrack-tools">
+                                    <button id="wx-stormtrack-start" type="button">Start Line</button>
+                                    <button id="wx-stormtrack-finish" type="button">Finish Line</button>
+                                    <button id="wx-stormtrack-clear" type="button">Clear
+                                        Projection</button>
+                                    <label for="wx-speed-override"
+                                        style="display:block; padding-top: 0; margin-top:5px;">Speed Override
+                                        (kt)</label>
+                                    <div class="wx-block wx-small">Use the radar speed estimator below to estimate speed
+                                        for precipitation with no polygons.</div>
+                                    <div class="wx-speed-override-row">
+                                        <input id="wx-speed-override" type="number" min="1" max="200" step="1"
+                                            placeholder="—">
+                                        <button id="wx-speed-override-clear" type="button"
+                                            title="Clear override">&#x2715;</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="wx-block">
+                                <h3>RADAR SPEED ESTIMATOR</h3>
+                                <div class="wx-block wx-small">Draw a line matching cell movement across the radar loop
+                                    to estimate forward speed.</div>
+                                <div class="wx-stormtrack-tools" id="wx-radarcal-tools">
+                                    <button id="wx-radarcal-start" type="button">Draw Speed Line</button>
+                                    <button id="wx-radarcal-clear" type="button">Clear</button>
+                                </div>
+                                <div id="wx-radarcal-result"></div>
                             </div>
                         </div>
                         <div id="wx-side-group-spc" class="wx-block wx-side-group" data-type="spc"
@@ -3061,6 +3494,19 @@
                             <div class="wx-block">
                                 <label for="weather-opacity-mrms">Overlay Opacity</label>
                                 <input id="weather-opacity-mrms" type="range" min="0.1" max="1" step="0.05" value="0.8">
+                            </div>
+                        </div>
+                        <div id="wx-side-group-rtma" class="wx-block wx-side-group" data-type="rtma"
+                            style="display:none;">
+                            <h3>Styling</h3>
+                            <h4>RTMA Styling</h4>
+                            <div class="wx-block">
+                                <label for="weather-rtma-gradient-opacity">Gradient Opacity</label>
+                                <input id="weather-rtma-gradient-opacity" type="range" min="0.1" max="1" step="0.05"
+                                    value="0.9">
+                                <label for="weather-rtma-gradient-blur">Gradient Blur (0.35x)</label>
+                                <input id="weather-rtma-gradient-blur" type="range" min="0" max="2" step="0.05"
+                                    value="0.35">
                             </div>
                         </div>
                     </div>
@@ -3107,8 +3553,8 @@
                         <button id="scrubber-play" type="button" title="Play/Pause">&#9654;</button>
                         <button id="scrubber-step-fwd" type="button" title="Next frame">&#9654;&#9654;</button>
                         <input type="range" id="scrubber-slider" min="0" max="0" value="0" step="1">
-                        <span id="scrubber-timestamp">--</span>
                         <span id="scrubber-frame-count"></span>
+                        <span id="scrubber-timestamp">--</span>
                     </div>
                 </div>
             </div>
@@ -3118,6 +3564,7 @@
         <script
             src="https://cdn.jsdelivr.net/npm/leaflet.layergroup.collision@0.1.6/dist/leaflet.layergroup.collision.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
         <script src="js/shared.js"></script>
         <script src="js/weather.js"></script>
         <script>initNav('weather');</script>
