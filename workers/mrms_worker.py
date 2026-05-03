@@ -7,8 +7,10 @@ The active product is tracked via FastAPI app.state.active_mrms_product.
 Only ONE product is refreshed at a time (active product pivots on user request).
 """
 
+import json
 import os
 import shutil
+from datetime import timezone
 
 from workers._freshness import is_cache_fresh, mark_run_complete
 
@@ -132,7 +134,7 @@ def _run_prewarm_product_set(skip_product: str, get_latest_mrms_file) -> None:
                 f"{file_dt.strftime('%Y-%m-%d %H:%M UTC')} (prewarm set)"
             )
             mark_run_complete(sentinel_name)
-            _prewarm_conus_png(product, grib_path, product_cache_dir)
+            _prewarm_conus_png(product, grib_path, product_cache_dir, file_dt=file_dt)
         except Exception as exc:
             print(f"[mrms_worker] Prewarm set fetch/render failed for {product}: {exc}")
 
@@ -170,7 +172,7 @@ def run_mrms_worker(force: bool = False) -> None:
 
         # Pre-render the default CONUS PNG so the first API request is a cache
         # hit (~50ms) rather than triggering a 5-10s blocking render.
-        _prewarm_conus_png(product, dest, product_cache_dir)
+        _prewarm_conus_png(product, dest, product_cache_dir, file_dt=file_dt)
 
         # Keep selected high-traffic products hot to reduce first-switch delay.
         _run_prewarm_product_set(
@@ -185,11 +187,18 @@ def run_mrms_worker(force: bool = False) -> None:
 _CONUS_EXTENT = [-130.0, -60.0, 21.0, 52.0]  # [west, east, south, north]
 
 
-def _prewarm_conus_png(product: str, grib_path: str, product_cache_dir: str) -> None:
+def _prewarm_conus_png(
+    product: str,
+    grib_path: str,
+    product_cache_dir: str,
+    file_dt=None,
+) -> None:
     """Render the default CONUS PNG immediately after a fresh GRIB2 download.
 
     Bounds are kept in sync with the defaults of get_data_mrms() so that the
     MD5 bounds-hash matches and the API returns the pre-rendered file instantly.
+    Also writes the rendered PNG into the shared overlay cache so the frame is
+    discoverable via /api/overlay/latest?family=mrms.
     """
     import hashlib
     import time as _t
@@ -208,6 +217,130 @@ def _prewarm_conus_png(product: str, grib_path: str, product_cache_dir: str) -> 
         )
     except Exception as exc:
         print(f"[mrms_worker] Pre-warm failed for {product} (non-fatal): {exc}")
+        return
+
+    if file_dt is not None:
+        try:
+            _write_mrms_overlay_cache(product, png_path, file_dt)
+        except Exception as exc:
+            print(
+                f"[mrms_worker] Overlay cache write failed for {product} (non-fatal): {exc}"
+            )
+
+
+def _write_mrms_overlay_cache(
+    product: str,
+    png_path: str,
+    file_dt,
+    *,
+    keep_n: int | None = 180,
+) -> None:
+    """Copy the pre-rendered MRMS PNG into the shared overlay cache structure.
+
+    This makes the frame discoverable via /api/overlay/latest?family=mrms so
+    the frontend can use the same overlay contract as RTMA.
+
+    ``keep_n`` controls retention pruning after the write.  Pass ``None`` to
+    skip pruning (useful when writing many frames in a batch — caller prunes
+    once at the end).
+    """
+    from cache.overlay_cache_utils import (
+        build_overlay_meta,
+        frame_key_from_datetime,
+        overlay_bounds_path,
+        overlay_image_path,
+        prune_overlay_frames,
+        update_overlay_index,
+        write_overlay_meta,
+    )
+    from config.mrms_config import MRMS_PRODUCTS
+    from mrms.legend_utils import build_mrms_legend
+
+    prod_info = MRMS_PRODUCTS.get(product, {})
+    family = "mrms"
+    region = "CONUS"
+    stream = "default"
+
+    dt_utc = (
+        file_dt if file_dt.tzinfo is not None else file_dt.replace(tzinfo=timezone.utc)
+    )
+    frame_key = frame_key_from_datetime(dt_utc)
+
+    # Read actual bounds from the sidecar written by _render_mrms_png_standalone.
+    bounds_sidecar = png_path.replace(".png", "_bounds.json")
+    try:
+        with open(bounds_sidecar, "r") as fh:
+            bounds = json.load(fh)  # [west, east, south, north]
+    except (OSError, json.JSONDecodeError):
+        bounds = [-130.0, -60.0, 21.0, 52.0]
+
+    # Read legend from the meta sidecar.
+    meta_sidecar = png_path.replace(".png", "_meta.json")
+    try:
+        with open(meta_sidecar, "r") as fh:
+            render_meta = json.load(fh)
+        legend = render_meta.get("legend") or build_mrms_legend(product)
+    except (OSError, json.JSONDecodeError):
+        legend = build_mrms_legend(product)
+
+    # Copy PNG into the overlay cache frame directory.
+    frame_img = overlay_image_path(
+        _CACHE_ROOT, family, region, stream, product, frame_key
+    )
+    os.makedirs(os.path.dirname(frame_img), exist_ok=True)
+    shutil.copy2(png_path, frame_img)
+
+    # Build the canonical image URL served via the /cache static mount.
+    image_rel_url = (
+        f"/cache/overlays/{family}/{region}/{stream}/{product}/{frame_key}/overlay.png"
+    )
+
+    meta = build_overlay_meta(
+        family=family,
+        region=region,
+        stream=stream,
+        product=product,
+        frame_key=frame_key,
+        timestamp=dt_utc.isoformat(),
+        source_data_key=f"mrms:{product}:{frame_key}",
+        full_name=prod_info.get("full_name", product),
+        units=prod_info.get("units", ""),
+        bounds=bounds,
+        image_rel_url=image_rel_url,
+        legend=legend,
+        vmin=prod_info.get("vmin"),
+        vmax=prod_info.get("vmax"),
+        cache_control={"ttl_seconds": 900, "stale_after_seconds": 3600},
+    )
+    write_overlay_meta(_CACHE_ROOT, family, region, stream, product, frame_key, meta)
+
+    # Write bounds sidecar in the frame dir (consistent with RTMA contract).
+    bounds_file = overlay_bounds_path(
+        _CACHE_ROOT, family, region, stream, product, frame_key
+    )
+    tmp = bounds_file + ".part"
+    try:
+        with open(tmp, "w") as fh:
+            json.dump(bounds, fh)
+        os.replace(tmp, bounds_file)
+    except OSError:
+        pass
+
+    # Update the family index so /api/overlay/latest resolves by index lookup.
+    meta_rel = (
+        f"/cache/overlays/{family}/{region}/{stream}/{product}/{frame_key}/meta.json"
+    )
+    update_overlay_index(
+        _CACHE_ROOT, family, region, stream, product, frame_key, meta_rel
+    )
+
+    # Prune old frames unless caller requested deferred pruning (batch writes).
+    if keep_n is not None:
+        prune_overlay_frames(
+            _CACHE_ROOT, family, region, stream, product, keep_n=keep_n
+        )
+
+    print(f"[mrms_worker] Overlay cache updated: {product} @ {frame_key}")
 
 
 def _render_mrms_png_standalone(
@@ -219,7 +352,6 @@ def _render_mrms_png_standalone(
     """Standalone MRMS PNG renderer — mirrors main._render_mrms_png without
     importing FastAPI/main so it is safe to call from the worker process."""
     import json
-    import numpy as np
     import matplotlib
 
     matplotlib.use("Agg")
@@ -234,8 +366,6 @@ def _render_mrms_png_standalone(
     cmap_key = prod_info.get("colormap", "precip_rate")
     vmin = prod_info.get("vmin", 0)
     vmax = prod_info.get("vmax", 100)
-    missing_value = prod_info.get("missing_value", -1)
-    no_coverage = prod_info.get("no_coverage", -3)
 
     west, east, south, north = crop_extent
 
@@ -248,12 +378,10 @@ def _render_mrms_png_standalone(
     if lat is None or lon is None:
         raise ValueError("GRIB2 read did not return lat/lon metadata")
 
-    actual_bounds = [
-        float(np.min(lon)),
-        float(np.max(lon)),
-        float(np.min(lat)),
-        float(np.max(lat)),
-    ]
+    import numpy as _np_mrms
+
+    _lat = _np_mrms.asarray(lat)
+    _lon = _np_mrms.asarray(lon)
 
     cmap_obj = MRMS_COLORMAPS.get(cmap_key)
     if isinstance(cmap_obj, tuple):
@@ -269,6 +397,10 @@ def _render_mrms_png_standalone(
     else:
         cmap = plt.get_cmap("viridis")
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+    from mrms.mrms_utils import warp_array_to_mercator
+
+    data, actual_bounds = warp_array_to_mercator(data, _lat, _lon)
 
     h, w = data.shape
     dpi = 100

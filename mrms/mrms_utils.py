@@ -65,6 +65,97 @@ IMAGEIO_AVAILABLE = importlib.util.find_spec("imageio") is not None
 # CensusCounties is imported at the top of this file from geo_utils.
 
 
+def warp_array_to_mercator(
+    data: np.ma.MaskedArray,
+    lat_1d: np.ndarray,
+    lon_1d: np.ndarray,
+) -> tuple[np.ma.MaskedArray, list[float]]:
+    """Reproject a flat (equirectangular) data array to Web Mercator (EPSG:3857)
+    so pixels align with Leaflet's imageOverlay at any zoom level.
+
+    Args:
+        data:   2-D masked array, rows ordered N→S (origin=upper) or S→N (origin=lower).
+        lat_1d: 1-D latitude coordinate array matching data rows.
+        lon_1d: 1-D longitude coordinate array matching data cols.
+
+    Returns:
+        (warped_masked_array, [west, east, south, north]) — bounds are WGS84,
+        unchanged from the source grid, because Leaflet still expects geographic
+        corner coordinates for imageOverlay.  Only the pixel content is warped.
+    """
+    import rasterio
+    import rasterio.transform
+    import rasterio.warp
+    import rasterio.crs
+
+    lat = np.asarray(lat_1d, dtype=np.float64)
+    lon = np.asarray(lon_1d, dtype=np.float64)
+
+    # Ensure longitude is in [-180, 180].
+    lon = np.where(lon > 180.0, lon - 360.0, lon)
+
+    lat_min, lat_max = float(lat.min()), float(lat.max())
+    lon_min, lon_max = float(lon.min()), float(lon.max())
+
+    src_rows, src_cols = data.shape
+
+    # rasterio expects rows N→S (top = north).
+    if lat[0] < lat[-1]:  # S→N stored — flip to N→S.
+        data_ns = data[::-1, :]
+        lat_ns = lat[::-1]
+    else:
+        data_ns = data
+        lat_ns = lat
+
+    dlat = abs(float(lat_ns[0] - lat_ns[1])) if src_rows > 1 else 0.01
+    dlon = abs(float(lon[1] - lon[0])) if src_cols > 1 else 0.01
+
+    src_transform = rasterio.transform.from_bounds(
+        lon_min - 0.5 * dlon,
+        lat_min - 0.5 * dlat,
+        lon_max + 0.5 * dlon,
+        lat_max + 0.5 * dlat,
+        src_cols,
+        src_rows,
+    )
+    src_crs = rasterio.crs.CRS.from_epsg(4326)
+    dst_crs = rasterio.crs.CRS.from_epsg(3857)
+
+    fill_val = 1e38
+    src_data = np.ma.filled(data_ns.astype(np.float32), fill_val)
+
+    dst_transform, dst_width, dst_height = rasterio.warp.calculate_default_transform(
+        src_crs,
+        dst_crs,
+        src_cols,
+        src_rows,
+        left=lon_min - 0.5 * dlon,
+        bottom=lat_min - 0.5 * dlat,
+        right=lon_max + 0.5 * dlon,
+        top=lat_max + 0.5 * dlat,
+    )
+
+    dst_data = np.full((dst_height, dst_width), fill_val, dtype=np.float32)
+    rasterio.warp.reproject(
+        source=src_data,
+        destination=dst_data,
+        src_transform=src_transform,
+        src_crs=src_crs,
+        dst_transform=dst_transform,
+        dst_crs=dst_crs,
+        resampling=rasterio.warp.Resampling.nearest,
+        src_nodata=fill_val,
+        dst_nodata=fill_val,
+    )
+
+    warped_masked = np.ma.masked_where(
+        (dst_data >= fill_val * 0.9) | ~np.isfinite(dst_data), dst_data
+    )
+
+    actual_bounds = [lon_min, lon_max, lat_min, lat_max]
+    return warped_masked, actual_bounds
+
+
 def decompress_grib2_gz(gz_path: str) -> str:
     """
     Decompress .grib2.gz file to .grib2 file.
@@ -100,10 +191,8 @@ def _compute_crop_slices(lat_coord, lon_coord, crop_extent, buffer_deg=2.0):
         return None
 
     west, east, south, north = crop_extent
-    lon_mask = (lon_coord >= west -
-                buffer_deg) & (lon_coord <= east + buffer_deg)
-    lat_mask = (lat_coord >= south -
-                buffer_deg) & (lat_coord <= north + buffer_deg)
+    lon_mask = (lon_coord >= west - buffer_deg) & (lon_coord <= east + buffer_deg)
+    lat_mask = (lat_coord >= south - buffer_deg) & (lat_coord <= north + buffer_deg)
 
     if not np.any(lon_mask) or not np.any(lat_mask):
         return None
@@ -228,8 +317,7 @@ def read_mrms_grib2(
             and lon_dim_name is not None
         ):
             lat_slice, lon_slice = resolved_crop_slices
-            data_da = data_da.isel(
-                {lat_dim_name: lat_slice, lon_dim_name: lon_slice})
+            data_da = data_da.isel({lat_dim_name: lat_slice, lon_dim_name: lon_slice})
             if lat_coord is not None:
                 lat_coord = lat_coord[lat_slice]
             if lon_coord is not None:
@@ -281,28 +369,24 @@ def plot_cities_on_map(ax, extent, style_config, z_cities=30):
 
     # Construct full path to cities file
     cities_path = os.path.join(PARENT_DIR, "data", cities_file)
-    print(
-        f"[DEBUG] plot_cities_on_map: Looking for cities file at: {cities_path}")
+    print(f"[DEBUG] plot_cities_on_map: Looking for cities file at: {cities_path}")
 
     if not os.path.exists(cities_path):
         fallback_path = os.path.join(PARENT_DIR, "data", "us-cities.json")
-        print(
-            f"[WARN] Cities file not found: {cities_path}; using {fallback_path}")
+        print(f"[WARN] Cities file not found: {cities_path}; using {fallback_path}")
         cities_path = fallback_path
 
     with open(cities_path, "r") as f:
         cities = json.load(f)
 
-    print(
-        f"[DEBUG] Loaded cities from {cities_file}, type={type(cities).__name__}")
+    print(f"[DEBUG] Loaded cities from {cities_file}, type={type(cities).__name__}")
 
     # Filter cities by extent
     west, east, south, north = extent
 
     # Handle list-of-dict format (us-cities.json)
     if not isinstance(cities, list):
-        print(
-            f"[WARN] Cities data is not a list, type={type(cities).__name__}")
+        print(f"[WARN] Cities data is not a list, type={type(cities).__name__}")
         return
 
     visible_cities = []
@@ -387,8 +471,7 @@ def plot_cities_on_map(ax, extent, style_config, z_cities=30):
             ),
             clip_on=True,
         )
-        txt.set_path_effects(
-            [PathEffects.withStroke(linewidth=2, foreground="black")])
+        txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground="black")])
         drawn_bboxes.append((cand_x_min, cand_x_max, cand_y_min, cand_y_max))
         drawn_count += 1
 
@@ -609,10 +692,9 @@ def _plot_mrms_data_layer(
         if np.any(lon_mask) and np.any(lat_mask):
             lon_idx = np.where(lon_mask)[0]
             lat_idx = np.where(lat_mask)[0]
-            lon = lon[lon_idx[0]: lon_idx[-1] + 1]
-            lat = lat[lat_idx[0]: lat_idx[-1] + 1]
-            data = data[lat_idx[0]: lat_idx[-1] +
-                        1, lon_idx[0]: lon_idx[-1] + 1]
+            lon = lon[lon_idx[0] : lon_idx[-1] + 1]
+            lat = lat[lat_idx[0] : lat_idx[-1] + 1]
+            data = data[lat_idx[0] : lat_idx[-1] + 1, lon_idx[0] : lon_idx[-1] + 1]
 
     # Compute image extent from (possibly cropped) 1D coordinate arrays
     img_extent = [lon.min(), lon.max(), lat.min(), lat.max()]
@@ -795,8 +877,7 @@ def _resolve_mrms_data_alpha(style_config, product):
 
     if product.startswith("MESH"):
         try:
-            data_alpha = float(style_config.get(
-                "mesh_data_alpha", data_alpha_default))
+            data_alpha = float(style_config.get("mesh_data_alpha", data_alpha_default))
         except Exception:
             data_alpha = data_alpha_default
     else:
@@ -901,8 +982,7 @@ def _draw_mrms_value_contours(
         return []
 
     try:
-        contour_levels = np.asarray(
-            product_info.get("levels", []), dtype=float)
+        contour_levels = np.asarray(product_info.get("levels", []), dtype=float)
     except Exception:
         return []
 
@@ -935,8 +1015,7 @@ def _draw_mrms_value_contours(
 
     contour_width = float(style_config.get("mesh_contour_width", 1.8))
     contour_alpha = float(style_config.get("mesh_contour_alpha", 0.95))
-    contour_zorder = int(style_config.get(
-        "zorder_contours", zo.get("contours", 28)))
+    contour_zorder = int(style_config.get("zorder_contours", zo.get("contours", 28)))
 
     contour_set = ax.contour(
         lon_vals,
@@ -1070,10 +1149,8 @@ def _render_mrms_frame(
 
     # --- Base map features ---
     ax.set_facecolor(map_bg_color)
-    ax.add_feature(cfeature.OCEAN.with_scale("10m"),
-                   facecolor=ocean_color, zorder=0)
-    ax.add_feature(cfeature.LAND.with_scale("10m"),
-                   facecolor=land_color, zorder=0)
+    ax.add_feature(cfeature.OCEAN.with_scale("10m"), facecolor=ocean_color, zorder=0)
+    ax.add_feature(cfeature.LAND.with_scale("10m"), facecolor=land_color, zorder=0)
 
     # Lakes (configurable)
     if show_lakes:
@@ -1201,8 +1278,7 @@ def _render_mrms_frame(
 
     # --- City labels ---
     if show_places:
-        plot_cities_on_map(ax, plot_extent, style_config,
-                           z_cities=zo["cities"])
+        plot_cities_on_map(ax, plot_extent, style_config, z_cities=zo["cities"])
 
     # --- Colorbar (bottom, matching radar/satellite layout) ---
     categories = product_info.get("categories")
@@ -1242,8 +1318,7 @@ def _render_mrms_frame(
             tick.set_fontweight("bold")
         cb.outline.set_edgecolor("#555555")
     else:
-        sm = plt.cm.ScalarMappable(
-            cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
         cb = fig.colorbar(
             sm,
             ax=ax,
@@ -1253,16 +1328,13 @@ def _render_mrms_frame(
             pad=0.05,
         )
         if product.startswith("MESH"):
-            mesh_levels = np.asarray(
-                product_info.get("levels", []), dtype=float)
-            mesh_levels = mesh_levels[(
-                mesh_levels >= vmin) & (mesh_levels <= vmax)]
+            mesh_levels = np.asarray(product_info.get("levels", []), dtype=float)
+            mesh_levels = mesh_levels[(mesh_levels >= vmin) & (mesh_levels <= vmax)]
             if mesh_levels.size:
                 cb.set_ticks(mesh_levels)
                 cb.set_ticklabels(
                     [
-                        str(int(round(v))) if float(
-                            v).is_integer() else f"{v:g}"
+                        str(int(round(v))) if float(v).is_integer() else f"{v:g}"
                         for v in mesh_levels
                     ]
                 )
@@ -1688,7 +1760,11 @@ def _generate_mrms_animation(
                     data_alpha,
                 )
 
-                if show_mesh_contours and product.startswith("MESH") and not is_categorical:
+                if (
+                    show_mesh_contours
+                    and product.startswith("MESH")
+                    and not is_categorical
+                ):
                     contour_artists = _draw_mrms_value_contours(
                         ax=ax,
                         data=data,
@@ -1737,17 +1813,14 @@ def _generate_mrms_animation(
                     tight_bbox = fig.get_tightbbox(renderer)
                     if tight_bbox is not None:
                         pad_inches = max(
-                            float(matplotlib.rcParams.get(
-                                "savefig.pad_inches", 0.1)),
+                            float(matplotlib.rcParams.get("savefig.pad_inches", 0.1)),
                             0.15,
                         )
                         tight_bbox = tight_bbox.padded(pad_inches)
-                        tight_bbox_px = tight_bbox.transformed(
-                            fig.dpi_scale_trans)
+                        tight_bbox_px = tight_bbox.transformed(fig.dpi_scale_trans)
                         canvas_h = int(frame_rgba.shape[0])
                         x0 = max(0, int(np.floor(tight_bbox_px.x0)))
-                        x1 = min(frame_rgba.shape[1], int(
-                            np.ceil(tight_bbox_px.x1)))
+                        x1 = min(frame_rgba.shape[1], int(np.ceil(tight_bbox_px.x1)))
                         y0_bbox = max(0, int(np.floor(tight_bbox_px.y0)))
                         y1_bbox = min(canvas_h, int(np.ceil(tight_bbox_px.y1)))
 
@@ -1761,8 +1834,7 @@ def _generate_mrms_animation(
                                 f"[DEBUG] MRMS tight frame crop set: x=({x0},{x1}) y=({y0},{y1})"
                             )
                 except Exception as crop_err:
-                    print(
-                        f"[WARN] Failed to compute MRMS tight crop: {crop_err}")
+                    print(f"[WARN] Failed to compute MRMS tight crop: {crop_err}")
 
             if tight_crop_px is not None:
                 x0, x1, y0, y1 = tight_crop_px

@@ -789,7 +789,6 @@ def process_alerts(
         if not _is_alert_active_for_time(props, valid_time):
             continue
 
-        color = ALERT_COLORS.get(event_name, "#6699CC")
         if allowed_events is not None and event_name not in allowed_events:
             continue
 
@@ -1767,11 +1766,11 @@ def generate_alerts_map(
         ext_lon0, ext_lon1, ext_lat0, ext_lat1 = prebuilt_state_basemap["extent"]
     elif is_national_view:
         ext_lon0, ext_lon1, ext_lat0, ext_lat1 = STATE_BOUNDS.get(
-            "CONUS", [-125, -70, 25, 50]
+            "CONUS", [-140, -70, 25, 50]
         )
     elif region == "CONUS":
         ext_lon0, ext_lon1, ext_lat0, ext_lat1 = STATE_BOUNDS.get(
-            "CONUS", [-125, -70, 25, 50]
+            "CONUS", [-140, -70, 25, 50]
         )
     elif state_code and state_code in STATE_BOUNDS:
         ext_lon0, ext_lon1, ext_lat0, ext_lat1 = STATE_BOUNDS[state_code]
@@ -1782,7 +1781,7 @@ def generate_alerts_map(
         ext_lat1 = max(item["geometry"].bounds[3] for item in clean_alerts) + 0.5
     else:
         ext_lon0, ext_lon1, ext_lat0, ext_lat1 = STATE_BOUNDS.get(
-            "CONUS", [-125, -70, 25, 50]
+            "CONUS", [-140, -70, 25, 50]
         )
 
     if prebuilt_state_basemap is not None:
@@ -2202,11 +2201,6 @@ def _simplify_geometry_for_display(geom, tolerance_m: float = 1000.0) -> object 
         return None
 
     try:
-        from pyproj import Geod
-
-        # Use WGS84 Geod for distance calculations.
-        geod = Geod(ellps="WGS84")
-
         # Estimate tolerance in degrees (~1000m = 0.009° at equator).
         # Rough conversion: 1 degree ≈ 111 km at equator, scales by cos(latitude).
         bounds = geom.bounds  # (minx, miny, maxx, maxy)

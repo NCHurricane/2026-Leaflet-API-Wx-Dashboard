@@ -43,5 +43,5 @@ unlzw3>=0.2.1
 # Optional: For GDAL/GEOS support (advanced geospatial operations)
 # Note: On Windows, these may require pre-built wheels or system libraries
 # Uncomment if cartopy/shapely geospatial operations fail
-# rasterio>=1.3.0
+rasterio>=1.3.0
 # GDAL>=3.7.0

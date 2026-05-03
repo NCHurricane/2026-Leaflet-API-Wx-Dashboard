@@ -393,7 +393,6 @@ def _create_background_layer(ax, fig, style_config):
     land_color = style_config.get("land_color", "#5c5c5c")
     coastline_color = style_config.get("coastline_color", "#000000")
     coastline_width = float(style_config.get("coastline_width", 0.8))
-    map_bg_color = style_config.get("map_bg_color", "#000000")
     zo = {"water": 0, "land": 0, "borders": 15}
     if style_config:
         for k in zo:

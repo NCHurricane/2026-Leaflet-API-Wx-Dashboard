@@ -11,6 +11,9 @@ import cfgrib
 import numpy as np
 import requests
 from config.surface_config import TEMPERATURE_GRADIENT_ANCHORS
+import warnings
+
+warnings.filterwarnings("ignore", category=FutureWarning, module="cfgrib")
 
 
 # NODD S3 public bucket — same path structure as NOMADS, no rate limiting,
@@ -672,6 +675,16 @@ def _crop_grid(
         lon[row_slice, col_slice],
     )
 
+    data_crop = data[row_slice, col_slice].copy()
+    lat_crop = lat[row_slice, col_slice]
+    lon_crop = lon[row_slice, col_slice]
+    # Null out cells outside the actual geographic crop
+    oob = (
+        (lat_crop < south) | (lat_crop > north) | (lon_crop < west) | (lon_crop > east)
+    )
+    data_crop = np.ma.masked_where(oob, np.ma.filled(data_crop, np.nan))
+    return data_crop, lat_crop, lon_crop
+
 
 def _serialize_timestamp(value) -> str | None:
     if value is None:
@@ -1020,6 +1033,89 @@ def ensure_rtma_grid_json(
     return out_path, meta
 
 
+def _warp_to_latlon_grid(
+    data: np.ndarray,
+    lat2d: np.ndarray,
+    lon2d: np.ndarray,
+) -> tuple["np.ma.MaskedArray", list[float]]:
+    """Resample a curvilinear-grid array (e.g. RTMA LCC) onto a regular
+    lat/lon grid so it can be placed correctly as a Leaflet image overlay.
+
+    Uses full-resolution inverse-distance interpolation via cKDTree so the
+    warped raster aligns with geographic features without frontend nudges.
+
+    Returns (warped_masked_array, [west, east, south, north]).
+    """
+    from scipy.spatial import cKDTree
+
+    lon2d = np.where(lon2d > 180.0, lon2d - 360.0, lon2d)
+
+    lat_min = float(np.nanmin(lat2d))
+    lat_max = float(np.nanmax(lat2d))
+    lon_min = float(np.nanmin(lon2d))
+    lon_max = float(np.nanmax(lon2d))
+
+    src_rows, src_cols = data.shape
+    n_lat, n_lon = src_rows, src_cols
+    lat_out = np.linspace(lat_min, lat_max, n_lat)
+    lon_out = np.linspace(lon_min, lon_max, n_lon)
+    lon_mesh, lat_mesh = np.meshgrid(lon_out, lat_out)
+
+    src_lat = lat2d.ravel()
+    src_lon = lon2d.ravel()
+    src_val = np.ma.filled(data, np.nan).ravel()
+
+    valid = np.isfinite(src_lat) & np.isfinite(src_lon) & np.isfinite(src_val)
+    if not np.any(valid):
+        raise ValueError("RTMA warp failed: no valid source points.")
+
+    src_points = np.column_stack([src_lat[valid], src_lon[valid]])
+    src_values = src_val[valid]
+
+    tree = cKDTree(src_points)
+    query_points = np.column_stack([lat_mesh.ravel(), lon_mesh.ravel()])
+
+    # Use a small neighbor set with inverse-distance weighting for smooth,
+    # stable alignment while preserving fine-scale gradients.
+    k = min(4, src_points.shape[0])
+    dists, idx = tree.query(query_points, k=k, workers=-1)
+    if k == 1:
+        dists = dists[:, np.newaxis]
+        idx = idx[:, np.newaxis]
+
+    neighbors = src_values[idx]
+    exact = dists[:, 0] <= 1.0e-12
+    weights = 1.0 / np.maximum(dists, 1.0e-12)
+    weight_sums = np.sum(weights, axis=1)
+    interp = np.sum(weights * neighbors, axis=1) / np.maximum(weight_sums, 1.0e-12)
+    if np.any(exact):
+        interp[exact] = neighbors[exact, 0]
+
+    dlat = abs(float(lat_out[1] - lat_out[0])) if n_lat > 1 else 0.05
+    dlon = abs(float(lon_out[1] - lon_out[0])) if n_lon > 1 else 0.05
+    max_gap_deg = max(0.06, 3.5 * max(dlat, dlon))
+    outside = dists[:, 0] > max_gap_deg
+
+    warped = interp.reshape(n_lat, n_lon)
+    outside_mask = outside.reshape(n_lat, n_lon)
+    warped_masked = np.ma.masked_where(outside_mask | ~np.isfinite(warped), warped)
+
+    if n_lon > 1:
+        west = float(lon_out[0] - 0.5 * dlon)
+        east = float(lon_out[-1] + 0.5 * dlon)
+    else:
+        west = float(lon_out[0])
+        east = float(lon_out[0])
+    if n_lat > 1:
+        south = float(lat_out[0] - 0.5 * dlat)
+        north = float(lat_out[-1] + 0.5 * dlat)
+    else:
+        south = float(lat_out[0])
+        north = float(lat_out[0])
+
+    return warped_masked, [west, east, south, north]
+
+
 def render_rtma_png(
     grib_path: str,
     product: str,
@@ -1065,12 +1161,37 @@ def render_rtma_png(
         data = np.ma.masked_invalid(data)
     data, latitude, longitude = _crop_grid(data, latitude, longitude, crop_extent)
 
-    actual_bounds = [
-        float(np.nanmin(longitude)),
-        float(np.nanmax(longitude)),
-        float(np.nanmin(latitude)),
-        float(np.nanmax(latitude)),
-    ]
+    lat_arr = np.asarray(latitude, dtype=float)
+    lon_arr = np.asarray(longitude, dtype=float)
+    if lat_arr.ndim == 2:
+        # Curvilinear (LCC) grid — resample onto a regular lat/lon grid so
+        # the Leaflet image overlay aligns with actual coastlines/borders.
+        data, actual_bounds = _warp_to_latlon_grid(data, lat_arr, lon_arr)
+    else:
+        lon_arr = np.where(lon_arr > 180.0, lon_arr - 360.0, lon_arr)
+        _dlat = abs(float(lat_arr[1] - lat_arr[0])) if lat_arr.size > 1 else 0.01
+        _dlon = abs(float(lon_arr[1] - lon_arr[0])) if lon_arr.size > 1 else 0.01
+        actual_bounds = [
+            float(np.nanmin(lon_arr) - 0.5 * _dlon),
+            float(np.nanmax(lon_arr) + 0.5 * _dlon),
+            float(np.nanmin(lat_arr) - 0.5 * _dlat),
+            float(np.nanmax(lat_arr) + 0.5 * _dlat),
+        ]
+
+    from mrms.mrms_utils import warp_array_to_mercator
+
+    if lat_arr.ndim == 2:
+        lat_1d = np.linspace(
+            float(np.nanmin(lat_arr)), float(np.nanmax(lat_arr)), data.shape[0]
+        )
+        lon_1d = np.linspace(
+            float(np.nanmin(lon_arr)), float(np.nanmax(lon_arr)), data.shape[1]
+        )
+    else:
+        lat_1d = lat_arr
+        lon_1d = lon_arr
+
+    data, actual_bounds = warp_array_to_mercator(data, lat_1d, lon_1d)
 
     cmap = _resolve_render_colormap(config).copy()
     cmap.set_bad((0, 0, 0, 0))

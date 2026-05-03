@@ -93,7 +93,7 @@
     // Leaflet fitBounds expects [[south, west], [north, east]]
     const STATE_BOUNDS = {
         WORLD: [-179.9, 179.9, -85.0, 85.0],
-        CONUS: [-125, -70, 21, 52],
+        CONUS: [-140, -65, 21, 52],
         AL: [-89.0, -84.4, 29.8, 35.7], AK: [-179.5, -129.6, 50.8, 71.8],
         AZ: [-115.8, -107.7, 29.7, 38.3], AR: [-95.0, -89.3, 32.7, 36.9],
         CA: [-124.9, -113.8, 32.2, 42.4], CO: [-109.4, -101.7, 36.6, 41.4],
@@ -639,6 +639,11 @@
     new ResetViewControl().addTo(map);
     new BasemapControl().addTo(map);
     map.attributionControl.addAttribution('©2026 ChuckCopeland.com/NCHurricane.com');
+    if (!map.getPane('mrms-radar-sites')) {
+        const mrmsRadarSitesPane = map.createPane('mrms-radar-sites');
+        mrmsRadarSitesPane.style.zIndex = '451';
+        mrmsRadarSitesPane.style.pointerEvents = 'none';
+    }
     const LogoControl = L.Control.extend({
         options: { position: 'topright' },
         onAdd() {
@@ -675,6 +680,7 @@
     let _rtmaGridSeq = 0;
     let _rtmaGridInFlightKey = null;
     let mrmsOverlay = null;
+    let mrmsRadarSiteLayer = null;
     let statesLayer = null;
     let countiesLayer = null;
     let countriesLayer = null;
@@ -682,7 +688,7 @@
     let _citiesData = null;
     let _citiesDensity = 1;
     let _surfaceDensity = 1;
-    let _gradientBlurScale = 0.35;
+    let _gradientBlurScale = 0;
     const CITY_LABEL_CHAR_PX = 5.2;
     const CITY_LABEL_HEIGHT_PX = 11;
     const CITY_LABEL_X_PAD = 4;
@@ -726,7 +732,7 @@
     let surfaceGradientOpacity = 0.9;
     let rtmaOpacity = 0.82;
     let rtmaGradientOpacity = 0.9;
-    let _rtmaGradientBlurScale = 0.35;
+    // _rtmaGradientBlurScale removed — RTMA gradients are pre-rendered PNGs, no canvas blur.
     let mrmsOpacity = 0.8;
     let _alertsRequestSeq = 0;
     let _spcRequestSeq = 0;
@@ -744,12 +750,98 @@
     let _rtmaScrubMode = false;
     let _rtmaScrubFrames = [];
     let _rtmaScrubFrameIndex = 0;
+    let _rtmaScrubRenderSeq = 0;
+    let _rtmaScrubLoadSeq = 0;
     let _rtmaScrubPlayTimer = null;
+    let _mrmsScrubMode = false;
+    let _mrmsScrubFrames = [];
+    let _mrmsScrubFrameIndex = 0;
+    let _mrmsScrubRenderSeq = 0;
+    let _mrmsScrubLoadSeq = 0;
+    let _mrmsScrubPlayTimer = null;
     const _rtmaScrubFrameCache = new Map();
     const _rtmaScrubFrameErrors = new Set();
     let _mrmsRequestSeq = 0;
+    const _MRMS_RADAR_SITE_POINT_STYLE = Object.freeze({
+        radius: 2.8,
+        color: '#f8f8f8',
+        weight: 1.1,
+        opacity: 0.95,
+        fillColor: '#ff3b30',
+        fillOpacity: 0.9,
+        pane: 'mrms-radar-sites',
+        interactive: false,
+        bubblingMouseEvents: false,
+    });
     const _SPC_PRIMARY_TIMEOUT_MS = 10_000;
     const _SPC_SUPPLEMENTAL_TIMEOUT_MS = 20_000;
+
+    function _resolveMrmsRadarSiteBounds(bounds) {
+        if (Array.isArray(bounds) && bounds.length === 4) {
+            return bounds.map((value) => Number(value));
+        }
+        if (mrmsOverlay && typeof mrmsOverlay.getBounds === 'function') {
+            const overlayBounds = mrmsOverlay.getBounds();
+            if (overlayBounds && typeof overlayBounds.getWest === 'function') {
+                return [
+                    overlayBounds.getWest(),
+                    overlayBounds.getEast(),
+                    overlayBounds.getSouth(),
+                    overlayBounds.getNorth(),
+                ];
+            }
+        }
+        return null;
+    }
+
+    function _getMrmsRadarSiteLocations(bounds) {
+        const sites = Array.isArray(window.RADAR_SITE_LOCATIONS)
+            ? window.RADAR_SITE_LOCATIONS
+            : [];
+        const siteBounds = _resolveMrmsRadarSiteBounds(bounds);
+        if (!siteBounds || siteBounds.some((value) => !Number.isFinite(value))) {
+            return [];
+        }
+
+        const [west, east, south, north] = siteBounds;
+        return sites.filter((site) => {
+            const lat = Number(site?.lat);
+            const lon = Number(site?.lon);
+            return Number.isFinite(lat)
+                && Number.isFinite(lon)
+                && lon >= west
+                && lon <= east
+                && lat >= south
+                && lat <= north;
+        });
+    }
+
+    function _ensureMrmsRadarSiteLayer() {
+        if (mrmsRadarSiteLayer) return mrmsRadarSiteLayer;
+        mrmsRadarSiteLayer = L.layerGroup();
+        return mrmsRadarSiteLayer;
+    }
+
+    function _syncMrmsRadarSiteOverlay(bounds) {
+        if (!_isTypeEnabled('mrms') || !mrmsOverlay) {
+            if (mrmsRadarSiteLayer && map.hasLayer(mrmsRadarSiteLayer)) {
+                map.removeLayer(mrmsRadarSiteLayer);
+            }
+            return;
+        }
+
+        const layer = _ensureMrmsRadarSiteLayer();
+        layer.clearLayers();
+        _getMrmsRadarSiteLocations(bounds).forEach((site) => {
+            layer.addLayer(L.circleMarker([site.lat, site.lon], _MRMS_RADAR_SITE_POINT_STYLE));
+        });
+        if (!map.hasLayer(layer)) {
+            layer.addTo(map);
+        }
+        if (typeof layer.bringToFront === 'function') {
+            layer.bringToFront();
+        }
+    }
     const _SPC_REPORT_COLORS = {
         torn: '#ff4d4f',
         wind: '#26a9ff',
@@ -760,7 +852,8 @@
     const RTMA_POINTS_MIN_FETCH_INTERVAL_MS = 500;
     const RTMA_SCRUB_PLAY_INTERVAL_MS = 800;
     const RTMA_SCRUB_LOOP_HOLD_MS = 2000;
-    const RTMA_SCRUB_POINTS_ONLY = true;
+    const RTMA_SCRUB_SWAP_FADE_MS = 90;
+    const RTMA_SCRUB_POINTS_ONLY = false;
     const RTMA_STREAM_MAX_HOURS = {
         rtma_hourly: 24,
         rtma_rapid_update: 6,
@@ -2824,6 +2917,7 @@
     function _canApplyAlertsResponse() {
         return !_archiveMode
             && !_rtmaScrubMode
+            && !_mrmsScrubMode
             && _isTypeEnabled('alerts')
             && _getCheckedAlertCategories().length > 0;
     }
@@ -2831,6 +2925,7 @@
     function _canApplySpcResponse() {
         return !_archiveMode
             && !_rtmaScrubMode
+            && !_mrmsScrubMode
             && _isTypeEnabled('spc')
             && !!byId('weather-show-spc')?.checked;
     }
@@ -2838,6 +2933,7 @@
     function _canApplyMrmsResponse() {
         return !_archiveMode
             && !_rtmaScrubMode
+            && !_mrmsScrubMode
             && _isTypeEnabled('mrms')
             && !!_activeMrmsProduct();
     }
@@ -2845,6 +2941,7 @@
     function _canApplyRtmaResponse() {
         return !_archiveMode
             && !_rtmaScrubMode
+            && !_mrmsScrubMode
             && _isTypeEnabled('rtma')
             && !!_activeRtmaStream()
             && !!_activeRtmaProduct();
@@ -4613,6 +4710,15 @@
             const section = byId(`wx-section-${type}`);
             if (section) section.style.display = _isTypeEnabled(type) ? '' : 'none';
         });
+        const rtmaActive = _isTypeEnabled('rtma');
+        const mrmsActive = _isTypeEnabled('mrms');
+        const animBtn = byId('weather-rtma-load-scrubber');
+        const animWin = byId('rtma-animate-window');
+        if (animBtn) {
+            animBtn.style.display = (rtmaActive || mrmsActive) ? '' : 'none';
+            if (!(rtmaActive || mrmsActive)) animBtn.classList.remove('active');
+        }
+        if (animWin && !(rtmaActive || mrmsActive)) animWin.style.display = 'none';
         _updateActiveTabName();
     }
 
@@ -4674,6 +4780,7 @@
         if (rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) map.removeLayer(rtmaGradientLayer);
         if (rtmaPointLayer && map.hasLayer(rtmaPointLayer)) map.removeLayer(rtmaPointLayer);
         if (mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
+        if (mrmsRadarSiteLayer && map.hasLayer(mrmsRadarSiteLayer)) map.removeLayer(mrmsRadarSiteLayer);
         alertsLayer = null;
         spcLayer = null;
         surfaceLayer = null;
@@ -4709,7 +4816,7 @@
     }
 
     function refreshActiveLayers() {
-        if (_archiveMode || _rtmaScrubMode) return;
+        if (_archiveMode || _rtmaScrubMode || _mrmsScrubMode) return;
         const alertsEnabled = _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0;
         const spcEnabled = _isTypeEnabled('spc') && byId('weather-show-spc')?.checked;
         const surfaceProduct = _activeSurfaceProduct();
@@ -4727,6 +4834,7 @@
         if (!rtmaEnabled && rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
         if (!rtmaEnabled && rtmaPointLayer && map.hasLayer(rtmaPointLayer)) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
         if (!mrmsEnabled && mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
+        if (!mrmsEnabled && mrmsRadarSiteLayer && map.hasLayer(mrmsRadarSiteLayer)) map.removeLayer(mrmsRadarSiteLayer);
 
         if (!spcEnabled) {
             if (_spcAbortController) {
@@ -4804,11 +4912,49 @@
     let _surfaceGradientStations = []; // cached source stations for gradient interpolation
     let _surfaceGradientProduct = null;
     let _surfaceGradientRegion = null;
+    const _surfaceGradientOverlayCache = new Map();
+    const _surfaceGradientOverlayInflight = new Map();
 
     function _getGradientSourceRegion(regionCode = null) {
         const region = (regionCode || byId('weather-region')?.value || 'CONUS').toUpperCase();
         // WORLD should interpolate from WORLD observations, not CONUS.
         return region === 'WORLD' ? 'WORLD' : 'CONUS';
+    }
+
+    // ── Wind direction barb icon ─────────────────────────────────────────────
+    // Renders a meteorological arrow: shaft + arrowhead pointing FROM the wind
+    // origin (e.g. dirDeg=270 → westerly wind → arrow points left/west).
+    // The SVG is rotated via the SVG transform attribute so no CSS quirks.
+    function windDirectionBarbIcon(dirDeg, opacity) {
+        const zoom = map?.getZoom() ?? 5;
+        const zoomMin = 5, zoomMax = 9;
+        const t = Math.max(0, Math.min(1, (zoom - zoomMin) / (zoomMax - zoomMin)));
+        const size = Math.round(22 + t * 18); // 22px @ z5 → 40px @ z9+
+        const alpha = Math.max(0, Math.min(1, opacity));
+        // Clamp to 0-360
+        const rot = ((dirDeg % 360) + 360) % 360;
+        // viewBox is 20×20; center is (10,10).
+        // Arrow drawn pointing UP (from-north = 0°); rotate by rot degrees around center.
+        const svg =
+            `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" ` +
+            `width="${size}" height="${size}" style="overflow:visible;opacity:${alpha};" ` +
+            `role="img" aria-label="Wind from ${Math.round(rot)}°">` +
+            `<defs>` +
+            `<filter id="wdb-shadow" x="-60%" y="-60%" width="220%" height="220%">` +
+            `<feDropShadow dx="0" dy="0" stdDeviation="1.4" flood-color="black" flood-opacity="0.95"/>` +
+            `</filter>` +
+            `</defs>` +
+            `<g transform="rotate(${rot},10,10)" filter="url(#wdb-shadow)">` +
+            `<line x1="10" y1="18" x2="10" y2="7" stroke="white" stroke-width="2.5" stroke-linecap="round"/>` +
+            `<polygon points="10,1 5,9 15,9" fill="white"/>` +
+            `</g>` +
+            `</svg>`;
+        return L.divIcon({
+            className: '',
+            html: `<div style="width:${size}px;height:${size}px;">${svg}</div>`,
+            iconSize: [size, size],
+            iconAnchor: [Math.round(size / 2), Math.round(size / 2)],
+        });
     }
 
     function surfaceColoredTextIcon(value, unit, opacity) {
@@ -4883,8 +5029,8 @@
 
     // City labels need heavier thinning than station plots at the same zoom.
     function _baseCityDistKm(zoom) {
-        if (zoom >= 9) return 30;
-        if (zoom >= 7) return 60;
+        if (zoom >= 9) return 10;
+        if (zoom >= 7) return 30;
         if (zoom >= 5) return 150;
         return 180;
     }
@@ -5384,7 +5530,7 @@
      * @param {number} blurScale
      * @returns {L.ImageOverlay|null}
      */
-    function _renderGradientFromGribGrid(gridPoints, product, canvasAlpha = 1.0, blurScale = _rtmaGradientBlurScale) {
+    function _renderGradientFromGribGrid(gridPoints, product, canvasAlpha = 1.0, blurScale = 0.35) {
         if (!gridPoints || !gridPoints.length) return null;
 
         const bounds = map.getBounds();
@@ -5438,6 +5584,46 @@
         });
     }
 
+    function _surfaceGradientCacheKey(product, regionCode = null) {
+        const sourceRegion = _getGradientSourceRegion(regionCode);
+        return `${sourceRegion}|${product}`;
+    }
+
+    async function _primeSurfaceGradientOverlayCache(product, regionCode = null) {
+        if (_archiveMode || !product) return null;
+        const key = _surfaceGradientCacheKey(product, regionCode);
+        if (_surfaceGradientOverlayCache.has(key)) {
+            return _surfaceGradientOverlayCache.get(key);
+        }
+        if (_surfaceGradientOverlayInflight.has(key)) {
+            return _surfaceGradientOverlayInflight.get(key);
+        }
+
+        const sourceRegion = _getGradientSourceRegion(regionCode);
+        const fetchPromise = (async () => {
+            try {
+                const url = apiUrl(`/api/data/surface-gradient?region=${encodeURIComponent(sourceRegion)}&product=${encodeURIComponent(product)}`);
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const meta = await resp.json();
+                if (meta && meta.image_url && Array.isArray(meta.bounds) && meta.bounds.length === 4) {
+                    _surfaceGradientOverlayCache.set(key, meta);
+                    return meta;
+                }
+            } catch (_err) {
+                // Keep silent and allow client-side fallback interpolation.
+            }
+            return null;
+        })();
+
+        _surfaceGradientOverlayInflight.set(key, fetchPromise);
+        try {
+            return await fetchPromise;
+        } finally {
+            _surfaceGradientOverlayInflight.delete(key);
+        }
+    }
+
     function _renderSurfaceMarkers(stations) {
         if (surfaceLayer) { map.removeLayer(surfaceLayer); surfaceLayer = null; }
         if (!stations.length) return;
@@ -5452,6 +5638,8 @@
         if (_activeSurfaceGradient()) {
             const currentRegion = (byId('weather-region')?.value || 'CONUS').toUpperCase();
             const gradientSourceRegion = _getGradientSourceRegion(currentRegion);
+            const gradientCacheKey = _surfaceGradientCacheKey(product, gradientSourceRegion);
+            const cachedGradientMeta = _surfaceGradientOverlayCache.get(gradientCacheKey) || null;
             const gradientStations = _archiveMode
                 ? stations
                 : (
@@ -5461,9 +5649,23 @@
                         ? _surfaceGradientStations
                         : stations
                 );
-            const gradientLayer = gradientStations.length
-                ? _renderGradientSurface(gradientStations, product)
-                : null;
+            let gradientLayer = null;
+
+            if (
+                cachedGradientMeta
+                && cachedGradientMeta.image_url
+                && Array.isArray(cachedGradientMeta.bounds)
+                && cachedGradientMeta.bounds.length === 4
+            ) {
+                const b = cachedGradientMeta.bounds;
+                const leafletBounds = [[b[2], b[0]], [b[3], b[1]]];
+                gradientLayer = L.imageOverlay(apiUrl(cachedGradientMeta.image_url), leafletBounds, {
+                    opacity: surfaceGradientOpacity,
+                    className: 'surface-gradient-overlay',
+                });
+            } else if (gradientStations.length) {
+                gradientLayer = _renderGradientSurface(gradientStations, product);
+            }
             if (gradientLayer) {
                 layers.push(gradientLayer);
             }
@@ -5578,6 +5780,15 @@
             // Pass the already-fetched stations so _ensureGradientStations
             // doesn't fire a duplicate request for the same endpoint.
             await _ensureGradientStations(product, region, stations);
+
+            // Warm worker-rendered gradient cache. If it becomes available,
+            // redraw once so product switches use cached high-res overlays.
+            const before = _surfaceGradientOverlayCache.has(_surfaceGradientCacheKey(product, region));
+            await _primeSurfaceGradientOverlayCache(product, region);
+            const after = _surfaceGradientOverlayCache.has(_surfaceGradientCacheKey(product, region));
+            if (!before && after && _canApplySurfaceResponse(region, product) && _activeSurfaceGradient()) {
+                _renderSurfaceMarkers(_surfaceStations);
+            }
         } catch (err) {
             if (requestSeq !== _surfaceRequestSeq) return;
             console.error('[surface] Load error:', err);
@@ -5806,24 +6017,48 @@
         const requestSeq = ++_mrmsRequestSeq;
         const product = composeMrmsProductKey();
         if (!product) return;
-        const bounds = map.getBounds();
-        const s = bounds.getSouth().toFixed(4);
-        const w = bounds.getWest().toFixed(4);
-        const n = bounds.getNorth().toFixed(4);
-        const e = bounds.getEast().toFixed(4);
 
         const statusEl = byId('weather-mrms-status');
         if (statusEl) statusEl.textContent = `Loading ${product}...`;
         setStatus(`Loading MRMS ${product}...`);
 
         try {
-            const url = apiUrl(`/api/data/mrms?product=${encodeURIComponent(product)}&south=${s}&west=${w}&north=${n}&east=${e}`);
-            const resp = await fetch(url);
-            if (!resp.ok) {
-                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-                throw new Error(err.detail || resp.statusText);
+            // ── Try pre-rendered overlay first (populated by mrms_worker) ───
+            let data = null;
+            const overlayResp = await fetch(
+                apiUrl(`/api/overlay/latest?family=mrms&region=CONUS&stream=default&product=${encodeURIComponent(product)}`)
+            );
+            if (overlayResp.ok) {
+                const overlayData = await overlayResp.json();
+                // Normalise to the shape expected by the rest of this handler.
+                data = {
+                    image_url: (overlayData?.render?.image_url) ?? '',
+                    bounds: overlayData?.bounds ?? [],
+                    legend: overlayData?.legend ?? null,
+                    full_name: overlayData?.full_name ?? product,
+                    units: overlayData?.units ?? '',
+                    vmin: overlayData?.vmin ?? null,
+                    vmax: overlayData?.vmax ?? null,
+                    timestamp: overlayData?.timestamp ?? null,
+                };
             }
-            const data = await resp.json();
+
+            // ── Fall back to legacy on-demand endpoint (cold cache / 404) ───
+            if (!data || !data.image_url) {
+                const bounds = map.getBounds();
+                const s = bounds.getSouth().toFixed(4);
+                const w = bounds.getWest().toFixed(4);
+                const n = bounds.getNorth().toFixed(4);
+                const e = bounds.getEast().toFixed(4);
+                const legacyResp = await fetch(
+                    apiUrl(`/api/data/mrms?product=${encodeURIComponent(product)}&south=${s}&west=${w}&north=${n}&east=${e}`)
+                );
+                if (!legacyResp.ok) {
+                    const err = await legacyResp.json().catch(() => ({ detail: legacyResp.statusText }));
+                    throw new Error(err.detail || legacyResp.statusText);
+                }
+                data = await legacyResp.json();
+            }
 
             if (requestSeq !== _mrmsRequestSeq || !_canApplyMrmsResponse()) return;
 
@@ -5834,6 +6069,7 @@
             const leafletBounds = [[b[2], b[0]], [b[3], b[1]]];
             mrmsOverlay = L.imageOverlay(apiUrl(data.image_url), leafletBounds, { opacity: mrmsOpacity });
             if (_activeMrmsProduct()) mrmsOverlay.addTo(map);
+            _syncMrmsRadarSiteOverlay(b);
 
             buildMrmsLegend(data);
 
@@ -5856,6 +6092,7 @@
     }
 
     function buildRtmaLegend(data) {
+        if (!_isTypeEnabled('rtma')) return;
         const legend = data?.legend;
         const title = escapeHtml(data?.full_name || 'RTMA');
         const units = escapeHtml(data?.units || '');
@@ -5885,12 +6122,61 @@
 
         setStatus(`Loading ${region} ${stream} ${product}...`);
 
-        // Fire grid fetch in parallel — it will re-render gradient when it arrives.
-        loadRtmaGrid();
+        // ── Try the pre-rendered overlay first ────────────────────────────────
+        // Wind direction has no scalar gradient overlay — barb arrows only.
+        let usedPrerender = false;
+        let pointsSourceDataKey = '';
+        try {
+            if (product === 'wind_direction') throw new Error('no-overlay');
+            const overlayResp = await fetch(
+                apiUrl(`/api/overlay/latest?family=rtma&region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`)
+            );
+
+            if (overlayResp.ok) {
+                const overlayData = await overlayResp.json();
+                if (requestSeq !== _rtmaRequestSeq || !_canApplyRtmaResponse()) return;
+
+                const imageUrl = overlayData?.render?.image_url;
+                const bounds = overlayData?.bounds; // [west, east, south, north]
+                pointsSourceDataKey = (typeof overlayData?.source_data_key === 'string')
+                    ? overlayData.source_data_key
+                    : '';
+
+                if (imageUrl && Array.isArray(bounds) && bounds.length === 4) {
+                    if (rtmaGradientLayer) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
+                    if (rtmaOverlay) { map.removeLayer(rtmaOverlay); rtmaOverlay = null; }
+
+                    const leafletBounds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
+                    rtmaGradientLayer = L.imageOverlay(apiUrl(imageUrl), leafletBounds, {
+                        opacity: rtmaGradientOpacity,
+                        className: 'surface-gradient-overlay',
+                    });
+                    if (_isTypeEnabled('rtma')) rtmaGradientLayer.addTo(map);
+
+                    buildRtmaLegend(overlayData);
+
+                    const dataTsMs = _asDate(overlayData?.timestamp)?.getTime() || Date.now();
+                    const ageMs = Date.now() - dataTsMs;
+                    const staleNote = ageMs > _rtmaStaleThresholdMs(stream, product)
+                        ? ` [stale: ${_formatAge(ageMs)}]`
+                        : '';
+                    const title = overlayData?.full_name || product;
+                    setStatus(`RTMA ${title} valid ${new Date(dataTsMs).toLocaleTimeString()}${staleNote}.`);
+                    _setViewerTimestamp(dataTsMs);
+                    _setReliability(`RTMA ${title}`, `NOAA ${stream}`, dataTsMs);
+                    usedPrerender = true;
+                }
+            }
+        } catch (_preErr) {
+            // Pre-render fetch failed — fall through to on-demand path below.
+        }
+
+        // ── Always load value-point markers (dynamic, not baked into raster) ──
 
         try {
             const url = apiUrl(
                 `/api/data/rtma/points?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
+                + (pointsSourceDataKey ? `&source_data_key=${encodeURIComponent(pointsSourceDataKey)}` : '')
             );
             const resp = await fetch(url);
             if (!resp.ok) {
@@ -5901,33 +6187,40 @@
 
             if (requestSeq !== _rtmaRequestSeq || !_canApplyRtmaResponse()) return;
 
-            if (rtmaOverlay) { map.removeLayer(rtmaOverlay); rtmaOverlay = null; }
+            // Only clear the overlay if we're still using the on-demand canvas path.
+            if (!usedPrerender && rtmaOverlay) { map.removeLayer(rtmaOverlay); rtmaOverlay = null; }
 
             _rtmaPointsAll = Array.isArray(data.points) ? data.points : [];
             _rtmaPointsUnits = data.units || '';
-            _rtmaPointsKey = `${region}|${stream}|${product}`;
+            _rtmaPointsKey = `${region}|${stream}|${product}|${pointsSourceDataKey || 'latest'}`;
             _lastRtmaPointsFetchKey = _rtmaPointsKey;
             _lastRtmaPointsFetchMs = Date.now();
 
+            // Render value markers regardless of whether the pre-rendered raster
+            // was applied. When cache is available the PNG overlay is already on
+            // the map; when not yet built we show markers only (no canvas gradient).
             _renderRtmaPoints();
-            buildRtmaLegend(data);
 
-            const dataTsMs = _asDate(data?.timestamp)?.getTime() || Date.now();
-            const ageMs = Date.now() - dataTsMs;
-            const staleNote = ageMs > _rtmaStaleThresholdMs(stream, product)
-                ? ` [stale: ${_formatAge(ageMs)}]`
-                : '';
-            const title = data?.full_name || product;
-            setStatus(`RTMA ${title} valid ${new Date(dataTsMs).toLocaleTimeString()}${staleNote}.`);
-            _setViewerTimestamp(dataTsMs);
-            _setReliability(`RTMA ${title}`, `NOAA ${stream}`, dataTsMs);
+            if (usedPrerender) {
+                // Legend + status already set from overlay meta above.
+            } else {
+                // Cache not yet built for this product — show markers-only notice.
+                buildRtmaLegend(data);
+                const dataTsMs = _asDate(data?.timestamp)?.getTime() || Date.now();
+                const title = data?.full_name || product;
+                setStatus(`RTMA ${title} — overlay cache not yet built (markers only).`);
+                _setViewerTimestamp(dataTsMs);
+                _setReliability(`RTMA ${title}`, `NOAA ${stream}`, dataTsMs);
+            }
         } catch (err) {
             if (requestSeq !== _rtmaRequestSeq) return;
             console.error('[rtma] Load error:', err);
-            if (rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
-            if (rtmaPointLayer && map.hasLayer(rtmaPointLayer)) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
-            setLegend(null);
-            setStatus(`RTMA error: ${err.message}`);
+            if (!usedPrerender) {
+                if (rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
+                if (rtmaPointLayer && map.hasLayer(rtmaPointLayer)) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
+                setLegend(null);
+                setStatus(`RTMA error: ${err.message}`);
+            }
         }
     }
 
@@ -5950,34 +6243,20 @@
     }
 
     function _renderRtmaPoints() {
-        if (rtmaGradientLayer) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
+        // Gradient is now pre-rendered server-side and applied as an imageOverlay
+        // in loadRtma() / _renderRtmaScrubFrame(). This function only renders
+        // the optional city-value markers on top.
         if (rtmaPointLayer) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
-        if (!_rtmaPointsAll.length && !_rtmaGridPoints.length) return;
+        if (!_rtmaPointsAll.length) return;
 
-        const product = _activeRtmaProduct()
-            || (_rtmaPointsKey ? _rtmaPointsKey.split('|')[2] : null);
-
-        // Gradient — prefer GRIB subgrid (accurate, no IDW) when key matches live product.
-        // Fall back to IDW from city points for scrubber frames and when grid is unavailable.
-        if (product) {
-            const currentKey = `${_activeRtmaRegion()}|${_activeRtmaStream()}|${product}`;
-            const useGrid = _rtmaGridPoints.length && _rtmaGridKey === currentKey;
-            const gradLayer = useGrid
-                ? _renderGradientFromGribGrid(_rtmaGridPoints, product, 1.0, _rtmaGradientBlurScale)
-                : (_rtmaPointsAll.length ? _renderGradientSurface(_rtmaPointsAll, product, 1.0, _rtmaGradientBlurScale) : null);
-            if (gradLayer) {
-                rtmaGradientLayer = gradLayer;
-                rtmaGradientLayer.setOpacity(rtmaGradientOpacity);
-                if (_isTypeEnabled('rtma')) rtmaGradientLayer.addTo(map);
-            }
-        }
-
-        // Value markers — checkbox-gated
         if (byId('weather-rtma-show-values')?.checked) {
+            const isWindDir = _rtmaPointsUnits === 'deg';
             const thin = _thinRtmaPoints(_rtmaPointsAll);
             if (thin.length) {
                 const markers = thin.map(p => {
-                    const icon = surfaceColoredTextIcon(p.value, _rtmaPointsUnits, 0.9);
+                    const icon = isWindDir
+                        ? windDirectionBarbIcon(p.value, 0.9)
+                        : surfaceColoredTextIcon(p.value, _rtmaPointsUnits, 0.9);
                     return L.marker([p.lat, p.lon], { icon });
                 });
                 rtmaPointLayer = L.layerGroup(markers);
@@ -6045,46 +6324,17 @@
     }
 
     /**
-     * Fetch GRIB-subgrid data from /api/data/rtma/grid and store in _rtmaGridPoints.
-     * Called in parallel with loadRtma() to provide the gradient data source.
+     * Formerly fetched GRIB-subgrid data for canvas gradient rendering.
+     * Gradients are now pre-rendered server-side as PNG overlays; this
+     * function is intentionally disabled.
      */
-    async function loadRtmaGrid(forceReload = false) {
-        const region = _activeRtmaRegion();
-        const stream = _activeRtmaStream();
-        const product = _activeRtmaProduct();
-        if (!region || !stream || !product) return;
-
-        const queryKey = `${region}|${stream}|${product}`;
-
-        if (!forceReload && _rtmaGridKey === queryKey && _rtmaGridPoints.length) return;
-        if (_rtmaGridInFlightKey === queryKey) return;
-
-        const requestSeq = ++_rtmaGridSeq;
-        try {
-            _rtmaGridInFlightKey = queryKey;
-            const url = apiUrl(
-                `/api/data/rtma/grid?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
-            );
-            const resp = await fetch(url);
-            if (!resp.ok) {
-                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-                throw new Error(err.detail || resp.statusText);
-            }
-            const data = await resp.json();
-            if (requestSeq !== _rtmaGridSeq || !_canApplyRtmaResponse()) return;
-            _rtmaGridPoints = Array.isArray(data.points) ? data.points : [];
-            _rtmaGridKey = queryKey;
-            // Re-render gradient now that grid data is available.
-            _renderRtmaPoints();
-        } catch (err) {
-            console.warn('[rtma grid] Load error:', err);
-        } finally {
-            if (_rtmaGridInFlightKey === queryKey) _rtmaGridInFlightKey = null;
-        }
+    function loadRtmaGrid() {
+        // No-op: on-demand canvas gradient generation removed.
+        // Overlay PNGs are served from the pre-render cache instead.
     }
 
     function _setRtmaScrubberStatus(message) {
-        const el = byId('weather-rtma-scrubber-status');
+        const el = byId('wx-scrubber-status');
         if (el) el.textContent = message || '';
     }
 
@@ -6099,18 +6349,20 @@
         const slider = byId('scrubber-slider');
         const tsEl = byId('scrubber-timestamp');
         const cntEl = byId('scrubber-frame-count');
-        const n = _rtmaScrubFrames.length;
+        const activeFrames = _mrmsScrubMode ? _mrmsScrubFrames : _rtmaScrubFrames;
+        const activeIndex = _mrmsScrubMode ? _mrmsScrubFrameIndex : _rtmaScrubFrameIndex;
+        const n = activeFrames.length;
         if (slider) {
             slider.min = '0';
             slider.max = String(n > 0 ? n - 1 : 0);
-            slider.value = String(_rtmaScrubFrameIndex);
+            slider.value = String(activeIndex);
         }
-        if (cntEl) cntEl.textContent = n > 0 ? `${_rtmaScrubFrameIndex + 1}/${n}` : '0/0';
+        if (cntEl) cntEl.textContent = n > 0 ? `${activeIndex + 1}/${n}` : '0/0';
         if (!n) {
             if (tsEl) tsEl.textContent = 'No frames found';
             return;
         }
-        const frame = _rtmaScrubFrames[_rtmaScrubFrameIndex];
+        const frame = activeFrames[activeIndex];
         if (tsEl) {
             try {
                 tsEl.textContent = new Date(frame.timestamp).toLocaleString(undefined, {
@@ -6136,11 +6388,12 @@
         const btn = byId('scrubber-play');
         if (btn) btn.textContent = '⏸';
 
-        const tick = () => {
+        const tick = async () => {
             if (!_rtmaScrubPlayTimer || !_rtmaScrubFrames.length) return;
             const atLast = _rtmaScrubFrameIndex >= _rtmaScrubFrames.length - 1;
             const next = atLast ? 0 : _rtmaScrubFrameIndex + 1;
-            _renderRtmaScrubFrame(next);
+            await _renderRtmaScrubFrame(next);
+            if (!_rtmaScrubPlayTimer || !_rtmaScrubFrames.length) return;
             const delay = atLast ? RTMA_SCRUB_LOOP_HOLD_MS : RTMA_SCRUB_PLAY_INTERVAL_MS;
             _rtmaScrubPlayTimer = setTimeout(tick, delay);
         };
@@ -6148,12 +6401,73 @@
         _rtmaScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
     }
 
+    function _canApplyRtmaScrubResponse(renderSeq) {
+        return renderSeq === _rtmaScrubRenderSeq
+            && _rtmaScrubMode
+            && _isTypeEnabled('rtma');
+    }
+
     function _exitRtmaScrubMode(shouldRefresh = true) {
         _stopRtmaScrubPlay();
+        _rtmaScrubLoadSeq += 1;
+        _rtmaScrubRenderSeq += 1;
         _rtmaScrubMode = false;
         _rtmaScrubFrames = [];
         _rtmaScrubFrameIndex = 0;
         _rtmaScrubFrameCache.clear();
+        _setArchiveProgress(false);
+        _setArchiveScrubber(false);
+        _setScrubberControlsEnabled(false);
+        _setRtmaScrubberStatus('');
+        byId('weather-rtma-load-scrubber')?.classList.remove('active');
+        byId('weather-mode-current')?.classList.add('active');
+        const animWin = byId('rtma-animate-window');
+        if (animWin) animWin.style.display = 'none';
+        if (shouldRefresh) {
+            refreshActiveLayers();
+        }
+    }
+
+    function _stopMrmsScrubPlay() {
+        if (_mrmsScrubPlayTimer) {
+            clearInterval(_mrmsScrubPlayTimer);
+            _mrmsScrubPlayTimer = null;
+        }
+        const btn = byId('scrubber-play');
+        if (btn) btn.textContent = '▶';
+    }
+
+    function _startMrmsScrubPlay() {
+        if (!_mrmsScrubFrames.length || _mrmsScrubPlayTimer) return;
+        const btn = byId('scrubber-play');
+        if (btn) btn.textContent = '⏸';
+
+        const tick = async () => {
+            if (!_mrmsScrubPlayTimer || !_mrmsScrubFrames.length) return;
+            const atLast = _mrmsScrubFrameIndex >= _mrmsScrubFrames.length - 1;
+            const next = atLast ? 0 : _mrmsScrubFrameIndex + 1;
+            await _renderMrmsScrubFrame(next);
+            if (!_mrmsScrubPlayTimer || !_mrmsScrubFrames.length) return;
+            const delay = atLast ? RTMA_SCRUB_LOOP_HOLD_MS : RTMA_SCRUB_PLAY_INTERVAL_MS;
+            _mrmsScrubPlayTimer = setTimeout(tick, delay);
+        };
+
+        _mrmsScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+    }
+
+    function _canApplyMrmsScrubResponse(renderSeq) {
+        return renderSeq === _mrmsScrubRenderSeq
+            && _mrmsScrubMode
+            && _isTypeEnabled('mrms');
+    }
+
+    function _exitMrmsScrubMode(shouldRefresh = true) {
+        _stopMrmsScrubPlay();
+        _mrmsScrubLoadSeq += 1;
+        _mrmsScrubRenderSeq += 1;
+        _mrmsScrubMode = false;
+        _mrmsScrubFrames = [];
+        _mrmsScrubFrameIndex = 0;
         _setArchiveProgress(false);
         _setArchiveScrubber(false);
         _setScrubberControlsEnabled(false);
@@ -6174,94 +6488,165 @@
         const region = frame.region || _activeRtmaRegion();
         const stream = frame.stream || _activeRtmaStream();
         const product = frame.product || _activeRtmaProduct();
-        const cacheKey = `${region}|${stream}|${product}|${frame.source_data_key}`;
+        const cacheKey = `${region}|${stream}|${product}|${frame.source_data_key || frame.frame_key}`;
         const existing = _rtmaScrubFrameCache.get(cacheKey);
         if (existing) return existing;
 
-        const bounds = map.getBounds();
-        const s = bounds.getSouth().toFixed(4);
-        const w = bounds.getWest().toFixed(4);
-        const n = bounds.getNorth().toFixed(4);
-        const e = bounds.getEast().toFixed(4);
-
-        const overlayUrl = apiUrl(
-            `/api/data/rtma?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}` +
-            `&product=${encodeURIComponent(product)}&source_data_key=${encodeURIComponent(frame.source_data_key)}` +
-            `&south=${s}&west=${w}&north=${n}&east=${e}`
-        );
         const pointsUrl = apiUrl(
             `/api/data/rtma/points?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}` +
-            `&product=${encodeURIComponent(product)}&source_data_key=${encodeURIComponent(frame.source_data_key)}` +
-            `&south=${s}&west=${w}&north=${n}&east=${e}`
+            `&product=${encodeURIComponent(product)}` +
+            (frame.source_data_key ? `&source_data_key=${encodeURIComponent(frame.source_data_key)}` : '')
         );
 
-        const payload = RTMA_SCRUB_POINTS_ONLY
-            ? await (async () => {
-                const pointsResp = await fetch(pointsUrl);
-                if (!pointsResp.ok) {
-                    const err = await pointsResp.json().catch(() => ({ detail: pointsResp.statusText }));
-                    throw new Error(err.detail || pointsResp.statusText);
+        // ── Try pre-rendered overlay first (instant — no GRIB parsing) ────────
+        if (!RTMA_SCRUB_POINTS_ONLY && frame.frame_key) {
+            try {
+                const [preResp, pointsResp] = await Promise.all([
+                    fetch(apiUrl(
+                        `/api/overlay/latest?family=rtma&region=${encodeURIComponent(region)}` +
+                        `&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}` +
+                        `&frame_key=${encodeURIComponent(frame.frame_key)}`
+                    )),
+                    fetch(pointsUrl),
+                ]);
+                if (preResp.ok) {
+                    const overlayData = await preResp.json();
+                    const pointsData = pointsResp.ok ? await pointsResp.json() : null;
+                    // Normalise to the same payload shape as the on-demand path.
+                    const payload = {
+                        overlay: {
+                            image_url: (overlayData.render || {}).image_url,
+                            bounds: overlayData.bounds,
+                            full_name: overlayData.full_name,
+                            units: overlayData.units,
+                            legend: overlayData.legend,
+                            timestamp: overlayData.timestamp,
+                        },
+                        points: pointsData,
+                        _fromPrerender: true,
+                    };
+                    _rtmaScrubFrameCache.set(cacheKey, payload);
+                    return payload;
                 }
-                const pointsData = await pointsResp.json();
-                return { overlay: null, points: pointsData };
-            })()
-            : await (async () => {
-                const [overlayResp, pointsResp] = await Promise.all([fetch(overlayUrl), fetch(pointsUrl)]);
-                if (!overlayResp.ok) {
-                    const err = await overlayResp.json().catch(() => ({ detail: overlayResp.statusText }));
-                    throw new Error(err.detail || overlayResp.statusText);
-                }
-                if (!pointsResp.ok) {
-                    const err = await pointsResp.json().catch(() => ({ detail: pointsResp.statusText }));
-                    throw new Error(err.detail || pointsResp.statusText);
-                }
-                return {
-                    overlay: await overlayResp.json(),
-                    points: await pointsResp.json(),
-                };
-            })();
+                // 404 → pre-render not yet cached for this frame.
+                // Fall through to points-only (no canvas gradient).
+            } catch (_preErr) {
+                // Network error — fall through to points-only.
+            }
+        }
 
-        _rtmaScrubFrameCache.set(cacheKey, payload);
-        return payload;
+        // ── Cache miss: fetch city-point markers only (no GRIB render) ──────
+        // The pre-rendered PNG for this frame is not yet available. Show value
+        // markers without a raster overlay rather than triggering on-demand
+        // server-side GRIB parsing.
+        try {
+            const pointsResp = await fetch(pointsUrl);
+            if (!pointsResp.ok) {
+                const err = await pointsResp.json().catch(() => ({ detail: pointsResp.statusText }));
+                throw new Error(err.detail || pointsResp.statusText);
+            }
+            const pointsData = await pointsResp.json();
+            const payload = { overlay: null, points: pointsData, _fromPrerender: false };
+            _rtmaScrubFrameCache.set(cacheKey, payload);
+            return payload;
+        } catch (err) {
+            throw err;
+        }
     }
 
     async function _renderRtmaScrubFrame(index) {
-        if (!_rtmaScrubFrames.length) return;
+        if (!_rtmaScrubFrames.length || !_rtmaScrubMode || !_isTypeEnabled('rtma')) return;
         _rtmaScrubFrameIndex = Math.max(0, Math.min(index, _rtmaScrubFrames.length - 1));
         _updateRtmaScrubberUi();
+        const renderSeq = ++_rtmaScrubRenderSeq;
 
         const frame = _rtmaScrubFrames[_rtmaScrubFrameIndex];
         try {
             const payload = await _fetchRtmaFramePayload(frame);
+            if (!_canApplyRtmaScrubResponse(renderSeq)) return;
             const data = payload.overlay || payload.points || {};
             const pointsData = payload.points;
 
-            if (rtmaOverlay) {
-                map.removeLayer(rtmaOverlay);
-                rtmaOverlay = null;
-            }
-            if (!RTMA_SCRUB_POINTS_ONLY && data?.image_url && Array.isArray(data?.bounds)) {
-                const b = data.bounds;
+            // Preload the new image into the browser cache before swapping layers.
+            // Without this the new imageOverlay is transparent until the PNG arrives,
+            // causing a visible blink even if we add-before-remove.
+            const oldGradientLayer = rtmaGradientLayer;
+            let newGradientLayer = null;
+            const imageUrl = data?.image_url || (payload._fromPrerender ? data?.image_url : null);
+            const imageBounds = data?.bounds;
+            if (!RTMA_SCRUB_POINTS_ONLY && imageUrl && Array.isArray(imageBounds)) {
+                await new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = resolve;
+                    img.onerror = resolve; // still swap on error rather than freezing
+                    img.src = apiUrl(imageUrl);
+                });
+                if (!_canApplyRtmaScrubResponse(renderSeq)) return;
+                const b = imageBounds;
                 const leafletBounds = [[b[2], b[0]], [b[3], b[1]]];
-                rtmaOverlay = L.imageOverlay(apiUrl(data.image_url), leafletBounds, { opacity: rtmaOpacity });
-                rtmaOverlay.addTo(map);
+                newGradientLayer = L.imageOverlay(apiUrl(imageUrl), leafletBounds, {
+                    opacity: oldGradientLayer ? 0 : rtmaGradientOpacity,
+                    className: 'surface-gradient-overlay',
+                });
+                // Image is already in browser cache — add new then remove old for instant swap.
+                if (_isTypeEnabled('rtma')) newGradientLayer.addTo(map);
+
+                // Ensure the new layer is actually painted before retiring the old one.
+                if (oldGradientLayer && _isTypeEnabled('rtma')) {
+                    await new Promise((resolve) => requestAnimationFrame(resolve));
+                    await new Promise((resolve) => requestAnimationFrame(resolve));
+                    if (!_canApplyRtmaScrubResponse(renderSeq)) return;
+                    newGradientLayer.setOpacity(rtmaGradientOpacity);
+                }
             }
+
+            if (rtmaOverlay) { map.removeLayer(rtmaOverlay); rtmaOverlay = null; }
+            if (oldGradientLayer && oldGradientLayer !== newGradientLayer) {
+                if (newGradientLayer && _isTypeEnabled('rtma')) {
+                    setTimeout(() => {
+                        if (oldGradientLayer && map.hasLayer(oldGradientLayer)) {
+                            map.removeLayer(oldGradientLayer);
+                        }
+                    }, RTMA_SCRUB_SWAP_FADE_MS);
+                } else if (map.hasLayer(oldGradientLayer)) {
+                    map.removeLayer(oldGradientLayer);
+                }
+            }
+            rtmaGradientLayer = newGradientLayer;
 
             _rtmaPointsAll = Array.isArray(pointsData?.points) ? pointsData.points : [];
             _rtmaPointsUnits = pointsData?.units || '';
             _rtmaPointsKey = `${frame.region || _activeRtmaRegion()}|${frame.stream || _activeRtmaStream()}|${frame.product || _activeRtmaProduct()}`;
-            _renderRtmaPoints();
+
+            // Render value markers on top of the raster.
+            if (rtmaPointLayer) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
+            if (byId('weather-rtma-show-values')?.checked && _rtmaPointsAll.length) {
+                const isWindDir = _rtmaPointsUnits === 'deg';
+                const thin = _thinRtmaPoints(_rtmaPointsAll);
+                if (thin.length) {
+                    const markers = thin.map(p => {
+                        const icon = isWindDir
+                            ? windDirectionBarbIcon(p.value, 0.9)
+                            : surfaceColoredTextIcon(p.value, _rtmaPointsUnits, 0.9);
+                        return L.marker([p.lat, p.lon], { icon });
+                    });
+                    rtmaPointLayer = L.layerGroup(markers);
+                    if (_isTypeEnabled('rtma')) rtmaPointLayer.addTo(map);
+                }
+            }
 
             buildRtmaLegend(pointsData || data);
-            const dataTsMs = _asDate(pointsData?.timestamp || data?.timestamp)?.getTime() || Date.now();
+            const dataTsMs = _asDate(pointsData?.timestamp || data?.timestamp || frame.timestamp)?.getTime() || Date.now();
             const title = pointsData?.full_name || data?.full_name || frame.product || _activeRtmaProduct();
-            setStatus(`RTMA scrub ${title} (gradient) ${new Date(dataTsMs).toLocaleTimeString()}.`);
+            const renderNote = payload._fromPrerender ? 'pre-rendered' : 'cache pending';
+            setStatus(`RTMA scrub ${title} (${renderNote}) ${new Date(dataTsMs).toLocaleTimeString()}.`);
             _setViewerTimestamp(dataTsMs);
             _setReliability(`RTMA ${title}`, `NOAA ${frame.stream || _activeRtmaStream()}`, dataTsMs);
-            _setRtmaScrubberStatus(`Loaded ${_rtmaScrubFrameIndex + 1} of ${_rtmaScrubFrames.length} frames.`);
+            _setRtmaScrubberStatus(`${_rtmaScrubFrameIndex + 1} / ${_rtmaScrubFrames.length} frames.`);
         } catch (err) {
+            if (!_canApplyRtmaScrubResponse(renderSeq)) return;
             console.error('[rtma scrub] Frame render error:', err);
-            const frameKey = frame?.source_data_key;
+            const frameKey = frame?.source_data_key || frame?.frame_key;
             if (frameKey) _rtmaScrubFrameErrors.add(frameKey);
             // Auto-skip to the next valid frame rather than freezing on error.
             const nextIndex = _rtmaScrubFrames.findIndex(
@@ -6278,6 +6663,8 @@
     }
 
     async function loadRtmaScrubberFrames() {
+        if (_mrmsScrubMode) _exitMrmsScrubMode(false);
+        const loadSeq = ++_rtmaScrubLoadSeq;
         const region = _activeRtmaRegion();
         const stream = _activeRtmaStream();
         const product = _activeRtmaProduct();
@@ -6288,6 +6675,7 @@
 
         _rtmaScrubMode = true;
         _stopRtmaScrubPlay();
+        _rtmaScrubRenderSeq += 1;
         _rtmaScrubFrames = [];
         _rtmaScrubFrameErrors.clear();
         _rtmaScrubFrameIndex = 0;
@@ -6300,19 +6688,70 @@
         const streamMax = RTMA_STREAM_MAX_HOURS[stream] || 24;
         const windowBtn = document.querySelector('#rtma-animate-window .wx-animate-window-btn.active');
         const maxHours = Math.min(windowBtn ? Number(windowBtn.dataset.hours) : streamMax, streamMax);
+        const cutoffMs = Date.now() - maxHours * 60 * 60 * 1000;
+
         try {
-            const url = apiUrl(
-                `/api/data/rtma/frames?region=${encodeURIComponent(region)}` +
-                `&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}` +
-                `&max_hours=${encodeURIComponent(maxHours)}`
-            );
-            const resp = await fetch(url);
-            if (!resp.ok) {
-                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-                throw new Error(err.detail || resp.statusText);
+            // ── Try pre-render cache first (disk read, instant) ───────────────
+            let usedCache = false;
+            try {
+                const cacheUrl = apiUrl(
+                    `/api/overlay/frames?family=rtma&region=${encodeURIComponent(region)}` +
+                    `&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
+                );
+                const cacheResp = await fetch(cacheUrl);
+                if (loadSeq !== _rtmaScrubLoadSeq || !_rtmaScrubMode || !_isTypeEnabled('rtma')) return;
+                if (cacheResp.ok) {
+                    const cacheData = await cacheResp.json();
+                    const rawFrames = Array.isArray(cacheData.frames) ? cacheData.frames : [];
+
+                    // Filter to the selected time window and normalise shape.
+                    const filtered = rawFrames.filter((f) => {
+                        if (!f.timestamp) return true; // keep if no timestamp to filter on
+                        const tsMs = _asDate(f.timestamp)?.getTime();
+                        return !tsMs || tsMs >= cutoffMs;
+                    });
+
+                    if (filtered.length > 0) {
+                        // Normalise: add region/stream/product so _fetchRtmaFramePayload
+                        // doesn't need to fall back to the live UI selectors.
+                        _rtmaScrubFrames = filtered.map((f) => ({
+                            frame_key: f.frame_key,
+                            source_data_key: f.source_data_key || '',
+                            timestamp: f.timestamp || '',
+                            region,
+                            stream,
+                            product,
+                            // Pre-attach image_url and bounds so _renderRtmaScrubFrame
+                            // can use them directly without a second API call when
+                            // the image is already embedded in the frame list.
+                            _image_url: f.image_url || null,
+                            _bounds: f.bounds || null,
+                        }));
+                        usedCache = true;
+                    }
+                }
+            } catch (_cacheErr) {
+                // Cache fetch failed — fall through to S3 path.
             }
-            const data = await resp.json();
-            _rtmaScrubFrames = Array.isArray(data.frames) ? data.frames : [];
+
+            // ── Fall back to S3 HEAD-check frame list ─────────────────────────
+            if (!usedCache) {
+                const url = apiUrl(
+                    `/api/data/rtma/frames?region=${encodeURIComponent(region)}` +
+                    `&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}` +
+                    `&max_hours=${encodeURIComponent(maxHours)}`
+                );
+                const resp = await fetch(url);
+                if (loadSeq !== _rtmaScrubLoadSeq || !_rtmaScrubMode || !_isTypeEnabled('rtma')) return;
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                    throw new Error(err.detail || resp.statusText);
+                }
+                const data = await resp.json();
+                _rtmaScrubFrames = Array.isArray(data.frames) ? data.frames : [];
+            }
+
+            if (loadSeq !== _rtmaScrubLoadSeq || !_rtmaScrubMode || !_isTypeEnabled('rtma')) return;
 
             if (!_rtmaScrubFrames.length) {
                 _setArchiveProgress(false);
@@ -6326,9 +6765,11 @@
 
             _setArchiveProgress(false);
             _setScrubberControlsEnabled(true);
-            _setRtmaScrubberStatus(`Loaded ${_rtmaScrubFrames.length} frames (${data.hours_back}h window).`);
+            const sourceLabel = usedCache ? 'pre-rendered cache' : 'S3';
+            _setRtmaScrubberStatus(`${_rtmaScrubFrames.length} frames from ${sourceLabel} (${maxHours}h window).`);
             await _renderRtmaScrubFrame(0);
         } catch (err) {
+            if (loadSeq !== _rtmaScrubLoadSeq || !_rtmaScrubMode || !_isTypeEnabled('rtma')) return;
             _setArchiveProgress(false);
             _setScrubberControlsEnabled(false);
             _setRtmaScrubberStatus(`Error: ${err.message}`);
@@ -6336,7 +6777,155 @@
         }
     }
 
+    async function _renderMrmsScrubFrame(index) {
+        if (!_mrmsScrubFrames.length || !_mrmsScrubMode || !_isTypeEnabled('mrms')) return;
+        _mrmsScrubFrameIndex = Math.max(0, Math.min(index, _mrmsScrubFrames.length - 1));
+        _updateRtmaScrubberUi();
+        const renderSeq = ++_mrmsScrubRenderSeq;
+
+        const frame = _mrmsScrubFrames[_mrmsScrubFrameIndex];
+        try {
+            if (!_canApplyMrmsScrubResponse(renderSeq)) return;
+            const oldOverlay = mrmsOverlay;
+            let newOverlay = null;
+            const imageUrl = frame?.image_url || '';
+            const bounds = Array.isArray(frame?.bounds) ? frame.bounds : null;
+
+            if (imageUrl && bounds && bounds.length === 4) {
+                await new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = resolve;
+                    img.onerror = resolve;
+                    img.src = apiUrl(imageUrl);
+                });
+                if (!_canApplyMrmsScrubResponse(renderSeq)) return;
+
+                const leafletBounds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
+                newOverlay = L.imageOverlay(apiUrl(imageUrl), leafletBounds, {
+                    opacity: oldOverlay ? 0 : mrmsOpacity,
+                });
+                if (_isTypeEnabled('mrms')) newOverlay.addTo(map);
+                if (oldOverlay && _isTypeEnabled('mrms')) {
+                    await new Promise((resolve) => requestAnimationFrame(resolve));
+                    await new Promise((resolve) => requestAnimationFrame(resolve));
+                    if (!_canApplyMrmsScrubResponse(renderSeq)) return;
+                    newOverlay.setOpacity(mrmsOpacity);
+                }
+            }
+
+            if (oldOverlay && oldOverlay !== newOverlay) {
+                if (newOverlay && _isTypeEnabled('mrms')) {
+                    setTimeout(() => {
+                        if (oldOverlay && map.hasLayer(oldOverlay)) map.removeLayer(oldOverlay);
+                    }, RTMA_SCRUB_SWAP_FADE_MS);
+                } else if (map.hasLayer(oldOverlay)) {
+                    map.removeLayer(oldOverlay);
+                }
+            }
+            mrmsOverlay = newOverlay;
+            _syncMrmsRadarSiteOverlay(bounds);
+
+            buildMrmsLegend(frame);
+            const tsMs = _asDate(frame?.timestamp)?.getTime() || Date.now();
+            const product = frame?.product || composeMrmsProductKey() || 'MRMS';
+            setStatus(`MRMS scrub ${product} ${new Date(tsMs).toLocaleTimeString()}.`);
+            _setViewerTimestamp(tsMs);
+            _setReliability(`MRMS ${product}`, 'NOAA MRMS', tsMs);
+            _setRtmaScrubberStatus(`${_mrmsScrubFrameIndex + 1} / ${_mrmsScrubFrames.length} frames.`);
+
+            // Prefetch next frame image into browser cache (fire-and-forget)
+            const nextFrame = _mrmsScrubFrames[_mrmsScrubFrameIndex + 1];
+            if (nextFrame?.image_url) {
+                const prefetch = new Image();
+                prefetch.src = apiUrl(nextFrame.image_url);
+            }
+        } catch (err) {
+            if (!_canApplyMrmsScrubResponse(renderSeq)) return;
+            setStatus(`MRMS scrubber error: ${err.message}`);
+            _setRtmaScrubberStatus(`Frame unavailable: ${err.message}`);
+        }
+    }
+
+    async function loadMrmsScrubberFrames() {
+        if (_rtmaScrubMode) _exitRtmaScrubMode(false);
+        const loadSeq = ++_mrmsScrubLoadSeq;
+        const product = composeMrmsProductKey();
+        if (!product) {
+            setStatus('Select an MRMS product first.');
+            return;
+        }
+
+        _mrmsScrubMode = true;
+        _stopMrmsScrubPlay();
+        _mrmsScrubRenderSeq += 1;
+        _mrmsScrubFrames = [];
+        _mrmsScrubFrameIndex = 0;
+        _setArchiveScrubber(true);
+        _setArchiveProgress(true, 10, 'Loading MRMS frame list...');
+        _setScrubberControlsEnabled(false);
+        _updateRtmaScrubberUi();
+
+        const windowBtn = document.querySelector('#rtma-animate-window .wx-animate-window-btn.active');
+        const maxHours = Math.max(1, Number(windowBtn ? windowBtn.dataset.hours : 3) || 3);
+        const cutoffMs = Date.now() - maxHours * 60 * 60 * 1000;
+
+        try {
+            const url = apiUrl(`/api/overlay/frames?family=mrms&region=CONUS&stream=default&product=${encodeURIComponent(product)}`);
+            const resp = await fetch(url);
+            if (loadSeq !== _mrmsScrubLoadSeq || !_mrmsScrubMode || !_isTypeEnabled('mrms')) return;
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || resp.statusText);
+            }
+
+            const data = await resp.json();
+            const rawFrames = Array.isArray(data.frames) ? data.frames : [];
+            _mrmsScrubFrames = rawFrames
+                .filter((f) => {
+                    if (!f.timestamp) return true;
+                    const tsMs = _asDate(f.timestamp)?.getTime();
+                    return !tsMs || tsMs >= cutoffMs;
+                })
+                .map((f) => ({
+                    frame_key: f.frame_key,
+                    source_data_key: f.source_data_key || '',
+                    image_url: f.image_url || '',
+                    bounds: f.bounds || null,
+                    timestamp: f.timestamp || '',
+                    legend: f.legend || null,
+                    full_name: f.full_name || product,
+                    units: f.units || '',
+                    vmin: f.vmin ?? null,
+                    vmax: f.vmax ?? null,
+                    product,
+                }));
+
+            if (loadSeq !== _mrmsScrubLoadSeq || !_mrmsScrubMode || !_isTypeEnabled('mrms')) return;
+            if (!_mrmsScrubFrames.length) {
+                _setArchiveProgress(false);
+                _setArchiveScrubber(true);
+                _setScrubberControlsEnabled(false);
+                _updateRtmaScrubberUi();
+                _setRtmaScrubberStatus('No MRMS frames found for selected window/product.');
+                setStatus('No MRMS frames found for the selected settings.');
+                return;
+            }
+
+            _setArchiveProgress(false);
+            _setScrubberControlsEnabled(true);
+            _setRtmaScrubberStatus(`${_mrmsScrubFrames.length} MRMS frames from cache (${maxHours}h window).`);
+            await _renderMrmsScrubFrame(0);
+        } catch (err) {
+            if (loadSeq !== _mrmsScrubLoadSeq || !_mrmsScrubMode || !_isTypeEnabled('mrms')) return;
+            _setArchiveProgress(false);
+            _setScrubberControlsEnabled(false);
+            _setRtmaScrubberStatus(`Error: ${err.message}`);
+            setStatus(`MRMS scrubber load error: ${err.message}`);
+        }
+    }
+
     function buildMrmsLegend(data) {
+        if (!_isTypeEnabled('mrms')) return;
         const legend = data?.legend;
         if (!legend) {
             const rows = [
@@ -6606,6 +7195,7 @@
             mrmsOverlay = L.imageOverlay(apiUrl(frame.image_url), leafletBounds, { opacity: mrmsOpacity });
             mrmsOverlay.addTo(map);
         }
+        _syncMrmsRadarSiteOverlay(b);
     }
 
     function _renderArchiveGeoJsonFrame(frame, layerType) {
@@ -6984,6 +7574,10 @@
             _exitRtmaScrubMode(true);
             return;
         }
+        if (_mrmsScrubMode) {
+            _exitMrmsScrubMode(true);
+            return;
+        }
         if (_archiveMode) exitArchiveMode();
     });
     byId('weather-mode-archive')?.addEventListener('click', () => {
@@ -7019,6 +7613,14 @@
             }
             return;
         }
+        if (_mrmsScrubMode) {
+            if (_mrmsScrubPlayTimer) {
+                _stopMrmsScrubPlay();
+            } else {
+                _startMrmsScrubPlay();
+            }
+            return;
+        }
         if (_archivePlayTimer) { stopScrubberPlay(); } else { startScrubberPlay(); }
     });
 
@@ -7026,6 +7628,11 @@
         if (_rtmaScrubMode) {
             _stopRtmaScrubPlay();
             _renderRtmaScrubFrame(_rtmaScrubFrameIndex - 1);
+            return;
+        }
+        if (_mrmsScrubMode) {
+            _stopMrmsScrubPlay();
+            _renderMrmsScrubFrame(_mrmsScrubFrameIndex - 1);
             return;
         }
         stopScrubberPlay();
@@ -7038,6 +7645,11 @@
             _renderRtmaScrubFrame(_rtmaScrubFrameIndex + 1);
             return;
         }
+        if (_mrmsScrubMode) {
+            _stopMrmsScrubPlay();
+            _renderMrmsScrubFrame(_mrmsScrubFrameIndex + 1);
+            return;
+        }
         stopScrubberPlay();
         renderArchiveFrame(_archiveFrameIndex + 1);
     });
@@ -7046,6 +7658,11 @@
         if (_rtmaScrubMode) {
             _stopRtmaScrubPlay();
             _renderRtmaScrubFrame(parseInt(e.target.value, 10));
+            return;
+        }
+        if (_mrmsScrubMode) {
+            _stopMrmsScrubPlay();
+            _renderMrmsScrubFrame(parseInt(e.target.value, 10));
             return;
         }
         stopScrubberPlay();
@@ -7077,12 +7694,10 @@
 
     async function _ensureCountriesLayer() {
         if (countriesLayer) return;
-        if (typeof window.topojson === 'undefined') return;
         try {
-            const resp = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+            const resp = await fetch(apiUrl('/api/overlay/world-borders'));
             if (!resp.ok) return;
-            const topo = await resp.json();
-            const countriesRaw = window.topojson.feature(topo, topo.objects.countries);
+            const countriesRaw = await resp.json();
             const countries = _normalizeGeoJsonForDateline(countriesRaw);
             countriesLayer = L.geoJSON(countries, {
                 style: { color: '#aac4d8', weight: 1, opacity: 0.7, fillOpacity: 0 },
@@ -7236,7 +7851,7 @@
     }
 
     function _readGradientBlurScale() {
-        const raw = parseFloat(byId('weather-gradient-blur')?.value || '0.35');
+        const raw = parseFloat(byId('weather-gradient-blur')?.value || '0');
         if (!Number.isFinite(raw)) return 0.35;
         return Math.max(0, Math.min(2, raw));
     }
@@ -7355,6 +7970,10 @@
             loadRtmaScrubberFrames();
             return;
         }
+        if (_mrmsScrubMode) {
+            loadMrmsScrubberFrames();
+            return;
+        }
         refreshActiveLayers();
     });
 
@@ -7427,6 +8046,15 @@
                 });
             }
             if (e.target.checked) {
+                // RTMA animate/scrub is tab-specific. Leaving RTMA must tear it
+                // down immediately, otherwise refreshActiveLayers() no-ops while
+                // _rtmaScrubMode is true and stale RTMA legend/layers can linger.
+                if (type !== 'rtma' && _rtmaScrubMode) {
+                    _exitRtmaScrubMode(false);
+                }
+                if (type !== 'mrms' && _mrmsScrubMode) {
+                    _exitMrmsScrubMode(false);
+                }
                 _resetTransientInteractiveUiForTabChange();
                 fitRegion(byId('weather-region')?.value || 'CONUS');
                 if (['radar', 'satellite', 'rtma', 'drought', 'tropical'].includes(type)) {
@@ -7643,11 +8271,19 @@
     });
 
     byId('weather-rtma-load-scrubber')?.addEventListener('click', () => {
+        if (!_isTypeEnabled('rtma') && !_isTypeEnabled('mrms')) {
+            setStatus('Select RTMA or MRMS to use Animate.');
+            return;
+        }
         byId('weather-mode-current')?.classList.remove('active');
         byId('weather-mode-archive')?.classList.remove('active');
         byId('weather-rtma-load-scrubber')?.classList.add('active');
         const animWin = byId('rtma-animate-window');
         if (animWin) animWin.style.display = '';
+        if (_isTypeEnabled('mrms')) {
+            loadMrmsScrubberFrames();
+            return;
+        }
         loadRtmaScrubberFrames();
     });
 
@@ -7657,6 +8293,7 @@
             document.querySelectorAll('.wx-animate-window-btn').forEach((b) => b.classList.remove('active'));
             btn.classList.add('active');
             if (_rtmaScrubMode) loadRtmaScrubberFrames();
+            if (_mrmsScrubMode) loadMrmsScrubberFrames();
         });
     });
 
@@ -7682,6 +8319,10 @@
                 });
             }
             updateMrmsSubControls();
+            if (_mrmsScrubMode) {
+                loadMrmsScrubberFrames();
+                return;
+            }
             refreshActiveLayers();
             if (cb.checked && _isTypeEnabled('mrms')) loadMrms();
         });
@@ -7689,6 +8330,10 @@
 
     document.querySelectorAll('.mrms-sub-radio').forEach((radio) => {
         radio.addEventListener('change', () => {
+            if (_mrmsScrubMode) {
+                loadMrmsScrubberFrames();
+                return;
+            }
             if (_isTypeEnabled('mrms') && _activeMrmsProduct()) loadMrms();
         });
     });
@@ -7710,6 +8355,7 @@
                 if (el.checked && product && el.dataset.product === product) {
                     const region = byId('weather-region')?.value || 'CONUS';
                     await _ensureGradientStations(product, region);
+                    await _primeSurfaceGradientOverlayCache(product, region);
                 }
                 _renderSurfaceMarkers(_surfaceStations);
             }
@@ -7733,12 +8379,6 @@
     byId('weather-rtma-gradient-opacity')?.addEventListener('input', (e) => {
         rtmaGradientOpacity = parseFloat(e.target.value);
         if (rtmaGradientLayer) rtmaGradientLayer.setOpacity(rtmaGradientOpacity);
-    });
-    byId('weather-rtma-gradient-blur')?.addEventListener('input', (e) => {
-        _rtmaGradientBlurScale = Math.max(0, Math.min(2, parseFloat(e.target.value)));
-        const lbl = document.querySelector('label[for="weather-rtma-gradient-blur"]');
-        if (lbl) lbl.textContent = `Gradient Blur (${_rtmaGradientBlurScale.toFixed(2)}x)`;
-        _renderRtmaPoints();
     });
     byId('weather-refresh-alerts')?.addEventListener('click', () => loadAlerts());
 
@@ -8155,7 +8795,7 @@
     // ── Auto-refresh alerts every 30s to match the OS-task backend cadence ──
     const ALERTS_AUTO_REFRESH_MS = 30_000;
     setInterval(() => {
-        if (_archiveMode || _rtmaScrubMode) return;
+        if (_archiveMode || _rtmaScrubMode || _mrmsScrubMode) return;
         if (!_isTypeEnabled('alerts')) return;
         if (!_getCheckedAlertCategories().length) return;
         loadAlerts();
@@ -8165,7 +8805,7 @@
     // and expired products are removed without a manual refresh.
     const SPC_AUTO_REFRESH_MS = 60_000;
     setInterval(() => {
-        if (_archiveMode || _rtmaScrubMode) return;
+        if (_archiveMode || _rtmaScrubMode || _mrmsScrubMode) return;
         if (!_isTypeEnabled('spc')) return;
         if (!byId('weather-show-spc')?.checked) return;
         const supplemental = _spcSupplementalSelections();

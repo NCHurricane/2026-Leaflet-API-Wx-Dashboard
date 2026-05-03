@@ -1,3 +1,19 @@
+from surface import surface_utils
+from config.rtma_config import RTMA_STREAM_MAX_HOURS, clamp_stream_hours
+from io import StringIO
+from datetime import datetime, timezone, timedelta
+import json
+from typing import Optional
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, HTTPException
+import glob
+import uvicorn
+import time as _time
+import os
+import shutil
+import threading
 from config.geo_config import STATE_BOUNDS
 from font_utils import resolve_logo_path
 from satellite import satellite_utils as satellite_thredds_utils
@@ -11,24 +27,8 @@ from radar import radar_utils as radar_thredds_utils  # noqa: E402
 
 sys.stderr = _real_stderr
 del _stderr_cap, _real_stderr, _StringIO
-import threading
-import shutil
-import os
-import time as _time
-import uvicorn
-import glob
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
-import json
-from datetime import datetime, timezone, timedelta
-from io import StringIO
-from config.rtma_config import RTMA_STREAM_MAX_HOURS, clamp_stream_hours
 
 # --- IMPORT YOUR UTILITIES ---
-from surface import surface_utils
 
 
 # Module state — initialized at startup
@@ -1049,6 +1049,146 @@ def _enrich_alert_features_geometry(features: list[dict]) -> None:
         print(f"[WARN] Alert geometry enrichment skipped: {exc}")
 
 
+# ── World-borders GeoJSON (coastlines + land-only country borders) ────────────
+
+_WORLD_BORDERS_CACHE_PATH = os.path.join(
+    os.path.dirname(__file__), "cache", "overlays", "world_borders.geojson"
+)
+_WORLD_BORDERS_CACHE_VERSION = 2
+_world_borders_lock = threading.Lock()
+
+
+def _iter_line_geometries(geom):
+    if geom is None or geom.is_empty:
+        return
+    if geom.geom_type in {"LineString", "MultiLineString"}:
+        yield geom
+        return
+    if geom.geom_type == "GeometryCollection":
+        for part in geom.geoms:
+            yield from _iter_line_geometries(part)
+
+
+def _build_world_borders_geojson() -> dict:
+    """Return a GeoJSON FeatureCollection with:
+    - Ocean coastlines (no Great Lakes / inland water body shores)
+    - International borders clipped out of lakes (no mid-lake US-Canada boundary)
+
+    Strategy:
+    - Coastlines come from ne_50m_land exterior rings only. ne_50m_land is a
+      single merged polygon where the Great Lakes, Chesapeake Bay, NC sounds,
+      etc. are interior holes. Extracting only exterior rings gives true ocean
+      coastlines with no inland water body lines.
+        - Borders come from ne_10m_admin_0_boundary_lines_land, then are clipped
+            against ne_10m_lakes because that boundary source still includes some
+            lake-crossing arcs around the Great Lakes.
+    """
+    import cartopy.io.shapereader as shpreader
+    from shapely.geometry import mapping
+    from shapely.ops import unary_union
+
+    features = []
+
+    # ── Coastlines from merged land polygon exterior rings ─────────────────
+    try:
+        land_shp = shpreader.natural_earth(
+            resolution="50m", category="physical", name="land"
+        )
+        reader = shpreader.Reader(land_shp)
+        for geom in reader.geometries():
+            if geom is None or geom.is_empty:
+                continue
+            # geom may be Polygon or MultiPolygon
+            polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
+            for poly in polys:
+                ext = list(poly.exterior.coords)
+                if len(ext) >= 2:
+                    features.append(
+                        {
+                            "type": "Feature",
+                            "geometry": {"type": "LineString", "coordinates": ext},
+                            "properties": {},
+                        }
+                    )
+    except Exception as exc:
+        print(f"[world-borders] Land/coastline load failed: {exc}")
+
+    lake_geometry = None
+    try:
+        lakes_shp = shpreader.natural_earth(
+            resolution="10m", category="physical", name="lakes"
+        )
+        lake_geoms = [
+            geom
+            for geom in shpreader.Reader(lakes_shp).geometries()
+            if geom is not None and not geom.is_empty
+        ]
+        if lake_geoms:
+            lake_geometry = unary_union(lake_geoms)
+    except Exception as exc:
+        print(f"[world-borders] Lake geometry load failed: {exc}")
+
+    # ── Country borders with inland-lake crossings removed ─────────────────
+    try:
+        borders_shp = shpreader.natural_earth(
+            resolution="10m", category="cultural", name="admin_0_boundary_lines_land"
+        )
+        reader = shpreader.Reader(borders_shp)
+        for geom in reader.geometries():
+            if geom is None or geom.is_empty:
+                continue
+            if lake_geometry is not None:
+                geom = geom.difference(lake_geometry)
+            for line_geom in _iter_line_geometries(geom):
+                features.append(
+                    {
+                        "type": "Feature",
+                        "geometry": mapping(line_geom),
+                        "properties": {},
+                    }
+                )
+    except Exception as exc:
+        print(f"[world-borders] Border lines load failed: {exc}")
+
+    return {
+        "type": "FeatureCollection",
+        "properties": {"cache_version": _WORLD_BORDERS_CACHE_VERSION},
+        "features": features,
+    }
+
+
+def _get_world_borders_geojson() -> dict:
+    with _world_borders_lock:
+        if os.path.exists(_WORLD_BORDERS_CACHE_PATH):
+            try:
+                with open(_WORLD_BORDERS_CACHE_PATH, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                props = data.get("properties") if isinstance(data, dict) else {}
+                if props.get("cache_version") == _WORLD_BORDERS_CACHE_VERSION:
+                    return data
+            except Exception:
+                pass
+        data = _build_world_borders_geojson()
+        os.makedirs(os.path.dirname(_WORLD_BORDERS_CACHE_PATH), exist_ok=True)
+        try:
+            with open(_WORLD_BORDERS_CACHE_PATH, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, separators=(",", ":"))
+        except Exception as exc:
+            print(f"[world-borders] Cache write failed: {exc}")
+        return data
+
+
+@app.get("/api/overlay/world-borders")
+def get_world_borders():
+    try:
+        data = _get_world_borders_geojson()
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(content=data)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── Phase 1: Data Endpoints (served from worker cache) ───────────────────────
 
 
@@ -1568,6 +1708,72 @@ def get_data_surface(region: str = "NC", product: str = "temperature"):
     return result
 
 
+@app.get("/api/data/surface-gradient")
+def get_data_surface_gradient(region: str = "CONUS", product: str = "temperature"):
+    """Return cached worker-generated surface gradient metadata.
+
+    Gradients are generated by workers/surface_worker.py and stored under
+    cache/surface/gradients/{source_region}/{product}.json.
+    """
+    region_upper = str(region or "CONUS").upper().strip()
+    product_lower = str(product or "temperature").lower().strip()
+
+    if product_lower not in _SURFACE_PRODUCTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown product '{product}'. Valid: {list(_SURFACE_PRODUCTS.keys())}",
+        )
+    if product_lower == "station_plot":
+        raise HTTPException(
+            status_code=400,
+            detail="station_plot does not have a gradient overlay.",
+        )
+
+    source_region = "WORLD" if region_upper == "WORLD" else "CONUS"
+    gradient_dir = os.path.join(
+        _CACHE_ROOT,
+        "surface",
+        "gradients",
+        source_region,
+    )
+    meta_path = os.path.join(gradient_dir, f"{product_lower}.json")
+
+    if not os.path.exists(meta_path):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No cached surface gradient for region={source_region}, "
+                f"product={product_lower}. Worker may not have run yet."
+            ),
+        )
+
+    try:
+        with open(meta_path, "r", encoding="utf-8") as fh:
+            meta = json.load(fh)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to read gradient meta: {exc}"
+        )
+
+    image_url = str(meta.get("image_url") or "")
+    if not image_url:
+        raise HTTPException(
+            status_code=500, detail="Gradient metadata is missing image_url."
+        )
+
+    rel = image_url.lstrip("/")
+    if rel.startswith("cache/"):
+        rel = rel[len("cache/") :]
+    image_disk = os.path.join(_CACHE_ROOT, rel)
+    if not os.path.exists(image_disk):
+        raise HTTPException(
+            status_code=404,
+            detail="Cached gradient image is missing on disk. Worker refresh pending.",
+        )
+
+    return meta
+
+
 @app.get("/api/data/colormap")
 def get_colormap(product: str = "temperature"):
     """Return colormap anchor points for a given surface product."""
@@ -1802,7 +2008,6 @@ def _render_mrms_png(
     Read MRMS GRIB2, crop to extent, apply colormap, save as transparent PNG.
     Returns (png_path, [west, east, south, north] actual bounds).
     """
-    import numpy as np
     import matplotlib
 
     matplotlib.use("Agg")
@@ -1817,8 +2022,6 @@ def _render_mrms_png(
     cmap_key = prod_info.get("colormap", "precip_rate")
     vmin = prod_info.get("vmin", 0)
     vmax = prod_info.get("vmax", 100)
-    missing_value = prod_info.get("missing_value", -1)
-    no_coverage = prod_info.get("no_coverage", -3)
 
     west, east, south, north = crop_extent
 
@@ -1832,12 +2035,11 @@ def _render_mrms_png(
     if lat is None or lon is None:
         raise ValueError("GRIB2 read did not return lat/lon metadata")
 
-    # Compute actual rendered bounds
-    actual_west = float(np.min(lon))
-    actual_east = float(np.max(lon))
-    actual_south = float(np.min(lat))
-    actual_north = float(np.max(lat))
-    actual_bounds = [actual_west, actual_east, actual_south, actual_north]
+    # Derive bounds from the actual cropped grid coordinates with half-cell
+    import numpy as _np_mrms
+
+    _lat = _np_mrms.asarray(lat)
+    _lon = _np_mrms.asarray(lon)
 
     # Build colormap
     cmap_obj = MRMS_COLORMAPS.get(cmap_key)
@@ -1855,7 +2057,11 @@ def _render_mrms_png(
         cmap = plt.get_cmap("viridis")
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
 
-    # Render to RGBA PNG (transparent where masked)
+    # Reproject to Web Mercator so pixels align with Leaflet imageOverlay at any zoom.
+    from mrms.mrms_utils import warp_array_to_mercator
+
+    data, actual_bounds = warp_array_to_mercator(data, _lat, _lon)
+
     h, w = data.shape
     dpi = 100
     fig_w = w / dpi
@@ -1921,9 +2127,104 @@ def get_data_rtma_points(
             detail="RTMA 24-hour temperature change is only available on rtma_hourly.",
         )
 
+    has_bounds = (
+        south is not None
+        and west is not None
+        and north is not None
+        and east is not None
+    )
+
+    def _read_points_from_cache(path: str) -> list[dict]:
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail=f"RTMA city-point read error: {exc}"
+            )
+
+        points: list[dict] = []
+        # Compact format (v1): {"v":1,"points":[[lat,lon,value,rank],...], ...}
+        if data.get("v") == 1:
+            for row in data.get("points", []):
+                if len(row) < 3:
+                    continue
+                lat, lon, val = float(row[0]), float(row[1]), float(row[2])
+                rank = row[3] if len(row) > 3 else None
+                if has_bounds and (
+                    lat < south or lat > north or lon < west or lon > east
+                ):
+                    continue
+                points.append({"lat": lat, "lon": lon, "value": val, "rank": rank})
+            return points
+
+        # Legacy GeoJSON FeatureCollection — remove after next worker run.
+        for feat in data.get("features", []):
+            geom = feat.get("geometry") or {}
+            if geom.get("type") != "Point":
+                continue
+            coords = geom.get("coordinates") or []
+            if len(coords) < 2:
+                continue
+            lon = float(coords[0])
+            lat = float(coords[1])
+            if has_bounds and (lat < south or lat > north or lon < west or lon > east):
+                continue
+            props = feat.get("properties") or {}
+            val = props.get("value")
+            if val is None:
+                continue
+            points.append(
+                {
+                    "lat": lat,
+                    "lon": lon,
+                    "value": float(val),
+                    "rank": props.get("rank"),
+                }
+            )
+        return points
+
     try:
         product_cfg = get_product_config(product)
         if source_data_key:
+            # Fast path: when frontend provides source_data_key and the worker
+            # has already cached points for that frame, serve directly from disk
+            # with no upstream source-resolution HEAD checks.
+            token = "".join(
+                ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
+                for ch in source_data_key
+            )
+            points_dir = os.path.join(_CACHE_ROOT, "rtma", "points", region_key, stream)
+            cached_geojson_path = os.path.join(
+                points_dir, f"{product}__{token}.geojson"
+            )
+            cached_meta_path = cached_geojson_path.replace(".geojson", "_meta.json")
+            if os.path.exists(cached_geojson_path):
+                meta = None
+                if os.path.exists(cached_meta_path):
+                    try:
+                        with open(cached_meta_path, "r", encoding="utf-8") as handle:
+                            meta = json.load(handle)
+                    except Exception:
+                        meta = None
+                points = _read_points_from_cache(cached_geojson_path)
+                return {
+                    "points": points,
+                    "units": product_cfg.get("units", ""),
+                    "full_name": product_cfg.get("label", product),
+                    "vmin": product_cfg.get("vmin"),
+                    "vmax": product_cfg.get("vmax"),
+                    "legend": build_rtma_legend(product_cfg),
+                    "timestamp": (meta or {}).get("timestamp")
+                    or (meta or {}).get("source_valid_time")
+                    or datetime.now(timezone.utc).isoformat(),
+                    "source": source_data_key,
+                    "source_data_key": source_data_key,
+                    "region": region_key,
+                    "stream": stream,
+                    "product": product,
+                }
+
             source = resolve_rtma_source_by_data_key(
                 region_key,
                 stream,
@@ -2000,57 +2301,7 @@ def get_data_rtma_points(
                 ),
             )
 
-    try:
-        with open(geojson_path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"RTMA city-point read error: {exc}"
-        )
-
-    points = []
-    has_bounds = (
-        south is not None
-        and west is not None
-        and north is not None
-        and east is not None
-    )
-
-    # Compact format (v1): {"v":1,"points":[[lat,lon,value,rank],...], ...}
-    if data.get("v") == 1:
-        for row in data.get("points", []):
-            if len(row) < 3:
-                continue
-            lat, lon, val = float(row[0]), float(row[1]), float(row[2])
-            rank = row[3] if len(row) > 3 else None
-            if has_bounds and (lat < south or lat > north or lon < west or lon > east):
-                continue
-            points.append({"lat": lat, "lon": lon, "value": val, "rank": rank})
-    else:
-        # Legacy GeoJSON FeatureCollection — remove after next worker run.
-        for feat in data.get("features", []):
-            geom = feat.get("geometry") or {}
-            if geom.get("type") != "Point":
-                continue
-            coords = geom.get("coordinates") or []
-            if len(coords) < 2:
-                continue
-            lon = float(coords[0])
-            lat = float(coords[1])
-            if has_bounds and (lat < south or lat > north or lon < west or lon > east):
-                continue
-            props = feat.get("properties") or {}
-            val = props.get("value")
-            if val is None:
-                continue
-            points.append(
-                {
-                    "lat": lat,
-                    "lon": lon,
-                    "value": float(val),
-                    "rank": props.get("rank"),
-                }
-            )
+    points = _read_points_from_cache(geojson_path)
 
     return {
         "points": points,
@@ -2381,6 +2632,104 @@ def get_data_rtma(
         "legend": render_meta.get("legend"),
         "timestamp": render_meta.get("timestamp") or source.valid_time.isoformat(),
         "source_data_key": source.data_key,
+    }
+
+
+@app.get("/api/overlay/latest")
+def get_overlay_latest(
+    family: str = "rtma",
+    region: str = "CONUS",
+    stream: str = "rtma_hourly",
+    product: str = "temperature",
+    frame_key: str | None = None,
+):
+    """Return the pre-rendered overlay meta for a specific or the latest frame.
+
+    When ``frame_key`` is omitted, returns the most recently cached frame.
+    When ``frame_key`` is provided (``YYYY_MM_DD_HH_MM_SS``), returns that
+    specific frame — used by the scrubber to replay historical frames.
+
+    Returns 404 when the requested frame is not in the pre-render cache.
+    """
+    from cache.overlay_cache_utils import read_latest_overlay_meta, read_overlay_meta
+
+    allowed_families = {"rtma", "mrms"}
+    if family not in allowed_families:
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported overlay family '{family}'."
+        )
+
+    region_key = region.upper()
+
+    if frame_key:
+        meta = read_overlay_meta(
+            _CACHE_ROOT, family, region_key, stream, product, frame_key
+        )
+    else:
+        meta = read_latest_overlay_meta(
+            _CACHE_ROOT, family, region_key, stream, product
+        )
+
+    if not meta:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No pre-rendered overlay found for family={family}, region={region_key}, "
+                f"stream={stream}, product={product}"
+                + (f", frame_key={frame_key}" if frame_key else "")
+                + ". Worker may not have run yet."
+            ),
+        )
+
+    # Confirm the image file still exists on disk (worker may have pruned it).
+    image_url = (meta.get("render") or {}).get("image_url", "")
+    if image_url:
+        rel = image_url.lstrip("/")
+        if rel.startswith("cache/"):
+            rel = rel[len("cache/") :]
+        img_disk = os.path.join(_CACHE_ROOT, rel)
+        if not os.path.exists(img_disk):
+            raise HTTPException(
+                status_code=404,
+                detail="Pre-rendered overlay image has been pruned; worker re-render pending.",
+            )
+
+    return meta
+
+
+@app.get("/api/overlay/frames")
+def get_overlay_frames(
+    family: str = "rtma",
+    region: str = "CONUS",
+    stream: str = "rtma_hourly",
+    product: str = "temperature",
+):
+    """Return all pre-rendered frames available on disk for a product.
+
+    Response is an array of frame objects sorted oldest-first, each with
+    ``frame_key``, ``timestamp``, ``source_data_key``, ``image_url``, and
+    ``bounds``.  Only frames whose ``overlay.png`` file exists are included.
+
+    This endpoint reads only from disk — no S3 HEAD checks — so it responds
+    instantly and is safe to call on every scrubber load.
+    """
+    from cache.overlay_cache_utils import list_overlay_frames
+
+    allowed_families = {"rtma", "mrms"}
+    if family not in allowed_families:
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported overlay family '{family}'."
+        )
+
+    region_key = region.upper()
+    frames = list_overlay_frames(_CACHE_ROOT, family, region_key, stream, product)
+    return {
+        "family": family,
+        "region": region_key,
+        "stream": stream,
+        "product": product,
+        "frame_count": len(frames),
+        "frames": frames,
     }
 
 
@@ -3350,9 +3699,21 @@ def get_radar_latest(
         # === DATA-ONLY TRANSPARENT RENDERING MODE ===
         if data_only_mode:
             try:
-                from radar.radar_data_only_utils import (
-                    render_radar_data_only_transparent,
-                )
+                import importlib
+
+                try:
+                    radar_data_only_utils = importlib.import_module(
+                        "radar.radar_data_only_utils"
+                    )
+                    render_radar_data_only_transparent = getattr(
+                        radar_data_only_utils, "render_radar_data_only_transparent"
+                    )
+                except (ImportError, AttributeError) as exc:
+                    return {
+                        "status": "error",
+                        "message": f"Radar data-only renderer unavailable: {exc}",
+                        "data_source": "ERROR",
+                    }
 
                 # Download latest radar file
                 radar_module = radar_utils

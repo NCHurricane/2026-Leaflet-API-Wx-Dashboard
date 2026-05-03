@@ -151,7 +151,7 @@
             #weather-map {
                 width: 100%;
                 height: 100%;
-                min-height: 95vh;
+                min-height: 90vh;
             }
 
             .weather-map-empty-overlay {
@@ -3334,8 +3334,7 @@
                             <button id="weather-mode-archive" class="wx-mode-tab" type="button">Archive</button>
                             <button id="weather-rtma-load-scrubber" class="wx-mode-tab" type="button">Animate</button>
                         </div>
-                        <span id="weather-rtma-scrubber-status" class="wx-small"
-                            style="display:block; margin-top:4px;"></span>
+                        <span id="wx-scrubber-status" class="wx-small" style="display:block; margin-top:4px;"></span>
                         <div id="rtma-animate-window" class="wx-animate-window" style="display:none;">
                             <label class="wx-small" style="color:#94a3b8; display:block; margin-bottom:3px;">Animation
                                 Window</label>
@@ -3427,7 +3426,7 @@
                                 <div id="weather-gradient-blur-wrap" style="display:none;">
                                     <label for="weather-gradient-blur">Gradient Blur</label>
                                     <input id="weather-gradient-blur" type="range" min="0" max="2" step="0.05"
-                                        value="0.35">
+                                        value="0">
                                     <label for="weather-opacity-surface-gradient">Gradient Opacity</label>
                                     <input id="weather-opacity-surface-gradient" type="range" min="0.1" max="1"
                                         step="0.05" value="0.9">
@@ -3501,12 +3500,9 @@
                             <h3>Styling</h3>
                             <h4>RTMA Styling</h4>
                             <div class="wx-block">
-                                <label for="weather-rtma-gradient-opacity">Gradient Opacity</label>
+                                <label for="weather-rtma-gradient-opacity">Overlay Opacity</label>
                                 <input id="weather-rtma-gradient-opacity" type="range" min="0.1" max="1" step="0.05"
                                     value="0.9">
-                                <label for="weather-rtma-gradient-blur">Gradient Blur (0.35x)</label>
-                                <input id="weather-rtma-gradient-blur" type="range" min="0" max="2" step="0.05"
-                                    value="0.35">
                             </div>
                         </div>
                     </div>
@@ -3566,6 +3562,7 @@
         <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
         <script src="js/shared.js"></script>
+        <script src="js/radar-site-locations.js"></script>
         <script src="js/weather.js"></script>
         <script>initNav('weather');</script>
     </body>
