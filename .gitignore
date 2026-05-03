@@ -2,10 +2,20 @@
 __pycache__/
 *.py[cod]
 *.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.ipynb_checkpoints/
 
 # Virtual environments
 .venv/
 venv/
+
+# Local env/config overrides
+.env
+.env.*
+!.env.example
 
 # Editor/OS
 .vscode/
@@ -21,6 +31,11 @@ logs/
 cache/
 basemap_cache/
 surface/basemap_cache/
+
+# Transient data artifacts
+*.grib2
+*.grib2.gz
+*.idx
 
 # Generated weather/radar/satellite artifacts
 alerts/alert_data/
@@ -51,5 +66,9 @@ weather/weather_images/
 img/BlackMarble_2016_3km_geo.tif
 shapefiles/states/
 shapefiles/counties/
-debug_build_surface.txt
-debug_build_surface.txt
+
+# Local debug dumps
+debug_*.txt
+
+# Local planning notes
+WebGL Migration.md
