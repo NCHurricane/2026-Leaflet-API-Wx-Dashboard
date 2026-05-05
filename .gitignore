@@ -72,3 +72,6 @@ debug_*.txt
 
 # Local planning notes
 WebGL Migration.md
+
+#Powershell Scripts
+*.ps1
