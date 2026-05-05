@@ -9,6 +9,7 @@ Update Frequency: Every 2 minutes
 
 import os
 import sys
+import gzip
 import importlib.util
 from datetime import datetime, timedelta
 from typing import List, Tuple, Optional, Callable
@@ -148,8 +149,7 @@ def list_mrms_files(
             for page in pages:
                 page_count += 1
                 if "Contents" not in page:
-                    print(
-                        f"[DEBUG] No contents in page {page_count} for {prefix}")
+                    print(f"[DEBUG] No contents in page {page_count} for {prefix}")
                     continue
 
                 for obj in page["Contents"]:
@@ -213,10 +213,23 @@ def download_mrms_file(
     if os.path.exists(local_path):
         local_size = os.path.getsize(local_path)
         if local_size > 0:
-            print(f"[DEBUG] Using cached MRMS file: {local_path}")
-            if progress_callback:
-                progress_callback(local_size, local_size)
-            return local_path
+            # Validate cached .gz files before reuse; a truncated/corrupt file can
+            # otherwise persist forever and trigger decode errors downstream.
+            is_valid_cached = True
+            if local_path.endswith(".gz"):
+                try:
+                    with gzip.open(local_path, "rb") as fh:
+                        fh.read(1)
+                except Exception:
+                    is_valid_cached = False
+
+            if is_valid_cached:
+                print(f"[DEBUG] Using cached MRMS file: {local_path}")
+                if progress_callback:
+                    progress_callback(local_size, local_size)
+                return local_path
+
+            print(f"[DEBUG] Removing corrupt cached MRMS file: {local_path}")
         # Remove empty/partial files so they can be downloaded cleanly.
         try:
             os.remove(local_path)
@@ -229,17 +242,26 @@ def download_mrms_file(
         response = s3_client.head_object(Bucket=MRMS_BUCKET, Key=s3_key)
         total_size = response.get("ContentLength", 0)
 
-        # Download with progress tracking
+        # Download with progress tracking (atomic replace to avoid partial files)
+        tmp_path = local_path + ".part"
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+
         if progress_callback and total_size > 0:
 
             def progress_hook(bytes_transferred):
                 progress_callback(bytes_transferred, total_size)
 
             s3_client.download_file(
-                MRMS_BUCKET, s3_key, local_path, Callback=progress_hook
+                MRMS_BUCKET, s3_key, tmp_path, Callback=progress_hook
             )
         else:
-            s3_client.download_file(MRMS_BUCKET, s3_key, local_path)
+            s3_client.download_file(MRMS_BUCKET, s3_key, tmp_path)
+
+        os.replace(tmp_path, local_path)
 
         return local_path
 
@@ -274,8 +296,7 @@ def download_mrms_data(
     if progress_callback:
         progress_callback("Listing files", 0, 100)
 
-    print(
-        f"[DEBUG] Listing MRMS files for {product} from {start_time} to {end_time}")
+    print(f"[DEBUG] Listing MRMS files for {product} from {start_time} to {end_time}")
 
     available_files = list_mrms_files(
         product,

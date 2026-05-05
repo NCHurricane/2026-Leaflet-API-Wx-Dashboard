@@ -1100,6 +1100,28 @@
                 line-height: 1.08;
             }
 
+            #wx-section-drought .wx-check-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 20px;
+                align-items: center;
+                gap: 12px;
+                padding: 2px 0;
+                font-size: 0.8rem;
+                line-height: 1.08;
+            }
+
+            #wx-section-drought .wx-check-row span {
+                display: block;
+            }
+
+            #wx-section-drought .wx-check-row input[type="checkbox"] {
+                width: 18px;
+                height: 18px;
+                margin: 0;
+                justify-self: end;
+                accent-color: var(--wx-cyan);
+            }
+
             #wx-section-rtma .wx-check-row span {
                 display: block;
             }
@@ -1218,6 +1240,71 @@
                 border-radius: 2px;
                 border: 1px solid rgba(0, 0, 0, 0.4);
                 flex-shrink: 0;
+            }
+
+            .drought-legend-subtitle {
+                font-size: 0.62rem;
+                font-weight: 900;
+                color: #475569;
+                margin: 0 0 4px;
+            }
+
+            .drought-legend-head,
+            .drought-legend-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 72px 72px;
+                align-items: center;
+                column-gap: 6px;
+            }
+
+            .drought-legend-head {
+                font-size: 0.52rem;
+                font-weight: 800;
+                color: #334155;
+                margin-bottom: 3px;
+                text-transform: uppercase;
+                letter-spacing: 0.02em;
+            }
+
+            .drought-legend-row {
+                font-size: 0.52rem;
+                margin-bottom: 2px;
+            }
+
+            .drought-legend-level {
+                display: flex;
+                font-weight: 900;
+                align-items: center;
+                gap: 4px;
+                min-width: 0;
+            }
+
+            .drought-legend-level .legend-swatch {
+                width: 12px;
+                height: 12px;
+            }
+
+            .drought-legend-value {
+                text-align: right;
+                font-weight: 800;
+                color: #0f172a;
+            }
+
+            .drought-legend-row.is-disabled {
+                opacity: 0.45;
+            }
+
+            .drought-legend-dsci {
+                display: grid;
+                grid-template-columns: 1fr auto;
+                align-items: center;
+                gap: 6px;
+                margin-top: 4px;
+                padding-top: 4px;
+                border-top: 1px solid rgba(71, 85, 105, 0.35);
+                font-size: 0.56rem;
+                font-weight: 800;
+                color: #0f172a;
             }
 
             .surface-colorbar {
@@ -1400,6 +1487,8 @@
             .leaflet-control-attribution a {
                 color: #dce8f1 !important;
             }
+
+
 
             .leaflet-popup-content-wrapper {
                 background: linear-gradient(180deg,
@@ -1778,6 +1867,31 @@
             }
 
             .wx-animate-window-btn.active {
+                background: var(--wx-cyan);
+                color: #0a1230;
+                border-color: var(--wx-cyan);
+            }
+
+            .wx-drought-date-btn {
+                background: #1e293b;
+                border: 1px solid #475569;
+                border-radius: 4px;
+                color: #94a3b8;
+                font-size: 0.65rem;
+                font-weight: 700;
+                padding: 5px 2px;
+                cursor: pointer;
+                text-align: center;
+                width: 100%;
+                transition: background 120ms, color 120ms, border-color 120ms;
+            }
+
+            .wx-drought-date-btn:hover {
+                background: #334155;
+                color: #e2e8f0;
+            }
+
+            .wx-drought-date-btn.active {
                 background: var(--wx-cyan);
                 color: #0a1230;
                 border-color: var(--wx-cyan);
@@ -2689,6 +2803,10 @@
                             <span class="wx-reliability-value" id="wx-reliability-age">—</span>
                         </div>
                         <div class="wx-reliability-row">
+                            <span class="wx-reliability-label">Provider:</span>
+                            <span class="wx-reliability-value" id="wx-reliability-provider">—</span>
+                        </div>
+                        <div class="wx-reliability-row">
                             <span class="wx-reliability-label">Source:</span>
                             <span class="wx-reliability-value" id="wx-reliability-source">—</span>
                         </div>
@@ -3048,6 +3166,32 @@
                         </div>
                     </div>
 
+                    <div id="wx-section-radar" class="wx-block" data-type="radar" style="display:none;">
+                        <div id="weather-radar-opts">
+                            <label for="weather-radar-site">Radar Site</label>
+                            <select id="weather-radar-site" class="wx-sidebar-select">
+                                <option value="">National Composite</option>
+                            </select>
+
+                            <label for="weather-radar-product">Product</label>
+                            <select id="weather-radar-product" class="wx-sidebar-select">
+                                <option value="L2_REF">L2 Reflectivity</option>
+                                <option value="L2_VEL">L2 Velocity</option>
+                                <option value="L3_N0B" selected>L3 Reflectivity</option>
+                                <option value="L3_N0G">L3 Velocity</option>
+                                <option value="L3_DTA">L3 Storm Total Precip</option>
+                            </select>
+
+                            <div class="wx-check-row" style="margin-top:8px;">
+                                <span>Show Radar Sites</span>
+                                <input id="weather-radar-show-sites" type="checkbox" checked>
+                            </div>
+
+                            <span id="weather-radar-status" class="wx-small"></span>
+                            <button id="weather-refresh-radar" type="button">Refresh</button>
+                        </div>
+                    </div>
+
                     <div id="wx-section-rtma" class="wx-block" data-type="rtma" style="display:none;">
 
                         <div id="weather-rtma-opts">
@@ -3328,6 +3472,29 @@
                         <button id="weather-refresh-mrms" type="button">Refresh</button>
                     </div>
 
+                    <div id="wx-section-drought" class="wx-block" data-type="drought" style="display:none;">
+                        <div id="weather-drought-opts">
+                            <label>Release Week</label>
+                            <div id="weather-drought-dates"
+                                style="display:grid; grid-template-columns:repeat(5,1fr); gap:4px;"></div>
+                            <div id="weather-drought-date-status" class="wx-small" style="margin-top:4px;"></div>
+
+                            <label style="margin-top:12px;">Drought Categories</label>
+                            <div class="wx-check-row"><span>D0 &ndash; Abnormally Dry</span><input
+                                    class="drought-cat-check" type="checkbox" value="0" checked></div>
+                            <div class="wx-check-row"><span>D1 &ndash; Moderate</span><input class="drought-cat-check"
+                                    type="checkbox" value="1" checked></div>
+                            <div class="wx-check-row"><span>D2 &ndash; Severe</span><input class="drought-cat-check"
+                                    type="checkbox" value="2" checked></div>
+                            <div class="wx-check-row"><span>D3 &ndash; Extreme</span><input class="drought-cat-check"
+                                    type="checkbox" value="3" checked></div>
+                            <div class="wx-check-row"><span>D4 &ndash; Exceptional</span><input
+                                    class="drought-cat-check" type="checkbox" value="4" checked></div>
+
+                            <button id="weather-refresh-drought" type="button" style="margin-top:10px;">Refresh</button>
+                        </div>
+                    </div>
+
                     <div class="wx-block">
                         <div class="wx-mode-tabs">
                             <button id="weather-mode-current" class="wx-mode-tab active" type="button">Current</button>
@@ -3505,6 +3672,16 @@
                                     value="0.9">
                             </div>
                         </div>
+                        <div id="wx-side-group-drought" class="wx-block wx-side-group" data-type="drought"
+                            style="display:none;">
+                            <h3>Styling</h3>
+                            <h4>Drought Styling</h4>
+                            <div class="wx-block">
+                                <label for="weather-opacity-drought">Fill Opacity</label>
+                                <input id="weather-opacity-drought" type="range" min="0.1" max="1" step="0.05"
+                                    value="0.75">
+                            </div>
+                        </div>
                     </div>
 
                     <div id="wx-right-pane-warnings" class="wx-right-pane is-active" role="tabpanel"
@@ -3561,9 +3738,9 @@
             src="https://cdn.jsdelivr.net/npm/leaflet.layergroup.collision@0.1.6/dist/leaflet.layergroup.collision.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
-        <script src="js/shared.js"></script>
-        <script src="js/radar-site-locations.js"></script>
-        <script src="js/weather.js"></script>
+        <script src="js/shared.js?v=20260504c"></script>
+        <script src="js/radar-site-locations.js?v=20260504c"></script>
+        <script src="js/weather.js?v=20260504c"></script>
         <script>initNav('weather');</script>
     </body>
 

@@ -14,6 +14,7 @@ import time as _time
 import os
 import shutil
 import threading
+from pathlib import Path
 from config.geo_config import STATE_BOUNDS
 from font_utils import resolve_logo_path
 from satellite import satellite_utils as satellite_thredds_utils
@@ -311,22 +312,28 @@ app.mount(
 )
 # Archive radar image mounts
 os.makedirs(
-    os.path.join(DIRS["radar"], "radar_archive", "radar_level2_images"), exist_ok=True
+    os.path.join(BASE_DIR, "cache", "radar", "archive", "radar_level2_images"),
+    exist_ok=True,
 )
 os.makedirs(
-    os.path.join(DIRS["radar"], "radar_archive", "radar_level3_images"), exist_ok=True
+    os.path.join(BASE_DIR, "cache", "radar", "archive", "radar_level3_images"),
+    exist_ok=True,
 )
 app.mount(
     "/img/radar_archive/radar_level2_images",
     StaticFiles(
-        directory=os.path.join(DIRS["radar"], "radar_archive", "radar_level2_images")
+        directory=os.path.join(
+            BASE_DIR, "cache", "radar", "archive", "radar_level2_images"
+        )
     ),
     name="radar_archive_level2_images",
 )
 app.mount(
     "/img/radar_archive/radar_level3_images",
     StaticFiles(
-        directory=os.path.join(DIRS["radar"], "radar_archive", "radar_level3_images")
+        directory=os.path.join(
+            BASE_DIR, "cache", "radar", "archive", "radar_level3_images"
+        )
     ),
     name="radar_archive_level3_images",
 )
@@ -378,6 +385,7 @@ os.makedirs(os.path.join(_CACHE_ROOT, "surface"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "mrms"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "rtma"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "archive"), exist_ok=True)
+os.makedirs(os.path.join(_CACHE_ROOT, "radar"), exist_ok=True)
 app.mount("/cache", StaticFiles(directory=_CACHE_ROOT), name="cache")
 
 app.mount("/css", StaticFiles(directory=os.path.join(BASE_DIR, "css")), name="css")
@@ -933,13 +941,15 @@ def _refresh_surface_cache_async(
     try:
         df = surface_utils.fetch_metar_data(region_upper)
         stations = _build_surface_stations(df, product_lower)
+        source_ts = _surface_source_timestamp_iso(df)
         result = {
             "stations": stations,
             "product": product_lower,
             "unit": _SURFACE_PRODUCTS[product_lower]["unit"],
             "region": region_upper,
             "count": len(stations),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": source_ts,
+            "timestamp_source": "station_valid",
         }
         try:
             with open(cache_file, "w", encoding="utf-8") as fh:
@@ -981,6 +991,47 @@ def _safe_float(row, col: str):
         return None if math.isnan(f) else round(f, 1)
     except (TypeError, ValueError):
         return None
+
+
+def _surface_source_timestamp_iso(df) -> str | None:
+    """Return newest UTC observation timestamp from a surface dataframe."""
+    if df is None or getattr(df, "empty", True) or "valid" not in df.columns:
+        return None
+
+    latest_dt: datetime | None = None
+    try:
+        valid_values = df["valid"].tolist()
+    except Exception:
+        return None
+
+    for raw in valid_values:
+        if raw is None:
+            continue
+
+        dt_val: datetime | None = None
+        if isinstance(raw, datetime):
+            dt_val = raw
+        else:
+            text = str(raw).strip()
+            if not text or text.lower() in {"nat", "nan", "none"}:
+                continue
+            try:
+                dt_val = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            except Exception:
+                dt_val = None
+
+        if dt_val is None:
+            continue
+
+        if dt_val.tzinfo is None:
+            dt_val = dt_val.replace(tzinfo=timezone.utc)
+        else:
+            dt_val = dt_val.astimezone(timezone.utc)
+
+        if latest_dt is None or dt_val > latest_dt:
+            latest_dt = dt_val
+
+    return latest_dt.isoformat() if latest_dt else None
 
 
 def _enrich_alert_features_geometry(features: list[dict]) -> None:
@@ -1656,6 +1707,248 @@ def get_data_spc_active(
     }
 
 
+@app.get("/api/data/drought/dates")
+def get_drought_dates():
+    """Return the last 15 USDM valid dates (Tuesdays), most recent first."""
+    from datetime import date as _date
+
+    today = _date.today()
+    # Weekday: Monday=0, Tuesday=1, ..., Sunday=6
+    # Find the most recent Tuesday
+    days_since_tuesday = (today.weekday() - 1) % 7
+    candidate = today - timedelta(days=days_since_tuesday)
+    # USDM data valid Tuesday is released Thursday — if today is Tue or Wed,
+    # the current week's data hasn't been released yet.
+    if today.weekday() in (1, 2):
+        candidate -= timedelta(weeks=1)
+    dates = [(candidate - timedelta(weeks=i)).isoformat() for i in range(15)]
+    return {"dates": dates, "latest": dates[0]}
+
+
+@app.get("/api/data/drought")
+async def get_drought_geojson(date: str = "latest"):
+    """Proxy USDM GeoJSON for the given valid date (YYYY-MM-DD or 'latest').
+
+    Responses are cached to cache/drought/usdm_{YYYYMMDD}.json on first fetch
+    and served from disk on subsequent requests to avoid repeated USDM calls.
+    """
+    import re as _re
+    import urllib.request as _ur
+    from datetime import date as _date
+    from fastapi.responses import Response as _Resp
+
+    if date == "latest":
+        today = _date.today()
+        days_since_tuesday = (today.weekday() - 1) % 7
+        candidate = today - timedelta(days=days_since_tuesday)
+        if today.weekday() in (1, 2):
+            candidate -= timedelta(weeks=1)
+        date = candidate.isoformat()
+
+    if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        raise HTTPException(
+            status_code=400, detail="Invalid date format; expected YYYY-MM-DD"
+        )
+
+    date_compact = date.replace("-", "")
+
+    # --- cache-first ---
+    cache_dir = Path("cache/drought")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_dir / f"usdm_{date_compact}.json"
+
+    if cache_file.exists():
+        return _Resp(content=cache_file.read_bytes(), media_type="application/json")
+
+    # --- cache miss: fetch from USDM ---
+    url = f"https://droughtmonitor.unl.edu/data/json/usdm_{date_compact}.json"
+    try:
+        req = _ur.Request(url, headers={"User-Agent": "NCHurricane-Dashboard/1.0"})
+        with _ur.urlopen(req, timeout=30) as resp:
+            if resp.status == 404:
+                raise HTTPException(status_code=404, detail=f"No USDM data for {date}")
+            raw = resp.read()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"USDM unreachable: {exc}") from exc
+
+    cache_file.write_bytes(raw)
+    return _Resp(content=raw, media_type="application/json")
+
+
+@app.get("/api/data/drought/state-stats")
+async def get_drought_state_stats(date: str = "latest", state: str = "NC"):
+    """Return cached USDM state stats for a specific valid date.
+
+    Includes cumulative D0-D4, individual D0..D4, and DSCI values.
+    """
+    import re as _re
+    import urllib.parse as _up
+    import urllib.request as _ur
+    from datetime import date as _date
+
+    state_to_fips = {
+        "AL": "01",
+        "AK": "02",
+        "AZ": "04",
+        "AR": "05",
+        "CA": "06",
+        "CO": "08",
+        "CT": "09",
+        "DE": "10",
+        "DC": "11",
+        "FL": "12",
+        "GA": "13",
+        "HI": "15",
+        "ID": "16",
+        "IL": "17",
+        "IN": "18",
+        "IA": "19",
+        "KS": "20",
+        "KY": "21",
+        "LA": "22",
+        "ME": "23",
+        "MD": "24",
+        "MA": "25",
+        "MI": "26",
+        "MN": "27",
+        "MS": "28",
+        "MO": "29",
+        "MT": "30",
+        "NE": "31",
+        "NV": "32",
+        "NH": "33",
+        "NJ": "34",
+        "NM": "35",
+        "NY": "36",
+        "NC": "37",
+        "ND": "38",
+        "OH": "39",
+        "OK": "40",
+        "OR": "41",
+        "PA": "42",
+        "RI": "44",
+        "SC": "45",
+        "SD": "46",
+        "TN": "47",
+        "TX": "48",
+        "UT": "49",
+        "VT": "50",
+        "VA": "51",
+        "WA": "53",
+        "WV": "54",
+        "WI": "55",
+        "WY": "56",
+        "PR": "72",
+    }
+
+    state_code = str(state or "").strip().upper()
+    if not _re.fullmatch(r"[A-Z]{2}", state_code):
+        raise HTTPException(
+            status_code=400, detail="Invalid state; expected 2-letter code"
+        )
+
+    state_fips = state_to_fips.get(state_code)
+    if not state_fips:
+        raise HTTPException(
+            status_code=404, detail=f"Unsupported state code '{state_code}'"
+        )
+
+    if date == "latest":
+        today = _date.today()
+        days_since_tuesday = (today.weekday() - 1) % 7
+        candidate = today - timedelta(days=days_since_tuesday)
+        if today.weekday() in (1, 2):
+            candidate -= timedelta(weeks=1)
+        date = candidate.isoformat()
+
+    if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        raise HTTPException(
+            status_code=400, detail="Invalid date format; expected YYYY-MM-DD"
+        )
+
+    date_compact = date.replace("-", "")
+    cache_dir = Path("cache/drought/stats")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_dir / f"usdm_state_stats_{state_code}_{date_compact}.json"
+
+    if cache_file.exists():
+        try:
+            with cache_file.open("r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception:
+            # Bad cache entry: fall through to rebuild.
+            pass
+
+    params = _up.urlencode(
+        {
+            "aoi": state_fips,
+            "startdate": f"{int(date[5:7])}/{int(date[8:10])}/{date[0:4]}",
+            "enddate": f"{int(date[5:7])}/{int(date[8:10])}/{date[0:4]}",
+            "statisticsType": 1,
+        }
+    )
+
+    area_url = (
+        "https://usdmdataservices.unl.edu/api/StateStatistics/"
+        f"GetDroughtSeverityStatisticsByAreaPercent?{params}"
+    )
+    dsci_url = f"https://usdmdataservices.unl.edu/api/StateStatistics/GetDSCI?{params}"
+
+    try:
+        headers = {
+            "User-Agent": "NCHurricane-Dashboard/1.0",
+            "Accept": "application/json",
+        }
+        area_req = _ur.Request(area_url, headers=headers)
+        with _ur.urlopen(area_req, timeout=30) as resp:
+            area_rows = json.loads(resp.read().decode("utf-8"))
+
+        dsci_req = _ur.Request(dsci_url, headers=headers)
+        with _ur.urlopen(dsci_req, timeout=30) as resp:
+            dsci_rows = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail=f"USDM state stats unreachable: {exc}"
+        ) from exc
+
+    area = area_rows[0] if isinstance(area_rows, list) and area_rows else {}
+    dsci = dsci_rows[0] if isinstance(dsci_rows, list) and dsci_rows else {}
+
+    d0 = float(area.get("d0") or 0.0)
+    d1 = float(area.get("d1") or 0.0)
+    d2 = float(area.get("d2") or 0.0)
+    d3 = float(area.get("d3") or 0.0)
+    d4 = float(area.get("d4") or 0.0)
+
+    payload = {
+        "state": state_code,
+        "date": date,
+        "provider": "USDM/NDMC",
+        "cumulative": {
+            "D0-D4": max(0.0, d0),
+            "D1-D4": max(0.0, d1),
+            "D2-D4": max(0.0, d2),
+            "D3-D4": max(0.0, d3),
+            "D4": max(0.0, d4),
+        },
+        "individual": {
+            "D0": max(0.0, d0 - d1),
+            "D1": max(0.0, d1 - d2),
+            "D2": max(0.0, d2 - d3),
+            "D3": max(0.0, d3 - d4),
+            "D4": max(0.0, d4),
+        },
+        "dsci": float(dsci.get("dsci") or 0.0),
+    }
+
+    with cache_file.open("w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=True)
+
+    return payload
+
+
 @app.get("/api/data/surface")
 def get_data_surface(region: str = "NC", product: str = "temperature"):
     """Return surface observations JSON with stale-while-revalidate caching."""
@@ -1675,12 +1968,16 @@ def get_data_surface(region: str = "NC", product: str = "temperature"):
         try:
             with open(cache_file, "r", encoding="utf-8") as fh:
                 cached = json.load(fh)
-            age = _time.time() - os.path.getmtime(cache_file)
-            if age >= _SURFACE_CACHE_TTL_SECONDS:
-                _kickoff_surface_refresh_if_needed(
-                    region_upper, product_lower, cache_file
-                )
-            return cached
+
+            # Migration guard: pre-source-timestamp cache entries used local
+            # generation time. Rebuild once so Current tab reflects source time.
+            if cached.get("timestamp_source") == "station_valid":
+                age = _time.time() - os.path.getmtime(cache_file)
+                if age >= _SURFACE_CACHE_TTL_SECONDS:
+                    _kickoff_surface_refresh_if_needed(
+                        region_upper, product_lower, cache_file
+                    )
+                return cached
         except Exception:
             pass
 
@@ -1690,13 +1987,15 @@ def get_data_surface(region: str = "NC", product: str = "temperature"):
         raise HTTPException(status_code=503, detail=f"Surface data unavailable: {exc}")
 
     stations = _build_surface_stations(df, product_lower)
+    source_ts = _surface_source_timestamp_iso(df)
     result = {
         "stations": stations,
         "product": product_lower,
         "unit": _SURFACE_PRODUCTS[product_lower]["unit"],
         "region": region_upper,
         "count": len(stations),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": source_ts,
+        "timestamp_source": "station_valid",
     }
 
     try:
@@ -1923,7 +2222,7 @@ def get_data_mrms(
             from workers.mrms_worker import run_mrms_worker, set_active_product
 
             set_active_product(product)
-            run_mrms_worker()
+            run_mrms_worker(force=True)
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -1935,6 +2234,28 @@ def get_data_mrms(
             status_code=503,
             detail=f"MRMS cache file missing after fetch attempt for '{product}'.",
         )
+
+    # If cached GRIB is old, request a targeted refresh for this product.
+    # This prevents stale overnight frames from persisting when UI switches
+    # to a product that has not been pre-warmed recently.
+    MRMS_STALE_GRIB_SECONDS = 90 * 60
+    grib_mtime = os.path.getmtime(grib_path)
+    grib_age_seconds = datetime.now(timezone.utc).timestamp() - grib_mtime
+    if grib_age_seconds > MRMS_STALE_GRIB_SECONDS:
+        try:
+            from workers.mrms_worker import run_mrms_worker, set_active_product
+
+            set_active_product(product)
+            run_mrms_worker(force=True)
+        except Exception:
+            pass
+
+        if not os.path.exists(grib_path):
+            raise HTTPException(
+                status_code=503,
+                detail=f"MRMS cache file missing after stale refresh attempt for '{product}'.",
+            )
+        grib_mtime = os.path.getmtime(grib_path)
 
     # Check if a recent PNG crop is already cached for this product + bounds
     import hashlib
@@ -1953,8 +2274,42 @@ def get_data_mrms(
             png_path, actual_bounds, render_meta = _render_mrms_png(
                 grib_path, product, [west, east, south, north], png_path
             )
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"MRMS render error: {exc}")
+        except Exception:
+            # Self-heal once: force-refresh this product, clear stale derived files,
+            # then retry render. This handles corrupted GRIB/PNG cache artifacts.
+            try:
+                from workers.mrms_worker import run_mrms_worker, set_active_product
+
+                set_active_product(product)
+                run_mrms_worker(force=True)
+            except Exception:
+                pass
+
+            # Force re-decompression from newest .gz and re-render sidecars.
+            stale_grib2 = grib_path[:-3] if grib_path.endswith(".gz") else None
+            for stale_path in [
+                stale_grib2,
+                png_path,
+                png_path.replace(".png", "_bounds.json"),
+                meta_sidecar,
+            ]:
+                if stale_path and os.path.exists(stale_path):
+                    try:
+                        os.remove(stale_path)
+                    except OSError:
+                        pass
+
+            try:
+                png_path, actual_bounds, render_meta = _render_mrms_png(
+                    grib_path, product, [west, east, south, north], png_path
+                )
+            except Exception as retry_exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        f"MRMS render error for '{product}' after refresh retry: {retry_exc}"
+                    ),
+                ) from retry_exc
     else:
         # Read bounds from sidecar file
         sidecar = png_path.replace(".png", "_bounds.json")
@@ -1994,7 +2349,7 @@ def get_data_mrms(
         "vmax": prod_info.get("vmax", 100),
         "legend": render_meta.get("legend"),
         "timestamp": render_meta.get("data_timestamp")
-        or datetime.now(timezone.utc).isoformat(),
+        or datetime.fromtimestamp(grib_mtime, tz=timezone.utc).isoformat(),
     }
 
 
@@ -2217,7 +2572,7 @@ def get_data_rtma_points(
                     "legend": build_rtma_legend(product_cfg),
                     "timestamp": (meta or {}).get("timestamp")
                     or (meta or {}).get("source_valid_time")
-                    or datetime.now(timezone.utc).isoformat(),
+                    or None,
                     "source": source_data_key,
                     "source_data_key": source_data_key,
                     "region": region_key,
@@ -3594,6 +3949,309 @@ def get_radar_site_locations():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _radar_live_catalog():
+    from config.radar_config import LIVE_RADAR_PRODUCTS
+
+    return dict(LIVE_RADAR_PRODUCTS)
+
+
+def _radar_live_sites():
+    from config.radar_config import LIVE_RADAR_SITES
+
+    return [normalize_radar_site_id(site) for site in LIVE_RADAR_SITES]
+
+
+_RADAR_LIVE_FALLBACK_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+_RADAR_LIVE_FALLBACK_LOCKS_GUARD = threading.Lock()
+
+
+def _radar_live_site_supported(site: str) -> bool:
+    try:
+        from pyart.io.nexrad_common import NEXRAD_LOCATIONS
+
+        site_id = normalize_radar_site_id(site)
+        info = NEXRAD_LOCATIONS.get(site_id)
+        if not info:
+            return False
+        return info.get("lat") is not None and info.get("lon") is not None
+    except Exception:
+        return False
+
+
+def _radar_live_product_supported(product_key: str) -> bool:
+    return str(product_key or "").strip().upper() in _radar_live_catalog()
+
+
+def _radar_live_fallback_lock(site: str, product_key: str) -> threading.Lock:
+    key = (normalize_radar_site_id(site), str(product_key or "").strip().upper())
+    with _RADAR_LIVE_FALLBACK_LOCKS_GUARD:
+        lock = _RADAR_LIVE_FALLBACK_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _RADAR_LIVE_FALLBACK_LOCKS[key] = lock
+        return lock
+
+
+def _radar_live_render_on_demand(site: str, product_key: str) -> int:
+    from workers.radar_live_worker import run_radar_live_site_product
+
+    lock = _radar_live_fallback_lock(site, product_key)
+    with lock:
+        return int(
+            run_radar_live_site_product(
+                normalize_radar_site_id(site),
+                str(product_key or "").strip().upper(),
+                force=True,
+            )
+        )
+
+
+def _radar_live_is_configured(site: str, product_key: str) -> bool:
+    return site in set(_radar_live_sites()) and product_key in _radar_live_catalog()
+
+
+@app.get("/api/radar/tile/{z}/{x}/{y}")
+def get_radar_tile(z: int, x: int, y: int):
+    """Serve a cached NEXRAD backdrop tile proxied from mesonet.agron.iastate.edu (IEM).
+
+    Tiles are pre-fetched by radar_tiles_worker every ~5 minutes.
+    On a cache miss the tile is fetched on-demand, cached, and returned so the
+    browser never sees a gap during the first worker cycle.
+
+    Tiles are stored as cache/radar/tiles/{z}/{x}/{y}.png (standard Leaflet order).
+    """
+    # Input validation — prevent path traversal and nonsensical coords.
+    if z < 0 or z > 18:
+        raise HTTPException(status_code=400, detail="z out of range (0–18)")
+    max_coord = (1 << z) - 1
+    if x < 0 or x > max_coord or y < 0 or y > max_coord:
+        raise HTTPException(status_code=400, detail="x/y out of range for given zoom")
+
+    tile_path = os.path.join(_CACHE_ROOT, "radar", "tiles", str(z), str(x), f"{y}.png")
+
+    if not os.path.exists(tile_path):
+        # On-demand fallback: fetch from IEM and cache atomically.
+        import urllib.request as _ur
+
+        _TILE_SOURCE = (
+            "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913"
+        )
+        url = f"{_TILE_SOURCE}/{z}/{x}/{y}"  # IEM: standard z/x/y
+        try:
+            req = _ur.Request(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; WxDashboard/1.0)",
+                },
+            )
+            with _ur.urlopen(req, timeout=10) as resp:
+                data = resp.read()
+            os.makedirs(os.path.dirname(tile_path), exist_ok=True)
+            tmp = tile_path + ".tmp"
+            with open(tmp, "wb") as fh:
+                fh.write(data)
+            os.replace(tmp, tile_path)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Upstream tile fetch failed: {exc}"
+            ) from exc
+
+    return FileResponse(
+        tile_path,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@app.get("/api/radar/live/sites")
+def get_radar_live_sites():
+    """Return radar sites with configured live-cache flag for weather.html Radar tab."""
+    try:
+        configured = set(_radar_live_sites())
+        from pyart.io.nexrad_common import NEXRAD_LOCATIONS
+
+        valid_prefixes = ("K", "P")
+        valid_extras = {"TJUA"}
+
+        sites = []
+        seen = set()
+        for site_id, info in NEXRAD_LOCATIONS.items():
+            if not (site_id.startswith(valid_prefixes) or site_id in valid_extras):
+                continue
+            normalized_id = normalize_radar_site_id(site_id)
+            if normalized_id in seen:
+                continue
+            lat = info.get("lat")
+            lon = info.get("lon")
+            if lat is None or lon is None:
+                continue
+            seen.add(normalized_id)
+            sites.append(
+                {
+                    "site": normalized_id,
+                    "lat": float(lat),
+                    "lon": float(lon),
+                    "configured": normalized_id in configured,
+                }
+            )
+
+        sites.sort(key=lambda entry: (0 if entry["configured"] else 1, entry["site"]))
+        return {
+            "status": "success",
+            "sites": sites,
+            "configured_sites": sorted(configured),
+            "products": _radar_live_catalog(),
+            "count": len(sites),
+        }
+    except Exception as e:
+        print(f"Radar live sites endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/radar/live/latest")
+def get_radar_live_latest(
+    site: str = "KMHX", product: str = "L3_N0B", force: bool = False
+):
+    """Return latest live radar frame from cache."""
+    from cache.overlay_cache_utils import radar_read_latest_frame
+
+    site_id = normalize_radar_site_id(site)
+    product_key = str(product or "L3_N0B").strip().upper()
+    configured = _radar_live_is_configured(site_id, product_key)
+    level_code = "L2" if product_key.startswith("L2_") else "L3"
+
+    if not _radar_live_product_supported(product_key):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Live radar product is not supported: {product_key}.",
+        )
+    if not _radar_live_site_supported(site_id):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Live radar site is not supported: {site_id}.",
+        )
+
+    meta = radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key)
+    fallback_cached = 0
+    if force:
+        try:
+            fallback_cached = _radar_live_render_on_demand(site_id, product_key)
+        except Exception as exc:
+            print(
+                f"[radar_live_fallback] forced latest {site_id}/{product_key} failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+        meta = radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key)
+
+    if not meta:
+        try:
+            fallback_cached = _radar_live_render_on_demand(site_id, product_key)
+        except Exception as exc:
+            print(
+                f"[radar_live_fallback] latest {site_id}/{product_key} failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+        meta = radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key)
+    if not meta:
+        raise HTTPException(status_code=404, detail="No live radar frame cached yet.")
+
+    image_url = (meta.get("render") or {}).get("image_url")
+    if not image_url:
+        raise HTTPException(
+            status_code=404, detail="Latest live radar image is missing."
+        )
+
+    return {
+        "status": "success",
+        "source": (
+            "live_cache_forced"
+            if force and fallback_cached > 0
+            else "live_cache_fallback"
+            if fallback_cached > 0
+            else "live_cache"
+        ),
+        "configured": configured,
+        "site": site_id,
+        "product": product_key,
+        "timestamp": meta.get("timestamp"),
+        "source_data_key": meta.get("source_data_key", ""),
+        "image_url": image_url,
+        "bounds": meta.get("bounds"),
+        "full_name": meta.get("full_name", product_key),
+        "units": meta.get("units", ""),
+    }
+
+
+@app.get("/api/radar/live/frames")
+def get_radar_live_frames(site: str = "KMHX", product: str = "L3_N0B", hours: int = 2):
+    """Return live radar frames list for scrubber playback."""
+    from cache.overlay_cache_utils import radar_list_frames
+
+    site_id = normalize_radar_site_id(site)
+    product_key = str(product or "L3_N0B").strip().upper()
+    configured = _radar_live_is_configured(site_id, product_key)
+    level_code = "L2" if product_key.startswith("L2_") else "L3"
+
+    if not _radar_live_product_supported(product_key):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Live radar product is not supported: {product_key}.",
+        )
+    if not _radar_live_site_supported(site_id):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Live radar site is not supported: {site_id}.",
+        )
+
+    frames = radar_list_frames(_CACHE_ROOT, site_id, level_code, product_key)
+    fallback_cached = 0
+    if not frames:
+        try:
+            fallback_cached = _radar_live_render_on_demand(site_id, product_key)
+        except Exception as exc:
+            print(
+                f"[radar_live_fallback] frames {site_id}/{product_key} failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+        frames = radar_list_frames(_CACHE_ROOT, site_id, level_code, product_key)
+
+    if not frames:
+        return {
+            "status": "success",
+            "source": "live_cache_fallback" if fallback_cached > 0 else "live_cache",
+            "configured": configured,
+            "site": site_id,
+            "product": product_key,
+            "frame_count": 0,
+            "frames": [],
+        }
+
+    cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours or 2)))
+    filtered = []
+    for frame in frames:
+        ts = frame.get("timestamp")
+        if ts:
+            try:
+                dt = parse_utc_datetime(ts)
+            except Exception:
+                dt = None
+        else:
+            dt = None
+        if dt and dt < cutoff_dt:
+            continue
+        filtered.append(frame)
+
+    return {
+        "status": "success",
+        "source": "live_cache_fallback" if fallback_cached > 0 else "live_cache",
+        "configured": configured,
+        "site": site_id,
+        "product": product_key,
+        "frame_count": len(filtered),
+        "frames": filtered,
+    }
+
+
 @app.get("/api/radar/basemap/{site}")
 def get_radar_basemap(site: str):
     """Return the URL to a pre-rendered basemap for the given radar site, or 404 if not found."""
@@ -4386,7 +5044,7 @@ def get_radar_archive(
                     site,
                     product,
                     _thredds_lb,
-                    os.path.join(BASE_DIR, "radar"),
+                    os.path.join(_CACHE_ROOT, "radar", "archive"),
                     download_progress,
                     latest_only=False,
                     start_time=parsed_from,
@@ -4422,7 +5080,7 @@ def get_radar_archive(
                                 product=product,
                                 date_from=window_start,
                                 date_to=window_end,
-                                base_dir=os.path.join(BASE_DIR, "radar"),
+                                base_dir=os.path.join(_CACHE_ROOT, "radar"),
                                 progress_callback=download_progress,
                                 provider=provider_try,
                                 # Archive single-frame behavior is handled by renderer
@@ -4483,7 +5141,7 @@ def get_radar_archive(
                         site,
                         product,
                         _thredds_lb,
-                        os.path.join(BASE_DIR, "radar"),
+                        os.path.join(_CACHE_ROOT, "radar", "archive"),
                         download_progress,
                         latest_only=False,
                         start_time=parsed_from,
@@ -4610,14 +5268,18 @@ def get_radar_archive(
 
             basemap_abs = os.path.normpath(basemap_path)
             radar_root_abs = os.path.normpath(DIRS["radar"])
+            cache_root_abs = os.path.normpath(_CACHE_ROOT)
             basemap_cache_root_abs = os.path.normpath(
                 os.path.join(BASE_DIR, "basemap_cache")
             )
 
-            def _resolve_layer_url(abs_path):
+            def _resolve_layer_url(abs_path: str | None):
                 if not abs_path:
                     return None
                 norm_path = os.path.normpath(abs_path)
+                if norm_path.startswith(cache_root_abs):
+                    rel = os.path.relpath(norm_path, cache_root_abs).replace("\\", "/")
+                    return f"/cache/{rel}"
                 if norm_path.startswith(radar_root_abs):
                     rel = os.path.relpath(norm_path, radar_root_abs).replace("\\", "/")
                     return f"/img/{rel}"
@@ -4628,30 +5290,8 @@ def get_radar_archive(
                     return f"/img/basemap_cache/{rel}"
                 return None
 
-            def _resolve_frame_layer_rel(abs_path):
-                if not abs_path:
-                    return None
-                norm_path = os.path.normpath(abs_path)
-                if norm_path.startswith(radar_root_abs):
-                    return os.path.relpath(norm_path, radar_root_abs).replace("\\", "/")
-                if norm_path.startswith(basemap_cache_root_abs):
-                    rel = os.path.relpath(norm_path, basemap_cache_root_abs).replace(
-                        "\\", "/"
-                    )
-                    return f"basemap_cache/{rel}"
-                return None
-
-            if basemap_abs.startswith(radar_root_abs):
-                basemap_rel = os.path.relpath(basemap_abs, radar_root_abs).replace(
-                    "\\", "/"
-                )
-                basemap_url = f"/img/{basemap_rel}"
-            elif basemap_abs.startswith(basemap_cache_root_abs):
-                basemap_rel = os.path.relpath(
-                    basemap_abs, basemap_cache_root_abs
-                ).replace("\\", "/")
-                basemap_url = f"/img/basemap_cache/{basemap_rel}"
-            else:
+            basemap_url = _resolve_layer_url(basemap_path)
+            if not basemap_url:
                 return {
                     "status": "error",
                     "message": "Layered basemap path is outside allowed static directories.",
@@ -4659,16 +5299,8 @@ def get_radar_archive(
                     "requested_source": requested_source,
                     "source_used": source_used,
                 }
-            static_overlay_rel = None
-            if static_overlay_path:
-                static_overlay_rel = os.path.relpath(
-                    static_overlay_path, DIRS["radar"]
-                ).replace("\\", "/")
-            legend_overlay_rel = None
-            if legend_overlay_path:
-                legend_overlay_rel = os.path.relpath(
-                    legend_overlay_path, DIRS["radar"]
-                ).replace("\\", "/")
+            static_overlay_url = _resolve_layer_url(static_overlay_path)
+            legend_overlay_url = _resolve_layer_url(legend_overlay_path)
 
             counties_overlay_url = _resolve_layer_url(counties_overlay_path)
             states_overlay_url = _resolve_layer_url(states_overlay_path)
@@ -4678,57 +5310,29 @@ def get_radar_archive(
                 frame_path = entry.get("path")
                 if not frame_path:
                     continue
-                rel_path = os.path.relpath(frame_path, DIRS["radar"]).replace("\\", "/")
-                radar_rel = None
-                alerts_rel = None
-                cities_rel = None
-                counties_rel = None
-                rings_rel = None
-                legend_rel = None
-                hud_right_rel = None
-                if entry.get("radar_path"):
-                    radar_rel = os.path.relpath(
-                        entry["radar_path"], DIRS["radar"]
-                    ).replace("\\", "/")
-                if entry.get("alerts_path"):
-                    alerts_rel = os.path.relpath(
-                        entry["alerts_path"], DIRS["radar"]
-                    ).replace("\\", "/")
-                if entry.get("cities_path"):
-                    cities_rel = os.path.relpath(
-                        entry["cities_path"], DIRS["radar"]
-                    ).replace("\\", "/")
-                if entry.get("counties_path"):
-                    counties_rel = _resolve_frame_layer_rel(entry["counties_path"])
-                states_rel = None
-                if entry.get("states_path"):
-                    states_rel = _resolve_frame_layer_rel(entry["states_path"])
-                if entry.get("rings_path"):
-                    rings_rel = _resolve_frame_layer_rel(entry["rings_path"])
-                if entry.get("legend_path"):
-                    legend_rel = os.path.relpath(
-                        entry["legend_path"], DIRS["radar"]
-                    ).replace("\\", "/")
-                if entry.get("hud_right_path"):
-                    hud_right_rel = os.path.relpath(
-                        entry["hud_right_path"], DIRS["radar"]
-                    ).replace("\\", "/")
+                frame_url = _resolve_layer_url(frame_path)
+                if not frame_url:
+                    continue
+                radar_url = _resolve_layer_url(entry.get("radar_path"))
+                alerts_url = _resolve_layer_url(entry.get("alerts_path"))
+                cities_url = _resolve_layer_url(entry.get("cities_path"))
+                counties_url = _resolve_layer_url(entry.get("counties_path"))
+                states_url = _resolve_layer_url(entry.get("states_path"))
+                rings_url = _resolve_layer_url(entry.get("rings_path"))
+                legend_url = _resolve_layer_url(entry.get("legend_path"))
+                hud_right_url = _resolve_layer_url(entry.get("hud_right_path"))
                 frames_payload.append(
                     {
                         "index": int(entry.get("index", len(frames_payload))),
-                        "url": f"/img/{rel_path}",
-                        "radar_url": f"/img/{radar_rel}" if radar_rel else None,
-                        "alerts_url": f"/img/{alerts_rel}" if alerts_rel else None,
-                        "cities_url": f"/img/{cities_rel}" if cities_rel else None,
-                        "counties_url": f"/img/{counties_rel}"
-                        if counties_rel
-                        else None,
-                        "states_url": f"/img/{states_rel}" if states_rel else None,
-                        "rings_url": f"/img/{rings_rel}" if rings_rel else None,
-                        "legend_url": f"/img/{legend_rel}" if legend_rel else None,
-                        "hud_right_url": f"/img/{hud_right_rel}"
-                        if hud_right_rel
-                        else None,
+                        "url": frame_url,
+                        "radar_url": radar_url,
+                        "alerts_url": alerts_url,
+                        "cities_url": cities_url,
+                        "counties_url": counties_url,
+                        "states_url": states_url,
+                        "rings_url": rings_url,
+                        "legend_url": legend_url,
+                        "hud_right_url": hud_right_url,
                         "timestamp_utc": entry.get("timestamp_utc", ""),
                         "timestamp_local": entry.get("timestamp_local", ""),
                     }
@@ -4745,7 +5349,7 @@ def get_radar_archive(
 
             layer_rel = None
             if layer_dir:
-                layer_rel = os.path.relpath(layer_dir, DIRS["radar"]).replace("\\", "/")
+                layer_rel = _resolve_layer_url(layer_dir)
 
             first_frame = frames_payload[0]
             layers_payload = {
@@ -4819,12 +5423,8 @@ def get_radar_archive(
                 ),
                 "image_url": frames_payload[0]["url"],
                 "basemap_url": basemap_url,
-                "static_overlay_url": f"/img/{static_overlay_rel}"
-                if static_overlay_rel
-                else None,
-                "legend_overlay_url": f"/img/{legend_overlay_rel}"
-                if legend_overlay_rel
-                else None,
+                "static_overlay_url": static_overlay_url,
+                "legend_overlay_url": legend_overlay_url,
                 "frames": frames_payload,
                 "frame_count": len(frames_payload),
                 "layers_path": layer_rel,
@@ -5478,16 +6078,16 @@ def purge_old_files(hours: float = 168, categories: str = ""):
                 cutoff,
                 [
                     os.path.join(
-                        BASE_DIR, "radar", "radar_archive", "radar_level2_downloads"
+                        _CACHE_ROOT, "radar", "archive", "radar_level2_downloads"
                     ),
                     os.path.join(
-                        BASE_DIR, "radar", "radar_archive", "radar_level2_images"
+                        _CACHE_ROOT, "radar", "archive", "radar_level2_images"
                     ),
                     os.path.join(
-                        BASE_DIR, "radar", "radar_archive", "radar_level3_downloads"
+                        _CACHE_ROOT, "radar", "archive", "radar_level3_downloads"
                     ),
                     os.path.join(
-                        BASE_DIR, "radar", "radar_archive", "radar_level3_images"
+                        _CACHE_ROOT, "radar", "archive", "radar_level3_images"
                     ),
                 ],
             )

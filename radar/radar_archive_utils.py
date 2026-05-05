@@ -2,7 +2,7 @@
 Radar Archive Animation Utility
 ================================
 Standalone module for generating radar animations from NODD (AWS/GCP) archive data.
-Downloads files to radar_archive/ directory tree, renders frames with per-file
+Downloads files to cache/radar/archive/ directory tree, renders frames with per-file
 timestamps from pyart, and stitches into MP4.
 
 Uses radar_nodd_utils for the S3/GCS download plumbing and radar_utils for
@@ -749,7 +749,7 @@ def download_archive_data(
 ):
     """
     Download radar files from NODD for an explicit date range.
-    Saves into radar_archive/ subdirectory so it never mixes with live data.
+    Saves into archive/ subdirectory so it never mixes with live data.
     """
     import importlib
     from urllib.parse import quote
@@ -757,7 +757,7 @@ def download_archive_data(
     provider = str(provider).lower()
     level_path = str(level).lower().replace(" ", "")
     save_dir = os.path.join(
-        base_dir, "radar_archive", f"radar_{level_path}_downloads", product, station_id
+        base_dir, "archive", f"radar_{level_path}_downloads", product, station_id
     )
     os.makedirs(save_dir, exist_ok=True)
 
@@ -814,7 +814,7 @@ def download_archive_data(
                     # Update save_dir for the resolved product
                     save_dir = os.path.join(
                         base_dir,
-                        "radar_archive",
+                        "archive",
                         f"radar_{level_path}_downloads",
                         resolved_product,
                         station_id,
@@ -866,7 +866,7 @@ def download_archive_data(
                     )
                     tar_save_dir = os.path.join(
                         base_dir,
-                        "radar_archive",
+                        "archive",
                         f"radar_{level_path}_downloads",
                         tar_fallback,
                         station_id,
@@ -952,7 +952,7 @@ def download_archive_data(
                 f"[WARN] Archive download failed: {type(e).__name__}: {e} | key={key}"
             )
 
-    _enforce_cache_size(os.path.join(base_dir, "radar_archive"))
+    _enforce_cache_size(os.path.join(base_dir, "archive"))
     unique_selected = sorted(
         path for path in {str(path) for path in selected_files} if os.path.isfile(path)
     )

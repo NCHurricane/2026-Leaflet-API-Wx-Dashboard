@@ -36,7 +36,10 @@
     }
 
     function _formatViewerTimestamp(value) {
-        const dt = _asDate(value) || new Date();
+        const dt = _asDate(value);
+        if (!dt) {
+            return '--/--/----, --:-- LOCAL, (--:-- UTC)';
+        }
         const localParts = new Intl.DateTimeFormat('en-US', {
             month: '2-digit',
             day: '2-digit',
@@ -396,7 +399,7 @@
         'Coastal Alerts': ['Coastal Flood Warning', 'Coastal Flood Watch', 'Coastal Flood Advisory', 'High Surf Warning', 'High Surf Advisory', 'Rip Current Statement', 'Storm Surge Warning', 'Storm Surge Watch', 'Beach Hazards Statement'],
         'Marine Alerts': ['Special Marine Warning', 'Marine Weather Statement', 'Gale Warning', 'Gale Watch', 'Hurricane Force Wind Warning', 'Storm Warning', 'Small Craft Advisory', 'Hazardous Seas Warning', 'Hazardous Seas Watch', 'Heavy Freezing Spray Warning', 'Brisk Wind Advisory', 'Freezing Spray Advisory', 'Low Water Advisory', 'Storm Watch'],
         'Tropical Cyclone Alerts': ['Hurricane Warning', 'Hurricane Watch', 'Tropical Storm Warning', 'Tropical Storm Watch', 'Storm Surge Warning', 'Storm Surge Watch', 'Extreme Wind Warning', 'Tropical Cyclone Local Statement', 'Hurricane Force Wind Warning', 'Hurricane Force Wind Watch', 'Typhoon Warning', 'Typhoon Watch'],
-        'Non-Precipitation Alerts': ['High Wind Warning', 'High Wind Watch', 'Wind Advisory', 'Dense Fog Advisory', 'Dense Smoke Advisory', 'Dust Storm Warning', 'Blowing Dust Warning', 'Air Quality Alert', 'Ashfall Warning', 'Ashfall Advisory', 'Air Stagnation Advisory', 'Blowing Dust Warning', 'Dust Advisory', 'Lake Wind Advisory'],
+        'Non-Precipitation Alerts': ['High Wind Warning', 'High Wind Watch', 'Wind Advisory', 'Dense Fog Advisory', 'Dense Smoke Advisory', 'Dust Storm Warning', 'Blowing Dust Warning', 'Blowing Dust Advisory', 'Air Quality Alert', 'Ashfall Warning', 'Ashfall Advisory', 'Air Stagnation Advisory', 'Dust Advisory', 'Lake Wind Advisory'],
         'Geophysical Alerts': ['Earthquake Warning', 'Tsunami Advisory', 'Tsunami Watch', 'Tsunami Warning', 'Volcano Warning'],
         'Public Safety Alerts': ['Civil Danger Warning', 'Hazardous Materials Warning', 'Local Area Emergency', 'Radiological Hazard Warning'],
         'Informational Alerts': ['Hazardous Weather Outlook', 'Short Term Forecast', 'Special Weather Statement'],
@@ -654,7 +657,7 @@
             img.loading = 'lazy';
             const ts = L.DomUtil.create('div', 'wx-global-timestamp', div);
             ts.id = 'wx-global-timestamp';
-            ts.innerHTML = `Last Updated:<br>${_formatViewerTimestamp(Date.now())}`;
+            ts.innerHTML = `Last Updated:<br>${_formatViewerTimestamp(null)}`;
             return div;
         },
     });
@@ -662,12 +665,22 @@
 
     // ── Layer state ──────────────────────────────────────────────────────────
     let alertsLayer = null;
-    let nexradLayer = null;
-    let _nexradRefreshTimer = null;
-    const NEXRAD_TILE_URL = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png';
-    const NEXRAD_REFRESH_MS = 5 * 60 * 1000;
     let spcLayer = null;
     let surfaceLayer = null;
+    let radarLiveOverlay = null;
+    let radarSiteLayer = null;
+    let radarBackdropLayer = null;
+    let _radarSitesLoaded = false;
+    let _radarSiteConfiguredMap = new Map();
+    let _radarSiteRequestSeq = 0;
+    let _radarLiveRequestSeq = 0;
+    let _radarAutoRefreshTimer = null;
+    let _radarScrubMode = false;
+    let _radarScrubFrames = [];
+    let _radarScrubFrameIndex = 0;
+    let _radarScrubRenderSeq = 0;
+    let _radarScrubLoadSeq = 0;
+    let _radarScrubPlayTimer = null;
     let rtmaOverlay = null;
     let rtmaPointLayer = null;
     let rtmaGradientLayer = null;
@@ -681,6 +694,12 @@
     let _rtmaGridInFlightKey = null;
     let mrmsOverlay = null;
     let mrmsRadarSiteLayer = null;
+    let droughtLayer = null;
+    let _droughtDates = [];
+    let _activeDroughtDate = null;
+    let _lastDroughtStateStats = null;
+    let _lastDroughtStateCode = null;
+    const _droughtStateStatsCache = new Map();
     let statesLayer = null;
     let countiesLayer = null;
     let countriesLayer = null;
@@ -854,6 +873,8 @@
     const RTMA_SCRUB_LOOP_HOLD_MS = 2000;
     const RTMA_SCRUB_SWAP_FADE_MS = 90;
     const RTMA_SCRUB_POINTS_ONLY = false;
+    const RADAR_AUTO_REFRESH_MS = 5 * 60 * 1000;
+    const IEM_RADAR_OVERLAY_REFRESH_MS = 5 * 60 * 1000;
     const RTMA_STREAM_MAX_HOURS = {
         rtma_hourly: 24,
         rtma_rapid_update: 6,
@@ -2352,9 +2373,7 @@
     }
 
     // Auto-enable the persistent Radar Overlay when the user zooms into a new
-    // alert polygon. Replaces the former transient new-alert radar loop — same
-    // IEM tile source, but persists after the warning popup closes and reuses
-    // the existing opacity slider.
+    // alert polygon.
     function _ensureRadarOverlayOn() {
         const cb = byId('weather-alerts-radar');
         if (!cb || cb.checked) return;
@@ -2744,6 +2763,204 @@
         setLegend('<h4>SPC Storm Reports</h4>' + rows);
     }
 
+    const _DROUGHT_COLORS = {
+        0: '#FFFF00',
+        1: '#FCD37F',
+        2: '#FFAA00',
+        3: '#E60000',
+        4: '#730000',
+    };
+    const _DROUGHT_LABELS = {
+        0: 'D0 – Abnormally Dry',
+        1: 'D1 – Moderate Drought',
+        2: 'D2 – Severe Drought',
+        3: 'D3 – Extreme Drought',
+        4: 'D4 – Exceptional Drought',
+    };
+
+    function _activeDroughtRegionState() {
+        const code = String(byId('weather-region')?.value || '').toUpperCase();
+        return /^[A-Z]{2}$/.test(code) ? code : null;
+    }
+
+    function _formatDroughtPct(value) {
+        const num = Number(value);
+        return Number.isFinite(num) ? `${num.toFixed(1)}%` : '—';
+    }
+
+    async function _fetchDroughtStateStats(date, stateCode) {
+        if (!date || !stateCode) return null;
+        const cacheKey = `${stateCode}|${date}`;
+        if (_droughtStateStatsCache.has(cacheKey)) {
+            return _droughtStateStatsCache.get(cacheKey);
+        }
+        const url = `/api/data/drought/state-stats?date=${encodeURIComponent(date)}&state=${encodeURIComponent(stateCode)}`;
+        const resp = await fetch(url);
+        if (!resp.ok) {
+            throw new Error(`state stats ${resp.status}`);
+        }
+        const data = await resp.json();
+        _droughtStateStatsCache.set(cacheKey, data);
+        return data;
+    }
+
+    function buildDroughtLegend(enabledCats, stateStats, stateCode) {
+        const cats = [0, 1, 2, 3, 4];
+        const activeCats = enabledCats || cats;
+
+        // CONUS/non-state views use the original levels-only legend.
+        if (!stateCode) {
+            const simpleRows = activeCats
+                .map((dm) => swatch(_DROUGHT_COLORS[dm], _DROUGHT_LABELS[dm]))
+                .join('');
+            setLegend('<h4>U.S. Drought Monitor</h4>' + simpleRows);
+            return;
+        }
+
+        const cumulative = stateStats?.cumulative || {};
+        const individual = stateStats?.individual || {};
+        const rows = cats.map((dm) => {
+            const cumKey = dm === 4 ? 'D4' : `D${dm}-D4`;
+            const indKey = `D${dm}`;
+            const cumVal = _formatDroughtPct(cumulative[cumKey]);
+            const indVal = _formatDroughtPct(individual[indKey]);
+            const enabled = activeCats.includes(dm);
+            return `
+                <div class="drought-legend-row${enabled ? '' : ' is-disabled'}">
+                    <div class="drought-legend-level"><span class="legend-swatch" style="background:${_DROUGHT_COLORS[dm]}"></span>${_DROUGHT_LABELS[dm]}</div>
+                    <div class="drought-legend-value">${cumKey}: ${cumVal}</div>
+                    <div class="drought-legend-value">${indKey}: ${indVal}</div>
+                </div>
+            `;
+        }).join('');
+
+        const dsci = Number(stateStats?.dsci);
+        const dsciText = Number.isFinite(dsci) ? dsci.toFixed(1) : '—';
+        const subtitle = `<div class="drought-legend-subtitle">${escapeHtml(stateCode)} stats for ${escapeHtml(_activeDroughtDate || '')}</div>`;
+
+        setLegend(
+            '<h4>U.S. Drought Monitor</h4>'
+            + subtitle
+            + '<div class="drought-legend-head">'
+            + '<div>Level</div><div>Cumulative</div><div>Individual</div>'
+            + '</div>'
+            + rows
+            + `<div class="drought-legend-dsci"><span>DSCI</span><span>${dsciText}</span></div>`,
+        );
+    }
+
+    async function loadDroughtLayer() {
+        const statusEl = byId('weather-drought-date-status');
+
+        // Fetch available dates if not already loaded
+        if (!_droughtDates.length) {
+            try {
+                const resp = await fetch('/api/data/drought/dates');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    _droughtDates = data.dates || [];
+                    _activeDroughtDate = _activeDroughtDate || (_droughtDates[0] ?? null);
+                    _renderDroughtDateButtons();
+                }
+            } catch (_) { /* ignore */ }
+        }
+
+        const date = _activeDroughtDate || (_droughtDates[0] ?? null);
+        if (!date) {
+            if (statusEl) statusEl.textContent = 'No dates available.';
+            return;
+        }
+
+        if (statusEl) statusEl.textContent = 'Loading…';
+
+        try {
+            const resp = await fetch(`/api/data/drought?date=${encodeURIComponent(date)}`);
+            if (!resp.ok) {
+                if (statusEl) statusEl.textContent = `Error ${resp.status}`;
+                return;
+            }
+            const geojson = await resp.json();
+
+            const enabledCats = _activeDroughtCategories();
+            const opacity = parseFloat(byId('weather-opacity-drought')?.value ?? 0.75);
+
+            if (droughtLayer && map.hasLayer(droughtLayer)) map.removeLayer(droughtLayer);
+
+            droughtLayer = L.geoJSON(geojson, {
+                filter: (feature) => enabledCats.includes(Number(feature.properties?.DM)),
+                style: (feature) => {
+                    const dm = Number(feature.properties?.DM);
+                    return {
+                        fillColor: _DROUGHT_COLORS[dm] ?? '#cccccc',
+                        fillOpacity: opacity,
+                        color: _DROUGHT_COLORS[dm] ?? '#cccccc',
+                        weight: 0.5,
+                        opacity: 0.8,
+                    };
+                },
+                onEachFeature: (feature, layer) => {
+                    const dm = Number(feature.properties?.DM);
+                    layer.bindTooltip(
+                        `<strong>${_DROUGHT_LABELS[dm] ?? `DM ${dm}`}</strong>`,
+                        { sticky: true, className: 'wx-tooltip' },
+                    );
+                },
+            }).addTo(map);
+
+            const stateCode = _activeDroughtRegionState();
+            let stateStats = null;
+            if (stateCode) {
+                try {
+                    stateStats = await _fetchDroughtStateStats(date, stateCode);
+                } catch (err) {
+                    console.warn('[drought] state stats unavailable', err);
+                }
+            }
+
+            _lastDroughtStateCode = stateCode;
+            _lastDroughtStateStats = stateStats;
+            buildDroughtLegend(enabledCats, stateStats, stateCode);
+
+            const tsMs = _resolveDataTimestampMs(date + 'T12:00:00Z');
+            _setReliability('drought', 'USDM Drought', 'USDM/NDMC', tsMs);
+            _setTimestampSource('drought', 'usdm_valid_date', tsMs);
+            if (statusEl) statusEl.textContent = `Valid: ${date}`;
+        } catch (err) {
+            if (statusEl) statusEl.textContent = 'Load failed.';
+            console.error('[drought] load failed', err);
+        }
+    }
+
+    function _activeDroughtCategories() {
+        return Array.from(document.querySelectorAll('.drought-cat-check'))
+            .filter((el) => el.checked)
+            .map((el) => Number(el.value));
+    }
+
+    function _renderDroughtDateButtons() {
+        const container = byId('weather-drought-dates');
+        if (!container) return;
+        container.innerHTML = '';
+        _droughtDates.forEach((d) => {
+            const btn = document.createElement('button');
+            btn.className = 'wx-drought-date-btn' + (d === _activeDroughtDate ? ' active' : '');
+            btn.type = 'button';
+            // Show as MM/DD (short label)
+            const [y, mo, day] = d.split('-');
+            btn.textContent = `${mo}/${day}`;
+            btn.title = d;
+            btn.dataset.date = d;
+            btn.addEventListener('click', () => {
+                _activeDroughtDate = d;
+                container.querySelectorAll('.wx-drought-date-btn').forEach((b) => {
+                    b.classList.toggle('active', b.dataset.date === d);
+                });
+                if (_isTypeEnabled('drought')) loadDroughtLayer();
+            });
+            container.appendChild(btn);
+        });
+    }
+
     // Authoritative SPC probabilistic fill colors (per-hazard scale).
     // Colors taken from SPC's published outlook legends.
     const _SPC_PROB_HAZARD_COLORS = {
@@ -2866,7 +3083,22 @@
     }
 
     // ── Reliability bar (Last Update / Data Age / Source) ────────────────────
-    const _reliability = { ts: null, source: null, label: null };
+    const _reliabilityByType = {
+        global: { ts: null, source: null, label: null },
+        alerts: { ts: null, source: null, label: null },
+        spc: { ts: null, source: null, label: null },
+        surface: { ts: null, source: null, label: null },
+        rtma: { ts: null, source: null, label: null },
+        mrms: { ts: null, source: null, label: null },
+    };
+    const _timestampSourceByType = {
+        global: { provenance: null, ts: null },
+        alerts: { provenance: null, ts: null },
+        spc: { provenance: null, ts: null },
+        surface: { provenance: null, ts: null },
+        rtma: { provenance: null, ts: null },
+        mrms: { provenance: null, ts: null },
+    };
     let _reliabilityTickerStarted = false;
     const _LIVE_DATA_STALE_MS = 90 * 60 * 1000;
 
@@ -2882,27 +3114,76 @@
         return `${d}d ${h % 24}h ago`;
     }
 
+    function _activeReliabilityType() {
+        if ((_mrmsScrubMode || _isTypeEnabled('mrms')) && _activeMrmsProduct()) return 'mrms';
+        if ((_rtmaScrubMode || _isTypeEnabled('rtma')) && _activeRtmaStream() && _activeRtmaProduct()) return 'rtma';
+        if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) return 'spc';
+        if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length) return 'alerts';
+        if (_isTypeEnabled('drought')) return 'drought';
+        if (_isTypeEnabled('current') && _activeSurfaceProduct()) return 'surface';
+        return 'global';
+    }
+
+    function _currentReliabilityEntry() {
+        const activeType = _activeReliabilityType();
+        return _reliabilityByType[activeType] || _reliabilityByType.global;
+    }
+
     function _renderReliability() {
         const updEl = byId('wx-reliability-updated');
         const ageEl = byId('wx-reliability-age');
+        const provEl = byId('wx-reliability-provider');
         const srcEl = byId('wx-reliability-source');
-        if (updEl) updEl.textContent = _reliability.ts ? new Date(_reliability.ts).toLocaleTimeString() : '—';
-        if (ageEl) ageEl.textContent = _reliability.ts ? _formatAge(Date.now() - _reliability.ts) : '—';
-        if (srcEl) srcEl.textContent = _reliability.source || '—';
+        const entry = _currentReliabilityEntry();
+        const activeType = _activeReliabilityType();
+        const tsEntry = _timestampSourceByType[activeType] || _timestampSourceByType.global;
+        if (updEl) updEl.textContent = Number.isFinite(entry.ts) ? new Date(entry.ts).toLocaleTimeString() : '—';
+        if (ageEl) ageEl.textContent = Number.isFinite(entry.ts) ? _formatAge(Date.now() - entry.ts) : '—';
+        if (provEl) provEl.textContent = entry.source || '—';
+        if (srcEl) srcEl.textContent = tsEntry.provenance || '—';
     }
 
-    function _setReliability(label, source, ts) {
-        _reliability.label = label || null;
-        _reliability.source = source || null;
-        _reliability.ts = ts ? +ts : Date.now();
+    function _setTimestampSource(type, provenance, ts) {
+        const key = (type && _timestampSourceByType[type]) ? type : 'global';
+        const tsMs = Number(ts);
+        _timestampSourceByType[key].provenance = provenance || null;
+        _timestampSourceByType[key].ts = Number.isFinite(tsMs) ? tsMs : null;
+        _renderReliability();
+    }
+
+    function _setReliability(type, label, source, ts) {
+        let targetType = type;
+        let targetLabel = label;
+        let targetSource = source;
+        let targetTs = ts;
+
+        // Backward compatibility: _setReliability(label, source, ts)
+        if (arguments.length === 3) {
+            targetType = 'global';
+            targetLabel = type;
+            targetSource = label;
+            targetTs = source;
+        }
+
+        const key = (targetType && _reliabilityByType[targetType]) ? targetType : 'global';
+        _reliabilityByType[key].label = targetLabel || null;
+        _reliabilityByType[key].source = targetSource || null;
+        const tsMs = Number(targetTs);
+        _reliabilityByType[key].ts = Number.isFinite(tsMs) ? tsMs : null;
         _renderReliability();
     }
 
     function _resolveDataTimestampMs(rawTs) {
-        return _asDate(rawTs)?.getTime() || Date.now();
+        const tsMs = _asDate(rawTs)?.getTime();
+        return Number.isFinite(tsMs) ? tsMs : null;
+    }
+
+    function _formatValidTimeLabel(tsMs) {
+        return Number.isFinite(tsMs) ? new Date(tsMs).toLocaleTimeString() : 'unknown time';
     }
 
     function _staleNoteForTimestamp(tsMs, thresholdMs = _LIVE_DATA_STALE_MS) {
+        if (!Number.isFinite(tsMs)) return '';
         const ageMs = Date.now() - tsMs;
         return ageMs > thresholdMs ? ` [stale: ${_formatAge(ageMs)}]` : '';
     }
@@ -3885,9 +4166,10 @@
             _renderActiveWarningsPanel();
             const alertsTsMs = _resolveDataTimestampMs(fullGeojson?._updated || displayGeojson?._updated);
             const alertsStaleNote = _staleNoteForTimestamp(alertsTsMs);
-            if (!silentStatus) setStatus(`Alerts valid ${new Date(alertsTsMs).toLocaleTimeString()}.${alertsStaleNote}`);
+            if (!silentStatus) setStatus(`Alerts valid ${_formatValidTimeLabel(alertsTsMs)}.${alertsStaleNote}`);
             _setViewerTimestamp(alertsTsMs);
-            _setReliability('Alerts', 'NWS, IEM', alertsTsMs);
+            _setReliability('alerts', 'Alerts', 'NWS, IEM', alertsTsMs);
+            _setTimestampSource('alerts', 'alerts_cache_updated', alertsTsMs);
         } catch (err) {
             if (requestSeq !== _alertsRequestSeq) return;
             console.error('[alerts] Load error:', err);
@@ -4646,9 +4928,10 @@
                 || watchesGeojson?._updated;
             const spcTsMs = _resolveDataTimestampMs(spcUpdatedRaw);
             const spcStaleNote = _staleNoteForTimestamp(spcTsMs);
-            setStatus(`SPC ${statusBits.join(' + ')} valid ${new Date(spcTsMs).toLocaleTimeString()}.${spcStaleNote}`);
+            setStatus(`SPC ${statusBits.join(' + ')} valid ${_formatValidTimeLabel(spcTsMs)}.${spcStaleNote}`);
             _setViewerTimestamp(spcTsMs);
-            _setReliability(`SPC ${statusBits.join(' + ')}`, 'NOAA SPC', spcTsMs);
+            _setReliability('spc', `SPC ${statusBits.join(' + ')}`, 'NOAA SPC', spcTsMs);
+            _setTimestampSource('spc', 'spc_cache_updated', spcTsMs);
         } catch (err) {
             if (!_isActiveSpcRequest(requestSeq, selectionKey)) return;
             if (_isAbortLikeError(err)) return;
@@ -4712,13 +4995,14 @@
         });
         const rtmaActive = _isTypeEnabled('rtma');
         const mrmsActive = _isTypeEnabled('mrms');
+        const radarActive = _isTypeEnabled('radar');
         const animBtn = byId('weather-rtma-load-scrubber');
         const animWin = byId('rtma-animate-window');
         if (animBtn) {
-            animBtn.style.display = (rtmaActive || mrmsActive) ? '' : 'none';
-            if (!(rtmaActive || mrmsActive)) animBtn.classList.remove('active');
+            animBtn.style.display = (rtmaActive || mrmsActive || radarActive) ? '' : 'none';
+            if (!(rtmaActive || mrmsActive || radarActive)) animBtn.classList.remove('active');
         }
-        if (animWin && !(rtmaActive || mrmsActive)) animWin.style.display = 'none';
+        if (animWin && !(rtmaActive || mrmsActive || radarActive)) animWin.style.display = 'none';
         _updateActiveTabName();
     }
 
@@ -4744,7 +5028,7 @@
     }
 
     function _updateRightSidebarGroups() {
-        const groups = ['current', 'alerts', 'spc', 'mrms', 'rtma'];
+        const groups = ['current', 'alerts', 'spc', 'mrms', 'rtma', 'drought'];
         let anyVisible = false;
         groups.forEach((type) => {
             const panel = byId(`wx-side-group-${type}`);
@@ -4771,19 +5055,23 @@
 
     function _clearAllMapLayers() {
         if (alertsLayer && map.hasLayer(alertsLayer)) map.removeLayer(alertsLayer);
-        if (nexradLayer && map.hasLayer(nexradLayer)) { map.removeLayer(nexradLayer); nexradLayer = null; }
-        if (_nexradRefreshTimer) { clearInterval(_nexradRefreshTimer); _nexradRefreshTimer = null; }
 
         if (spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
         if (surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
+        if (radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
+        if (radarBackdropLayer && map.hasLayer(radarBackdropLayer)) map.removeLayer(radarBackdropLayer);
+        if (radarSiteLayer && map.hasLayer(radarSiteLayer)) map.removeLayer(radarSiteLayer);
         if (rtmaOverlay && map.hasLayer(rtmaOverlay)) map.removeLayer(rtmaOverlay);
         if (rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) map.removeLayer(rtmaGradientLayer);
         if (rtmaPointLayer && map.hasLayer(rtmaPointLayer)) map.removeLayer(rtmaPointLayer);
         if (mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
         if (mrmsRadarSiteLayer && map.hasLayer(mrmsRadarSiteLayer)) map.removeLayer(mrmsRadarSiteLayer);
+        if (droughtLayer && map.hasLayer(droughtLayer)) map.removeLayer(droughtLayer);
+        droughtLayer = null;
         alertsLayer = null;
         spcLayer = null;
         surfaceLayer = null;
+        radarLiveOverlay = null;
         rtmaOverlay = null;
         rtmaGradientLayer = null;
         rtmaPointLayer = null;
@@ -4815,14 +5103,540 @@
         _clearSpeedOverride();
     }
 
+    function _activeRadarSite() {
+        return String(byId('weather-radar-site')?.value || '').trim().toUpperCase();
+    }
+
+    function _activeRadarProduct() {
+        return String(byId('weather-radar-product')?.value || 'L3_N0B').trim().toUpperCase();
+    }
+
+    function _setRadarStatus(message) {
+        const el = byId('weather-radar-status');
+        if (el) el.textContent = message || '';
+    }
+
+    const _IEM_RADAR_OVERLAY_ALLOWED_TYPES = new Set(['current', 'alerts', 'spc', 'rtma', 'radar']);
+    const _IEM_RADAR_OVERLAY_FRAMES = 12;
+    const _IEM_RADAR_OVERLAY_STEP_MIN = 5;
+    const _IEM_RADAR_OVERLAY_FRAME_MS = 500;
+    const _IEM_RADAR_OVERLAY_PAUSE_MS = 900;
+    let _iemRadarOverlayLoop = null;
+
+    function _activeWeatherType() {
+        const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'];
+        return allTypes.find((type) => _isTypeEnabled(type)) || '';
+    }
+
+    function _iemRadarOverlayAllowedInContext() {
+        if (_archiveMode || _rtmaScrubMode || _mrmsScrubMode || _radarScrubMode) {
+            return false;
+        }
+        return _IEM_RADAR_OVERLAY_ALLOWED_TYPES.has(_activeWeatherType());
+    }
+
+    function _iemRadarOverlayCacheBust() {
+        const bucket = _IEM_RADAR_OVERLAY_STEP_MIN * 60 * 1000;
+        return Math.floor(Date.now() / bucket);
+    }
+
+    function _iemRadarOverlayFrameOffsets() {
+        const offsets = [];
+        for (let i = _IEM_RADAR_OVERLAY_FRAMES - 1; i >= 0; i -= 1) {
+            offsets.push(i * _IEM_RADAR_OVERLAY_STEP_MIN);
+        }
+        return offsets;
+    }
+
+    function _iemRadarOverlayTileUrl(mins, cacheBust = null) {
+        const cb = Number.isFinite(cacheBust) ? cacheBust : _iemRadarOverlayCacheBust();
+        const slug = mins === 0
+            ? 'nexrad-n0q-900913'
+            : `nexrad-n0q-m${String(mins).padStart(2, '0')}m-900913`;
+        return `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/${slug}/{z}/{x}/{y}.png?_cb=${cb}`;
+    }
+
+    function _iemRadarOverlayBuildLayerForState(state, mins, opacity = 0) {
+        return L.tileLayer(_iemRadarOverlayTileUrl(mins, state.cacheBust), {
+            opacity,
+            zIndex: 300,
+            attribution: '&copy; Iowa State Mesonet / NWS',
+        });
+    }
+
+    function _iemRadarOverlayStop() {
+        const s = _iemRadarOverlayLoop;
+        if (!s) return;
+        if (s.cycleTimer) clearTimeout(s.cycleTimer);
+        if (s.refreshTimer) clearInterval(s.refreshTimer);
+        if (s.swapTimer) clearTimeout(s.swapTimer);
+        const layers = Array.isArray(s.layers) ? s.layers : [s.currentLayer, s.transitionLayer];
+        layers.forEach((lyr) => {
+            try {
+                if (lyr && map.hasLayer(lyr)) map.removeLayer(lyr);
+            } catch (_) {
+                // ignore layer removal errors
+            }
+        });
+        _iemRadarOverlayLoop = null;
+    }
+
+    function _iemRadarOverlayShowFrame(state, frameIdx) {
+        const offsets = state.offsets;
+        const clampedIdx = ((frameIdx % offsets.length) + offsets.length) % offsets.length;
+        const mins = offsets[clampedIdx];
+        const nextLayer = state.layers?.[clampedIdx];
+        if (!nextLayer) return;
+
+        const previousIdx = Number.isFinite(state.activeIdx) ? state.activeIdx : -1;
+        const previousLayer = state.layers?.[previousIdx] || null;
+
+        if (previousLayer && previousLayer !== nextLayer) {
+            previousLayer.setOpacity(0);
+        }
+        nextLayer.setOpacity(state.opacity);
+
+        state.currentLayer = nextLayer;
+        state.activeIdx = clampedIdx;
+        state.activeOffsetMinutes = mins;
+        state.transitionLayer = null;
+    }
+
+    function _iemRadarOverlayPrimeLayers(state) {
+        state.layers = state.offsets.map((mins) => {
+            const layer = _iemRadarOverlayBuildLayerForState(state, mins, 0);
+            layer.addTo(map);
+            layer.setOpacity(0);
+            return layer;
+        });
+    }
+
+    function _iemRadarOverlayRefreshLayerUrls(state) {
+        const nextCb = _iemRadarOverlayCacheBust();
+        if (!Number.isFinite(nextCb) || nextCb === state.cacheBust) return;
+        state.cacheBust = nextCb;
+        state.layers.forEach((layer, idx) => {
+            const mins = state.offsets[idx];
+            if (!layer || !Number.isFinite(mins)) return;
+            layer.setUrl(_iemRadarOverlayTileUrl(mins, state.cacheBust));
+        });
+    }
+
+    function _iemRadarOverlayStart(initialOpacity) {
+        _iemRadarOverlayStop();
+        const opacity = Number.isFinite(initialOpacity) ? initialOpacity : 0.6;
+        const state = {
+            offsets: _iemRadarOverlayFrameOffsets(),
+            opacity,
+            cacheBust: _iemRadarOverlayCacheBust(),
+            idx: 0,
+            activeIdx: -1,
+            activeOffsetMinutes: null,
+            currentLayer: null,
+            transitionLayer: null,
+            layers: [],
+            cycleTimer: null,
+            refreshTimer: null,
+            swapTimer: null,
+        };
+
+        _iemRadarOverlayPrimeLayers(state);
+
+        const tick = () => {
+            if (!_iemRadarOverlayLoop) return;
+            const s = _iemRadarOverlayLoop;
+            _iemRadarOverlayShowFrame(s, s.idx);
+            const hold = s.idx === s.offsets.length - 1
+                ? _IEM_RADAR_OVERLAY_PAUSE_MS
+                : _IEM_RADAR_OVERLAY_FRAME_MS;
+            s.idx = (s.idx + 1) % s.offsets.length;
+            s.cycleTimer = setTimeout(tick, hold);
+        };
+
+        state.refreshTimer = setInterval(() => {
+            if (!_iemRadarOverlayLoop) return;
+            if (!_iemRadarOverlayAllowedInContext()) {
+                _iemRadarOverlayStop();
+                return;
+            }
+            const s = _iemRadarOverlayLoop;
+            _iemRadarOverlayRefreshLayerUrls(s);
+            _iemRadarOverlayShowFrame(s, s.activeIdx);
+        }, IEM_RADAR_OVERLAY_REFRESH_MS);
+
+        _iemRadarOverlayLoop = state;
+        _iemRadarOverlayShowFrame(state, state.idx);
+        state.idx = (state.idx + 1) % state.offsets.length;
+        state.cycleTimer = setTimeout(tick, _IEM_RADAR_OVERLAY_FRAME_MS);
+    }
+
+    function _iemRadarOverlaySetOpacity(value) {
+        if (!_iemRadarOverlayLoop) return;
+        const op = parseFloat(value);
+        if (!Number.isFinite(op)) return;
+        _iemRadarOverlayLoop.opacity = op;
+        if (_iemRadarOverlayLoop.currentLayer) {
+            _iemRadarOverlayLoop.currentLayer.setOpacity(op);
+        }
+    }
+
+    function _syncIemRadarOverlay() {
+        const cb = byId('weather-alerts-radar');
+        const opacitySlider = byId('weather-alerts-radar-opacity');
+        if (!cb || !cb.checked) {
+            _iemRadarOverlayStop();
+            return;
+        }
+        if (!_iemRadarOverlayAllowedInContext()) {
+            _iemRadarOverlayStop();
+            return;
+        }
+        const opacity = parseFloat(opacitySlider?.value ?? 0.6);
+        if (!_iemRadarOverlayLoop) {
+            _iemRadarOverlayStart(opacity);
+            return;
+        }
+        _iemRadarOverlaySetOpacity(opacity);
+    }
+
+    function _ensureRadarBackdropLayer() {
+        if (radarBackdropLayer && map.hasLayer(radarBackdropLayer)) {
+            map.removeLayer(radarBackdropLayer);
+        }
+        radarBackdropLayer = null;
+    }
+
+    function _ensureRadarSiteLayer() {
+        if (!radarSiteLayer) radarSiteLayer = L.layerGroup();
+        return radarSiteLayer;
+    }
+
+    function _syncRadarSiteLayerVisibility() {
+        const show = _isTypeEnabled('radar') && !!byId('weather-radar-show-sites')?.checked;
+        const layer = _ensureRadarSiteLayer();
+        if (show) {
+            if (!map.hasLayer(layer)) layer.addTo(map);
+            if (typeof layer.bringToFront === 'function') layer.bringToFront();
+        } else if (map.hasLayer(layer)) {
+            map.removeLayer(layer);
+        }
+    }
+
+    async function _loadRadarSites(force = false) {
+        if (_radarSitesLoaded && !force) {
+            _syncRadarSiteLayerVisibility();
+            return;
+        }
+        const requestSeq = ++_radarSiteRequestSeq;
+        try {
+            const resp = await fetch(apiUrl('/api/radar/live/sites'));
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if (requestSeq !== _radarSiteRequestSeq) return;
+
+            const sites = Array.isArray(data?.sites) ? data.sites : [];
+            const configuredMap = new Map();
+            sites.forEach((site) => {
+                const siteId = String(site?.site || '').toUpperCase();
+                if (!siteId) return;
+                configuredMap.set(siteId, !!site?.configured);
+            });
+            _radarSiteConfiguredMap = configuredMap;
+
+            const select = byId('weather-radar-site');
+            if (select) {
+                const keepValue = _activeRadarSite();
+                select.innerHTML = '<option value="">National Composite</option>';
+                const added = new Set();
+                sites.forEach((site) => {
+                    const siteId = String(site?.site || '').toUpperCase();
+                    if (!siteId || added.has(siteId)) return;
+                    added.add(siteId);
+                    const option = document.createElement('option');
+                    option.value = siteId;
+                    option.textContent = site.configured ? `${siteId} (Live Cache)` : siteId;
+                    select.appendChild(option);
+                });
+                if (keepValue && added.has(keepValue)) select.value = keepValue;
+            }
+
+            const layer = _ensureRadarSiteLayer();
+            layer.clearLayers();
+            sites.forEach((site) => {
+                const lat = Number(site?.lat);
+                const lon = Number(site?.lon);
+                const siteId = String(site?.site || '').toUpperCase();
+                if (!Number.isFinite(lat) || !Number.isFinite(lon) || !siteId) return;
+                const marker = L.circleMarker([lat, lon], {
+                    radius: site.configured ? 4.2 : 3.2,
+                    color: site.configured ? '#fef08a' : '#94a3b8',
+                    weight: 1,
+                    fillColor: site.configured ? '#facc15' : '#64748b',
+                    fillOpacity: 0.9,
+                });
+                marker.bindTooltip(siteId, { direction: 'top', className: 'city-name-label' });
+                marker.on('click', () => {
+                    if (_isTypeEnabled('radar')) {
+                        map.flyTo([lat, lon], Math.max(map.getZoom(), 7), { duration: 0.6 });
+                    }
+                    const sel = byId('weather-radar-site');
+                    if (sel) sel.value = siteId;
+                    loadRadarLiveLatest();
+                });
+                layer.addLayer(marker);
+            });
+
+            _radarSitesLoaded = true;
+            _syncRadarSiteLayerVisibility();
+        } catch (err) {
+            console.error('[radar] Site load error:', err);
+        }
+    }
+
+    function _canApplyRadarResponse(site, product) {
+        return !_archiveMode
+            && !_radarScrubMode
+            && _isTypeEnabled('radar')
+            && _activeRadarSite() === site
+            && _activeRadarProduct() === product;
+    }
+
+    function _clearRadarLiveLayers() {
+        if (radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
+        radarLiveOverlay = null;
+    }
+
+    async function loadRadarLiveLatest() {
+        const site = _activeRadarSite();
+        const product = _activeRadarProduct();
+        const siteConfigured = _radarSiteConfiguredMap.has(site)
+            ? !!_radarSiteConfiguredMap.get(site)
+            : true;
+        const requestSeq = ++_radarLiveRequestSeq;
+        _syncRadarSiteLayerVisibility();
+        _ensureRadarBackdropLayer();
+
+        if (!site) {
+            _clearRadarLiveLayers();
+            _setRadarStatus('Radar overlay is off. Enable Radar Overlay for IEM animation.');
+            setStatus('Radar tab: IEM overlay is off.');
+            return;
+        }
+
+        _setRadarStatus(
+            siteConfigured
+                ? `Loading ${site} ${product} live radar...`
+                : `Loading ${site} ${product} live radar (on-demand L3 render)...`,
+        );
+        setStatus(`Loading radar site ${site} (${product})...`);
+
+        try {
+            const params = new URLSearchParams({ site, product });
+            if (!siteConfigured) params.set('force', '1');
+            const resp = await fetch(apiUrl(`/api/radar/live/latest?${params.toString()}`), {
+                cache: 'no-store',
+            });
+
+            if (requestSeq !== _radarLiveRequestSeq || !_canApplyRadarResponse(site, product)) return;
+
+            let data = null;
+            try {
+                data = await resp.json();
+            } catch (_) {
+                data = null;
+            }
+
+            if (!resp.ok) {
+                const detail = String(data?.detail || data?.error || `HTTP ${resp.status}`);
+                throw new Error(detail);
+            }
+
+            if (typeof data?.configured === 'boolean') {
+                _radarSiteConfiguredMap.set(site, data.configured);
+            }
+
+            const imageUrl = data?.image_url;
+            const bounds = Array.isArray(data?.bounds) ? data.bounds : null;
+            if (!imageUrl || !bounds || bounds.length !== 4) {
+                throw new Error('Live radar image/bounds unavailable.');
+            }
+
+            await new Promise((resolve) => {
+                const img = new Image();
+                img.onload = resolve;
+                img.onerror = resolve;
+                img.src = apiUrl(imageUrl);
+            });
+
+            if (requestSeq !== _radarLiveRequestSeq || !_canApplyRadarResponse(site, product)) return;
+
+            const oldOverlay = radarLiveOverlay;
+            const leafletBounds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
+            const newOverlay = L.imageOverlay(apiUrl(imageUrl), leafletBounds, {
+                opacity: oldOverlay ? 0 : 0.9,
+                zIndex: 320,
+            });
+            if (_isTypeEnabled('radar')) newOverlay.addTo(map);
+
+            if (oldOverlay && _isTypeEnabled('radar')) {
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+                if (requestSeq !== _radarLiveRequestSeq || !_canApplyRadarResponse(site, product)) return;
+                newOverlay.setOpacity(0.9);
+                setTimeout(() => {
+                    if (oldOverlay && map.hasLayer(oldOverlay)) map.removeLayer(oldOverlay);
+                }, RTMA_SCRUB_SWAP_FADE_MS);
+            } else if (oldOverlay && map.hasLayer(oldOverlay)) {
+                map.removeLayer(oldOverlay);
+            }
+
+            radarLiveOverlay = newOverlay;
+
+            const tsMs = _resolveDataTimestampMs(data?.timestamp);
+            _setViewerTimestamp(tsMs);
+            _setReliability('radar', `Radar ${product}`, data?.full_name || `Radar ${product}`, tsMs);
+            _setTimestampSource('radar', 'radar_live_latest', tsMs);
+
+            const provider = String(data?.source || 'live_cache').replaceAll('_', ' ');
+            _setRadarStatus(`${site} ${product} live radar loaded.`);
+            setStatus(`${site} ${product} ${_formatValidTimeLabel(tsMs)} (${provider}).`);
+        } catch (err) {
+            if (requestSeq !== _radarLiveRequestSeq || !_canApplyRadarResponse(site, product)) return;
+            _clearRadarLiveLayers();
+            _setRadarStatus(`Unable to load ${site} ${product} live radar.`);
+            setStatus(`Radar live load failed for ${site}/${product}: ${err.message}`);
+        }
+    }
+
+    function _stopRadarScrubPlay() {
+        if (_radarScrubPlayTimer) {
+            clearInterval(_radarScrubPlayTimer);
+            _radarScrubPlayTimer = null;
+        }
+        const btn = byId('scrubber-play');
+        if (btn) btn.textContent = '▶';
+    }
+
+    function _startRadarScrubPlay() {
+        if (!_radarScrubFrames.length || _radarScrubPlayTimer) return;
+        const btn = byId('scrubber-play');
+        if (btn) btn.textContent = '⏸';
+
+        const tick = async () => {
+            if (!_radarScrubPlayTimer || !_radarScrubFrames.length) return;
+            const atLast = _radarScrubFrameIndex >= _radarScrubFrames.length - 1;
+            const next = atLast ? 0 : _radarScrubFrameIndex + 1;
+            await _renderRadarScrubFrame(next);
+            if (!_radarScrubPlayTimer || !_radarScrubFrames.length) return;
+            const delay = atLast ? RTMA_SCRUB_LOOP_HOLD_MS : RTMA_SCRUB_PLAY_INTERVAL_MS;
+            _radarScrubPlayTimer = setTimeout(tick, delay);
+        };
+
+        _radarScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+    }
+
+    function _canApplyRadarScrubResponse(renderSeq) {
+        return renderSeq === _radarScrubRenderSeq && _radarScrubMode && _isTypeEnabled('radar');
+    }
+
+    async function _renderRadarScrubFrame(index) {
+        if (!_radarScrubFrames.length || !_radarScrubMode || !_isTypeEnabled('radar')) return;
+        _radarScrubFrameIndex = Math.max(0, Math.min(index, _radarScrubFrames.length - 1));
+        _updateRtmaScrubberUi();
+        const renderSeq = ++_radarScrubRenderSeq;
+        const frame = _radarScrubFrames[_radarScrubFrameIndex];
+
+        try {
+            const imageUrl = frame?.image_url;
+            const bounds = Array.isArray(frame?.bounds) ? frame.bounds : null;
+            if (!imageUrl || !bounds || bounds.length !== 4) throw new Error('Frame has no image/bounds.');
+
+            await new Promise((resolve) => {
+                const img = new Image();
+                img.onload = resolve;
+                img.onerror = resolve;
+                img.src = apiUrl(imageUrl);
+            });
+            if (!_canApplyRadarScrubResponse(renderSeq)) return;
+
+            const oldOverlay = radarLiveOverlay;
+            const leafletBounds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
+            const newOverlay = L.imageOverlay(apiUrl(imageUrl), leafletBounds, { opacity: oldOverlay ? 0 : 0.9, zIndex: 320 });
+            if (_isTypeEnabled('radar')) newOverlay.addTo(map);
+
+            if (oldOverlay && _isTypeEnabled('radar')) {
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+                if (!_canApplyRadarScrubResponse(renderSeq)) return;
+                newOverlay.setOpacity(0.9);
+                setTimeout(() => {
+                    if (oldOverlay && map.hasLayer(oldOverlay)) map.removeLayer(oldOverlay);
+                }, RTMA_SCRUB_SWAP_FADE_MS);
+            } else if (oldOverlay && map.hasLayer(oldOverlay)) {
+                map.removeLayer(oldOverlay);
+            }
+
+            radarLiveOverlay = newOverlay;
+            const tsMs = _resolveDataTimestampMs(frame?.timestamp);
+            _setViewerTimestamp(tsMs);
+            _setReliability('radar', `Radar ${_activeRadarProduct()}`, 'Radar live frames', tsMs);
+            _setTimestampSource('radar', 'radar_live_frames', tsMs);
+            _setRtmaScrubberStatus(`${_radarScrubFrameIndex + 1} / ${_radarScrubFrames.length} frames.`);
+            setStatus(`Radar scrub ${_formatValidTimeLabel(tsMs)}.`);
+        } catch (err) {
+            if (!_canApplyRadarScrubResponse(renderSeq)) return;
+            setStatus(`Radar scrubber error: ${err.message}`);
+            _setRtmaScrubberStatus(`Frame unavailable: ${err.message}`);
+        }
+    }
+
+    function _exitRadarScrubMode(shouldRefresh = true) {
+        _stopRadarScrubPlay();
+        _radarScrubLoadSeq += 1;
+        _radarScrubRenderSeq += 1;
+        _radarScrubMode = false;
+        _radarScrubFrames = [];
+        _radarScrubFrameIndex = 0;
+        _setArchiveProgress(false);
+        _setArchiveScrubber(false);
+        _setScrubberControlsEnabled(false);
+        _setRtmaScrubberStatus('');
+        byId('weather-rtma-load-scrubber')?.classList.remove('active');
+        byId('weather-mode-current')?.classList.add('active');
+        const animWin = byId('rtma-animate-window');
+        if (animWin) animWin.style.display = 'none';
+        if (shouldRefresh) loadRadarLiveLatest();
+    }
+
+    async function loadRadarScrubberFrames() {
+        _stopRadarScrubPlay();
+        _radarScrubMode = false;
+        _radarScrubFrames = [];
+        _radarScrubFrameIndex = 0;
+        _setArchiveProgress(false);
+        _setArchiveScrubber(false);
+        _setScrubberControlsEnabled(false);
+        _setRtmaScrubberStatus('Radar scrubber is disabled (IEM overlay only).');
+        setStatus('Radar scrubber is disabled. Radar tab uses IEM overlay only.');
+    }
+
+    function _startRadarAutoRefresh() {
+        // Radar tab no longer uses backend live-radar frame fetches.
+        // Keep this as a no-op so older init wiring does not start timers.
+        return;
+    }
+
     function refreshActiveLayers() {
-        if (_archiveMode || _rtmaScrubMode || _mrmsScrubMode) return;
+        if (_archiveMode || _rtmaScrubMode || _mrmsScrubMode || _radarScrubMode) return;
         const alertsEnabled = _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0;
         const spcEnabled = _isTypeEnabled('spc') && byId('weather-show-spc')?.checked;
         const surfaceProduct = _activeSurfaceProduct();
         const surfaceEnabled = _isTypeEnabled('current') && !!surfaceProduct;
+        const radarEnabled = _isTypeEnabled('radar');
         const rtmaEnabled = _isTypeEnabled('rtma') && !!_activeRtmaStream() && !!_activeRtmaProduct();
         const mrmsEnabled = _isTypeEnabled('mrms') && !!_activeMrmsProduct();
+
+        const droughtEnabled = _isTypeEnabled('drought');
 
         // Clear legend at the start to ensure old legend doesn't persist when switching products
         setLegend(null);
@@ -4830,11 +5644,15 @@
         if (!alertsEnabled && alertsLayer && map.hasLayer(alertsLayer)) map.removeLayer(alertsLayer);
         if (!spcEnabled && spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
         if (!surfaceEnabled && surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
+        if (!radarEnabled && radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
+        if (!radarEnabled && radarBackdropLayer && map.hasLayer(radarBackdropLayer)) map.removeLayer(radarBackdropLayer);
+        if (!radarEnabled && radarSiteLayer && map.hasLayer(radarSiteLayer)) map.removeLayer(radarSiteLayer);
         if (!rtmaEnabled && rtmaOverlay && map.hasLayer(rtmaOverlay)) map.removeLayer(rtmaOverlay);
         if (!rtmaEnabled && rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
         if (!rtmaEnabled && rtmaPointLayer && map.hasLayer(rtmaPointLayer)) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
         if (!mrmsEnabled && mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
         if (!mrmsEnabled && mrmsRadarSiteLayer && map.hasLayer(mrmsRadarSiteLayer)) map.removeLayer(mrmsRadarSiteLayer);
+        if (!droughtEnabled && droughtLayer && map.hasLayer(droughtLayer)) { map.removeLayer(droughtLayer); droughtLayer = null; }
 
         if (!spcEnabled) {
             if (_spcAbortController) {
@@ -4857,11 +5675,18 @@
             const region = byId('weather-region')?.value || 'NC';
             loadSurface(region, surfaceProduct || 'temperature');
         }
+        if (radarEnabled) {
+            _loadRadarSites();
+            loadRadarLiveLatest();
+        }
         if (rtmaEnabled) {
             loadRtma();
         }
         if (mrmsEnabled) {
             loadMrms();
+        }
+        if (droughtEnabled) {
+            loadDroughtLayer();
         }
     }
 
@@ -5773,9 +6598,10 @@
             if (countEl) countEl.textContent = `${stations.length} station(s)`;
             const surfaceTsMs = _resolveDataTimestampMs(data?.timestamp);
             const surfaceStaleNote = _staleNoteForTimestamp(surfaceTsMs);
-            setStatus(`Surface ${product} for ${region} valid ${new Date(surfaceTsMs).toLocaleTimeString()}.${surfaceStaleNote}`);
+            setStatus(`Surface ${product} for ${region} valid ${_formatValidTimeLabel(surfaceTsMs)}.${surfaceStaleNote}`);
             _setViewerTimestamp(surfaceTsMs);
-            _setReliability(`Surface ${product}`, 'IEM', surfaceTsMs);
+            _setReliability('surface', `Surface ${product}`, 'IEM', surfaceTsMs);
+            _setTimestampSource('surface', data?.timestamp_source || 'station_valid', surfaceTsMs);
 
             // Pass the already-fetched stations so _ensureGradientStations
             // doesn't fire a duplicate request for the same endpoint.
@@ -5945,6 +6771,21 @@
         return rtmaRegions.includes(selectedRegion) ? selectedRegion : 'CONUS';
     }
 
+    let _lastMrmsWorkerProductSet = null;
+
+    async function _setMrmsWorkerProduct(product) {
+        if (!product) return;
+        if (_lastMrmsWorkerProductSet === product) return;
+        try {
+            const resp = await fetch(apiUrl(`/api/mrms/set-product?product=${encodeURIComponent(product)}`));
+            if (resp.ok) {
+                _lastMrmsWorkerProductSet = product;
+            }
+        } catch (err) {
+            console.warn('[mrms] Could not set worker active product:', err?.message || err);
+        }
+    }
+
     // composeMrmsProductKey: mirrors Python MRMS_PRODUCTS key structure
     function composeMrmsProductKey() {
         const family = _activeMrmsProduct();
@@ -6023,6 +6864,9 @@
         setStatus(`Loading MRMS ${product}...`);
 
         try {
+            // Keep the backend worker aligned to the current UI MRMS key.
+            await _setMrmsWorkerProduct(product);
+
             // ── Try pre-rendered overlay first (populated by mrms_worker) ───
             let data = null;
             const overlayResp = await fetch(
@@ -6041,9 +6885,16 @@
                     vmax: overlayData?.vmax ?? null,
                     timestamp: overlayData?.timestamp ?? null,
                 };
+
+                const overlayTsMs = _asDate(data?.timestamp)?.getTime() || 0;
+                const overlayIsStale = !overlayTsMs || (Date.now() - overlayTsMs) > MRMS_STALE_MS;
+                if (overlayIsStale) {
+                    // If cached overlay is stale, force a fresh on-demand path.
+                    data = null;
+                }
             }
 
-            // ── Fall back to legacy on-demand endpoint (cold cache / 404) ───
+            // ── Fall back to legacy on-demand endpoint (cold cache / stale cache / 404) ───
             if (!data || !data.image_url) {
                 const bounds = map.getBounds();
                 const s = bounds.getSouth().toFixed(4);
@@ -6073,16 +6924,14 @@
 
             buildMrmsLegend(data);
 
-            const dataTsMs = _asDate(data?.timestamp)?.getTime() || Date.now();
-            const ageMs = Date.now() - dataTsMs;
-            const staleNote = ageMs > MRMS_STALE_MS
-                ? ` [stale: ${_formatAge(ageMs)}]`
-                : '';
+            const dataTsMs = _resolveDataTimestampMs(data?.timestamp);
+            const staleNote = _staleNoteForTimestamp(dataTsMs, MRMS_STALE_MS);
 
-            if (statusEl) statusEl.textContent = `${data.full_name} valid ${new Date(dataTsMs).toLocaleTimeString()}${staleNote}`;
-            setStatus(`MRMS ${product} valid ${new Date(dataTsMs).toLocaleTimeString()}.${staleNote}`);
+            if (statusEl) statusEl.textContent = `${data.full_name} valid ${_formatValidTimeLabel(dataTsMs)}${staleNote}`;
+            setStatus(`MRMS ${product} valid ${_formatValidTimeLabel(dataTsMs)}.${staleNote}`);
             _setViewerTimestamp(dataTsMs);
-            _setReliability(`MRMS ${product}`, 'NOAA MRMS', dataTsMs);
+            _setReliability('mrms', `MRMS ${product}`, 'NOAA MRMS', dataTsMs);
+            _setTimestampSource('mrms', data?.timestamp_source || 'grib_data_timestamp', dataTsMs);
         } catch (err) {
             if (requestSeq !== _mrmsRequestSeq) return;
             console.error('[mrms] Load error:', err);
@@ -6155,15 +7004,16 @@
 
                     buildRtmaLegend(overlayData);
 
-                    const dataTsMs = _asDate(overlayData?.timestamp)?.getTime() || Date.now();
-                    const ageMs = Date.now() - dataTsMs;
-                    const staleNote = ageMs > _rtmaStaleThresholdMs(stream, product)
-                        ? ` [stale: ${_formatAge(ageMs)}]`
-                        : '';
+                    const dataTsMs = _resolveDataTimestampMs(overlayData?.timestamp);
+                    const staleNote = _staleNoteForTimestamp(
+                        dataTsMs,
+                        _rtmaStaleThresholdMs(stream, product)
+                    );
                     const title = overlayData?.full_name || product;
-                    setStatus(`RTMA ${title} valid ${new Date(dataTsMs).toLocaleTimeString()}${staleNote}.`);
+                    setStatus(`RTMA ${title} valid ${_formatValidTimeLabel(dataTsMs)}${staleNote}.`);
                     _setViewerTimestamp(dataTsMs);
-                    _setReliability(`RTMA ${title}`, `NOAA ${stream}`, dataTsMs);
+                    _setReliability('rtma', `RTMA ${title}`, `NOAA ${stream}`, dataTsMs);
+                    _setTimestampSource('rtma', 'overlay_meta_timestamp', dataTsMs);
                     usedPrerender = true;
                 }
             }
@@ -6206,11 +7056,12 @@
             } else {
                 // Cache not yet built for this product — show markers-only notice.
                 buildRtmaLegend(data);
-                const dataTsMs = _asDate(data?.timestamp)?.getTime() || Date.now();
+                const dataTsMs = _resolveDataTimestampMs(data?.timestamp);
                 const title = data?.full_name || product;
                 setStatus(`RTMA ${title} — overlay cache not yet built (markers only).`);
                 _setViewerTimestamp(dataTsMs);
-                _setReliability(`RTMA ${title}`, `NOAA ${stream}`, dataTsMs);
+                _setReliability('rtma', `RTMA ${title}`, `NOAA ${stream}`, dataTsMs);
+                _setTimestampSource('rtma', data?.timestamp_source || 'points_source_timestamp', dataTsMs);
             }
         } catch (err) {
             if (requestSeq !== _rtmaRequestSeq) return;
@@ -6349,8 +7200,12 @@
         const slider = byId('scrubber-slider');
         const tsEl = byId('scrubber-timestamp');
         const cntEl = byId('scrubber-frame-count');
-        const activeFrames = _mrmsScrubMode ? _mrmsScrubFrames : _rtmaScrubFrames;
-        const activeIndex = _mrmsScrubMode ? _mrmsScrubFrameIndex : _rtmaScrubFrameIndex;
+        const activeFrames = _radarScrubMode
+            ? _radarScrubFrames
+            : (_mrmsScrubMode ? _mrmsScrubFrames : _rtmaScrubFrames);
+        const activeIndex = _radarScrubMode
+            ? _radarScrubFrameIndex
+            : (_mrmsScrubMode ? _mrmsScrubFrameIndex : _rtmaScrubFrameIndex);
         const n = activeFrames.length;
         if (slider) {
             slider.min = '0';
@@ -6636,12 +7491,13 @@
             }
 
             buildRtmaLegend(pointsData || data);
-            const dataTsMs = _asDate(pointsData?.timestamp || data?.timestamp || frame.timestamp)?.getTime() || Date.now();
+            const dataTsMs = _resolveDataTimestampMs(pointsData?.timestamp || data?.timestamp || frame.timestamp);
             const title = pointsData?.full_name || data?.full_name || frame.product || _activeRtmaProduct();
             const renderNote = payload._fromPrerender ? 'pre-rendered' : 'cache pending';
-            setStatus(`RTMA scrub ${title} (${renderNote}) ${new Date(dataTsMs).toLocaleTimeString()}.`);
+            setStatus(`RTMA scrub ${title} (${renderNote}) ${_formatValidTimeLabel(dataTsMs)}.`);
             _setViewerTimestamp(dataTsMs);
-            _setReliability(`RTMA ${title}`, `NOAA ${frame.stream || _activeRtmaStream()}`, dataTsMs);
+            _setReliability('rtma', `RTMA ${title}`, `NOAA ${frame.stream || _activeRtmaStream()}`, dataTsMs);
+            _setTimestampSource('rtma', payload._fromPrerender ? 'overlay_meta_timestamp' : 'points_source_timestamp', dataTsMs);
             _setRtmaScrubberStatus(`${_rtmaScrubFrameIndex + 1} / ${_rtmaScrubFrames.length} frames.`);
         } catch (err) {
             if (!_canApplyRtmaScrubResponse(renderSeq)) return;
@@ -6826,11 +7682,12 @@
             _syncMrmsRadarSiteOverlay(bounds);
 
             buildMrmsLegend(frame);
-            const tsMs = _asDate(frame?.timestamp)?.getTime() || Date.now();
+            const tsMs = _resolveDataTimestampMs(frame?.timestamp);
             const product = frame?.product || composeMrmsProductKey() || 'MRMS';
-            setStatus(`MRMS scrub ${product} ${new Date(tsMs).toLocaleTimeString()}.`);
+            setStatus(`MRMS scrub ${product} ${_formatValidTimeLabel(tsMs)}.`);
             _setViewerTimestamp(tsMs);
-            _setReliability(`MRMS ${product}`, 'NOAA MRMS', tsMs);
+            _setReliability('mrms', `MRMS ${product}`, 'NOAA MRMS', tsMs);
+            _setTimestampSource('mrms', 'overlay_frame_timestamp', tsMs);
             _setRtmaScrubberStatus(`${_mrmsScrubFrameIndex + 1} / ${_mrmsScrubFrames.length} frames.`);
 
             // Prefetch next frame image into browser cache (fire-and-forget)
@@ -6854,6 +7711,8 @@
             setStatus('Select an MRMS product first.');
             return;
         }
+
+        await _setMrmsWorkerProduct(product);
 
         _mrmsScrubMode = true;
         _stopMrmsScrubPlay();
@@ -6962,6 +7821,7 @@
     function enterArchiveMode() {
         _archiveMode = true;
         // Disable live radar overlay — it would show current radar against historical data
+        _iemRadarOverlayStop();
         const radarCb = byId('weather-alerts-radar');
         if (radarCb && radarCb.checked) radarCb.dispatchEvent(new Event('change'));
         if (radarCb) radarCb.disabled = true;
@@ -7070,6 +7930,7 @@
 
     function exitArchiveMode() {
         stopScrubberPlay();
+        _iemRadarOverlayStop();
         const radarCb = byId('weather-alerts-radar');
         if (radarCb) radarCb.disabled = false;
         _archiveMode = false;
@@ -7151,7 +8012,7 @@
             } else {
                 tsEl.textContent = '—';
             }
-            _setViewerTimestamp(frame?.timestamp || Date.now());
+            _setViewerTimestamp(frame?.timestamp || null);
         }
     }
 
@@ -7570,6 +8431,10 @@
 
     // ── Archive event wiring ──────────────────────────────────────────────────
     byId('weather-mode-current')?.addEventListener('click', () => {
+        if (_radarScrubMode) {
+            _exitRadarScrubMode(true);
+            return;
+        }
         if (_rtmaScrubMode) {
             _exitRtmaScrubMode(true);
             return;
@@ -7605,6 +8470,14 @@
     byId('archive-to')?.addEventListener('input', () => _setActivePreset('custom'));
 
     byId('scrubber-play')?.addEventListener('click', () => {
+        if (_radarScrubMode) {
+            if (_radarScrubPlayTimer) {
+                _stopRadarScrubPlay();
+            } else {
+                _startRadarScrubPlay();
+            }
+            return;
+        }
         if (_rtmaScrubMode) {
             if (_rtmaScrubPlayTimer) {
                 _stopRtmaScrubPlay();
@@ -7625,6 +8498,11 @@
     });
 
     byId('scrubber-step-back')?.addEventListener('click', () => {
+        if (_radarScrubMode) {
+            _stopRadarScrubPlay();
+            _renderRadarScrubFrame(_radarScrubFrameIndex - 1);
+            return;
+        }
         if (_rtmaScrubMode) {
             _stopRtmaScrubPlay();
             _renderRtmaScrubFrame(_rtmaScrubFrameIndex - 1);
@@ -7640,6 +8518,11 @@
     });
 
     byId('scrubber-step-fwd')?.addEventListener('click', () => {
+        if (_radarScrubMode) {
+            _stopRadarScrubPlay();
+            _renderRadarScrubFrame(_radarScrubFrameIndex + 1);
+            return;
+        }
         if (_rtmaScrubMode) {
             _stopRtmaScrubPlay();
             _renderRtmaScrubFrame(_rtmaScrubFrameIndex + 1);
@@ -7655,6 +8538,11 @@
     });
 
     byId('scrubber-slider')?.addEventListener('input', (e) => {
+        if (_radarScrubMode) {
+            _stopRadarScrubPlay();
+            _renderRadarScrubFrame(parseInt(e.target.value, 10));
+            return;
+        }
         if (_rtmaScrubMode) {
             _stopRtmaScrubPlay();
             _renderRtmaScrubFrame(parseInt(e.target.value, 10));
@@ -7974,6 +8862,10 @@
             loadMrmsScrubberFrames();
             return;
         }
+        if (_radarScrubMode) {
+            loadRadarScrubberFrames();
+            return;
+        }
         refreshActiveLayers();
     });
 
@@ -8055,10 +8947,13 @@
                 if (type !== 'mrms' && _mrmsScrubMode) {
                     _exitMrmsScrubMode(false);
                 }
+                if (type !== 'radar' && _radarScrubMode) {
+                    _exitRadarScrubMode(false);
+                }
                 _resetTransientInteractiveUiForTabChange();
                 fitRegion(byId('weather-region')?.value || 'CONUS');
                 if (['radar', 'satellite', 'rtma', 'drought', 'tropical'].includes(type)) {
-                    _setViewerTimestamp(Date.now());
+                    _setViewerTimestamp(null);
                 }
             }
             _updateTypeSections();
@@ -8071,6 +8966,7 @@
             } else {
                 refreshActiveLayers();
             }
+            _syncIemRadarOverlay();
         });
     });
 
@@ -8271,8 +9167,8 @@
     });
 
     byId('weather-rtma-load-scrubber')?.addEventListener('click', () => {
-        if (!_isTypeEnabled('rtma') && !_isTypeEnabled('mrms')) {
-            setStatus('Select RTMA or MRMS to use Animate.');
+        if (!_isTypeEnabled('radar') && !_isTypeEnabled('rtma') && !_isTypeEnabled('mrms')) {
+            setStatus('Select Radar, RTMA, or MRMS to use Animate.');
             return;
         }
         byId('weather-mode-current')?.classList.remove('active');
@@ -8280,6 +9176,10 @@
         byId('weather-rtma-load-scrubber')?.classList.add('active');
         const animWin = byId('rtma-animate-window');
         if (animWin) animWin.style.display = '';
+        if (_isTypeEnabled('radar')) {
+            loadRadarScrubberFrames();
+            return;
+        }
         if (_isTypeEnabled('mrms')) {
             loadMrmsScrubberFrames();
             return;
@@ -8292,6 +9192,7 @@
         btn.addEventListener('click', () => {
             document.querySelectorAll('.wx-animate-window-btn').forEach((b) => b.classList.remove('active'));
             btn.classList.add('active');
+            if (_radarScrubMode) loadRadarScrubberFrames();
             if (_rtmaScrubMode) loadRtmaScrubberFrames();
             if (_mrmsScrubMode) loadMrmsScrubberFrames();
         });
@@ -8339,6 +9240,42 @@
     });
 
     byId('weather-refresh-mrms')?.addEventListener('click', loadMrms);
+
+    byId('weather-refresh-drought')?.addEventListener('click', () => {
+        if (_isTypeEnabled('drought')) loadDroughtLayer();
+    });
+    document.querySelectorAll('.drought-cat-check').forEach((cb) => {
+        cb.addEventListener('change', () => {
+            if (!_isTypeEnabled('drought')) return;
+            // Re-apply filter without re-fetching
+            if (droughtLayer) {
+                const enabledCats = _activeDroughtCategories();
+                const opacity = parseFloat(byId('weather-opacity-drought')?.value ?? 0.75);
+                droughtLayer.eachLayer((l) => {
+                    const dm = Number(l.feature?.properties?.DM);
+                    if (enabledCats.includes(dm)) {
+                        l.setStyle({ fillOpacity: opacity, opacity: 0.8 });
+                        if (!map.hasLayer(droughtLayer)) droughtLayer.addTo(map);
+                    } else {
+                        l.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 });
+                    }
+                });
+                buildDroughtLegend(enabledCats, _lastDroughtStateStats, _lastDroughtStateCode);
+            }
+        });
+    });
+    byId('weather-opacity-drought')?.addEventListener('input', (e) => {
+        const opacity = parseFloat(e.target.value);
+        if (droughtLayer) {
+            const enabledCats = _activeDroughtCategories();
+            droughtLayer.eachLayer((l) => {
+                const dm = Number(l.feature?.properties?.DM);
+                if (enabledCats.includes(dm)) {
+                    l.setStyle({ fillOpacity: opacity, opacity: 0.8 });
+                }
+            });
+        }
+    });
 
     byId('weather-opacity-alerts')?.addEventListener('input', (e) => applyAlertsOpacity(e.target.value));
     byId('weather-opacity-spc')?.addEventListener('input', (e) => applySpcOpacity(e.target.value));
@@ -8496,135 +9433,31 @@
         }
     }
 
-    // ── Persistent radar-overlay loop (Alerts panel "Radar Overlay" checkbox) ─
-    // 4-frame loop reusing the same IEM tile naming as the new-alert loop, but
-    // with its own state so opacity can be driven by the sidebar slider and
-    // the frames refresh every 5 minutes so "now" keeps moving forward.
-    const _RADAR_OVERLAY_FRAMES = 10;
-    const _RADAR_OVERLAY_STEP_MIN = 5;
-    const _RADAR_OVERLAY_FRAME_MS = 700;
-    const _RADAR_OVERLAY_PAUSE_MS = 3000;
-    let _radarOverlayLoop = null;
-
-    // Returns a cache-bust token rounded to the nearest 5-minute boundary so
-    // tiles refresh in sync with the IEM scan cycle without hammering with a
-    // new token every second.
-    function _radarCacheBust() {
-        const bucket = _RADAR_OVERLAY_STEP_MIN * 60 * 1000; // 5 min in ms
-        return Math.floor(Date.now() / bucket);
-    }
-
-    function _radarOverlayBuildLayers(opacity) {
-        const offsets = [];
-        for (let i = _RADAR_OVERLAY_FRAMES - 1; i >= 0; i--) {
-            offsets.push(i * _RADAR_OVERLAY_STEP_MIN);
-        }
-        const cb = _radarCacheBust();
-        return offsets.map((mins) => {
-            const slug = mins === 0
-                ? 'nexrad-n0q-900913'
-                : `nexrad-n0q-m${String(mins).padStart(2, '0')}m-900913`;
-            const url = `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/${slug}/{z}/{x}/{y}.png?_cb=${cb}`;
-            return L.tileLayer(url, {
-                opacity: 0,
-                zIndex: 300,
-                attribution: '&copy; Iowa State Mesonet / NWS',
-            }).addTo(map);
-        });
-    }
-
-    function _radarOverlayStartLoop(initialOpacity) {
-        _radarOverlayStopLoop();
-        const opacity = Number.isFinite(initialOpacity) ? initialOpacity : 0.6;
-        const layers = _radarOverlayBuildLayers(opacity);
-        const state = {
-            layers,
-            opacity,
-            idx: 0,
-            cycleTimer: null,
-            refreshTimer: null,
-        };
-
-        const tick = () => {
-            if (!_radarOverlayLoop) return;
-            const s = _radarOverlayLoop;
-            s.layers.forEach((lyr, i) => lyr.setOpacity(i === s.idx ? s.opacity : 0));
-            const hold = s.idx === s.layers.length - 1 ? _RADAR_OVERLAY_PAUSE_MS : _RADAR_OVERLAY_FRAME_MS;
-            s.idx = (s.idx + 1) % s.layers.length;
-            s.cycleTimer = setTimeout(tick, hold);
-        };
-
-        // Rebuild the frame URLs every 5 minutes so the loop keeps tracking
-        // the most recent radar volume.
-        state.refreshTimer = setInterval(() => {
-            if (!_radarOverlayLoop) return;
-            const op = _radarOverlayLoop.opacity;
-            _radarOverlayLoop.layers.forEach((lyr) => {
-                try { if (map.hasLayer(lyr)) map.removeLayer(lyr); } catch (_) { /* ignore */ }
-            });
-            _radarOverlayLoop.layers = _radarOverlayBuildLayers(op);
-            _radarOverlayLoop.idx = 0;
-        }, NEXRAD_REFRESH_MS);
-
-        _radarOverlayLoop = state;
-        tick();
-    }
-
-    function _radarOverlayStopLoop() {
-        const s = _radarOverlayLoop;
-        if (!s) return;
-        if (s.cycleTimer) clearTimeout(s.cycleTimer);
-        if (s.refreshTimer) clearInterval(s.refreshTimer);
-        s.layers.forEach((lyr) => {
-            try { if (map.hasLayer(lyr)) map.removeLayer(lyr); } catch (_) { /* ignore */ }
-        });
-        _radarOverlayLoop = null;
-    }
-
-    // When the browser tab returns to the foreground, force a full layer
-    // rebuild so throttled/suspended timers don't leave stale tiles on screen.
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState !== 'visible') return;
-        if (!_radarOverlayLoop) return;
-        const op = _radarOverlayLoop.opacity;
-        _radarOverlayLoop.layers.forEach((lyr) => {
-            try { if (map.hasLayer(lyr)) map.removeLayer(lyr); } catch (_) { /* ignore */ }
-        });
-        _radarOverlayLoop.layers = _radarOverlayBuildLayers(op);
-        _radarOverlayLoop.idx = 0;
-    });
-
-    function _radarOverlaySetOpacity(value) {
-        if (!_radarOverlayLoop) return;
-        const op = parseFloat(value);
-        if (!Number.isFinite(op)) return;
-        _radarOverlayLoop.opacity = op;
-        // The non-active frames stay at 0; only the active frame visually changes.
-        const s = _radarOverlayLoop;
-        s.layers.forEach((lyr, i) => {
-            // Active frame index is one behind the next-to-show idx.
-            const activeIdx = (s.idx - 1 + s.layers.length) % s.layers.length;
-            lyr.setOpacity(i === activeIdx ? op : 0);
-        });
-    }
-
     byId('weather-alerts-radar')?.addEventListener('change', function () {
         const opacityLabel = byId('weather-alerts-radar-opacity-label');
         const opacitySlider = byId('weather-alerts-radar-opacity');
-        if (this.checked) {
-            const opacity = parseFloat(opacitySlider?.value ?? 0.6);
-            _radarOverlayStartLoop(opacity);
-            if (opacityLabel) opacityLabel.style.display = '';
-            if (opacitySlider) opacitySlider.style.display = '';
-        } else {
-            _radarOverlayStopLoop();
-            if (opacityLabel) opacityLabel.style.display = 'none';
-            if (opacitySlider) opacitySlider.style.display = 'none';
+        if (opacityLabel) opacityLabel.style.display = this.checked ? '' : 'none';
+        if (opacitySlider) opacitySlider.style.display = this.checked ? '' : 'none';
+
+        _syncIemRadarOverlay();
+
+        if (this.checked && !_iemRadarOverlayAllowedInContext()) {
+            setStatus('Radar overlay is available on Current, Alerts, SPC, RTMA, and Radar tabs only.');
+        }
+
+        if (_isTypeEnabled('radar') && !_activeRadarSite()) {
+            if (this.checked && _iemRadarOverlayAllowedInContext()) {
+                _setRadarStatus('Showing national animated radar overlay (IEM only).');
+                setStatus('Radar tab: national animated radar overlay active.');
+            } else {
+                _setRadarStatus('Radar overlay is off (IEM only mode).');
+                setStatus('Radar tab: IEM overlay is off.');
+            }
         }
     });
 
     byId('weather-alerts-radar-opacity')?.addEventListener('input', function () {
-        _radarOverlaySetOpacity(this.value);
+        _iemRadarOverlaySetOpacity(this.value);
     });
 
     byId('weather-alerts-nowcoast')?.addEventListener('change', function () {
@@ -8668,6 +9501,40 @@
             return;
         }
         loadSurface(region, product);
+    });
+
+    byId('weather-radar-site')?.addEventListener('change', () => {
+        if (!_isTypeEnabled('radar')) return;
+        if (_radarScrubMode) {
+            loadRadarScrubberFrames();
+            return;
+        }
+        loadRadarLiveLatest();
+    });
+
+    byId('weather-radar-product')?.addEventListener('change', () => {
+        if (!_isTypeEnabled('radar')) return;
+        if (_radarScrubMode) {
+            loadRadarScrubberFrames();
+            return;
+        }
+        loadRadarLiveLatest();
+    });
+
+    byId('weather-radar-show-sites')?.addEventListener('change', () => {
+        _syncRadarSiteLayerVisibility();
+    });
+
+    byId('weather-refresh-radar')?.addEventListener('click', () => {
+        if (!_isTypeEnabled('radar')) {
+            setStatus('Enable the Radar tab first.');
+            return;
+        }
+        if (_radarScrubMode) {
+            loadRadarScrubberFrames();
+            return;
+        }
+        loadRadarLiveLatest();
     });
 
 
@@ -8761,6 +9628,11 @@
     // ── Init ─────────────────────────────────────────────────────────────────
     function init() {
         _applyDefaultAlertSelection();
+        const radarCb = byId('weather-alerts-radar');
+        const radarOpacityLabel = byId('weather-alerts-radar-opacity-label');
+        const radarOpacitySlider = byId('weather-alerts-radar-opacity');
+        if (radarOpacityLabel) radarOpacityLabel.style.display = radarCb?.checked ? '' : 'none';
+        if (radarOpacitySlider) radarOpacitySlider.style.display = radarCb?.checked ? '' : 'none';
         _syncSpcConvectiveOptions(false);
         _syncSpcFireWeatherOptions(false);
         _updateTypeSections();
@@ -8786,16 +9658,19 @@
         _updateGradientBlurLabel();
         _updateGradientBlurControlVisibility();
         _syncRtmaProductForStream();
+        _loadRadarSites();
+        _startRadarAutoRefresh();
         _syncRightSidebarLayers();
-        _setViewerTimestamp(Date.now());
+        _setViewerTimestamp(null);
         refreshActiveLayers();
+        _syncIemRadarOverlay();
         _startReliabilityTicker();
     }
 
     // ── Auto-refresh alerts every 30s to match the OS-task backend cadence ──
     const ALERTS_AUTO_REFRESH_MS = 30_000;
     setInterval(() => {
-        if (_archiveMode || _rtmaScrubMode || _mrmsScrubMode) return;
+        if (_archiveMode || _rtmaScrubMode || _mrmsScrubMode || _radarScrubMode) return;
         if (!_isTypeEnabled('alerts')) return;
         if (!_getCheckedAlertCategories().length) return;
         loadAlerts();
@@ -8805,7 +9680,7 @@
     // and expired products are removed without a manual refresh.
     const SPC_AUTO_REFRESH_MS = 60_000;
     setInterval(() => {
-        if (_archiveMode || _rtmaScrubMode || _mrmsScrubMode) return;
+        if (_archiveMode || _rtmaScrubMode || _mrmsScrubMode || _radarScrubMode) return;
         if (!_isTypeEnabled('spc')) return;
         if (!byId('weather-show-spc')?.checked) return;
         const supplemental = _spcSupplementalSelections();

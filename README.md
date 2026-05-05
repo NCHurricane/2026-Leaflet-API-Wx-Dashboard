@@ -136,6 +136,30 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### 4. Run Profiles (Worker Modes)
+
+Use the launchers in `tools/` to start with explicit worker behavior:
+
+- API-only mode (no in-process APScheduler):
+
+```powershell
+.\tools\run_api_only.ps1
+```
+
+- In-process mode (enable `WX_INPROC_WORKERS=1`):
+
+```powershell
+.\tools\run_inproc_workers.ps1
+```
+
+- Dual mode (Task Scheduler + in-process workers):
+
+```powershell
+.\tools\run_dual_mode.ps1
+```
+
+Dual mode is intended for validation/stress testing because it can duplicate refresh work.
+
 Server starts on:
 
 - `http://127.0.0.1:8000`

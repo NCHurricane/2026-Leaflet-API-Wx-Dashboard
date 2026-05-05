@@ -282,7 +282,8 @@ def list_nexrad_files(
                     day_keys = _list_gcs_keys_for_prefix(level2_bucket, prefix)
                 else:
                     day_keys = _list_objects_for_prefix(
-                        s3_client, level2_bucket, prefix)
+                        s3_client, level2_bucket, prefix
+                    )
                 _log(f"[NODD] Level2: Found {len(day_keys)} files in {prefix}")
                 keys.extend(day_keys)
             except Exception as e:
@@ -383,8 +384,7 @@ def list_nexrad_files(
                     for bucket in level3_buckets:
                         try:
                             if provider == "gcp":
-                                day_keys = _list_gcs_keys_for_prefix(
-                                    bucket, prefix)
+                                day_keys = _list_gcs_keys_for_prefix(bucket, prefix)
                             else:
                                 day_keys = _list_objects_for_prefix(
                                     s3_client, bucket, prefix
@@ -444,8 +444,7 @@ def list_nexrad_files(
                     if provider == "gcp":
                         keys.extend(_list_gcs_keys_for_prefix(bucket, prefix))
                     else:
-                        keys.extend(_list_objects_for_prefix(
-                            s3_client, bucket, prefix))
+                        keys.extend(_list_objects_for_prefix(s3_client, bucket, prefix))
                 except Exception as e:
                     _log(
                         f"[WARN] Level3 archive list failed "
@@ -579,7 +578,7 @@ def download_radar_data(
         # Archive downloads go into a separate directory tree
         save_dir = os.path.join(
             base_dir,
-            "radar_archive",
+            "archive",
             f"radar_{level_path}_downloads",
             product,
             station_id,
@@ -676,12 +675,9 @@ def download_radar_data(
         f"[TIMER] download loop took {_time.perf_counter() - _t_dl:.2f}s  (downloaded={downloaded}/{total_files})"
     )
     _t_cache = _time.perf_counter()
-    _enforce_cache_size(os.path.join(
-        base_dir, f"radar_{level_path}_downloads"))
-    _log(
-        f"[TIMER] _enforce_cache_size took {_time.perf_counter() - _t_cache:.2f}s")
-    _log(
-        f"[TIMER] download_radar_data TOTAL {_time.perf_counter() - _t_total:.2f}s")
+    _enforce_cache_size(os.path.join(base_dir, f"radar_{level_path}_downloads"))
+    _log(f"[TIMER] _enforce_cache_size took {_time.perf_counter() - _t_cache:.2f}s")
+    _log(f"[TIMER] download_radar_data TOTAL {_time.perf_counter() - _t_total:.2f}s")
     return save_dir, total_files, downloaded
 
 

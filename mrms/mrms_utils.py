@@ -171,9 +171,19 @@ def decompress_grib2_gz(gz_path: str) -> str:
 
     grib_path = gz_path[:-3]  # Remove .gz extension
 
-    # Skip if already decompressed
+    # Skip decompression only when the existing .grib2 is as new as (or newer
+    # than) the .gz.  If the .gz was just updated by the worker, the .grib2
+    # will be older and must be replaced to avoid serving stale data.
     if os.path.exists(grib_path):
-        return grib_path
+        gz_mtime = os.path.getmtime(gz_path)
+        grib_mtime = os.path.getmtime(grib_path)
+        if grib_mtime >= gz_mtime:
+            return grib_path
+        # .gz is newer — remove the stale uncompressed copy before re-extracting.
+        try:
+            os.remove(grib_path)
+        except OSError:
+            pass
 
     with gzip.open(gz_path, "rb") as f_in:
         with open(grib_path, "wb") as f_out:

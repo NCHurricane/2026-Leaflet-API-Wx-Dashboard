@@ -39,3 +39,42 @@ L3_PRODUCTS = {
     "N0U": "Base Velocity",
     "N1U": "Base Velocity (1.5°)",
 }
+
+
+# Live radar tab cache config (weather.html inline tab)
+LIVE_RADAR_SITES = [
+    "KMHX",
+    "KLTX",
+    "KAKQ",
+    "KRAX",
+]
+
+# Keys are UI/backend-facing product IDs for the weather.html Radar tab.
+LIVE_RADAR_PRODUCTS = {
+    "L2_REF": {
+        "level": "Level 2",
+        "product": "REF",
+        "label": "L2 Reflectivity",
+    },
+    "L2_VEL": {
+        "level": "Level 2",
+        "product": "VEL",
+        "label": "L2 Velocity",
+    },
+    "L3_N0B": {
+        "level": "Level 3",
+        "product": "N0B",
+        "label": "L3 Reflectivity",
+    },
+    "L3_N0G": {
+        "level": "Level 3",
+        "product": "N0G",
+        "label": "L3 Velocity",
+    },
+}
+
+# Worker cadence and retention.
+LIVE_RADAR_LOOKBACK_HOURS = 2
+LIVE_RADAR_WORKER_INTERVAL_MIN = 5
+LIVE_RADAR_TILE_WORKER_INTERVAL_MIN = 5
+LIVE_RADAR_KEEP_FRAMES = 30
