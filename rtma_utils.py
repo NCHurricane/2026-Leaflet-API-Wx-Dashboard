@@ -124,6 +124,19 @@ def _format_legend_value(value: float) -> str:
     return str(int(value)) if float(value).is_integer() else f"{value:.1f}"
 
 
+def _format_display_value(product: str, value: float) -> float | int:
+    """Format point values for UI display by product.
+
+    Temperature is shown as whole-degree values; all other RTMA products keep
+    one decimal place.
+    """
+    if product == "temperature":
+        if value >= 0:
+            return int(np.floor(value + 0.5))
+        return int(np.ceil(value - 0.5))
+    return round(value, 1)
+
+
 def _build_anchor_colormap(name: str, anchors: list[tuple[float, str]]):
     from matplotlib.colors import LinearSegmentedColormap
 
@@ -552,10 +565,23 @@ def resolve_rtma_source_by_data_key(
     """Resolve a specific frame by data key inside a bounded lookback window."""
     if not data_key:
         raise ValueError("RTMA data_key is required.")
+
+    # Frontend overlay APIs use canonical frame keys (YYYY_MM_DD_HH_MM_SS)
+    # as source_data_key. Support both full GRIB data_key and frame-key inputs.
+    frame_dt: datetime | None = None
+    try:
+        frame_dt = datetime.strptime(data_key, "%Y_%m_%d_%H_%M_%S").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError:
+        frame_dt = None
+
     for candidate in iter_rtma_sources_within_hours(
         region, stream, product, hours_back=hours_back, now=now
     ):
         if candidate.data_key == data_key:
+            return candidate
+        if frame_dt is not None and candidate.valid_time == frame_dt:
             return candidate
     raise FileNotFoundError(
         f"No RTMA source found for data_key={data_key}, region={region}, "
@@ -855,7 +881,13 @@ def sample_rtma_points(
             else:
                 lat_val = float(latitude[r, c])
                 lon_val = float(longitude[r, c])
-            points.append({"lat": lat_val, "lon": lon_val, "value": round(fval, 1)})
+            points.append(
+                {
+                    "lat": lat_val,
+                    "lon": lon_val,
+                    "value": _format_display_value(product, fval),
+                }
+            )
 
     return points
 
@@ -902,6 +934,10 @@ def ensure_rtma_city_geojson(
 
     cities = _load_city_points(cities_path)
     city_points = _sample_city_values(data, latitude, longitude, cities)
+
+    if product == "temperature":
+        for point in city_points:
+            point["value"] = _format_display_value(product, float(point["value"]))
 
     # Compact format: constant fields go in a single header; per-point data is
     # a flat list of [lat, lon, value, rank] tuples (no repeated keys).
@@ -997,7 +1033,13 @@ def ensure_rtma_grid_json(
                 continue
             lat_val = float(latitude[r]) if is_1d else float(latitude[r, c])
             lon_val = float(longitude[c]) if is_1d else float(longitude[r, c])
-            points.append([round(lat_val, 3), round(lon_val, 3), round(fval, 1)])
+            points.append(
+                [
+                    round(lat_val, 3),
+                    round(lon_val, 3),
+                    _format_display_value(product, fval),
+                ]
+            )
 
     meta = {
         "source_data_key": source.data_key,

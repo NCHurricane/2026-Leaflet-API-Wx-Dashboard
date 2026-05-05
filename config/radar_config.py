@@ -47,6 +47,9 @@ LIVE_RADAR_SITES = [
     "KLTX",
     "KAKQ",
     "KRAX",
+    "KFCX",
+    "KMRX",
+    "KGSP",
 ]
 
 # Keys are UI/backend-facing product IDs for the weather.html Radar tab.
@@ -74,7 +77,7 @@ LIVE_RADAR_PRODUCTS = {
 }
 
 # Worker cadence and retention.
-LIVE_RADAR_LOOKBACK_HOURS = 2
+LIVE_RADAR_LOOKBACK_HOURS = 3
 LIVE_RADAR_WORKER_INTERVAL_MIN = 5
 LIVE_RADAR_TILE_WORKER_INTERVAL_MIN = 5
-LIVE_RADAR_KEEP_FRAMES = 30
+LIVE_RADAR_KEEP_FRAMES = 45

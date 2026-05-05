@@ -217,3 +217,41 @@ The overlay cache is already structured to support arbitrarily deep scrubbing. F
 - No frontend changes required — `loadRtmaScrubberFrames()` / `loadMrmsFrames()` already call `/api/overlay/frames`, which returns whatever is in the cache; the scrubber slider auto-sizes to the available frame count.
 
 The only practical constraints are local disk space and the S3 source data availability window (NODD retains RTMA/MRMS data for a rolling 2–7 days depending on product).
+
+## Radar Filtered Reflectivity — Future Enhancement (2026-05-05)
+
+**Planned Feature:**
+
+Dual-render filtered reflectivity output to reduce ground clutter and clear-air artifacts. Worker generates two overlay PNGs per frame:
+
+- `{PRODUCT}_full.png` — original data (current behavior)
+- `{PRODUCT}_filtered.png` — clutter masked
+
+Filtering logic (to be implemented in `workers/radar_live_worker.py`):
+
+```python
+mask = (
+    (cc < 0.82) &  # Low correlation coefficient targets non-precipitation
+    (reflectivity < 40)  # Weak reflectivity targets clutter + weak returns
+)
+reflectivity[mask] = np.nan  # PyART-compatible masking
+```
+
+**Requirements:**
+
+1. Verify correlation coefficient (CC) field availability in NEXRAD Level 2 via PyART (field name: `correlation_coefficient`)
+2. Modify `_render_overlay_png()` to apply mask before colormap rendering
+3. Store both frame variants in cache; update metadata schema to track `{full,filtered}` frames
+4. Add `/api/radar/live/frames?filter=true|false` query parameter to endpoint
+5. Frontend toggle in Radar sidebar; update legend title/annotation when filtered mode active
+6. State persistence strategy (preserve toggle across site/product switches or reset per interaction)
+
+**Design Trade-offs:**
+
+- **Dual-render (recommended)**: 2x cache storage, instant toggle UX (~0ms latency)
+- **On-demand filtering endpoint**: Lighter cache, ~500ms latency on first toggle if not pre-cached
+- **Frontend canvas masking**: Zero backend changes, but requires CC pixel-data and complex JS canvas logic
+
+**Threshold Validation:**
+
+CC < 0.82 and reflectivity < 40 dBZ are scientifically sound but may require regional tuning. Consider making thresholds user-configurable if adopted.

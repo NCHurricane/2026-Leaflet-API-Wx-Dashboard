@@ -469,6 +469,21 @@
                 line-height: 1.08;
             }
 
+            #weather-radar-opts>.wx-check-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 20px;
+                align-items: center;
+                gap: 12px;
+                padding: 0 0 0 5px;
+                margin: 0 0 8px 0;
+                font-size: 0.8rem;
+                line-height: 1.08;
+            }
+
+            .wx-block .wx-radar-select select {
+                margin: 8px 0;
+            }
+
             .wx-gradient-label {
                 font-size: 0.7rem;
                 opacity: 0.65;
@@ -1872,6 +1887,44 @@
                 border-color: var(--wx-cyan);
             }
 
+            #weather-rtma-load-scrubber.radar-animate-filling {
+                color: #ffffff;
+                border-color: #f59e0b;
+                animation: radar-fill-pulse 1.5s ease-in-out infinite;
+            }
+
+            #weather-rtma-load-scrubber.radar-animate-newframe {
+                color: #000000;
+                border-color: #22c55e;
+                animation: radar-new-frame-pulse 0.85s ease-in-out infinite;
+            }
+
+            @keyframes radar-fill-pulse {
+
+                0%,
+                100% {
+                    opacity: 1;
+                }
+
+                50% {
+                    opacity: 0.55;
+                }
+            }
+
+            @keyframes radar-new-frame-pulse {
+
+                0%,
+                100% {
+                    opacity: 1;
+                    transform: scale(1);
+                }
+
+                50% {
+                    opacity: 0.72;
+                    transform: scale(1.03);
+                }
+            }
+
             .wx-drought-date-btn {
                 background: #1e293b;
                 border: 1px solid #475569;
@@ -3172,24 +3225,26 @@
                             <select id="weather-radar-site" class="wx-sidebar-select">
                                 <option value="">National Composite</option>
                             </select>
-
-                            <label for="weather-radar-product">Product</label>
-                            <select id="weather-radar-product" class="wx-sidebar-select">
-                                <option value="L2_REF">L2 Reflectivity</option>
-                                <option value="L2_VEL">L2 Velocity</option>
-                                <option value="L3_N0B" selected>L3 Reflectivity</option>
-                                <option value="L3_N0G">L3 Velocity</option>
-                                <option value="L3_DTA">L3 Storm Total Precip</option>
-                            </select>
-
                             <div class="wx-check-row" style="margin-top:8px;">
                                 <span>Show Radar Sites</span>
                                 <input id="weather-radar-show-sites" type="checkbox" checked>
                             </div>
+                            <label for="weather-radar-product">Product</label>
+                            <div class="wx-radar-select" id="wx-radar-select">
+                                <select id="weather-radar-product" class="wx-sidebar-select">
+                                    <option value="L2_REF">L2 Reflectivity</option>
+                                    <option value="L2_VEL">L2 Velocity</option>
+                                    <option value="L3_N0B" selected>L3 Reflectivity</option>
+                                    <option value="L3_N0G">L3 Velocity</option>
+                                    <option value="L3_DTA">L3 Storm Total Precip</option>
+                                </select>
+                            </div>
 
-                            <span id="weather-radar-status" class="wx-small"></span>
+
                             <button id="weather-refresh-radar" type="button">Refresh</button>
                         </div>
+                        <span id="weather-radar-status" class="wx-small"></span>
+
                     </div>
 
                     <div id="wx-section-rtma" class="wx-block" data-type="rtma" style="display:none;">
@@ -3502,6 +3557,13 @@
                             <button id="weather-rtma-load-scrubber" class="wx-mode-tab" type="button">Animate</button>
                         </div>
                         <span id="wx-scrubber-status" class="wx-small" style="display:block; margin-top:4px;"></span>
+                        <span id="wx-radar-next-update-status" class="wx-small"
+                            style="display:none; margin-top:2px; color:#94a3b8;"></span>
+                        <label id="wx-radar-auto-update-row" class="wx-small"
+                            style="display:none; margin-top:5px; cursor:pointer; user-select:none;">
+                            <input id="wx-radar-auto-update" type="checkbox" checked style="margin-right:4px;">
+                            Auto-update <span id="wx-radar-auto-update-status" style="color:#94a3b8;"></span>
+                        </label>
                         <div id="rtma-animate-window" class="wx-animate-window" style="display:none;">
                             <label class="wx-small" style="color:#94a3b8; display:block; margin-bottom:3px;">Animation
                                 Window</label>

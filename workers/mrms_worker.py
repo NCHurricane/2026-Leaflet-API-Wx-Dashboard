@@ -245,26 +245,31 @@ def _write_mrms_overlay_cache(
     once at the end).
     """
     from cache.overlay_cache_utils import (
-        build_overlay_meta,
+        flat_overlay_image_path,
+        flat_overlay_prune_frames,
+        flat_overlay_read_processed_keys,
+        flat_overlay_update_index,
+        flat_overlay_write_processed_keys,
         frame_key_from_datetime,
-        overlay_bounds_path,
-        overlay_image_path,
-        prune_overlay_frames,
-        update_overlay_index,
-        write_overlay_meta,
     )
     from config.mrms_config import MRMS_PRODUCTS
     from mrms.legend_utils import build_mrms_legend
 
     prod_info = MRMS_PRODUCTS.get(product, {})
-    family = "mrms"
-    region = "CONUS"
-    stream = "default"
+    path_parts = ("CONUS", "default", product)
 
     dt_utc = (
         file_dt if file_dt.tzinfo is not None else file_dt.replace(tzinfo=timezone.utc)
     )
     frame_key = frame_key_from_datetime(dt_utc)
+    source_key = f"mrms:{product}:{frame_key}"
+
+    # Dedup: skip if this frame has already been processed.
+    processed_keys = flat_overlay_read_processed_keys(_CACHE_ROOT, "mrms", path_parts)
+    if source_key in processed_keys:
+        img_path = flat_overlay_image_path(_CACHE_ROOT, "mrms", path_parts, frame_key)
+        if os.path.exists(img_path) and os.path.getsize(img_path) > 0:
+            return
 
     # Read actual bounds from the sidecar written by _render_mrms_png_standalone.
     bounds_sidecar = png_path.replace(".png", "_bounds.json")
@@ -283,62 +288,37 @@ def _write_mrms_overlay_cache(
     except (OSError, json.JSONDecodeError):
         legend = build_mrms_legend(product)
 
-    # Copy PNG into the overlay cache frame directory.
-    frame_img = overlay_image_path(
-        _CACHE_ROOT, family, region, stream, product, frame_key
-    )
-    os.makedirs(os.path.dirname(frame_img), exist_ok=True)
-    shutil.copy2(png_path, frame_img)
+    # Copy PNG into the flat overlay cache directory.
+    flat_img = flat_overlay_image_path(_CACHE_ROOT, "mrms", path_parts, frame_key)
+    os.makedirs(os.path.dirname(flat_img), exist_ok=True)
+    shutil.copy2(png_path, flat_img)
 
-    # Build the canonical image URL served via the /cache static mount.
-    image_rel_url = (
-        f"/cache/overlays/{family}/{region}/{stream}/{product}/{frame_key}/overlay.png"
-    )
-
-    meta = build_overlay_meta(
-        family=family,
-        region=region,
-        stream=stream,
-        product=product,
-        frame_key=frame_key,
-        timestamp=dt_utc.isoformat(),
-        source_data_key=f"mrms:{product}:{frame_key}",
+    flat_overlay_update_index(
+        _CACHE_ROOT,
+        "mrms",
+        path_parts,
+        frame_key,
+        bounds=bounds,
         full_name=prod_info.get("full_name", product),
         units=prod_info.get("units", ""),
-        bounds=bounds,
-        image_rel_url=image_rel_url,
         legend=legend,
         vmin=prod_info.get("vmin"),
         vmax=prod_info.get("vmax"),
-        cache_control={"ttl_seconds": 900, "stale_after_seconds": 3600},
+        timestamp=dt_utc.isoformat(),
     )
-    write_overlay_meta(_CACHE_ROOT, family, region, stream, product, frame_key, meta)
 
-    # Write bounds sidecar in the frame dir (consistent with RTMA contract).
-    bounds_file = overlay_bounds_path(
-        _CACHE_ROOT, family, region, stream, product, frame_key
-    )
-    tmp = bounds_file + ".part"
-    try:
-        with open(tmp, "w") as fh:
-            json.dump(bounds, fh)
-        os.replace(tmp, bounds_file)
-    except OSError:
-        pass
-
-    # Update the family index so /api/overlay/latest resolves by index lookup.
-    meta_rel = (
-        f"/cache/overlays/{family}/{region}/{stream}/{product}/{frame_key}/meta.json"
-    )
-    update_overlay_index(
-        _CACHE_ROOT, family, region, stream, product, frame_key, meta_rel
+    processed_keys.add(source_key)
+    flat_overlay_write_processed_keys(
+        _CACHE_ROOT,
+        "mrms",
+        path_parts,
+        processed_keys,
+        keep_n if keep_n is not None else 180,
     )
 
     # Prune old frames unless caller requested deferred pruning (batch writes).
     if keep_n is not None:
-        prune_overlay_frames(
-            _CACHE_ROOT, family, region, stream, product, keep_n=keep_n
-        )
+        flat_overlay_prune_frames(_CACHE_ROOT, "mrms", path_parts, keep_n)
 
     print(f"[mrms_worker] Overlay cache updated: {product} @ {frame_key}")
 

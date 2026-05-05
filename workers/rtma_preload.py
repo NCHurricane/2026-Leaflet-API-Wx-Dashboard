@@ -31,7 +31,6 @@ import time as _time
 
 from config.geo_config import STATE_BOUNDS
 from config.rtma_config import (
-    RTMA_STREAM_MAX_HOURS,
     RTMA_STREAMS,
     RTMA_UI_PRODUCTS,
     RTMA_WORKER_REGIONS,
@@ -59,6 +58,7 @@ def _product_supported_on_stream(product: str, stream: str) -> bool:
 # Core render helper (mirrors rtma_worker._render_overlay_for_source)
 # ---------------------------------------------------------------------------
 
+
 def _render_overlay(
     cache_root: str,
     source,
@@ -69,40 +69,34 @@ def _render_overlay(
     *,
     verbose: bool = False,
 ) -> str:
-    """Render a single frame's overlay PNG + meta.  Returns 'ok', 'skip', or 'fail'."""
+    """Render a single frame's overlay PNG into the flat cache.  Returns 'ok', 'skip', or 'fail'."""
     from cache.overlay_cache_utils import (
-        build_overlay_meta,
+        flat_overlay_image_path,
+        flat_overlay_prune_frames,
+        flat_overlay_read_processed_keys,
+        flat_overlay_update_index,
+        flat_overlay_write_processed_keys,
         frame_key_from_datetime,
-        overlay_image_path,
-        prune_overlay_frames,
-        read_overlay_meta,
-        update_overlay_index,
-        write_overlay_meta,
     )
-    from rtma_utils import build_rtma_legend, ensure_rtma_grib, get_product_config, render_rtma_png
+    from rtma_utils import ensure_rtma_grib, render_rtma_png
 
+    path_parts = (region.upper(), stream, product)
     frame_key = frame_key_from_datetime(source.valid_time)
 
     # Skip-if-exists guard — same source key + file present → nothing to do.
-    existing = read_overlay_meta(
-        cache_root, "rtma", region, stream, product, frame_key)
-    if existing and existing.get("source_data_key") == source.data_key:
-        img_path = overlay_image_path(
-            cache_root, "rtma", region, stream, product, frame_key)
+    processed_keys = flat_overlay_read_processed_keys(cache_root, "rtma", path_parts)
+    if source.data_key in processed_keys:
+        img_path = flat_overlay_image_path(cache_root, "rtma", path_parts, frame_key)
         if os.path.exists(img_path) and os.path.getsize(img_path) > 0:
             if verbose:
                 print(f"  [skip] {region}/{stream}/{product}/{frame_key}")
             return "skip"
 
     bounds = STATE_BOUNDS.get(region, [-125, -70, 21, 52])
-    west, east, south, north = (
-        float(bounds[0]), float(bounds[1]), float(bounds[2]), float(bounds[3])
-    )
-    crop_extent = [west, east, south, north]
+    crop_extent = [float(b) for b in bounds]
 
     try:
-        img_path = overlay_image_path(
-            cache_root, "rtma", region, stream, product, frame_key)
+        img_path = flat_overlay_image_path(cache_root, "rtma", path_parts, frame_key)
         grib_path = ensure_rtma_grib(cache_root, source)
         _out_path, actual_bounds, render_meta = render_rtma_png(
             grib_path,
@@ -115,47 +109,31 @@ def _render_overlay(
             stream=stream,
         )
     except Exception as exc:
-        print(
-            f"  [FAIL render] {region}/{stream}/{product}/{frame_key}: {exc}")
+        print(f"  [FAIL render] {region}/{stream}/{product}/{frame_key}: {exc}")
         return "fail"
 
     try:
-        config = get_product_config(product)
-        legend = build_rtma_legend(config)
-
-        cache_dir_name = os.path.basename(cache_root)
-        img_rel_url = (
-            f"/{cache_dir_name}/"
-            + os.path.relpath(img_path, cache_root).replace("\\", "/")
-        )
-        meta_rel_url = img_rel_url.replace("/overlay.png", "/meta.json")
-
-        meta = build_overlay_meta(
-            family="rtma",
-            region=region,
-            stream=stream,
-            product=product,
-            frame_key=frame_key,
-            timestamp=render_meta.get(
-                "timestamp") or source.valid_time.isoformat(),
-            source_data_key=source.data_key,
-            full_name=render_meta.get("full_name", config["label"]),
-            units=render_meta.get("units", config["units"]),
+        flat_overlay_update_index(
+            cache_root,
+            "rtma",
+            path_parts,
+            frame_key,
             bounds=actual_bounds,
-            image_rel_url=img_rel_url,
-            legend=legend,
-            vmin=config.get("vmin"),
-            vmax=config.get("vmax"),
+            full_name=render_meta.get("full_name", ""),
+            units=render_meta.get("units", ""),
+            legend=render_meta.get("legend"),
+            vmin=render_meta.get("vmin"),
+            vmax=render_meta.get("vmax"),
+            timestamp=render_meta.get("timestamp") or source.valid_time.isoformat(),
         )
+        processed_keys.add(source.data_key)
+        flat_overlay_write_processed_keys(
+            cache_root, "rtma", path_parts, processed_keys, keep_n
+        )
+        flat_overlay_prune_frames(cache_root, "rtma", path_parts, keep_n)
 
-        write_overlay_meta(cache_root, "rtma", region,
-                           stream, product, frame_key, meta)
-        update_overlay_index(cache_root, "rtma", region,
-                             stream, product, frame_key, meta_rel_url)
-        prune_overlay_frames(cache_root, "rtma", region,
-                             stream, product, keep_n=keep_n)
-
-        print(f"  [ok]   {region}/{stream}/{product}/{frame_key}")
+        if verbose:
+            print(f"  [ok]   {region}/{stream}/{product}/{frame_key}")
         return "ok"
     except Exception as exc:
         print(f"  [FAIL meta] {region}/{stream}/{product}/{frame_key}: {exc}")
@@ -165,6 +143,7 @@ def _render_overlay(
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
+
 
 def run_preload(
     *,
@@ -194,7 +173,8 @@ def run_preload(
 
     all_product_keys = [p for p in products if p in PRODUCTS]
     analysis_products = [
-        p for p in all_product_keys if PRODUCTS[p]["kind"] == "analysis"]
+        p for p in all_product_keys if PRODUCTS[p]["kind"] == "analysis"
+    ]
 
     if not analysis_products:
         print("[rtma_preload] No valid analysis products selected — aborting")
@@ -220,8 +200,7 @@ def run_preload(
                     )
                 )
             except Exception as exc:
-                print(
-                    f"[rtma_preload] Frame discovery error {region}/{stream}: {exc}")
+                print(f"[rtma_preload] Frame discovery error {region}/{stream}: {exc}")
                 sources = []
             jobs.append((region, stream, sources, stream_products))
 
@@ -254,14 +233,14 @@ def run_preload(
 
         # ── Step 1: GeoJSON city-point files ─────────────────────────────────
         print(
-            f"  [GeoJSON] pre-computing {len(sources) * len(stream_products)} file(s)...")
+            f"  [GeoJSON] pre-computing {len(sources) * len(stream_products)} file(s)..."
+        )
         for source in sources:
             try:
                 ensure_rtma_grib(cache_root, source)
             except Exception as exc:
                 geojson_fail += len(stream_products)
-                print(
-                    f"  [FAIL GRIB] {region}/{stream}/{source.data_key}: {exc}")
+                print(f"  [FAIL GRIB] {region}/{stream}/{source.data_key}: {exc}")
                 continue
 
             for product in stream_products:
@@ -284,12 +263,12 @@ def run_preload(
                 except Exception as exc:
                     geojson_fail += 1
                     print(
-                        f"  [FAIL geojson] {region}/{stream}/{product}/{source.data_key}: {exc}")
+                        f"  [FAIL geojson] {region}/{stream}/{product}/{source.data_key}: {exc}"
+                    )
 
         # ── Step 2: Overlay PNG pre-render ────────────────────────────────────
         # Wind direction has no useful scalar gradient; skip its overlay.
-        overlay_products = [
-            p for p in stream_products if p != "wind_direction"]
+        overlay_products = [p for p in stream_products if p != "wind_direction"]
         frame_count = len(sources)
         print(
             f"  [Overlay] rendering {frame_count * len(overlay_products)} PNG(s) "
@@ -298,7 +277,12 @@ def run_preload(
         for frame_idx, source in enumerate(sources, 1):
             for product in overlay_products:
                 result = _render_overlay(
-                    cache_root, source, region, stream, product, keep_n,
+                    cache_root,
+                    source,
+                    region,
+                    stream,
+                    product,
+                    keep_n,
                     verbose=verbose,
                 )
                 overlay_done += 1

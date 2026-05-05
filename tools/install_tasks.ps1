@@ -4,7 +4,8 @@
     perpetually warm so the FastAPI server starts with hot data.
 
 .DESCRIPTION
-    Creates one task per data worker (alerts, SPC, surface, MRMS, RTMA) plus a
+    Creates one task per data worker (alerts, SPC, surface, MRMS, RTMA hourly,
+    RTMA rapid-update) plus a
     weekly NWS zone-geometry preseed task. All tasks:
       - Run as the current user, only when logged on.
       - Use the project's venv Python explicitly.
@@ -82,9 +83,15 @@ $tasks = @(
     },
     @{
         Name        = 'Wx-Dashboard-RTMA'
-        Description = 'Refresh RTMA city-point GeoJSON cache (cache/rtma/points/).'
-        Module      = 'workers.rtma_worker'
-        Trigger     = 'minutes-15'
+        Description = 'Refresh RTMA Hourly city-point/overlay cache (cache/rtma/*).'
+        Module      = 'workers.rtma_hourly_worker'
+        Trigger     = 'hourly-at-5'
+    },
+    @{
+        Name        = 'Wx-Dashboard-RTMA-RU'
+        Description = 'Refresh RTMA Rapid Update city-point/overlay cache (cache/rtma/*).'
+        Module      = 'workers.rtma_rapid_worker'
+        Trigger     = 'minutes-15-at-20'
     },
     @{
         Name        = 'Wx-Dashboard-ZonePreseed'
@@ -96,11 +103,17 @@ $tasks = @(
 
 function New-IntervalTrigger {
     param(
-        [Parameter(Mandatory)] [int]$Minutes
+        [Parameter(Mandatory)] [int]$Minutes,
+        [int]$StartMinute = 0
     )
-    # Repeat the trigger forever, starting now. Daily-at-startup so reboots
-    # also kick off the cycle without waiting for the next interval.
-    $start = (Get-Date).AddMinutes(1)
+    # Repeat forever from a wall-clock anchored minute (e.g., :05, :20).
+    $now = Get-Date
+    $start = Get-Date -Year $now.Year -Month $now.Month -Day $now.Day `
+        -Hour $now.Hour -Minute $StartMinute -Second 0
+    while ($start -le $now) {
+        $start = $start.AddMinutes($Minutes)
+    }
+
     $trigger = New-ScheduledTaskTrigger -Once -At $start `
         -RepetitionInterval (New-TimeSpan -Minutes $Minutes) `
         -RepetitionDuration ([TimeSpan]::FromDays(3650))
@@ -138,6 +151,14 @@ foreach ($t in $tasks) {
     switch -Regex ($t.Trigger) {
         '^minutes-(\d+)$' {
             $trigger = New-IntervalTrigger -Minutes ([int]$Matches[1])
+            break
+        }
+        '^minutes-(\d+)-at-(\d{1,2})$' {
+            $trigger = New-IntervalTrigger -Minutes ([int]$Matches[1]) -StartMinute ([int]$Matches[2])
+            break
+        }
+        '^hourly-at-(\d{1,2})$' {
+            $trigger = New-IntervalTrigger -Minutes 60 -StartMinute ([int]$Matches[1])
             break
         }
         '^weekly-(\w+)-(\d{4})$' {

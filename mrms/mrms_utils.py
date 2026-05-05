@@ -16,6 +16,7 @@ import os
 import sys
 import gzip
 import shutil
+import threading
 import time as _time
 from datetime import datetime
 from typing import List, Tuple, Optional, Callable
@@ -57,6 +58,10 @@ register_montserrat_fonts()
 
 # Check imageio availability for animation encoding support.
 IMAGEIO_AVAILABLE = importlib.util.find_spec("imageio") is not None
+
+# Serialize .grib2 refresh from .grib2.gz so parallel requests/workers do not
+# read a partially-written uncompressed file.
+_MRMS_GRIB_DECOMPRESS_LOCK = threading.Lock()
 
 
 # =============================================================================
@@ -171,23 +176,31 @@ def decompress_grib2_gz(gz_path: str) -> str:
 
     grib_path = gz_path[:-3]  # Remove .gz extension
 
-    # Skip decompression only when the existing .grib2 is as new as (or newer
-    # than) the .gz.  If the .gz was just updated by the worker, the .grib2
-    # will be older and must be replaced to avoid serving stale data.
-    if os.path.exists(grib_path):
-        gz_mtime = os.path.getmtime(gz_path)
-        grib_mtime = os.path.getmtime(grib_path)
-        if grib_mtime >= gz_mtime:
-            return grib_path
-        # .gz is newer — remove the stale uncompressed copy before re-extracting.
+    with _MRMS_GRIB_DECOMPRESS_LOCK:
+        # Skip decompression only when the existing .grib2 is as new as (or newer
+        # than) the .gz.  If the .gz was just updated by the worker, the .grib2
+        # will be older and must be replaced to avoid serving stale data.
+        if os.path.exists(grib_path):
+            gz_mtime = os.path.getmtime(gz_path)
+            grib_mtime = os.path.getmtime(grib_path)
+            if grib_mtime >= gz_mtime and os.path.getsize(grib_path) > 0:
+                return grib_path
+
+        tmp_path = grib_path + ".part"
         try:
-            os.remove(grib_path)
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
         except OSError:
             pass
 
-    with gzip.open(gz_path, "rb") as f_in:
-        with open(grib_path, "wb") as f_out:
-            shutil.copyfileobj(f_in, f_out)
+        with gzip.open(gz_path, "rb") as f_in:
+            with open(tmp_path, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+
+        if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
+            raise ValueError(f"Decompressed MRMS file is empty: {gz_path}")
+
+        os.replace(tmp_path, grib_path)
 
     return grib_path
 
@@ -201,8 +214,10 @@ def _compute_crop_slices(lat_coord, lon_coord, crop_extent, buffer_deg=2.0):
         return None
 
     west, east, south, north = crop_extent
-    lon_mask = (lon_coord >= west - buffer_deg) & (lon_coord <= east + buffer_deg)
-    lat_mask = (lat_coord >= south - buffer_deg) & (lat_coord <= north + buffer_deg)
+    lon_mask = (lon_coord >= west -
+                buffer_deg) & (lon_coord <= east + buffer_deg)
+    lat_mask = (lat_coord >= south -
+                buffer_deg) & (lat_coord <= north + buffer_deg)
 
     if not np.any(lon_mask) or not np.any(lat_mask):
         return None
@@ -327,7 +342,8 @@ def read_mrms_grib2(
             and lon_dim_name is not None
         ):
             lat_slice, lon_slice = resolved_crop_slices
-            data_da = data_da.isel({lat_dim_name: lat_slice, lon_dim_name: lon_slice})
+            data_da = data_da.isel(
+                {lat_dim_name: lat_slice, lon_dim_name: lon_slice})
             if lat_coord is not None:
                 lat_coord = lat_coord[lat_slice]
             if lon_coord is not None:
@@ -379,24 +395,28 @@ def plot_cities_on_map(ax, extent, style_config, z_cities=30):
 
     # Construct full path to cities file
     cities_path = os.path.join(PARENT_DIR, "data", cities_file)
-    print(f"[DEBUG] plot_cities_on_map: Looking for cities file at: {cities_path}")
+    print(
+        f"[DEBUG] plot_cities_on_map: Looking for cities file at: {cities_path}")
 
     if not os.path.exists(cities_path):
         fallback_path = os.path.join(PARENT_DIR, "data", "us-cities.json")
-        print(f"[WARN] Cities file not found: {cities_path}; using {fallback_path}")
+        print(
+            f"[WARN] Cities file not found: {cities_path}; using {fallback_path}")
         cities_path = fallback_path
 
     with open(cities_path, "r") as f:
         cities = json.load(f)
 
-    print(f"[DEBUG] Loaded cities from {cities_file}, type={type(cities).__name__}")
+    print(
+        f"[DEBUG] Loaded cities from {cities_file}, type={type(cities).__name__}")
 
     # Filter cities by extent
     west, east, south, north = extent
 
     # Handle list-of-dict format (us-cities.json)
     if not isinstance(cities, list):
-        print(f"[WARN] Cities data is not a list, type={type(cities).__name__}")
+        print(
+            f"[WARN] Cities data is not a list, type={type(cities).__name__}")
         return
 
     visible_cities = []
@@ -481,7 +501,8 @@ def plot_cities_on_map(ax, extent, style_config, z_cities=30):
             ),
             clip_on=True,
         )
-        txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground="black")])
+        txt.set_path_effects(
+            [PathEffects.withStroke(linewidth=2, foreground="black")])
         drawn_bboxes.append((cand_x_min, cand_x_max, cand_y_min, cand_y_max))
         drawn_count += 1
 
@@ -702,9 +723,10 @@ def _plot_mrms_data_layer(
         if np.any(lon_mask) and np.any(lat_mask):
             lon_idx = np.where(lon_mask)[0]
             lat_idx = np.where(lat_mask)[0]
-            lon = lon[lon_idx[0] : lon_idx[-1] + 1]
-            lat = lat[lat_idx[0] : lat_idx[-1] + 1]
-            data = data[lat_idx[0] : lat_idx[-1] + 1, lon_idx[0] : lon_idx[-1] + 1]
+            lon = lon[lon_idx[0]: lon_idx[-1] + 1]
+            lat = lat[lat_idx[0]: lat_idx[-1] + 1]
+            data = data[lat_idx[0]: lat_idx[-1] +
+                        1, lon_idx[0]: lon_idx[-1] + 1]
 
     # Compute image extent from (possibly cropped) 1D coordinate arrays
     img_extent = [lon.min(), lon.max(), lat.min(), lat.max()]
@@ -887,7 +909,8 @@ def _resolve_mrms_data_alpha(style_config, product):
 
     if product.startswith("MESH"):
         try:
-            data_alpha = float(style_config.get("mesh_data_alpha", data_alpha_default))
+            data_alpha = float(style_config.get(
+                "mesh_data_alpha", data_alpha_default))
         except Exception:
             data_alpha = data_alpha_default
     else:
@@ -992,7 +1015,8 @@ def _draw_mrms_value_contours(
         return []
 
     try:
-        contour_levels = np.asarray(product_info.get("levels", []), dtype=float)
+        contour_levels = np.asarray(
+            product_info.get("levels", []), dtype=float)
     except Exception:
         return []
 
@@ -1025,7 +1049,8 @@ def _draw_mrms_value_contours(
 
     contour_width = float(style_config.get("mesh_contour_width", 1.8))
     contour_alpha = float(style_config.get("mesh_contour_alpha", 0.95))
-    contour_zorder = int(style_config.get("zorder_contours", zo.get("contours", 28)))
+    contour_zorder = int(style_config.get(
+        "zorder_contours", zo.get("contours", 28)))
 
     contour_set = ax.contour(
         lon_vals,
@@ -1159,8 +1184,10 @@ def _render_mrms_frame(
 
     # --- Base map features ---
     ax.set_facecolor(map_bg_color)
-    ax.add_feature(cfeature.OCEAN.with_scale("10m"), facecolor=ocean_color, zorder=0)
-    ax.add_feature(cfeature.LAND.with_scale("10m"), facecolor=land_color, zorder=0)
+    ax.add_feature(cfeature.OCEAN.with_scale("10m"),
+                   facecolor=ocean_color, zorder=0)
+    ax.add_feature(cfeature.LAND.with_scale("10m"),
+                   facecolor=land_color, zorder=0)
 
     # Lakes (configurable)
     if show_lakes:
@@ -1288,7 +1315,8 @@ def _render_mrms_frame(
 
     # --- City labels ---
     if show_places:
-        plot_cities_on_map(ax, plot_extent, style_config, z_cities=zo["cities"])
+        plot_cities_on_map(ax, plot_extent, style_config,
+                           z_cities=zo["cities"])
 
     # --- Colorbar (bottom, matching radar/satellite layout) ---
     categories = product_info.get("categories")
@@ -1328,7 +1356,8 @@ def _render_mrms_frame(
             tick.set_fontweight("bold")
         cb.outline.set_edgecolor("#555555")
     else:
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+        sm = plt.cm.ScalarMappable(
+            cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
         cb = fig.colorbar(
             sm,
             ax=ax,
@@ -1338,13 +1367,16 @@ def _render_mrms_frame(
             pad=0.05,
         )
         if product.startswith("MESH"):
-            mesh_levels = np.asarray(product_info.get("levels", []), dtype=float)
-            mesh_levels = mesh_levels[(mesh_levels >= vmin) & (mesh_levels <= vmax)]
+            mesh_levels = np.asarray(
+                product_info.get("levels", []), dtype=float)
+            mesh_levels = mesh_levels[(
+                mesh_levels >= vmin) & (mesh_levels <= vmax)]
             if mesh_levels.size:
                 cb.set_ticks(mesh_levels)
                 cb.set_ticklabels(
                     [
-                        str(int(round(v))) if float(v).is_integer() else f"{v:g}"
+                        str(int(round(v))) if float(
+                            v).is_integer() else f"{v:g}"
                         for v in mesh_levels
                     ]
                 )
@@ -1823,14 +1855,17 @@ def _generate_mrms_animation(
                     tight_bbox = fig.get_tightbbox(renderer)
                     if tight_bbox is not None:
                         pad_inches = max(
-                            float(matplotlib.rcParams.get("savefig.pad_inches", 0.1)),
+                            float(matplotlib.rcParams.get(
+                                "savefig.pad_inches", 0.1)),
                             0.15,
                         )
                         tight_bbox = tight_bbox.padded(pad_inches)
-                        tight_bbox_px = tight_bbox.transformed(fig.dpi_scale_trans)
+                        tight_bbox_px = tight_bbox.transformed(
+                            fig.dpi_scale_trans)
                         canvas_h = int(frame_rgba.shape[0])
                         x0 = max(0, int(np.floor(tight_bbox_px.x0)))
-                        x1 = min(frame_rgba.shape[1], int(np.ceil(tight_bbox_px.x1)))
+                        x1 = min(frame_rgba.shape[1], int(
+                            np.ceil(tight_bbox_px.x1)))
                         y0_bbox = max(0, int(np.floor(tight_bbox_px.y0)))
                         y1_bbox = min(canvas_h, int(np.ceil(tight_bbox_px.y1)))
 
@@ -1844,7 +1879,8 @@ def _generate_mrms_animation(
                                 f"[DEBUG] MRMS tight frame crop set: x=({x0},{x1}) y=({y0},{y1})"
                             )
                 except Exception as crop_err:
-                    print(f"[WARN] Failed to compute MRMS tight crop: {crop_err}")
+                    print(
+                        f"[WARN] Failed to compute MRMS tight crop: {crop_err}")
 
             if tight_crop_px is not None:
                 x0, x1, y0, y1 = tight_crop_px

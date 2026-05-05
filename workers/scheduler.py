@@ -57,7 +57,7 @@ def start_scheduler() -> None:
     from workers.mrms_worker import run_mrms_worker
     from workers.radar_live_worker import run_radar_live_worker
     from workers.radar_tiles_worker import run_radar_tiles_worker
-    from workers.rtma_worker import run_rtma_worker
+    from workers.rtma_worker import run_rtma_hourly_worker, run_rtma_rapid_worker
     from workers.surface_worker import run_surface_worker
 
     now = datetime.now(timezone.utc)
@@ -110,13 +110,22 @@ def start_scheduler() -> None:
         next_run_time=now + timedelta(seconds=25),
     )
     _scheduler.add_job(
-        run_rtma_worker,
+        run_rtma_hourly_worker,
+        "interval",
+        minutes=60,
+        id="rtma_hourly_worker",
+        max_instances=1,
+        misfire_grace_time=180,
+        next_run_time=now + timedelta(seconds=45),
+    )
+    _scheduler.add_job(
+        run_rtma_rapid_worker,
         "interval",
         minutes=15,
-        id="rtma_worker",
+        id="rtma_rapid_worker",
         max_instances=1,
         misfire_grace_time=60,
-        next_run_time=now + timedelta(seconds=45),
+        next_run_time=now + timedelta(seconds=50),
     )
     _scheduler.add_job(
         run_surface_worker,
@@ -134,7 +143,8 @@ def start_scheduler() -> None:
         "[scheduler] In-process fallback ENABLED — alerts (1 min), spc (30 min), "
         "mrms (15 min, +30s delay), radar_live (5 min, +20s delay), "
         "radar_tiles (5 min, +25s delay), "
-        "rtma (15 min, +45s delay), surface (30 min)"
+        "rtma_hourly (60 min, +45s delay), rtma_rapid (15 min, +50s delay), "
+        "surface (30 min)"
     )
 
 

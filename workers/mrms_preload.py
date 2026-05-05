@@ -134,9 +134,9 @@ def _render_frame(
     """
 
     from cache.overlay_cache_utils import (
+        flat_overlay_image_path,
+        flat_overlay_read_processed_keys,
         frame_key_from_datetime,
-        overlay_image_path,
-        read_overlay_meta,
     )
     from mrms.mrms_nodd_utils import download_mrms_file
     from workers.mrms_worker import (
@@ -147,16 +147,16 @@ def _render_frame(
     if file_dt.tzinfo is None:
         file_dt = file_dt.replace(tzinfo=timezone.utc)
     frame_key = frame_key_from_datetime(file_dt)
+    path_parts = ("CONUS", "default", product)
+    source_key = f"mrms:{product}:{frame_key}"
 
     # Skip-if-exists guard unless --force.
     if not force:
-        existing = read_overlay_meta(
-            _CACHE_ROOT, "mrms", "CONUS", "default", product, frame_key
+        processed_keys = flat_overlay_read_processed_keys(
+            _CACHE_ROOT, "mrms", path_parts
         )
-        if existing:
-            img = overlay_image_path(
-                _CACHE_ROOT, "mrms", "CONUS", "default", product, frame_key
-            )
+        if source_key in processed_keys:
+            img = flat_overlay_image_path(_CACHE_ROOT, "mrms", path_parts, frame_key)
             if os.path.exists(img) and os.path.getsize(img) > 0:
                 if verbose:
                     print(f"    [skip] {frame_key}")
@@ -200,7 +200,6 @@ def _backfill_product(
     from datetime import timedelta
 
     from mrms.mrms_nodd_utils import list_mrms_files
-    from cache.overlay_cache_utils import prune_overlay_frames
 
     from datetime import datetime as _dt
 
@@ -254,8 +253,10 @@ def _backfill_product(
 
     # Single prune pass now that all frames are written.
     kn = _keep_n(product)
-    pruned = prune_overlay_frames(
-        _CACHE_ROOT, "mrms", "CONUS", "default", product, keep_n=kn
+    from cache.overlay_cache_utils import flat_overlay_prune_frames
+
+    pruned = flat_overlay_prune_frames(
+        _CACHE_ROOT, "mrms", ("CONUS", "default", product), kn
     )
     if pruned:
         print(f"  Pruned {pruned} old frame(s) (kept {kn})")

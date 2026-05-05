@@ -2275,19 +2275,11 @@ def get_data_mrms(
                 grib_path, product, [west, east, south, north], png_path
             )
         except Exception:
-            # Self-heal once: force-refresh this product, clear stale derived files,
-            # then retry render. This handles corrupted GRIB/PNG cache artifacts.
-            try:
-                from workers.mrms_worker import run_mrms_worker, set_active_product
-
-                set_active_product(product)
-                run_mrms_worker(force=True)
-            except Exception:
-                pass
-
-            # Force re-decompression from newest .gz and re-render sidecars.
+            # Self-heal once: clear stale/corrupt artifacts, force-refresh this
+            # product, then retry render.
             stale_grib2 = grib_path[:-3] if grib_path.endswith(".gz") else None
             for stale_path in [
+                grib_path,
                 stale_grib2,
                 png_path,
                 png_path.replace(".png", "_bounds.json"),
@@ -2298,6 +2290,14 @@ def get_data_mrms(
                         os.remove(stale_path)
                     except OSError:
                         pass
+
+            try:
+                from workers.mrms_worker import run_mrms_worker, set_active_product
+
+                set_active_product(product)
+                run_mrms_worker(force=True)
+            except Exception:
+                pass
 
             try:
                 png_path, actual_bounds, render_meta = _render_mrms_png(
@@ -2320,22 +2320,49 @@ def get_data_mrms(
             actual_bounds = [west, east, south, north]
         render_meta = _load_mrms_render_meta(meta_sidecar)
         if not render_meta:
-            render_meta = _build_mrms_meta_from_grib(
-                grib_path, product, [west, east, south, north]
-            )
+            try:
+                render_meta = _build_mrms_meta_from_grib(
+                    grib_path, product, [west, east, south, north]
+                )
+            except Exception:
+                # Non-fatal when PNG is already rendered: keep serving overlay
+                # and fall back to mtime-based timestamp until next refresh.
+                render_meta = {}
             _write_mrms_render_meta(meta_sidecar, render_meta)
         elif not render_meta.get("data_timestamp"):
             # Backfill data-valid timestamp for older sidecars.
-            refreshed_meta = _build_mrms_meta_from_grib(
-                grib_path, product, [west, east, south, north]
-            )
-            if refreshed_meta.get("data_timestamp"):
-                render_meta["data_timestamp"] = refreshed_meta.get("data_timestamp")
-                _write_mrms_render_meta(meta_sidecar, render_meta)
+            try:
+                refreshed_meta = _build_mrms_meta_from_grib(
+                    grib_path, product, [west, east, south, north]
+                )
+                if refreshed_meta.get("data_timestamp"):
+                    render_meta["data_timestamp"] = refreshed_meta.get("data_timestamp")
+                    _write_mrms_render_meta(meta_sidecar, render_meta)
+            except Exception:
+                pass
 
     # Build URL relative to /cache mount
+
     rel = os.path.relpath(png_path, _CACHE_ROOT).replace("\\", "/")
     image_url = f"/cache/{rel}"
+
+    timestamp = (
+        render_meta.get("data_timestamp")
+        or datetime.fromtimestamp(grib_mtime, tz=timezone.utc).isoformat()
+    )
+
+    # Mirror every successful manual view into the flat overlay cache so future
+    # product revisits can hit /api/overlay/latest without triggering re-render.
+    try:
+        from workers.mrms_worker import _write_mrms_overlay_cache
+
+        frame_dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        if frame_dt.tzinfo is None:
+            frame_dt = frame_dt.replace(tzinfo=timezone.utc)
+        _write_mrms_overlay_cache(product, png_path, frame_dt)
+    except Exception:
+        # Non-fatal: /api/data/mrms still returns the rendered image payload.
+        pass
 
     prod_info = MRMS_PRODUCTS[product]
     return {
@@ -2348,8 +2375,7 @@ def get_data_mrms(
         "vmin": prod_info.get("vmin", 0),
         "vmax": prod_info.get("vmax", 100),
         "legend": render_meta.get("legend"),
-        "timestamp": render_meta.get("data_timestamp")
-        or datetime.fromtimestamp(grib_mtime, tz=timezone.utc).isoformat(),
+        "timestamp": timestamp,
     }
 
 
@@ -2973,6 +2999,24 @@ def get_data_rtma(
                 "timestamp": source.valid_time.isoformat(),
             }
 
+    # Mirror successful RTMA on-demand requests into the flat overlay cache so
+    # later loads can hit /api/overlay/latest without a fresh render.
+    if product != "wind_direction":
+        try:
+            from workers.rtma_worker import _render_overlay_for_source
+
+            _render_overlay_for_source(
+                _CACHE_ROOT,
+                source,
+                region_key,
+                stream,
+                product,
+                keep_n=30,
+            )
+        except Exception:
+            # Non-fatal: this endpoint still returns the on-demand overlay.
+            pass
+
     rel = os.path.relpath(png_path, _CACHE_ROOT).replace("\\", "/")
     return {
         "image_url": f"/cache/{rel}",
@@ -3006,7 +3050,11 @@ def get_overlay_latest(
 
     Returns 404 when the requested frame is not in the pre-render cache.
     """
-    from cache.overlay_cache_utils import read_latest_overlay_meta, read_overlay_meta
+    from cache.overlay_cache_utils import (
+        flat_overlay_image_path,
+        flat_overlay_read_latest,
+        datetime_from_frame_key,
+    )
 
     allowed_families = {"rtma", "mrms"}
     if family not in allowed_families:
@@ -3016,28 +3064,102 @@ def get_overlay_latest(
 
     region_key = region.upper()
 
-    if frame_key:
-        meta = read_overlay_meta(
-            _CACHE_ROOT, family, region_key, stream, product, frame_key
-        )
+    if family == "rtma":
+        if region_key not in STATE_BOUNDS:
+            raise HTTPException(
+                status_code=400, detail=f"Unknown RTMA region '{region}'."
+            )
+        if product == "temperature_change_24h" and stream != "rtma_hourly":
+            raise HTTPException(
+                status_code=400,
+                detail="RTMA 24-hour temperature change is only available on rtma_hourly.",
+            )
+        if stream == "rtma_rapid_update" and region_key != "CONUS":
+            raise HTTPException(
+                status_code=400,
+                detail="RTMA rapid update stream is only available for CONUS.",
+            )
+        path_parts = (region_key, stream, product)
     else:
-        meta = read_latest_overlay_meta(
-            _CACHE_ROOT, family, region_key, stream, product
+        path_parts = ("CONUS", "default", product)
+
+    if frame_key:
+        # Specific frame requested — verify PNG exists on disk and build response.
+        img_path = flat_overlay_image_path(_CACHE_ROOT, family, path_parts, frame_key)
+        if not os.path.exists(img_path) or os.path.getsize(img_path) == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"No pre-rendered overlay found for family={family}, region={region_key}, "
+                    f"stream={stream}, product={product}, frame_key={frame_key}. "
+                    "Worker may not have run yet."
+                ),
+            )
+        rel_dir = (
+            "/cache/overlays/" + family + "/" + "/".join(str(p) for p in path_parts)
         )
+        png_name = f"{frame_key}.png"
+        image_url = f"{rel_dir}/{png_name}"
+        try:
+            frame_dt = datetime_from_frame_key(frame_key)
+            timestamp = frame_dt.isoformat()
+        except Exception:
+            timestamp = frame_key
+        # Get static fields from the latest frame (same product = same bounds/legend).
+        latest = flat_overlay_read_latest(_CACHE_ROOT, family, path_parts) or {}
+        meta = {
+            "frame_key": frame_key,
+            "timestamp": timestamp,
+            "source_data_key": frame_key,
+            "image_url": image_url,
+            "bounds": latest.get("bounds"),
+            "full_name": latest.get("full_name", ""),
+            "units": latest.get("units", ""),
+            "legend": latest.get("legend"),
+            "vmin": latest.get("vmin"),
+            "vmax": latest.get("vmax"),
+            "render": {"type": "image", "image_url": image_url},
+        }
+    else:
+        meta = flat_overlay_read_latest(_CACHE_ROOT, family, path_parts)
+
+    # RTMA on-demand bootstrap: if the worker has not pre-rendered this product
+    # yet, build one frame now so the viewer can immediately load an overlay.
+    if (
+        not meta
+        and family == "rtma"
+        and frame_key is None
+        and product != "wind_direction"
+    ):
+        try:
+            bounds = STATE_BOUNDS.get(region_key, [-130.0, -60.0, 21.0, 52.0])
+            _ = get_data_rtma(
+                region=region_key,
+                stream=stream,
+                product=product,
+                south=float(bounds[2]),
+                west=float(bounds[0]),
+                north=float(bounds[3]),
+                east=float(bounds[1]),
+            )
+            meta = flat_overlay_read_latest(_CACHE_ROOT, family, path_parts)
+        except HTTPException:
+            # Preserve the existing 404 behavior below if bootstrap fails.
+            pass
+        except Exception:
+            pass
 
     if not meta:
         raise HTTPException(
             status_code=404,
             detail=(
                 f"No pre-rendered overlay found for family={family}, region={region_key}, "
-                f"stream={stream}, product={product}"
-                + (f", frame_key={frame_key}" if frame_key else "")
-                + ". Worker may not have run yet."
+                f"stream={stream}, product={product}" + ". Worker may not have run yet."
             ),
         )
 
     # Confirm the image file still exists on disk (worker may have pruned it).
-    image_url = (meta.get("render") or {}).get("image_url", "")
+    image_url = (meta.get("render") or {}).get("image_url") or meta.get("image_url", "")
     if image_url:
         rel = image_url.lstrip("/")
         if rel.startswith("cache/"):
@@ -3062,13 +3184,11 @@ def get_overlay_frames(
     """Return all pre-rendered frames available on disk for a product.
 
     Response is an array of frame objects sorted oldest-first, each with
-    ``frame_key``, ``timestamp``, ``source_data_key``, ``image_url``, and
-    ``bounds``.  Only frames whose ``overlay.png`` file exists are included.
-
-    This endpoint reads only from disk — no S3 HEAD checks — so it responds
-    instantly and is safe to call on every scrubber load.
+    ``frame_key``, ``timestamp``, ``source_data_key``, ``image_url``,
+    ``bounds``, ``full_name``, ``units``, ``legend``, ``vmin``, ``vmax``.
+    Only frames whose PNG file exists are included.
     """
-    from cache.overlay_cache_utils import list_overlay_frames
+    from cache.overlay_cache_utils import flat_overlay_list_frames
 
     allowed_families = {"rtma", "mrms"}
     if family not in allowed_families:
@@ -3077,7 +3197,13 @@ def get_overlay_frames(
         )
 
     region_key = region.upper()
-    frames = list_overlay_frames(_CACHE_ROOT, family, region_key, stream, product)
+
+    if family == "rtma":
+        path_parts = (region_key, stream, product)
+    else:
+        path_parts = ("CONUS", "default", product)
+
+    frames = flat_overlay_list_frames(_CACHE_ROOT, family, path_parts)
     return {
         "family": family,
         "region": region_key,
@@ -3964,6 +4090,68 @@ def _radar_live_sites():
 _RADAR_LIVE_FALLBACK_LOCKS: dict[tuple[str, str], threading.Lock] = {}
 _RADAR_LIVE_FALLBACK_LOCKS_GUARD = threading.Lock()
 
+# --- NWS Radar station operational status cache (5-minute TTL) ---
+_NWS_RADAR_STATUS_CACHE: dict | None = None
+_NWS_RADAR_STATUS_CACHE_TS: float = 0.0
+_NWS_RADAR_STATUS_CACHE_LOCK = threading.Lock()
+_NWS_RADAR_STATUS_TTL_SEC = 300
+
+
+def _fetch_nws_radar_status() -> dict:
+    """Fetch and cache radar station status from NWS API. Returns dict keyed by site ID."""
+    import time
+    import urllib.request as _ur
+
+    global _NWS_RADAR_STATUS_CACHE, _NWS_RADAR_STATUS_CACHE_TS
+
+    now = time.monotonic()
+    with _NWS_RADAR_STATUS_CACHE_LOCK:
+        if (
+            _NWS_RADAR_STATUS_CACHE is not None
+            and (now - _NWS_RADAR_STATUS_CACHE_TS) < _NWS_RADAR_STATUS_TTL_SEC
+        ):
+            return _NWS_RADAR_STATUS_CACHE
+
+    try:
+        req = _ur.Request(
+            "https://api.weather.gov/radar/stations",
+            headers={
+                "User-Agent": "2026-Dashboard/1.0 (github.com/NCHurricane)",
+                "Accept": "application/geo+json",
+            },
+        )
+        with _ur.urlopen(req, timeout=15) as resp:
+            raw = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except Exception as exc:
+        print(f"[radar status] NWS fetch failed: {exc}")
+        with _NWS_RADAR_STATUS_CACHE_LOCK:
+            return _NWS_RADAR_STATUS_CACHE or {}
+
+    status_map: dict = {}
+    features = raw.get("features", []) if isinstance(raw, dict) else []
+    for feat in features:
+        props = feat.get("properties", {}) if isinstance(feat, dict) else {}
+        site_id = str(props.get("id") or "").strip().upper()
+        if not site_id:
+            continue
+        rda = props.get("rda") or {}
+        rda_props = rda.get("properties") or {}
+        latency = props.get("latency") or {}
+        status_map[site_id] = {
+            "operabilityStatus": rda_props.get("operabilityStatus", ""),
+            "status": rda_props.get("status", ""),
+            "alarmSummary": rda_props.get("alarmSummary", ""),
+            "volumeCoveragePattern": rda_props.get("volumeCoveragePattern", ""),
+            "mode": rda_props.get("mode", ""),
+            "rdaTimestamp": rda.get("timestamp", ""),
+            "levelTwoLastReceived": latency.get("levelTwoLastReceivedTime", ""),
+        }
+
+    with _NWS_RADAR_STATUS_CACHE_LOCK:
+        _NWS_RADAR_STATUS_CACHE = status_map
+        _NWS_RADAR_STATUS_CACHE_TS = now
+    return status_map
+
 
 def _radar_live_site_supported(site: str) -> bool:
     try:
@@ -3992,18 +4180,54 @@ def _radar_live_fallback_lock(site: str, product_key: str) -> threading.Lock:
         return lock
 
 
-def _radar_live_render_on_demand(site: str, product_key: str) -> int:
+def _radar_live_render_on_demand(
+    site: str,
+    product_key: str,
+    *,
+    latest_only: bool = True,
+    backfill_history: bool = True,
+) -> int:
     from workers.radar_live_worker import run_radar_live_site_product
 
-    lock = _radar_live_fallback_lock(site, product_key)
+    site_id = normalize_radar_site_id(site)
+    product_id = str(product_key or "").strip().upper()
+
+    # Render a synchronous on-demand pass.
+    lock = _radar_live_fallback_lock(site_id, product_id)
     with lock:
-        return int(
+        cached = int(
             run_radar_live_site_product(
-                normalize_radar_site_id(site),
-                str(product_key or "").strip().upper(),
+                site_id,
+                product_id,
                 force=True,
+                latest_only=latest_only,
             )
         )
+
+    # Optional background back-fill so the scrubber can animate.
+    if not backfill_history:
+        return cached
+
+    if not latest_only:
+        return cached
+
+    def _fill_history():
+        try:
+            run_radar_live_site_product(
+                site_id,
+                product_id,
+                force=True,
+                latest_only=False,
+            )
+        except Exception as exc:
+            print(
+                f"[radar_live] history back-fill failed {site_id}/{product_id}: {exc}"
+            )
+
+    threading.Thread(
+        target=_fill_history, name=f"radar-history-{site_id}-{product_id}", daemon=True
+    ).start()
+    return cached
 
 
 def _radar_live_is_configured(site: str, product_key: str) -> bool:
@@ -4061,6 +4285,46 @@ def get_radar_tile(z: int, x: int, y: int):
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=300"},
     )
+
+
+_RADAR_COLORTABLE_PRODUCTS: dict[str, tuple[float, float]] = {
+    "BR": (-30.0, 90.0),
+    "BV": (-120.0, 120.0),
+}
+
+
+@app.get("/api/radar/colortable")
+def get_radar_colortable(product: str = "BR"):
+    """Return the legend color entries for a radar product colortable."""
+    product = product.upper()
+    if product not in _RADAR_COLORTABLE_PRODUCTS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No colortable for product '{product}'. Valid: {list(_RADAR_COLORTABLE_PRODUCTS)}",
+        )
+    vmin, vmax = _RADAR_COLORTABLE_PRODUCTS[product]
+    try:
+        from config.radar_colortable_utils import get_legend_json
+
+        entries = get_legend_json(product, vmin, vmax)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"product": product, "vmin": vmin, "vmax": vmax, "entries": entries}
+
+
+@app.get("/api/radar/status")
+def get_radar_status():
+    """Return NWS radar station operational status for all sites, cached 5 minutes."""
+    try:
+        status = _fetch_nws_radar_status()
+        return {
+            "status": "success",
+            "stations": status,
+            "count": len(status),
+        }
+    except Exception as exc:
+        print(f"[radar status] Endpoint error: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.get("/api/radar/live/sites")
@@ -4135,7 +4399,12 @@ def get_radar_live_latest(
     fallback_cached = 0
     if force:
         try:
-            fallback_cached = _radar_live_render_on_demand(site_id, product_key)
+            fallback_cached = _radar_live_render_on_demand(
+                site_id,
+                product_key,
+                latest_only=True,
+                backfill_history=True,
+            )
         except Exception as exc:
             print(
                 f"[radar_live_fallback] forced latest {site_id}/{product_key} failed: "
@@ -4145,10 +4414,34 @@ def get_radar_live_latest(
 
     if not meta:
         try:
-            fallback_cached = _radar_live_render_on_demand(site_id, product_key)
+            fallback_cached = _radar_live_render_on_demand(
+                site_id,
+                product_key,
+                latest_only=True,
+                backfill_history=True,
+            )
         except Exception as exc:
             print(
                 f"[radar_live_fallback] latest {site_id}/{product_key} failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+        meta = radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key)
+
+    # Cold-start edge case: latest-only probe may miss while broader frame render succeeds.
+    if not meta:
+        try:
+            fallback_cached = max(
+                fallback_cached,
+                _radar_live_render_on_demand(
+                    site_id,
+                    product_key,
+                    latest_only=False,
+                    backfill_history=False,
+                ),
+            )
+        except Exception as exc:
+            print(
+                f"[radar_live_fallback] full latest {site_id}/{product_key} failed: "
                 f"{type(exc).__name__}: {exc}"
             )
         meta = radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key)
@@ -4170,6 +4463,7 @@ def get_radar_live_latest(
             if fallback_cached > 0
             else "live_cache"
         ),
+        "history_filling": fallback_cached > 0,
         "configured": configured,
         "site": site_id,
         "product": product_key,
@@ -4207,7 +4501,12 @@ def get_radar_live_frames(site: str = "KMHX", product: str = "L3_N0B", hours: in
     fallback_cached = 0
     if not frames:
         try:
-            fallback_cached = _radar_live_render_on_demand(site_id, product_key)
+            fallback_cached = _radar_live_render_on_demand(
+                site_id,
+                product_key,
+                latest_only=False,
+                backfill_history=False,
+            )
         except Exception as exc:
             print(
                 f"[radar_live_fallback] frames {site_id}/{product_key} failed: "

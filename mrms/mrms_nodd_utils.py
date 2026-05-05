@@ -32,6 +32,21 @@ CACHE_AVAILABLE = importlib.util.find_spec("listing_cache") is not None
 from s3_utils import get_s3_client  # noqa: E402
 
 
+def _is_valid_gzip_file(path: str, chunk_size: int = 1024 * 1024) -> bool:
+    """Validate gzip integrity by streaming through the full file.
+
+    Reading only the first byte can miss truncated tails and CRC/footer errors,
+    which then surface later during cfgrib decode.
+    """
+    try:
+        with gzip.open(path, "rb") as fh:
+            while fh.read(chunk_size):
+                pass
+        return True
+    except Exception:
+        return False
+
+
 def construct_s3_prefix(product: str, dt: datetime) -> str:
     """
     Construct S3 prefix for MRMS product at given datetime.
@@ -149,7 +164,8 @@ def list_mrms_files(
             for page in pages:
                 page_count += 1
                 if "Contents" not in page:
-                    print(f"[DEBUG] No contents in page {page_count} for {prefix}")
+                    print(
+                        f"[DEBUG] No contents in page {page_count} for {prefix}")
                     continue
 
                 for obj in page["Contents"]:
@@ -217,11 +233,7 @@ def download_mrms_file(
             # otherwise persist forever and trigger decode errors downstream.
             is_valid_cached = True
             if local_path.endswith(".gz"):
-                try:
-                    with gzip.open(local_path, "rb") as fh:
-                        fh.read(1)
-                except Exception:
-                    is_valid_cached = False
+                is_valid_cached = _is_valid_gzip_file(local_path)
 
             if is_valid_cached:
                 print(f"[DEBUG] Using cached MRMS file: {local_path}")
@@ -261,6 +273,14 @@ def download_mrms_file(
         else:
             s3_client.download_file(MRMS_BUCKET, s3_key, tmp_path)
 
+        if tmp_path.endswith(".gz") and not _is_valid_gzip_file(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise ValueError(
+                f"Downloaded MRMS gzip failed integrity validation: {s3_key}")
+
         os.replace(tmp_path, local_path)
 
         return local_path
@@ -296,7 +316,8 @@ def download_mrms_data(
     if progress_callback:
         progress_callback("Listing files", 0, 100)
 
-    print(f"[DEBUG] Listing MRMS files for {product} from {start_time} to {end_time}")
+    print(
+        f"[DEBUG] Listing MRMS files for {product} from {start_time} to {end_time}")
 
     available_files = list_mrms_files(
         product,

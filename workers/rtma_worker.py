@@ -34,8 +34,16 @@ from config.rtma_config import (
 )
 from workers._freshness import is_cache_fresh, mark_run_complete
 
-# Skip if successful run happened recently (75% of 15-min schedule)
-_FRESH_WINDOW_SEC = 11 * 60
+# Skip if successful run happened recently (75% of schedule cadence).
+_FRESH_WINDOW_SEC_BY_STREAM: dict[str, int] = {
+    "rtma_hourly": 45 * 60,
+    "rtma_rapid_update": 11 * 60,
+}
+
+_STREAM_WORKER_NAME: dict[str, str] = {
+    "rtma_hourly": "rtma_hourly",
+    "rtma_rapid_update": "rtma_rapid_update",
+}
 
 _PRELOAD_REGIONS = list(RTMA_WORKER_REGIONS)
 _PRELOAD_STREAMS = list(RTMA_STREAMS)
@@ -50,6 +58,10 @@ _OVERLAY_KEEP_N: dict[str, int] = {
     "rtma_hourly": 30,  # covers 24 h + headroom for gaps
     "rtma_rapid_update": 30,  # 15-min cadence × 6 h = 24 frames + headroom
 }
+
+
+def _worker_name_for_stream(stream: str) -> str:
+    return _STREAM_WORKER_NAME.get(stream, "rtma")
 
 
 def _product_supported_on_stream(product: str, stream: str) -> bool:
@@ -67,50 +79,35 @@ def _render_overlay_for_source(
     product: str,
     keep_n: int = 30,
 ) -> bool:
-    """Render a full-extent PNG overlay for *source* and write meta + update index.
+    """Render a full-extent PNG overlay for *source* and write into flat cache.
 
     Returns True on success, False on failure.
     """
     from cache.overlay_cache_utils import (
-        build_overlay_meta,
+        flat_overlay_image_path,
+        flat_overlay_prune_frames,
+        flat_overlay_read_processed_keys,
+        flat_overlay_update_index,
+        flat_overlay_write_processed_keys,
         frame_key_from_datetime,
-        overlay_image_path,
-        prune_overlay_frames,
-        read_overlay_meta,
-        update_overlay_index,
-        write_overlay_meta,
     )
-    from rtma_utils import (
-        build_rtma_legend,
-        get_product_config,
-        render_rtma_png,
-        ensure_rtma_grib,
-    )
+    from rtma_utils import ensure_rtma_grib, render_rtma_png
 
+    path_parts = (region.upper(), stream, product)
     frame_key = frame_key_from_datetime(source.valid_time)
 
-    # Skip if overlay already rendered for this exact source.
-    existing = read_overlay_meta(cache_root, "rtma", region, stream, product, frame_key)
-    if existing and existing.get("source_data_key") == source.data_key:
-        img_path = overlay_image_path(
-            cache_root, "rtma", region, stream, product, frame_key
-        )
+    # Dedup: skip if this source key is already recorded as processed.
+    processed_keys = flat_overlay_read_processed_keys(cache_root, "rtma", path_parts)
+    if source.data_key in processed_keys:
+        img_path = flat_overlay_image_path(cache_root, "rtma", path_parts, frame_key)
         if os.path.exists(img_path) and os.path.getsize(img_path) > 0:
             return True  # already fresh
 
     bounds = STATE_BOUNDS.get(region, [-125, -70, 21, 52])
-    west, east, south, north = (
-        float(bounds[0]),
-        float(bounds[1]),
-        float(bounds[2]),
-        float(bounds[3]),
-    )
-    crop_extent = [west, east, south, north]
+    crop_extent = [float(b) for b in bounds]
 
     try:
-        img_path = overlay_image_path(
-            cache_root, "rtma", region, stream, product, frame_key
-        )
+        img_path = flat_overlay_image_path(cache_root, "rtma", path_parts, frame_key)
         grib_path = ensure_rtma_grib(cache_root, source)
         _out_path, actual_bounds, render_meta = render_rtma_png(
             grib_path,
@@ -129,43 +126,25 @@ def _render_overlay_for_source(
         return False
 
     try:
-        config = get_product_config(product)
-        legend = build_rtma_legend(config)
-
-        # Image URL relative to the project web root (served as /cache/...).
-        import os as _os
-
-        img_rel = _os.path.relpath(img_path, _os.path.dirname(cache_root)).replace(
-            "\\", "/"
-        )
-        # Ensure it starts with cache/ for consistent frontend use.
-        cache_dir_name = _os.path.basename(cache_root)
-        img_rel_url = f"/{cache_dir_name}/{_os.path.relpath(img_path, cache_root).replace(chr(92), '/')}"
-
-        meta_rel_url = img_rel_url.replace("/overlay.png", "/meta.json")
-
-        meta = build_overlay_meta(
-            family="rtma",
-            region=region,
-            stream=stream,
-            product=product,
-            frame_key=frame_key,
-            timestamp=render_meta.get("timestamp") or source.valid_time.isoformat(),
-            source_data_key=source.data_key,
-            full_name=render_meta.get("full_name", config["label"]),
-            units=render_meta.get("units", config["units"]),
+        flat_overlay_update_index(
+            cache_root,
+            "rtma",
+            path_parts,
+            frame_key,
             bounds=actual_bounds,
-            image_rel_url=img_rel_url,
-            legend=legend,
-            vmin=config.get("vmin"),
-            vmax=config.get("vmax"),
+            full_name=render_meta.get("full_name", ""),
+            units=render_meta.get("units", ""),
+            legend=render_meta.get("legend"),
+            vmin=render_meta.get("vmin"),
+            vmax=render_meta.get("vmax"),
+            timestamp=render_meta.get("timestamp") or source.valid_time.isoformat(),
         )
 
-        write_overlay_meta(cache_root, "rtma", region, stream, product, frame_key, meta)
-        update_overlay_index(
-            cache_root, "rtma", region, stream, product, frame_key, meta_rel_url
+        processed_keys.add(source.data_key)
+        flat_overlay_write_processed_keys(
+            cache_root, "rtma", path_parts, processed_keys, keep_n
         )
-        prune_overlay_frames(cache_root, "rtma", region, stream, product, keep_n=keep_n)
+        flat_overlay_prune_frames(cache_root, "rtma", path_parts, keep_n)
 
         print(f"[rtma_worker] Overlay OK {region}/{stream}/{product}/{frame_key}")
         return True
@@ -176,9 +155,22 @@ def _render_overlay_for_source(
         return False
 
 
-def run_rtma_worker(force: bool = False) -> None:
-    if not force and is_cache_fresh("rtma", _FRESH_WINDOW_SEC):
-        print("[rtma_worker] Cache fresh - skipping run")
+def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> None:
+    selected_streams = [s for s in streams if s in RTMA_STREAMS]
+    if not selected_streams:
+        print("[rtma_worker] No valid RTMA streams selected - skipping run")
+        return
+
+    streams_to_run: list[str] = []
+    for stream in selected_streams:
+        freshness_window = _FRESH_WINDOW_SEC_BY_STREAM.get(stream, 11 * 60)
+        worker_name = _worker_name_for_stream(stream)
+        if not force and is_cache_fresh(worker_name, freshness_window):
+            print(f"[rtma_worker] {stream} cache fresh - skipping stream")
+            continue
+        streams_to_run.append(stream)
+
+    if not streams_to_run:
         return
 
     try:
@@ -208,10 +200,11 @@ def run_rtma_worker(force: bool = False) -> None:
     ok = 0
     skipped = 0
     failed = 0
+    stream_ok: dict[str, int] = {stream: 0 for stream in streams_to_run}
 
     t0 = _time.perf_counter()
 
-    for stream in _PRELOAD_STREAMS:
+    for stream in streams_to_run:
         for region in _PRELOAD_REGIONS:
             if stream == "rtma_rapid_update" and region != "CONUS":
                 continue
@@ -266,6 +259,7 @@ def run_rtma_worker(force: bool = False) -> None:
                                 source_data_key=source.data_key,
                             )
                             ok += 1
+                            stream_ok[stream] += 1
                             print(
                                 f"[rtma_worker] {region}/{stream}/{product}/"
                                 f"{source.data_key}: {meta.get('feature_count', 0)} pts"
@@ -292,6 +286,7 @@ def run_rtma_worker(force: bool = False) -> None:
                         )
                         if rendered:
                             ok += 1
+                            stream_ok[stream] += 1
                         else:
                             failed += 1
 
@@ -300,8 +295,24 @@ def run_rtma_worker(force: bool = False) -> None:
         "[rtma_worker] done "
         f"ok={ok} skipped={skipped} failed={failed} in {elapsed:.1f}s"
     )
-    if ok > 0:
-        mark_run_complete("rtma")
+    for stream in streams_to_run:
+        if stream_ok.get(stream, 0) > 0:
+            mark_run_complete(_worker_name_for_stream(stream))
+
+
+def run_rtma_worker(force: bool = False) -> None:
+    """Run both RTMA streams in one invocation (legacy behavior)."""
+    _run_rtma_worker_for_streams(list(RTMA_STREAMS), force=force)
+
+
+def run_rtma_hourly_worker(force: bool = False) -> None:
+    """Run only the RTMA hourly stream worker pass."""
+    _run_rtma_worker_for_streams(["rtma_hourly"], force=force)
+
+
+def run_rtma_rapid_worker(force: bool = False) -> None:
+    """Run only the RTMA rapid-update stream worker pass."""
+    _run_rtma_worker_for_streams(["rtma_rapid_update"], force=force)
 
 
 if __name__ == "__main__":
@@ -310,13 +321,30 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the RTMA worker once.")
     parser.add_argument("--force", action="store_true", help="Bypass freshness gate.")
     parser.add_argument(
+        "--stream",
+        choices=list(RTMA_STREAMS),
+        default=None,
+        help="Limit run to one stream (default: both streams).",
+    )
+    parser.add_argument(
         "--log-to-file",
         action="store_true",
-        help="Redirect stdout/stderr to logs/scheduled/rtma.log (for headless task runs).",
+        help="Redirect stdout/stderr to logs/scheduled/rtma*.log (for headless task runs).",
     )
     args = parser.parse_args()
     if args.log_to_file:
         from workers._freshness import redirect_stdio_to_log
 
-        redirect_stdio_to_log("rtma")
-    run_rtma_worker(force=args.force)
+        if args.stream == "rtma_hourly":
+            redirect_stdio_to_log("rtma_hourly")
+        elif args.stream == "rtma_rapid_update":
+            redirect_stdio_to_log("rtma_rapid_update")
+        else:
+            redirect_stdio_to_log("rtma")
+
+    if args.stream == "rtma_hourly":
+        run_rtma_hourly_worker(force=args.force)
+    elif args.stream == "rtma_rapid_update":
+        run_rtma_rapid_worker(force=args.force)
+    else:
+        run_rtma_worker(force=args.force)

@@ -31,11 +31,20 @@ _FRESH_WINDOW_SEC = 22 * 60
 _CACHE_ROOT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache"
 )
-_SURFACE_GRADIENT_ROOT = os.path.join(_CACHE_ROOT, "surface", "gradients", "CONUS")
+
+
+def _gradient_root(region: str) -> str:
+    region_dir = "WORLD" if region.upper() == "WORLD" else "CONUS"
+    return os.path.join(_CACHE_ROOT, "surface", "gradients", region_dir)
+
 
 # Higher-res fixed CONUS gradient grid. This is rendered worker-side once per cycle.
 _GRADIENT_WIDTH = 5120
 _GRADIENT_HEIGHT = 2240
+
+# World gradient grid — lower pixel density but covers the full globe.
+_GRADIENT_WIDTH_WORLD = 3600
+_GRADIENT_HEIGHT_WORLD = 1800
 
 _SURFACE_GRADIENT_PRODUCTS: dict[str, dict] = {
     "temperature": {
@@ -169,14 +178,15 @@ def _normalize_product_selection(products: list[str] | None) -> set[str] | None:
     return selected
 
 
-def _cleanup_stale_gradient_temp_files() -> None:
-    if not os.path.isdir(_SURFACE_GRADIENT_ROOT):
+def _cleanup_stale_gradient_temp_files(region: str = "CONUS") -> None:
+    root = _gradient_root(region)
+    if not os.path.isdir(root):
         return
     try:
-        for name in os.listdir(_SURFACE_GRADIENT_ROOT):
+        for name in os.listdir(root):
             if name.endswith(".png.part"):
                 try:
-                    os.remove(os.path.join(_SURFACE_GRADIENT_ROOT, name))
+                    os.remove(os.path.join(root, name))
                 except OSError:
                     pass
     except OSError:
@@ -217,7 +227,8 @@ _OUTLIER_THRESHOLDS: dict[str, float] = {
     "relative_humidity": 25.0,  # %
     "wind_speed": 20.0,  # kt
     "wind_gust": 25.0,  # kt
-    "altimeter": 1.0,  # inHg  (synoptic gradients are large; only catch sensor faults)
+    # inHg  (synoptic gradients are large; only catch sensor faults)
+    "altimeter": 1.0,
     "mslp": 8.0,  # hPa
     "visibility": 5.0,  # mi
 }
@@ -245,7 +256,8 @@ def _filter_spatial_outliers(
     tree = cKDTree(np.column_stack([sx, sy]))
 
     k = min(_OUTLIER_NEIGHBORS, len(vals) - 1)
-    _, idxs = tree.query(np.column_stack([sx, sy]), k=k + 1)  # +1 includes self
+    _, idxs = tree.query(np.column_stack(
+        [sx, sy]), k=k + 1)  # +1 includes self
     # idxs[:, 0] is the point itself; skip it
     neighbor_idxs = idxs[:, 1:]
     neighbor_vals = vals[neighbor_idxs]  # (N, k)
@@ -271,26 +283,36 @@ def _merc_y_to_lat(merc_y: np.ndarray) -> np.ndarray:
 
 
 def _interpolate_surface_grid(
-    lon: np.ndarray, lat: np.ndarray, values: np.ndarray
+    lon: np.ndarray, lat: np.ndarray, values: np.ndarray, region: str = "CONUS"
 ) -> tuple[np.ndarray, list[float]] | tuple[None, None]:
     """IDW interpolation matching the JS _idwInterpolate / _interpolateGridValues
-    algorithm with CONUS defaults: maxNeighbors=14, maxInfluenceKm=900, idwPower=1.0.
+    algorithm.  CONUS uses a high-res grid with a nearly-flat IDW power for
+    smooth pre-rendered overlays.  WORLD uses a globe-sized grid with a sharper
+    IDW power matching the JS _gradientNeighborConfig() WORLD values.
     Grid latitudes are sampled in Mercator space to match Leaflet's projection.
     """
-    west, east, south, north = STATE_BOUNDS["CONUS"]
-
-    # IDW parameters — must match JS _gradientNeighborConfig() CONUS values
-    MAX_NEIGHBORS = 14
-    MAX_INFLUENCE_KM = 1200
-    IDW_POWER = 0.1
+    if region.upper() == "WORLD":
+        west, east, south, north = STATE_BOUNDS["WORLD"]
+        width, height = _GRADIENT_WIDTH_WORLD, _GRADIENT_HEIGHT_WORLD
+        # IDW parameters — must match JS _gradientNeighborConfig() WORLD values
+        MAX_NEIGHBORS = 16
+        MAX_INFLUENCE_KM = 1200
+        IDW_POWER = 2.5
+    else:
+        west, east, south, north = STATE_BOUNDS["CONUS"]
+        width, height = _GRADIENT_WIDTH, _GRADIENT_HEIGHT
+        # IDW parameters — must match JS _gradientNeighborConfig() CONUS values
+        MAX_NEIGHBORS = 14
+        MAX_INFLUENCE_KM = 1200
+        IDW_POWER = 0.1
     NEAR_STATION_KM = 0.0
 
     # Build grid longitudes (linear) and latitudes (Mercator-sampled).
-    grid_lons = np.linspace(west, east, _GRADIENT_WIDTH, dtype=np.float64)
+    grid_lons = np.linspace(west, east, width, dtype=np.float64)
     north_merc = float(_lat_to_merc_y(np.asarray(north, dtype=np.float64)))
     south_merc = float(_lat_to_merc_y(np.asarray(south, dtype=np.float64)))
-    merc_ys = np.linspace(north_merc, south_merc, _GRADIENT_HEIGHT, dtype=np.float64)
-    grid_lats = _merc_y_to_lat(merc_ys)  # shape (_GRADIENT_HEIGHT,)
+    merc_ys = np.linspace(north_merc, south_merc, height, dtype=np.float64)
+    grid_lats = _merc_y_to_lat(merc_ys)  # shape (height,)
 
     # Project stations to approximate km space (cosLat scaling at mean lat).
     mean_lat = float(np.mean(lat))
@@ -335,7 +357,7 @@ def _interpolate_surface_grid(
     if nan_mask.any():
         result[nan_mask] = vals_at_neighbors[nan_mask, 0]
 
-    grid = result.reshape(_GRADIENT_HEIGHT, _GRADIENT_WIDTH).astype(np.float32)
+    grid = result.reshape(height, width).astype(np.float32)
     return grid, [west, east, south, north]
 
 
@@ -356,16 +378,18 @@ def _write_gradient_cache(
     timestamp_iso: str,
     station_count: int,
     unit: str,
+    region: str = "CONUS",
 ) -> None:
     matplotlib.use("Agg")
     from matplotlib import image as mpl_image
 
-    os.makedirs(_SURFACE_GRADIENT_ROOT, exist_ok=True)
-    png_path = os.path.join(_SURFACE_GRADIENT_ROOT, f"{product}.png")
-    meta_path = os.path.join(_SURFACE_GRADIENT_ROOT, f"{product}.json")
+    gradient_root = _gradient_root(region)
+    os.makedirs(gradient_root, exist_ok=True)
+    png_path = os.path.join(gradient_root, f"{product}.png")
+    meta_path = os.path.join(gradient_root, f"{product}.json")
 
     with tempfile.NamedTemporaryFile(
-        "wb", delete=False, dir=_SURFACE_GRADIENT_ROOT, suffix=".png"
+        "wb", delete=False, dir=gradient_root, suffix=".png"
     ) as fh:
         tmp_png = fh.name
     mpl_image.imsave(tmp_png, rgba)
@@ -373,24 +397,25 @@ def _write_gradient_cache(
 
     rel = os.path.relpath(png_path, _CACHE_ROOT).replace("\\", "/")
     meta = {
-        "region": "CONUS",
+        "region": region.upper(),
         "product": product,
         "bounds": bounds,
         "image_url": f"/cache/{rel}",
         "timestamp": timestamp_iso,
         "station_count": station_count,
-        "grid": {"width": _GRADIENT_WIDTH, "height": _GRADIENT_HEIGHT},
+        "grid": {"width": _GRADIENT_WIDTH_WORLD if region.upper() == "WORLD" else _GRADIENT_WIDTH,
+                 "height": _GRADIENT_HEIGHT_WORLD if region.upper() == "WORLD" else _GRADIENT_HEIGHT},
         "unit": unit,
     }
     _write_json_atomic(meta_path, meta)
 
 
-def _build_surface_gradients(df, selected_products: set[str] | None = None) -> None:
+def _build_surface_gradients(df, selected_products: set[str] | None = None, region: str = "CONUS") -> None:
     if df is None or df.empty:
-        print("[surface_worker] gradient: no CONUS source data")
+        print(f"[surface_worker] gradient [{region}]: no source data")
         return
 
-    _cleanup_stale_gradient_temp_files()
+    _cleanup_stale_gradient_temp_files(region)
 
     df_work = df.copy()
     for col in ("longitude", "latitude"):
@@ -437,9 +462,11 @@ def _build_surface_gradients(df, selected_products: set[str] | None = None) -> N
                 )
                 continue
 
-            grid, bounds = _interpolate_surface_grid(lons, lats, vals)
+            grid, bounds = _interpolate_surface_grid(
+                lons, lats, vals, region=region)
             if grid is None or bounds is None:
-                print(f"[surface_worker] gradient {product}: interpolation failed")
+                print(
+                    f"[surface_worker] gradient {product}: interpolation failed")
                 continue
 
             rgba = _build_rgba_from_values(grid, cfg["anchors"])
@@ -450,17 +477,18 @@ def _build_surface_gradients(df, selected_products: set[str] | None = None) -> N
                 timestamp_iso=valid_ts.isoformat(),
                 station_count=int(vals.size),
                 unit=str(cfg["unit"]),
+                region=region,
             )
             elapsed = _time.perf_counter() - t0
             print(
-                f"[surface_worker] gradient {product}: {int(vals.size)} points in {elapsed:.1f}s"
+                f"[surface_worker] gradient [{region}] {product}: {int(vals.size)} points in {elapsed:.1f}s"
             )
         except Exception as exc:
             print(f"[surface_worker] gradient {product} error: {exc}")
 
 
 def run_surface_worker(force: bool = False, products: list[str] | None = None) -> None:
-    """Fetch METAR data and pre-render CONUS gradient caches."""
+    """Fetch METAR data and pre-render CONUS and WORLD gradient caches."""
     if not force and is_cache_fresh("surface", _FRESH_WINDOW_SEC):
         print("[surface_worker] Cache fresh — skipping run")
         return
@@ -472,7 +500,8 @@ def run_surface_worker(force: bool = False, products: list[str] | None = None) -
         return
 
     if selected_products:
-        print(f"[surface_worker] gradient filter active: {sorted(selected_products)}")
+        print(
+            f"[surface_worker] gradient filter active: {sorted(selected_products)}")
 
     try:
         from surface import surface_utils
@@ -480,23 +509,27 @@ def run_surface_worker(force: bool = False, products: list[str] | None = None) -
         print(f"[surface_worker] Import error: {exc}")
         return
 
-    conus_df = None
+    region_dfs: dict[str, object] = {}
     for region in _PRELOAD_REGIONS:
         t0 = _time.perf_counter()
         try:
             df = surface_utils.fetch_metar_data(region)
             elapsed = _time.perf_counter() - t0
             rows = len(df) if df is not None and not df.empty else 0
-            print(f"[surface_worker] {region}: {rows} stations in {elapsed:.1f}s")
-            if region == "CONUS" and df is not None and not df.empty:
-                conus_df = df
+            print(
+                f"[surface_worker] {region}: {rows} stations in {elapsed:.1f}s")
+            if df is not None and not df.empty:
+                region_dfs[region] = df
         except Exception as exc:
             print(f"[surface_worker] {region} error: {exc}")
 
-    if conus_df is not None and not conus_df.empty:
-        _build_surface_gradients(conus_df, selected_products=selected_products)
-    else:
-        print("[surface_worker] gradient: skipped (no CONUS dataframe)")
+    for reg in ("CONUS", "WORLD"):
+        df = region_dfs.get(reg)
+        if df is not None and not df.empty:
+            _build_surface_gradients(
+                df, selected_products=selected_products, region=reg)
+        else:
+            print(f"[surface_worker] gradient [{reg}]: skipped (no dataframe)")
 
     mark_run_complete("surface")
 
@@ -504,8 +537,10 @@ def run_surface_worker(force: bool = False, products: list[str] | None = None) -
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run the surface worker once.")
-    parser.add_argument("--force", action="store_true", help="Bypass freshness gate.")
+    parser = argparse.ArgumentParser(
+        description="Run the surface worker once.")
+    parser.add_argument("--force", action="store_true",
+                        help="Bypass freshness gate.")
     parser.add_argument(
         "--log-to-file",
         action="store_true",

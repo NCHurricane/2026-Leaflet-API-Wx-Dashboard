@@ -281,12 +281,15 @@ def _render_overlay_png(
         radar.fields[field_name]["data"] = np.ma.masked_where(invalid, field_data)
 
         display = pyart.graph.RadarMapDisplay(radar)
-        cmap_name = "NWSVel" if is_velocity else "NWSRef"
-        cmap = plt.get_cmap(cmap_name).copy()
-        cmap.set_bad((0, 0, 0, 0))
-        cmap.set_under((0, 0, 0, 0))
-        vmin = -80 if is_velocity else -10
-        vmax = 80 if is_velocity else 80
+        from config.radar_colortable_utils import get_radar_colortable as _get_ct
+
+        _pal_key = "BV" if is_velocity else "BR"
+        _vmin = -120.0 if is_velocity else -30.0
+        _vmax = 120.0 if is_velocity else 90.0
+        _ct = _get_ct(_pal_key, _vmin, _vmax)
+        cmap = _ct["cmap"]
+        vmin = _vmin
+        vmax = _vmax
         sweep = _best_sweep(radar, field_name)
         display.plot_ppi_map(
             field_name,
@@ -349,6 +352,7 @@ def _render_site_product(
     site: str,
     product_key: str,
     product_cfg: dict,
+    latest_only: bool = False,
 ) -> int:
     """Render and cache frames for one site/product. Returns number of frames cached."""
     level = str(product_cfg.get("level") or "Level 3")
@@ -367,7 +371,7 @@ def _render_site_product(
         product_code,
         float(LIVE_RADAR_LOOKBACK_HOURS),
         str(_RADAR_ROOT),
-        latest_only=False,
+        latest_only=latest_only,
         **kwargs,
     )
 
@@ -501,6 +505,7 @@ def run_radar_live_site_product(
     site: str,
     product_key: str,
     force: bool = True,
+    latest_only: bool = False,
 ) -> int:
     """Render and cache frames for a single live radar site/product pair.
 
@@ -528,6 +533,7 @@ def run_radar_live_site_product(
         site_id,
         normalized_product,
         product_cfg,
+        latest_only=latest_only,
     )
     if cached > 0:
         mark_run_complete("radar_live")
