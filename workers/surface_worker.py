@@ -16,8 +16,13 @@ from datetime import datetime, timezone
 import matplotlib
 import numpy as np
 from scipy.spatial import cKDTree
+from rasterio.features import rasterize as _rasterize
+from rasterio.transform import from_bounds as _from_bounds
+from shapely.ops import transform as _shapely_transform
 
 from config.geo_config import STATE_BOUNDS
+from geo_utils import build_conus_geometry as _build_conus_geometry
+from geo_utils import build_world_land_geometry as _build_world_land_geometry
 
 from workers._freshness import is_cache_fresh, mark_run_complete
 
@@ -470,6 +475,61 @@ def _build_surface_gradients(df, selected_products: set[str] | None = None, regi
                 continue
 
             rgba = _build_rgba_from_values(grid, cfg["anchors"])
+
+            # Clip gradients to land boundaries so overlays do not bleed into
+            # oceans. Keep masking in Mercator Y to match grid sampling.
+            region_upper = region.upper()
+            mask_geom = None
+            mask_label = region_upper
+            if region_upper == "CONUS":
+                mask_geom = _build_conus_geometry()
+                mask_label = "CONUS"
+            elif region_upper == "WORLD":
+                mask_geom = _build_world_land_geometry()
+                mask_label = "WORLD land"
+
+            if mask_geom is not None:
+                try:
+                    west_b, east_b, south_b, north_b = bounds
+                    north_merc = float(
+                        _lat_to_merc_y(np.asarray(north_b, dtype=np.float64))
+                    )
+                    south_merc = float(
+                        _lat_to_merc_y(np.asarray(south_b, dtype=np.float64))
+                    )
+
+                    def _lonlat_to_lon_mercy(x, y, z=None):
+                        merc_y = _lat_to_merc_y(
+                            np.asarray(y, dtype=np.float64))
+                        if z is None:
+                            return x, merc_y
+                        return x, merc_y, z
+
+                    mask_geom_merc = _shapely_transform(
+                        _lonlat_to_lon_mercy, mask_geom
+                    )
+                    transform = _from_bounds(
+                        west_b,
+                        south_merc,
+                        east_b,
+                        north_merc,
+                        grid.shape[1],
+                        grid.shape[0],
+                    )
+                    land_mask = _rasterize(
+                        [(mask_geom_merc, 1)],
+                        out_shape=grid.shape,
+                        transform=transform,
+                        fill=0,
+                        dtype=np.uint8,
+                    )
+                    rgba[:, :, 3] = np.where(land_mask == 1, 255, 0)
+                except Exception as _mask_err:
+                    print(
+                        f"[surface_worker] gradient {product}: "
+                        f"{mask_label} mask failed (continuing without clip): {_mask_err}"
+                    )
+
             _write_gradient_cache(
                 product=product,
                 rgba=rgba,

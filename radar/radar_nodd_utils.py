@@ -34,6 +34,8 @@ NEXRAD_LEVEL2_GCP_BUCKET = "gcp-public-data-nexrad-l2"
 NEXRAD_LEVEL3_GCP_BUCKET = "gcp-public-data-nexrad-l3"
 NEXRAD_LEVEL3_GCP_REALTIME_BUCKET = "gcp-public-data-nexrad-l3-realtime"
 CACHE_MAX_BYTES = 20 * 1024 * 1024 * 1024
+DOWNLOAD_RETRY_ATTEMPTS = 3
+DOWNLOAD_RETRY_SLEEP_SECONDS = 0.12
 
 
 LEVEL3_PREFIX_PATTERNS = [
@@ -635,6 +637,13 @@ def download_radar_data(
         requests = None
 
     downloaded = 0
+
+    def _has_nonempty_file(path):
+        try:
+            return os.path.exists(path) and os.path.getsize(path) > 0
+        except OSError:
+            return False
+
     _t_dl = _time.perf_counter()
     for idx, key in enumerate(keys, start=1):
         if progress_callback:
@@ -643,33 +652,58 @@ def download_radar_data(
         filename = os.path.basename(key)
         local_path = os.path.join(save_dir, filename)
 
-        if os.path.exists(local_path):
+        if _has_nonempty_file(local_path):
             continue
 
-        try:
-            if provider == "gcp":
-                encoded_key = quote(key, safe="/")
-                resp = None
-                for bucket in buckets:
-                    url = f"https://storage.googleapis.com/{bucket}/{encoded_key}"
-                    candidate = requests.get(url, timeout=60)
-                    if candidate.status_code == 200:
-                        resp = candidate
-                        break
-                if resp is None:
-                    raise RuntimeError(
-                        f"File not found in any GCP bucket for key={key}"
+        download_succeeded = False
+        for attempt in range(1, DOWNLOAD_RETRY_ATTEMPTS + 1):
+            try:
+                if provider == "gcp":
+                    encoded_key = quote(key, safe="/")
+                    resp = None
+                    for bucket in buckets:
+                        url = f"https://storage.googleapis.com/{bucket}/{encoded_key}"
+                        candidate = requests.get(url, timeout=60)
+                        if candidate.status_code == 200:
+                            resp = candidate
+                            break
+                    if resp is None:
+                        raise RuntimeError(
+                            f"File not found in any GCP bucket for key={key}"
+                        )
+                    with open(local_path, "wb") as file_handle:
+                        file_handle.write(resp.content)
+                else:
+                    bucket = buckets[0]
+                    s3_client.download_file(bucket, key, local_path)
+
+                if _has_nonempty_file(local_path):
+                    downloaded += 1
+                    download_succeeded = True
+                break
+            except (FileExistsError, PermissionError) as e:
+                # Concurrent requests can race to write the same file on Windows.
+                _time.sleep(DOWNLOAD_RETRY_SLEEP_SECONDS)
+                if _has_nonempty_file(local_path):
+                    downloaded += 1
+                    download_succeeded = True
+                    _log(
+                        f"[INFO] NODD radar download race-resolved: {type(e).__name__}: {e} | provider={provider} key={key}"
                     )
-                with open(local_path, "wb") as file_handle:
-                    file_handle.write(resp.content)
-            else:
-                bucket = buckets[0]
-                s3_client.download_file(bucket, key, local_path)
+                    break
+
+                if attempt >= DOWNLOAD_RETRY_ATTEMPTS:
+                    _log(
+                        f"[WARN] NODD radar download failed after retries: {type(e).__name__}: {e} | provider={provider} key={key}"
+                    )
+            except Exception as e:
+                _log(
+                    f"[WARN] NODD radar download failed: {type(e).__name__}: {e} | provider={provider} key={key}"
+                )
+                break
+
+        if not download_succeeded and _has_nonempty_file(local_path):
             downloaded += 1
-        except Exception as e:
-            _log(
-                f"[WARN] NODD radar download failed: {type(e).__name__}: {e} | provider={provider} key={key}"
-            )
 
     _log(
         f"[TIMER] download loop took {_time.perf_counter() - _t_dl:.2f}s  (downloaded={downloaded}/{total_files})"

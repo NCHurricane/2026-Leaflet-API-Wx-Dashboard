@@ -31,6 +31,7 @@ from config.geo_config import STATES_FULL
 _STATE_GEOM_CACHE = None
 _CONUS_GEOM_CACHE = None
 _US_COUNTRY_GEOM_CACHE = None
+_WORLD_LAND_GEOM_CACHE = None
 
 
 def _configure_pyshp_logging() -> None:
@@ -126,6 +127,38 @@ def get_us_country_geometry():
             break
 
     return _US_COUNTRY_GEOM_CACHE
+
+
+def build_world_land_geometry():
+    """Build and cache a global land polygon union from Natural Earth.
+
+    Returns:
+        shapely.geometry.base.BaseGeometry or None
+    """
+    global _WORLD_LAND_GEOM_CACHE
+    if _WORLD_LAND_GEOM_CACHE is not None:
+        return _WORLD_LAND_GEOM_CACHE
+
+    # 50m is a good balance between coastline detail and worker speed.
+    shp_path = shpreader.natural_earth(
+        resolution="50m", category="physical", name="land"
+    )
+    reader = shpreader.Reader(shp_path)
+    geoms = [geom for geom in reader.geometries() if geom is not None]
+
+    if not geoms:
+        # Fallback to lower-resolution land polygons if needed.
+        shp_path = shpreader.natural_earth(
+            resolution="110m", category="physical", name="land"
+        )
+        reader = shpreader.Reader(shp_path)
+        geoms = [geom for geom in reader.geometries() if geom is not None]
+
+    if not geoms:
+        return None
+
+    _WORLD_LAND_GEOM_CACHE = unary_union(geoms).buffer(0)
+    return _WORLD_LAND_GEOM_CACHE
 
 
 # ═════════════════════════════════════════════════════════════════════════════

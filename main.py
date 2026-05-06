@@ -1,5 +1,6 @@
 from surface import surface_utils
 from config.rtma_config import RTMA_STREAM_MAX_HOURS, clamp_stream_hours
+from config.satellite_config import SATELLITE_LEAFLET_PHASE1_PRODUCTS
 from io import StringIO
 from datetime import datetime, timezone, timedelta
 import json
@@ -38,6 +39,7 @@ radar_utils = None
 satellite_utils = None
 radar_archive_utils = None
 satellite_archive_utils = None
+satellite_tile_utils = None
 weather_utils = None
 _SCHEDULER_AVAILABLE = False
 start_scheduler = None
@@ -76,7 +78,11 @@ app = FastAPI(title="NCHurricane Weather API")
 def _initialize_modules() -> None:
     """Load all optional modules at startup (NODD, Archive, Weather, Scheduler) with timing."""
     global USING_NODD, radar_utils, satellite_utils, radar_archive_utils
-    global satellite_archive_utils, weather_utils, _SCHEDULER_AVAILABLE
+    global \
+        satellite_archive_utils, \
+        satellite_tile_utils, \
+        weather_utils, \
+        _SCHEDULER_AVAILABLE
     global start_scheduler, stop_scheduler
 
     startup_events = []
@@ -142,6 +148,21 @@ def _initialize_modules() -> None:
     except Exception as weather_err:
         startup_events.append(
             (f"[WARN] Weather module unavailable: {weather_err}", _time.time() - _t0)
+        )
+
+    # 4b. Initialize Satellite tile workflow module
+    _t0 = _time.time()
+    try:
+        from satellite import satellite_tile_utils as sat_tiles
+
+        satellite_tile_utils = sat_tiles
+        startup_events.append(("[OK] Satellite tile module", _time.time() - _t0))
+    except Exception as sat_tiles_err:
+        startup_events.append(
+            (
+                f"[WARN] Satellite tile module unavailable: {sat_tiles_err}",
+                _time.time() - _t0,
+            )
         )
 
     # 5. Initialize Background Scheduler
@@ -386,6 +407,7 @@ os.makedirs(os.path.join(_CACHE_ROOT, "mrms"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "rtma"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "archive"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "radar"), exist_ok=True)
+os.makedirs(os.path.join(_CACHE_ROOT, "satellite"), exist_ok=True)
 app.mount("/cache", StaticFiles(directory=_CACHE_ROOT), name="cache")
 
 app.mount("/css", StaticFiles(directory=os.path.join(BASE_DIR, "css")), name="css")
@@ -4186,6 +4208,8 @@ def _radar_live_render_on_demand(
     *,
     latest_only: bool = True,
     backfill_history: bool = True,
+    newest_first: bool = False,
+    max_render_frames: int | None = None,
 ) -> int:
     from workers.radar_live_worker import run_radar_live_site_product
 
@@ -4201,6 +4225,8 @@ def _radar_live_render_on_demand(
                 product_id,
                 force=True,
                 latest_only=latest_only,
+                newest_first=newest_first,
+                max_render_frames=max_render_frames,
             )
         )
 
@@ -4208,17 +4234,23 @@ def _radar_live_render_on_demand(
     if not backfill_history:
         return cached
 
-    if not latest_only:
+    # Avoid kicking off expensive history work when latest probe found nothing.
+    if cached <= 0:
+        return cached
+
+    if not latest_only and max_render_frames is None:
         return cached
 
     def _fill_history():
         try:
-            run_radar_live_site_product(
-                site_id,
-                product_id,
-                force=True,
-                latest_only=False,
-            )
+            lock = _radar_live_fallback_lock(site_id, product_id)
+            with lock:
+                run_radar_live_site_product(
+                    site_id,
+                    product_id,
+                    force=True,
+                    latest_only=False,
+                )
         except Exception as exc:
             print(
                 f"[radar_live] history back-fill failed {site_id}/{product_id}: {exc}"
@@ -4428,6 +4460,8 @@ def get_radar_live_latest(
         meta = radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key)
 
     # Cold-start edge case: latest-only probe may miss while broader frame render succeeds.
+    # Render the newest frame first so Current can paint immediately, then
+    # continue full history in the background for scrubber readiness.
     if not meta:
         try:
             fallback_cached = max(
@@ -4436,7 +4470,9 @@ def get_radar_live_latest(
                     site_id,
                     product_key,
                     latest_only=False,
-                    backfill_history=False,
+                    backfill_history=True,
+                    newest_first=True,
+                    max_render_frames=1,
                 ),
             )
         except Exception as exc:
@@ -5995,6 +6031,111 @@ def get_satellite_current(
         latest_only=latest_only,
     )
     return attach_mode_and_source(response, "recent")
+
+
+@app.get("/api/satellite/live/frames")
+def get_satellite_live_frames(
+    sat_id: str = "goes19",
+    sector: str = "CONUS",
+    channel: str = "Channel13",
+    hours: int = 2,
+    source: str = "auto",
+    max_frames: int = 90,
+):
+    if satellite_tile_utils is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Satellite tile workflow module is unavailable.",
+        )
+
+    product_key = str(channel or "Channel13").strip()
+    if product_key not in SATELLITE_LEAFLET_PHASE1_PRODUCTS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Satellite product is not supported by Leaflet phase 1: {product_key}",
+        )
+
+    try:
+        payload = satellite_tile_utils.build_live_frames(
+            cache_root=_CACHE_ROOT,
+            base_dir=BASE_DIR,
+            sat_id=sat_id,
+            sector=sector,
+            channel_key=product_key,
+            hours=max(1, int(hours or 2)),
+            source=source,
+            max_frames=max(1, int(max_frames or 90)),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    payload["data_mode"] = "current"
+    payload["requested_source"] = str(source or "auto").strip().lower() or "auto"
+    payload["source_used"] = payload.get("provider", "aws")
+    payload["tile_url_template"] = (
+        "/api/satellite/tile/{z}/{x}/{y}"
+        f"?sat_id={sat_id}&sector={sector}&channel={product_key}&source={source}&frame_key={{frame_key}}"
+    )
+    return payload
+
+
+@app.get("/api/satellite/tile/{z}/{x}/{y}")
+def get_satellite_tile(
+    z: int,
+    x: int,
+    y: int,
+    sat_id: str,
+    sector: str,
+    channel: str,
+    frame_key: str,
+    source: str = "auto",
+):
+    if satellite_tile_utils is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Satellite tile workflow module is unavailable.",
+        )
+
+    product_key = str(channel or "").strip()
+    if product_key not in SATELLITE_LEAFLET_PHASE1_PRODUCTS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Satellite product is not supported by Leaflet phase 1: {product_key}",
+        )
+
+    tile_path, tile_stats = satellite_tile_utils.ensure_tile_cached_with_stats(
+        cache_root=_CACHE_ROOT,
+        sat_id=sat_id,
+        sector=sector,
+        channel_key=product_key,
+        source=source,
+        frame_key=frame_key,
+        z=z,
+        x=x,
+        y=y,
+    )
+
+    if not tile_path or not os.path.exists(tile_path):
+        raise HTTPException(status_code=404, detail="Satellite tile not available.")
+
+    response = FileResponse(tile_path, media_type="image/png")
+    cache_status = str(tile_stats.get("cache_status") or "miss").strip().lower()
+    response.headers["X-Satellite-Tile-Cache"] = (
+        "HIT" if cache_status == "hit" else "MISS"
+    )
+    response.headers["X-Satellite-Tile-Provider"] = str(
+        tile_stats.get("provider") or "unknown"
+    )
+    response.headers["X-Satellite-Tile-Elapsed-Ms"] = str(
+        int(tile_stats.get("elapsed_ms") or 0)
+    )
+    response.headers["X-Satellite-Tile-Render-Ms"] = str(
+        int(tile_stats.get("render_ms") or 0)
+    )
+    response.headers["X-Satellite-Frame-Key"] = str(frame_key or "")
+    return response
 
 
 @app.get("/api/satellite/archive")

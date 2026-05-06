@@ -97,6 +97,8 @@ _HEALTH_THRESHOLDS = {
     "surface": 60 * 60,  # task fires every 30 min
     "rtma_hourly": 2 * 60 * 60,  # task fires hourly at :05
     "rtma_rapid_update": 30 * 60,  # task fires every 15 min starting :20
+    "satellite_current": 30 * 60,  # task fires every 15 min
+    "satellite_meso": 12 * 60,  # task fires every 5 min
     # MRMS sentinels are per-product; we check whichever exists. See below.
 }
 _MRMS_THRESHOLD = 30 * 60  # task fires every 15 min

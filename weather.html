@@ -484,6 +484,16 @@
                 margin: 8px 0;
             }
 
+            .wx-radar-action-row {
+                display: flex;
+                gap: 8px;
+                margin-top: 4px;
+            }
+
+            .wx-radar-action-row button {
+                flex: 1 1 0;
+            }
+
             .wx-gradient-label {
                 font-size: 0.7rem;
                 opacity: 0.65;
@@ -2285,6 +2295,50 @@
                 text-transform: uppercase;
             }
 
+
+            /* ── Radar workflow toast (selection changed while animating) ─── */
+            #wx-radar-toast-stack {
+                position: absolute;
+                top: 84px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 1005;
+                width: min(92vw, 560px);
+                display: flex;
+                justify-content: center;
+                pointer-events: none;
+            }
+
+            .wx-radar-toast {
+                pointer-events: none;
+                background: rgba(6, 16, 38, 0.94);
+                color: #f6fbff;
+                border: 1px solid rgba(88, 188, 255, 0.75);
+                border-left: 5px solid #22e8ff;
+                border-radius: 8px;
+                box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+                font-size: 0.74rem;
+                font-weight: 800;
+                letter-spacing: 0.03em;
+                text-transform: uppercase;
+                padding: 8px 12px;
+                opacity: 0;
+                transform: translateY(-8px);
+                transition: opacity 140ms ease, transform 140ms ease;
+            }
+
+            .wx-radar-toast.is-active {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            @media (max-width: 860px) {
+                #wx-radar-toast-stack {
+                    top: 72px;
+                    width: min(95vw, 520px);
+                }
+            }
+
             .wx-new-alert-banner.is-dismissing {
                 animation: wx-alert-slide-out 0.3s ease-in forwards;
             }
@@ -2731,6 +2785,10 @@
                 padding: 0 10px;
             }
 
+            .wx-nad-peaks-title {
+                padding: 0 10px;
+            }
+
             .wx-nad-chip {
                 padding: 3px 8px;
                 font-size: 1rem;
@@ -2843,6 +2901,7 @@
                 </div>
                 <div id="wx-new-alert-border-flash" aria-hidden="true"></div>
                 <div id="wx-new-alert-stack"></div>
+                <div id="wx-radar-toast-stack" aria-live="polite" aria-atomic="true"></div>
 
                 <aside class="weather-side weather-side-left" id="weather-side-left">
                     <h3 id="wx-active-tab-name">Current</h3>
@@ -3239,12 +3298,80 @@
                                     <option value="L3_DTA">L3 Storm Total Precip</option>
                                 </select>
                             </div>
-
-
-                            <button id="weather-refresh-radar" type="button">Refresh</button>
+                            <div class="wx-radar-action-row">
+                                <button id="weather-refresh-radar" type="button">Refresh</button>
+                                <button id="weather-clear-radar" type="button">Clear</button>
+                            </div>
                         </div>
                         <span id="weather-radar-status" class="wx-small"></span>
 
+                    </div>
+
+                    <div id="wx-section-satellite" class="wx-block" data-type="satellite" style="display:none;">
+                        <div id="weather-satellite-opts">
+                            <label for="weather-satellite-sat-id">Satellite</label>
+                            <select id="weather-satellite-sat-id" class="wx-sidebar-select">
+                                <option value="goes19" selected>GOES-19</option>
+                                <option value="goes18">GOES-18</option>
+                                <option value="goes16">GOES-16</option>
+                            </select>
+
+                            <label for="weather-satellite-sector">Sector</label>
+                            <select id="weather-satellite-sector" class="wx-sidebar-select">
+                                <option value="CONUS" selected>CONUS</option>
+                                <option value="FullDisk">Full Disk</option>
+                                <option value="Meso1">Meso 1</option>
+                                <option value="Meso2">Meso 2</option>
+                            </select>
+
+                            <label for="weather-satellite-channel">Product</label>
+                            <select id="weather-satellite-channel" class="wx-sidebar-select">
+                                <option value="Channel01">Channel 01 - Blue Visible</option>
+                                <option value="Channel02">Channel 02 - Red Visible</option>
+                                <option value="Channel08">Channel 08 - Upper-Level WV</option>
+                                <option value="Channel13" selected>Channel 13 - Clean IR</option>
+                                <option value="GeoColor">GeoColor</option>
+                                <option value="TrueColor">True Color</option>
+                                <option value="NaturalColor">Natural Color</option>
+                            </select>
+                            <div class="wx-radar-action-row" style="margin-top:8px;">
+                                <button id="weather-satellite-current" type="button">Current</button>
+                            </div>
+                            <span id="weather-satellite-status" class="wx-small"></span>
+
+                            <div class="wx-radar-action-row" style="margin-top:8px;">
+                                <button id="weather-satellite-animate" type="button">Animate</button>
+                            </div>
+
+                            <div id="weather-satellite-lookback-wrap" style="display:none; margin-top:8px;">
+                                <label class="wx-small"
+                                    style="color:#94a3b8; display:block; margin-bottom:3px;">Lookback
+                                    Window</label>
+                                <div id="weather-satellite-lookback-buttons" class="wx-animate-presets">
+                                    <button class="weather-satellite-lookback-btn active" type="button"
+                                        data-hours="1">1h</button>
+                                    <button class="weather-satellite-lookback-btn" type="button"
+                                        data-hours="3">3h</button>
+                                    <button class="weather-satellite-lookback-btn" type="button"
+                                        data-hours="6">6h</button>
+                                    <button class="weather-satellite-lookback-btn" type="button"
+                                        data-hours="12">12h</button>
+                                </div>
+                            </div>
+
+                            <div id="weather-satellite-scrubber" style="display:none; margin-top:8px;">
+                                <div class="wx-radar-action-row" style="margin-bottom:6px;">
+                                    <button id="weather-satellite-step-back" type="button">Prev</button>
+                                    <button id="weather-satellite-step-fwd" type="button">Next</button>
+                                </div>
+                                <input id="weather-satellite-scrubber-slider" type="range" min="0" max="0" value="0"
+                                    step="1">
+                                <div class="wx-small" id="weather-satellite-scrubber-count" style="margin-top:4px;">0/0
+                                </div>
+                                <div class="wx-small" id="weather-satellite-scrubber-ts" style="margin-top:2px;">--
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="wx-section-rtma" class="wx-block" data-type="rtma" style="display:none;">
@@ -3556,7 +3683,7 @@
                             <button id="weather-mode-archive" class="wx-mode-tab" type="button">Archive</button>
                             <button id="weather-rtma-load-scrubber" class="wx-mode-tab" type="button">Animate</button>
                         </div>
-                        <span id="wx-scrubber-status" class="wx-small" style="display:block; margin-top:4px;"></span>
+                        <span id="wx-scrubber-status" class="wx-small" style="display:none; margin-top:4px;"></span>
                         <span id="wx-radar-next-update-status" class="wx-small"
                             style="display:none; margin-top:2px; color:#94a3b8;"></span>
                         <label id="wx-radar-auto-update-row" class="wx-small"

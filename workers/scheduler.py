@@ -58,6 +58,10 @@ def start_scheduler() -> None:
     from workers.radar_live_worker import run_radar_live_worker
     from workers.radar_tiles_worker import run_radar_tiles_worker
     from workers.rtma_worker import run_rtma_hourly_worker, run_rtma_rapid_worker
+    from workers.satellite_worker import (
+        run_satellite_current_worker,
+        run_satellite_meso_worker,
+    )
     from workers.surface_worker import run_surface_worker
 
     now = datetime.now(timezone.utc)
@@ -136,6 +140,24 @@ def start_scheduler() -> None:
         misfire_grace_time=120,
         next_run_time=now,
     )
+    _scheduler.add_job(
+        run_satellite_current_worker,
+        "interval",
+        minutes=15,
+        id="satellite_current_worker",
+        max_instances=1,
+        misfire_grace_time=60,
+        next_run_time=now + timedelta(seconds=35),
+    )
+    _scheduler.add_job(
+        run_satellite_meso_worker,
+        "interval",
+        minutes=5,
+        id="satellite_meso_worker",
+        max_instances=1,
+        misfire_grace_time=60,
+        next_run_time=now + timedelta(seconds=40),
+    )
 
     _scheduler.start()
 
@@ -144,7 +166,8 @@ def start_scheduler() -> None:
         "mrms (15 min, +30s delay), radar_live (5 min, +20s delay), "
         "radar_tiles (5 min, +25s delay), "
         "rtma_hourly (60 min, +45s delay), rtma_rapid (15 min, +50s delay), "
-        "surface (30 min)"
+        "surface (30 min), satellite_current (15 min, +35s delay), "
+        "satellite_meso (5 min, +40s delay)"
     )
 
 

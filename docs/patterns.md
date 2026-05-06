@@ -22,6 +22,12 @@ Current RTMA endpoints:
 - `/api/overlay/frames`
 - `/api/data/rtma/points`
 
+Current weather-radar live endpoints:
+
+- `/api/radar/live/sites`
+- `/api/radar/live/latest`
+- `/api/radar/live/frames`
+
 ## Worker / Scheduler Pattern
 
 Default mode is OS-scheduled cache refresh (Windows Task Scheduler). In-process
@@ -78,6 +84,28 @@ Progress tracking (`active_tasks`, `/api/progress/{request_id}`) applies only to
 Weather cache-first endpoints (`/api/data/*`, `/api/overlay/*`) are lightweight reads — no progress tracking needed.
 
 Archive and export endpoints retain progress tracking where render time is non-trivial.
+
+## Radar Live Fallback Pattern (Weather Tab)
+
+For `/api/radar/live/latest` and `/api/radar/live/frames`:
+
+1. Read from cache-first radar overlay store (`cache/overlays/radar/{SITE}/{LEVEL}/{PRODUCT}`).
+2. If cache miss, run bounded on-demand render path using `run_radar_live_site_product(...)`.
+3. For latest endpoint cold start, render newest-first with `max_render_frames=1` for immediate first paint.
+4. Start background history backfill after first frame so scrubber readiness improves without blocking current view.
+5. Guard fallback with per-site/per-product locks to avoid duplicate warm runs.
+
+Frontend should treat `history_filling=true` as a warm-state hint, not as an error.
+
+## Radar Download Race-Tolerance Pattern (Windows)
+
+`radar/radar_nodd_utils.py` download loop intentionally tolerates concurrent write races:
+
+1. Retry on `FileExistsError` and `PermissionError`.
+2. After each retry delay, accept a non-empty local file as race-resolved success.
+3. Emit warning only after retries are exhausted and no valid file exists.
+
+This prevents false hard-failures when worker/API warm paths overlap on Windows.
 
 ## Two-Tier Dropdown Pattern
 
@@ -168,6 +196,8 @@ Animation encoding applies to Radar and Satellite export endpoints only. Weather
 
 Radar/Satellite: H.264 via FFmpeg, `/api/radar/export-animation`, `/api/satellite/export-animation`.
 
+Weather radar tab playback is frame scrub/poll playback from cached overlays, not encoded export animation.
+
 ## Date Validation Pattern
 
 For archive endpoints: `date_from`/`date_to` must both be provided or both omitted. Single-date requests return HTTP 400.
@@ -202,3 +232,12 @@ Migration target for Surface, MRMS, Radar, and Satellite:
 4. Preserve product-specific projection/render details under a common cache/index API.
 
 Alerts intentionally remains on vector GeoJSON workflow.
+
+## Radar UX State Pattern (Weather Tab)
+
+Radar controls in `js/weather.js` follow these state rules:
+
+1. Site dropdown selection collapses multi-site mode into a single-site context.
+2. If site/product selection changes during time-mode scrub, context is invalidated and user is prompted to press Animate again.
+3. `Clear` removes loaded radar overlays and exits animate-to-current state, while preserving current map extent.
+4. `Show Radar Sites` controls both marker visibility and the radar-sites legend visibility when no specific site is selected.

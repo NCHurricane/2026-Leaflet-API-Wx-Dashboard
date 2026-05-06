@@ -194,6 +194,18 @@ Open in browser:
 - `GET /api/radar/archive`
 - `GET /api/radar` (legacy multiplexer)
 
+### Weather Radar Live (Leaflet weather tab)
+
+- `GET /api/radar/live/sites`
+- `GET /api/radar/live/latest?site=KMHX&product=L3_N0B`
+- `GET /api/radar/live/frames?site=KMHX&product=L3_N0B&hours=2`
+
+Notes:
+
+- Endpoints are cache-first and read from `cache/overlays/radar/...`.
+- On cold cache miss, latest endpoint prioritizes first frame availability, then warms additional history asynchronously.
+- Frontend radar controls include `Refresh`, `Clear` (clear overlays without resetting map extent), and multi-site/time-mode animation workflow.
+
 ### Satellite
 
 - `GET /api/satellite/current`

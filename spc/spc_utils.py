@@ -4,6 +4,7 @@ import io
 import os
 import re
 import time
+import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -42,7 +43,8 @@ _SPC_WX_MAPSERVER = (
     "/outlooks/SPC_wx_outlks/MapServer"
 )
 
-_DAY12_HAZARDS = {"cat", "torn", "wind", "hail", "cigtorn", "cigwind", "cighail"}
+_DAY12_HAZARDS = {"cat", "torn", "wind",
+                  "hail", "cigtorn", "cigwind", "cighail"}
 _DAY3_HAZARDS = {"cat", "prob", "sig"}
 
 _SPC_CONVECTIVE_LAYER_IDS = {
@@ -140,7 +142,8 @@ def _request_text(url: str, timeout: int = 20, retries: int = 3) -> str:
         try:
             response = requests.get(url, timeout=timeout)
             if response.status_code in {429, 500, 502, 503, 504}:
-                last_error = RuntimeError(f"HTTP {response.status_code} for {url}")
+                last_error = RuntimeError(
+                    f"HTTP {response.status_code} for {url}")
                 continue
             response.raise_for_status()
             return response.text
@@ -212,7 +215,8 @@ def _clean_spc_text(text: str) -> str:
     raw = str(text or "")
     if not raw:
         return ""
-    pre_blocks = re.findall(r"<pre\b[^>]*>(.*?)</pre>", raw, re.IGNORECASE | re.DOTALL)
+    pre_blocks = re.findall(
+        r"<pre\b[^>]*>(.*?)</pre>", raw, re.IGNORECASE | re.DOTALL)
     if pre_blocks:
         raw = "\n\n".join(pre_blocks)
     else:
@@ -231,6 +235,43 @@ def _clean_spc_text(text: str) -> str:
     cleaned = re.sub(r"<[^>]+>", " ", raw)
     cleaned = html.unescape(cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+    return cleaned
+
+
+def _clean_spc_bulletin_text(text: str) -> str:
+    """Clean SPC bulletin text while preserving line/paragraph structure."""
+    raw = str(text or "")
+    if not raw:
+        return ""
+
+    pre_blocks = re.findall(
+        r"<pre\b[^>]*>(.*?)</pre>", raw, re.IGNORECASE | re.DOTALL
+    )
+    if pre_blocks:
+        raw = "\n\n".join(pre_blocks)
+    else:
+        raw = re.sub(
+            r"<script\b[^>]*>.*?</script>", " ", raw, flags=re.IGNORECASE | re.DOTALL
+        )
+        raw = re.sub(
+            r"<style\b[^>]*>.*?</style>", " ", raw, flags=re.IGNORECASE | re.DOTALL
+        )
+        raw = re.sub(
+            r"<noscript\b[^>]*>.*?</noscript>",
+            " ",
+            raw,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        raw = re.sub(r"<br\s*/?>", "\n", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"</p\s*>", "\n\n", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"</div\s*>", "\n", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"</li\s*>", "\n", raw, flags=re.IGNORECASE)
+
+    cleaned = re.sub(r"<[^>]+>", "", raw)
+    cleaned = html.unescape(cleaned)
+    cleaned = cleaned.replace("\r\n", "\n").replace("\r", "\n")
+    cleaned = "\n".join(line.rstrip() for line in cleaned.split("\n"))
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
     return cleaned
 
 
@@ -590,13 +631,16 @@ def _parse_md_valid_window(detail_text: str):
         ref_date = datetime.now(timezone.utc)
 
     try:
-        d1, h1, m1 = int(match.group(1)), int(match.group(2)), int(match.group(3))
-        d2, h2, m2 = int(match.group(4)), int(match.group(5)), int(match.group(6))
+        d1, h1, m1 = int(match.group(1)), int(
+            match.group(2)), int(match.group(3))
+        d2, h2, m2 = int(match.group(4)), int(
+            match.group(5)), int(match.group(6))
 
         start_utc = ref_date.replace(
             day=d1, hour=h1, minute=m1, second=0, microsecond=0
         )
-        end_utc = ref_date.replace(day=d2, hour=h2, minute=m2, second=0, microsecond=0)
+        end_utc = ref_date.replace(
+            day=d2, hour=h2, minute=m2, second=0, microsecond=0)
         return start_utc, end_utc
     except Exception:
         return None, None
@@ -791,7 +835,8 @@ def _fetch_active_watch_items_from_spc(
     iem_wwp_map: Optional[dict] = None,
 ):
     listing_url = f"{SPC_BASE}/products/watch/"
-    listing_html = _cached_text("spc_watch_listing", "active", listing_url, ttl_seconds)
+    listing_html = _cached_text(
+        "spc_watch_listing", "active", listing_url, ttl_seconds)
 
     watch_ids = []
     seen = set()
@@ -839,7 +884,8 @@ def _fetch_active_watch_items_from_spc(
             else:
                 wou_url = f"{SPC_BASE}/products/watch/{wou_rel}"
             try:
-                wou_text = _cached_text("spc_watch_wou", watch_id, wou_url, ttl_seconds)
+                wou_text = _cached_text(
+                    "spc_watch_wou", watch_id, wou_url, ttl_seconds)
                 county_fips = _parse_watch_county_fips_from_wou(wou_text)
                 issue_utc, expire_utc = _parse_watch_window_from_wou(wou_text)
                 watch_full_text = _clean_spc_text(wou_text)
@@ -857,7 +903,8 @@ def _fetch_active_watch_items_from_spc(
         if not watch_probabilities:
             wwp_url = f"{SPC_BASE}/products/watch/wwp{watch_id}.txt"
             try:
-                wwp_text = _cached_text("spc_watch_wwp", watch_id, wwp_url, ttl_seconds)
+                wwp_text = _cached_text(
+                    "spc_watch_wwp", watch_id, wwp_url, ttl_seconds)
                 watch_probabilities = _parse_watch_probability_table(wwp_text)
             except Exception:
                 watch_probabilities = {}
@@ -910,6 +957,68 @@ def _fetch_active_watch_items_from_spc(
 
 _IEM_WATCH_GEOJSON_URL = f"{IEM_BASE}/api/1/spc_watch_outline.geojson"
 _IEM_MCD_GEOJSON_URL = f"{IEM_BASE}/api/1/nws/spc_mcd.geojson"
+_SPC_MD_RSS_URL = f"{SPC_BASE}/products/spcmdrss.xml"
+
+
+def _md_id_from_text_or_link(text: str) -> str:
+    raw = str(text or "")
+    if not raw:
+        return ""
+    link_match = re.search(r"/md(\d{4})\.html", raw, re.IGNORECASE)
+    if link_match:
+        return link_match.group(1)
+    title_match = re.search(
+        r"\bMesoscale\s+Discussion\s*#?\s*0*(\d{1,4})\b", raw, re.IGNORECASE
+    )
+    if title_match:
+        try:
+            return str(int(title_match.group(1))).zfill(4)
+        except Exception:
+            return ""
+    return ""
+
+
+def _build_spc_md_rss_text_map(ttl_seconds: int = 90) -> dict:
+    """Map md_id -> full-text narrative from SPC MD RSS feed."""
+    try:
+        rss_text = _cached_text("spc_md_rss", "active",
+                                _SPC_MD_RSS_URL, ttl_seconds)
+    except Exception:
+        return {}
+
+    try:
+        root = ET.fromstring(rss_text)
+    except Exception:
+        return {}
+
+    mapped = {}
+    for item in root.findall("./channel/item"):
+        title = item.findtext("title") or ""
+        desc = item.findtext("description") or ""
+        link = item.findtext("link") or ""
+        guid = item.findtext("guid") or ""
+        md_id = (
+            _md_id_from_text_or_link(link)
+            or _md_id_from_text_or_link(guid)
+            or _md_id_from_text_or_link(title)
+            or _md_id_from_text_or_link(desc)
+        )
+        if not md_id:
+            continue
+        cleaned = _clean_spc_bulletin_text(desc)
+        if cleaned:
+            mapped[md_id] = {"text": cleaned, "link": link.strip()}
+    return mapped
+
+
+def _fetch_spc_md_detail_text(md_id: str, ttl_seconds: int = 90) -> str:
+    detail_url = f"{SPC_BASE}/products/md/md{md_id}.html"
+    try:
+        detail_html = _cached_text(
+            "spc_md_detail", md_id, detail_url, ttl_seconds)
+    except Exception:
+        return ""
+    return _clean_spc_bulletin_text(detail_html)
 
 
 def _extract_polygon_from_geom(geom: dict) -> list:
@@ -1027,7 +1136,8 @@ def fetch_active_watch_items(ttl_seconds: int = 90, with_counties: bool = False)
 
 def fetch_active_watch_options(ttl_seconds: int = 90):
     listing_url = f"{SPC_BASE}/products/watch/"
-    listing_html = _cached_text("spc_watch_listing", "active", listing_url, ttl_seconds)
+    listing_html = _cached_text(
+        "spc_watch_listing", "active", listing_url, ttl_seconds)
 
     items = []
     seen = set()
@@ -1054,9 +1164,11 @@ def fetch_active_watch_options(ttl_seconds: int = 90):
 
 def fetch_active_md_items(ttl_seconds: int = 90):
     """Fetch active SPC MDs from IEM GeoJSON — single fast request."""
-    data = _cached_json("iem_mcd_outline", "active", _IEM_MCD_GEOJSON_URL, ttl_seconds)
+    data = _cached_json("iem_mcd_outline", "active",
+                        _IEM_MCD_GEOJSON_URL, ttl_seconds)
     features = data.get("features") or []
     now = datetime.now(timezone.utc)
+    rss_text_map = _build_spc_md_rss_text_map(ttl_seconds=ttl_seconds)
     items = []
 
     for feat in features:
@@ -1091,6 +1203,9 @@ def fetch_active_md_items(ttl_seconds: int = 90):
             label = f"{label} - {concerning}"
 
         detail_url = f"https://www.spc.noaa.gov/products/md/md{md_id}.html"
+        rss_text = str((rss_text_map.get(md_id) or {}).get("text") or "")
+        full_text = rss_text or _fetch_spc_md_detail_text(
+            md_id, ttl_seconds=ttl_seconds)
 
         items.append(
             {
@@ -1101,17 +1216,21 @@ def fetch_active_md_items(ttl_seconds: int = 90):
                 "polygon": polygon,
                 "issue_utc": issue_utc,
                 "expire_utc": expire_utc,
-                "full_text": "",
+                "full_text": full_text,
                 "detail_url": detail_url,
             }
         )
 
-    return items, "SPC Mesoscale Discussions (IEM)"
+    source = "SPC Mesoscale Discussions (IEM + SPC RSS text)"
+    if not rss_text_map:
+        source = "SPC Mesoscale Discussions (IEM + SPC HTML text fallback)"
+    return items, source
 
 
 def fetch_active_md_options(ttl_seconds: int = 90):
     listing_url = f"{SPC_BASE}/products/md/"
-    listing_html = _cached_text("spc_md_listing", "active", listing_url, ttl_seconds)
+    listing_html = _cached_text(
+        "spc_md_listing", "active", listing_url, ttl_seconds)
 
     items = []
     seen = set()
@@ -1179,7 +1298,8 @@ def _draw_watch_county_items_layer(
 
     for item in items:
         county_fips = item.get("county_fips") or []
-        county_geoms = [fips_map.get(fips) for fips in county_fips if fips in fips_map]
+        county_geoms = [fips_map.get(fips)
+                        for fips in county_fips if fips in fips_map]
         county_geoms = [geom for geom in county_geoms if geom is not None]
 
         if not county_geoms:
@@ -1272,16 +1392,19 @@ def fetch_reports_rows(
         candidate_dates.append(report_date_utc - timedelta(days=1))
 
     for candidate_date in candidate_dates:
-        candidate_urls = [_report_csv_url(candidate_date, report_mode, type_key)]
+        candidate_urls = [_report_csv_url(
+            candidate_date, report_mode, type_key)]
         if type_key not in {"", "all"}:
             mode_key = (report_mode or "filtered").strip().lower()
             if mode_key == "filtered":
-                candidate_urls.append(_report_csv_url(candidate_date, "all", type_key))
+                candidate_urls.append(_report_csv_url(
+                    candidate_date, "all", type_key))
             elif mode_key == "all":
                 candidate_urls.append(
                     _report_csv_url(candidate_date, "filtered", type_key)
                 )
-            candidate_urls.append(_report_csv_url(candidate_date, report_mode, "all"))
+            candidate_urls.append(_report_csv_url(
+                candidate_date, report_mode, "all"))
 
         deduped_urls = []
         seen_urls = set()
@@ -1345,7 +1468,8 @@ def fetch_reports_rows(
             continue
 
         if normalized[0].lower() == "time":
-            header_map = {name.lower(): idx for idx, name in enumerate(normalized)}
+            header_map = {name.lower(): idx for idx,
+                          name in enumerate(normalized)}
             section_event = _event_from_second_header(
                 normalized[1] if len(normalized) > 1 else ""
             )
@@ -1616,7 +1740,8 @@ def _add_outlook_polygons(
 ):
     legend_entries = []
     features = (
-        outlook_geojson.get("features", []) if isinstance(outlook_geojson, dict) else []
+        outlook_geojson.get("features", []) if isinstance(
+            outlook_geojson, dict) else []
     )
 
     def _cat_rank(label: str) -> int:
@@ -1792,7 +1917,8 @@ def _build_outlook_bin_layers(
         return fallback_dn
 
     features = (
-        outlook_geojson.get("features", []) if isinstance(outlook_geojson, dict) else []
+        outlook_geojson.get("features", []) if isinstance(
+            outlook_geojson, dict) else []
     )
     for idx, feature in enumerate(features):
         props = feature.get("properties") or {}
@@ -2017,7 +2143,8 @@ def _dashify_hatch_layer_png(
             return
 
         if rgba.shape[2] == 3:
-            alpha_channel = np.ones((rgba.shape[0], rgba.shape[1], 1), dtype=rgba.dtype)
+            alpha_channel = np.ones(
+                (rgba.shape[0], rgba.shape[1], 1), dtype=rgba.dtype)
             rgba = np.concatenate([rgba, alpha_channel], axis=2)
         elif rgba.shape[2] < 4:
             return
@@ -2738,7 +2865,8 @@ def generate_spc_map(
     is_reports_only = hazard_key == "reports"
     is_watches_only = hazard_key == "watches"
     is_mds_only = hazard_key in {"md", "mds"}
-    show_outlook_layers = not (is_reports_only or is_watches_only or is_mds_only)
+    show_outlook_layers = not (
+        is_reports_only or is_watches_only or is_mds_only)
 
     show_country = _to_bool(style_config.get("show_country", True), True)
     show_states = _to_bool(style_config.get("show_states", True), True)
@@ -2841,7 +2969,8 @@ def generate_spc_map(
             mds_items = []
             mds_source = ""
 
-    selected_watch_ids = _selected_ids_from_style(style_config, "spc_selected_watch_id")
+    selected_watch_ids = _selected_ids_from_style(
+        style_config, "spc_selected_watch_id")
     if selected_watch_ids:
         watches_items = [
             item
@@ -2849,7 +2978,8 @@ def generate_spc_map(
             if _normalize_product_id(item.get("id", "")) in selected_watch_ids
         ]
 
-    selected_md_ids = _selected_ids_from_style(style_config, "spc_selected_md_id")
+    selected_md_ids = _selected_ids_from_style(
+        style_config, "spc_selected_md_id")
     if selected_md_ids:
         mds_items = [
             item
@@ -2863,8 +2993,10 @@ def generate_spc_map(
         resolved_region,
         custom_extent=custom_extent,
     )
-    output_size = _resolve_output_size(render_extent, projection=map_projection)
-    is_conus_like_view = bool(custom_extent) or str(resolved_region).upper() == "CONUS"
+    output_size = _resolve_output_size(
+        render_extent, projection=map_projection)
+    is_conus_like_view = bool(custom_extent) or str(
+        resolved_region).upper() == "CONUS"
     base_feature_resolution = "50m" if is_conus_like_view else "10m"
 
     # Use resolved region directory once extent logic is finalized
@@ -2917,7 +3049,8 @@ def generate_spc_map(
         facecolor=ocean_color,
         zorder=0,
     )
-    layer_paths["basemap"] = _save_layer(fig_base, "basemap", transparent=False)
+    layer_paths["basemap"] = _save_layer(
+        fig_base, "basemap", transparent=False)
 
     fig_country, ax_country = _new_fig_ax()
     ax_country.add_feature(
@@ -2993,7 +3126,8 @@ def generate_spc_map(
         layer_paths.update(outlook_bin_paths)
 
         sig_geojson = fetch_significant_geojson(day, hazard)
-        show_sig_hatch = _to_bool(style_config.get("spc_show_sig_hatch", True), True)
+        show_sig_hatch = _to_bool(style_config.get(
+            "spc_show_sig_hatch", True), True)
         fig_hatch, ax_hatch = _new_fig_ax()
         if show_sig_hatch and sig_geojson:
             hatch_applied = _add_significant_hatching(
@@ -3071,7 +3205,8 @@ def generate_spc_map(
     fig_cities, ax_cities = _new_fig_ax()
     plot_cities(
         ax_cities,
-        (render_extent[0], render_extent[1], render_extent[2], render_extent[3]),
+        (render_extent[0], render_extent[1],
+         render_extent[2], render_extent[3]),
         filename=style_config.get("cities_file", "us-cities.json"),
         style_config=style_config,
         z_cities=70,
@@ -3091,7 +3226,8 @@ def generate_spc_map(
     valid_until_iso = ""
     issue_iso = ""
     features = (
-        outlook_geojson.get("features", []) if isinstance(outlook_geojson, dict) else []
+        outlook_geojson.get("features", []) if isinstance(
+            outlook_geojson, dict) else []
     )
     if features:
         first_props = features[0].get("properties", {}) or {}
@@ -3204,7 +3340,8 @@ def generate_spc_map(
     is_hail_prob = hazard_key == "hail"
     is_reports_mode = hazard_key == "reports"
     selected_watch_item = (
-        watches_items[0] if (is_watches_only and len(watches_items) == 1) else None
+        watches_items[0] if (is_watches_only and len(
+            watches_items) == 1) else None
     )
     legend_mode = (
         "cat"
@@ -3349,7 +3486,8 @@ def generate_spc_map(
     if show_places:
         plot_cities(
             ax_comp,
-            (render_extent[0], render_extent[1], render_extent[2], render_extent[3]),
+            (render_extent[0], render_extent[1],
+             render_extent[2], render_extent[3]),
             filename=style_config.get("cities_file", "us-cities.json"),
             style_config=style_config,
             z_cities=103,

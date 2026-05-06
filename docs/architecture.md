@@ -10,10 +10,11 @@ Unified weather page serves a live Leaflet map with mixed layer types:
 
 - Vector GeoJSON overlays (alerts, SPC)
 - Pre-rendered raster overlays + frame-locked value points (RTMA)
+- Radar live overlays from cache-first per-site/per-product PNG streams
 
 Active pages and their JS:
 
-- `weather.html` / `js/weather.js` — Leaflet map, alerts + SPC GeoJSON layers, RTMA pre-rendered overlays, RTMA scrubber
+- `weather.html` / `js/weather.js` — Leaflet map, alerts + SPC GeoJSON layers, RTMA pre-rendered overlays, RTMA scrubber, radar live multi-site + time-mode playback
 - `radar.html` / `js/radar.js` — independent radar workflow (unchanged)
 - `satellite.html` / `js/satellite.js` — independent satellite workflow (unchanged)
 
@@ -72,6 +73,9 @@ GET /api/data/spc?day={1-8}&hazard={cat|torn|wind|hail|prob|windrh|dryt}
 GET /api/overlay/latest?family=rtma&region={REGION}&stream={STREAM}&product={PRODUCT}[&frame_key=YYYY_MM_DD_HH_MM_SS]
 GET /api/overlay/frames?family=rtma&region={REGION}&stream={STREAM}&product={PRODUCT}
 GET /api/data/rtma/points?region={REGION}&stream={STREAM}&product={PRODUCT}[&source_data_key=...]
+GET /api/radar/live/sites
+GET /api/radar/live/latest?site={SITE}&product={PRODUCT}[&force=true]
+GET /api/radar/live/frames?site={SITE}&product={PRODUCT}[&hours=2]
 ```
 
 Alerts/SPC endpoints:
@@ -86,6 +90,13 @@ RTMA overlay endpoints:
 2. Return overlay metadata (`render.image_url`, `bounds`, `legend`, `timestamp`, `source_data_key`).
 3. Frontend requests points with matching `source_data_key` to avoid frame drift.
 
+Weather radar live endpoints:
+
+1. Read latest/listed frames from `cache/overlays/radar/{SITE}/{LEVEL}/{PRODUCT}`.
+2. On cache miss, trigger bounded on-demand render via `workers/radar_live_worker.py`.
+3. Latest endpoint prioritizes first-paint responsiveness by rendering newest-first with a single-frame cap on cold start, then starts async history backfill.
+4. Responses include `history_filling` so the frontend can signal that animation history is still warming.
+
 Cache served as static files via `/cache` mount (StaticFiles).
 
 ## Frontend Architecture
@@ -99,6 +110,9 @@ Responsibilities:
 - `loadSpc(day, hazard)` — fetches `/api/data/spc`, renders `L.geoJSON`, builds legend
 - `loadRtma()` — fetches `/api/overlay/latest` first, applies `L.imageOverlay`, then fetches frame-locked points
 - `loadRtmaScrubberFrames()` — fetches `/api/overlay/frames` for instant frame list
+- Radar live site/product selection with multi-site map overlays
+- Radar time-mode playback from `/api/radar/live/frames` with context invalidation when selection changes
+- Radar clear control that clears loaded radar overlays and exits animate mode back to current without resetting map view
 - Region → `fitBounds` mapping (all 50 states + CONUS)
 - Layer visibility and opacity sliders (no page reload)
 - SPC three-way dropdown: convective / fire / other (tracks `_spcLastTouched`)
@@ -119,8 +133,9 @@ Weather workflow is mixed by product family:
 
 - Alerts/SPC: data-only endpoints, Leaflet vector rendering
 - RTMA: server-side pre-rendered PNG overlays + cached points, Leaflet imageOverlay + markers
+- Radar (weather tab): cache-first pre-rendered PNG overlays (latest + frames), with bounded on-demand fallback rendering
 
-Radar/Satellite workflows: unchanged — synchronous render pipeline, Lambert projection, server-side image generation, layered PNG scrubber.
+Radar/Satellite archive workflows: unchanged — synchronous render pipeline, Lambert projection, server-side image generation, layered PNG scrubber.
 
 ## Cache Layout
 
@@ -143,13 +158,19 @@ cache/
   overlays/
     index/
       rtma.json
+      radar.json
     rtma/
       {REGION}/{stream}/{product}/{frame_key}/
         overlay.png
         meta.json
         bounds.json
+    radar/
+      {SITE}/{LEVEL}/{PRODUCT}/
+        {frame_key}.png
+        processed.json
   .workers/
     rtma.last_run
+    radar_live.last_run
 ```
 
 ## Python Module Map
@@ -162,8 +183,10 @@ cache/
 | `workers/spc_worker.py`        | SPC outlook fetch → cache                                                     |
 | `workers/rtma_worker.py`       | RTMA points + pre-render overlay refresh                                      |
 | `workers/rtma_preload.py`      | One-time RTMA backfill/preload                                                |
+| `workers/radar_live_worker.py` | Live radar cache renderer for weather radar endpoints                          |
 | `alerts/alerts_utils.py`       | `fetch_active_alerts_with_source()`                                           |
 | `spc/spc_utils.py`             | `fetch_outlook_geojson()`, `fetch_fire_wx_geojson()`                          |
+| `radar/radar_nodd_utils.py`    | NODD radar key listing + downloads with race-tolerant retries                 |
 | `rtma_utils.py`                | RTMA source resolution, grid extraction, pre-render generation, point caching |
 | `cache/overlay_cache_utils.py` | Overlay frame paths/index/meta helpers                                        |
 | `config/geo_config.py`         | `STATE_BOUNDS` dict (used in weather.js)                                      |
@@ -171,7 +194,7 @@ cache/
 
 ## Radar / Satellite Exception (Current)
 
-Radar and Satellite are not yet on the RTMA overlay-cache contract. They currently retain:
+The independent `radar.html` and `satellite.html` pages still retain:
 
 - Synchronous render pipeline
 - Lambert conformal conic projection
@@ -179,10 +202,19 @@ Radar and Satellite are not yet on the RTMA overlay-cache contract. They current
 - `/api/radar`, `/api/satellite` endpoints
 - `active_tasks` progress tracking
 
+Weather-tab radar (`weather.html`) is now on a cache-first live overlay contract via `/api/radar/live/*`.
+
 Planned direction:
 
-- Migrate relevant tabs (Surface, MRMS, Radar, Satellite) toward the RTMA-style cache-first pre-render contract.
+- Continue migrating relevant tabs (Surface, MRMS, archive Radar, Satellite) toward the cache-first pre-render contract.
 - Alerts remain on the existing vector GeoJSON workflow.
+
+## Weather Radar Live Notes (2026-05-05)
+
+- Cold-start latest requests now prioritize immediate first frame: newest-first, single-frame synchronous render, then async history backfill.
+- History backfill is guarded by a per-site/per-product fallback lock to avoid duplicate warm passes.
+- `radar_nodd_utils.py` download loop tolerates expected Windows file races (`FileExistsError`, `PermissionError`) with retry + race-resolved success detection.
+- Frontend radar controls now include explicit `Clear` behavior (clear loaded radar overlays only, do not reset map view) and site legend visibility tracks the `Show Radar Sites` toggle.
 
 ## MRMS Overlay Cache — Rollout Status (2026-05-01)
 

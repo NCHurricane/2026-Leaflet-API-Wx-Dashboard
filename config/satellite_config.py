@@ -284,6 +284,10 @@ ABI_CHANNELS = {
         "name": "Natural Color / True Color",
         "req": ["Channel01", "Channel02", "Channel03"],
     },
+    "NaturalColor": {
+        "name": "Natural Color",
+        "req": ["Channel01", "Channel02", "Channel03"],
+    },
     "GeoColor": {
         "name": "GEOColor (Day/Night Blend)",
         "req": ["Channel01", "Channel02", "Channel03", "Channel07", "Channel13"],
@@ -395,6 +399,7 @@ ABI_CHANNELS = {
 # Keys that produce direct RGB/RGBA arrays (no cmap/norm needed for display)
 RGB_COMPOSITE_KEYS = {
     "TrueColor",
+    "NaturalColor",
     "GeoColor",
     "GeoColorBlkMar",
     "DayNightHybrid",
@@ -418,4 +423,63 @@ RGB_COMPOSITE_KEYS = {
     "BlowingSnow",
     "SeaSpray",
     "RocketPlume",
+}
+
+# Satellite products supported by the Leaflet tab migration (phase 1).
+SATELLITE_LEAFLET_PHASE1_PRODUCTS = (
+    "Channel01",
+    "Channel02",
+    "Channel08",
+    "Channel13",
+    "GeoColor",
+    "TrueColor",
+    "NaturalColor",
+)
+
+# Default live Satellite tab selection.
+SATELLITE_LIVE_DEFAULTS = {
+    "region": "CONUS",
+    "sat_id": "goes19",
+    "sector": "CONUS",
+    "product": "Channel13",
+    "lookback_hours": 1,
+}
+
+# User-editable lookback options for Satellite animate mode.
+SATELLITE_ANIMATE_LOOKBACK_HOURS = (1, 3, 6, 12)
+
+# Worker-side prewarm: non-mesoscale sectors (15 min cadence).
+SATELLITE_PREWARM_CURRENT = {
+    "cadence_minutes": 15,
+    "sat_id": "goes19",
+    "sectors": ("CONUS",),
+    "products": ("Channel02", "Channel13", "GeoColor"),
+    "lookback_hours": 1,
+    "max_frames": 60,
+}
+
+# Worker-side prewarm: mesoscale sectors (5 min cadence).
+SATELLITE_PREWARM_MESO = {
+    "cadence_minutes": 5,
+    "sat_id": "goes19",
+    "sectors": ("Meso1", "Meso2"),
+    "products": ("Channel02", "Channel13", "GeoColor"),
+    "lookback_hours": 1,
+    "max_frames": 60,
+}
+
+# Tile zoom levels to pre-render per frame during worker warming.
+SATELLITE_PREWARM_ZOOMS = (3, 4, 5, 6)
+
+# Number of newest frames to prewarm per product/sector each run.
+# Keeping this bounded prevents warm cycles from growing unbounded while still
+# making scrubber playback responsive for the most recent timeline.
+SATELLITE_PREWARM_NEWEST_FRAMES = 12
+
+# Prewarm neighborhood radius by zoom level (radius 2 => 5x5 tile grid).
+SATELLITE_PREWARM_TILE_RADIUS_BY_ZOOM = {
+    3: 1,
+    4: 2,
+    5: 2,
+    6: 2,
 }

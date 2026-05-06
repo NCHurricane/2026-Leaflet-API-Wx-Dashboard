@@ -72,7 +72,12 @@ debug_*.txt
 
 # Local planning notes
 WebGL Migration.md
+docs/RTMA_GPU_Alternative.md
 
 #Powershell Scripts
 *.ps1
-docs/RTMA_GPU_Alternative.md
+tools/install_tasks.ps1
+
+# Downloaded data files
+*.nc
+tools/install_tasks.ps1

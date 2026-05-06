@@ -353,6 +353,8 @@ def _render_site_product(
     product_key: str,
     product_cfg: dict,
     latest_only: bool = False,
+    newest_first: bool = False,
+    max_render_frames: int | None = None,
 ) -> int:
     """Render and cache frames for one site/product. Returns number of frames cached."""
     level = str(product_cfg.get("level") or "Level 3")
@@ -389,6 +391,10 @@ def _render_site_product(
 
     keep_n = max(1, int(LIVE_RADAR_KEEP_FRAMES or 30))
     selected_files = radar_files[-keep_n:]
+    if newest_first:
+        selected_files = list(reversed(selected_files))
+    if max_render_frames is not None:
+        selected_files = selected_files[: max(1, int(max_render_frames))]
 
     # Load dedup tracking for this product.
     processed_keys = radar_read_processed_keys(
@@ -506,6 +512,8 @@ def run_radar_live_site_product(
     product_key: str,
     force: bool = True,
     latest_only: bool = False,
+    newest_first: bool = False,
+    max_render_frames: int | None = None,
 ) -> int:
     """Render and cache frames for a single live radar site/product pair.
 
@@ -534,6 +542,8 @@ def run_radar_live_site_product(
         normalized_product,
         product_cfg,
         latest_only=latest_only,
+        newest_first=newest_first,
+        max_render_frames=max_render_frames,
     )
     if cached > 0:
         mark_run_complete("radar_live")
