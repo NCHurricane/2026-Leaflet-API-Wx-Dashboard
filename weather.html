@@ -195,7 +195,7 @@
 
             .weather-side-left {
                 left: var(--wx-side-inset);
-                max-height: calc(100% - 95px);
+                max-height: calc(90% - 95px);
                 border-right: 3px solid var(--wx-yellow);
             }
 
@@ -1028,10 +1028,11 @@
                 transform: translateX(-50%);
                 bottom: 3rem;
                 z-index: 490;
+                font-weight: 700;
                 min-width: 575px;
                 max-width: 96vw;
                 width: fit-content;
-                background: rgba(245, 248, 252, 0.75);
+                background: rgba(245, 248, 252, 0.9);
                 border: 2px solid #1a1a1a;
                 border-radius: 14px;
                 padding: 8px 10px;
@@ -1387,6 +1388,29 @@
             .leaflet-top.leaflet-left .leaflet-control {
                 clear: none;
                 float: none;
+            }
+
+            .leaflet-control-zoom.wx-zoom-indicator-enabled .leaflet-control-zoom-out {
+                border-bottom-left-radius: 0;
+                border-bottom-right-radius: 0;
+            }
+
+            .leaflet-control-zoom .wx-leaflet-zoom-indicator {
+                box-sizing: border-box;
+                width: 100%;
+                padding: 3px 4px;
+                border-top: 1px solid #334155;
+                border-bottom-left-radius: 4px;
+                border-bottom-right-radius: 4px;
+                background: rgba(10, 18, 48, 0.94);
+                color: #dae307;
+                font-size: 0.64rem;
+                font-weight: 800;
+                letter-spacing: 0.03em;
+                line-height: 1.2;
+                text-align: center;
+                pointer-events: none;
+                user-select: none;
             }
 
             .wx-basemap-control {
@@ -2037,6 +2061,62 @@
             #weather-archive-toggle:hover {
                 background: #3b82f6;
                 border-color: #3b82f6;
+            }
+
+            .scrubber-speed-controls {
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+                flex: 0 0 auto;
+                margin-left: 2px;
+            }
+
+            #archive-scrubber-row .scrubber-speed-controls button {
+                min-width: 26px;
+                width: 26px;
+                padding: 3px 0;
+                font-size: 0.75rem;
+                font-weight: 800;
+            }
+
+            #archive-scrubber-row #weather-satellite-auto-refresh {
+                display: none;
+                min-width: 54px;
+                font-weight: 800;
+                white-space: nowrap;
+            }
+
+            #archive-scrubber-row #weather-satellite-auto-refresh.is-visible {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            #archive-scrubber-row #weather-satellite-auto-refresh.is-active {
+                background: #16a34a;
+                border-color: #22c55e;
+                color: #ffffff;
+            }
+
+            #archive-scrubber-row #weather-satellite-auto-refresh.radar-animate-newframe {
+                background: #bbf7d0;
+                border-color: #22c55e;
+                color: #052e16;
+                animation: radar-new-frame-pulse 0.85s ease-in-out infinite;
+            }
+
+            #scrubber-speed-label {
+                min-width: 34px;
+                padding: 3px 6px;
+                border: 1px solid rgba(71, 85, 105, 0.85);
+                border-radius: 4px;
+                background: rgba(15, 23, 42, 0.75);
+                color: #f7f81b;
+                font-size: 0.68rem;
+                font-weight: 800;
+                line-height: 1;
+                text-align: center;
+                font-variant-numeric: tabular-nums;
             }
 
             #scrubber-slider {
@@ -2927,6 +3007,7 @@
                     <div class="wx-block">
                         <label for="weather-region">Region</label>
                         <select id="weather-region">
+                            <option value="__ALERT_LOCATION__" disabled hidden>Choose Location</option>
                             <option value="CONUS" selected>CONUS</option>
                             <option value="WORLD">World</option>
                             <option value="NC">North Carolina</option>
@@ -3311,64 +3392,60 @@
                         <div id="weather-satellite-opts">
                             <label for="weather-satellite-sat-id">Satellite</label>
                             <select id="weather-satellite-sat-id" class="wx-sidebar-select">
-                                <option value="goes19" selected>GOES-19</option>
-                                <option value="goes18">GOES-18</option>
-                                <option value="goes16">GOES-16</option>
+                                <option value="goes19" selected>GOES-19 (East)</option>
+                                <option value="goes18">GOES-18 (West)</option>
                             </select>
 
                             <label for="weather-satellite-sector">Sector</label>
                             <select id="weather-satellite-sector" class="wx-sidebar-select">
                                 <option value="CONUS" selected>CONUS</option>
                                 <option value="FullDisk">Full Disk</option>
-                                <option value="Meso1">Meso 1</option>
-                                <option value="Meso2">Meso 2</option>
+                                <option value="Meso1">Mesoscale 1</option>
+                                <option value="Meso2">Mesoscale 2</option>
                             </select>
 
                             <label for="weather-satellite-channel">Product</label>
                             <select id="weather-satellite-channel" class="wx-sidebar-select">
                                 <option value="Channel01">Channel 01 - Blue Visible</option>
                                 <option value="Channel02">Channel 02 - Red Visible</option>
-                                <option value="Channel08">Channel 08 - Upper-Level WV</option>
+                                <option value="Channel03">Channel 03 - Veggie Near-IR</option>
+                                <option value="Channel07">Channel 07 - Shortwave IR</option>
+                                <option value="Channel07Fire">Channel 07 - Fire Detection</option>
+                                <option value="Channel08RAMSDIS">Channel 08 - RAMSDIS WV</option>
+                                <option value="Channel09RAMSDIS">Channel 09 - RAMSDIS WV</option>
                                 <option value="Channel13" selected>Channel 13 - Clean IR</option>
                                 <option value="GeoColor">GeoColor</option>
+                                <option value="GeoColorBlkMar">GeoColor Black Marble</option>
                                 <option value="TrueColor">True Color</option>
                                 <option value="NaturalColor">Natural Color</option>
+                                <option value="Dust">Dust</option>
+                                <option value="RocketPlume">Rocket Plume</option>
                             </select>
                             <div class="wx-radar-action-row" style="margin-top:8px;">
-                                <button id="weather-satellite-current" type="button">Current</button>
+                                <button id="weather-satellite-current" class="wx-mode-tab active"
+                                    type="button">Current</button>
                             </div>
                             <span id="weather-satellite-status" class="wx-small"></span>
 
                             <div class="wx-radar-action-row" style="margin-top:8px;">
-                                <button id="weather-satellite-animate" type="button">Animate</button>
+                                <button id="weather-satellite-animate" class="wx-mode-tab"
+                                    type="button">Animate</button>
                             </div>
 
-                            <div id="weather-satellite-lookback-wrap" style="display:none; margin-top:8px;">
-                                <label class="wx-small"
-                                    style="color:#94a3b8; display:block; margin-bottom:3px;">Lookback
-                                    Window</label>
-                                <div id="weather-satellite-lookback-buttons" class="wx-animate-presets">
-                                    <button class="weather-satellite-lookback-btn active" type="button"
-                                        data-hours="1">1h</button>
-                                    <button class="weather-satellite-lookback-btn" type="button"
-                                        data-hours="3">3h</button>
-                                    <button class="weather-satellite-lookback-btn" type="button"
-                                        data-hours="6">6h</button>
-                                    <button class="weather-satellite-lookback-btn" type="button"
-                                        data-hours="12">12h</button>
+                            <div id="weather-satellite-lookback-wrap"
+                                style="display:none; margin-top:12px; padding-top:8px; border-top:1px solid #334155;">
+                                <div
+                                    style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <label class="wx-small" style="color:#94a3b8;">Lookback Hours</label>
+                                    <span id="weather-satellite-lookback-value" class="wx-small"
+                                        style="color:#cbd5e1; font-weight:bold; min-width:30px; text-align:right;">1h</span>
                                 </div>
-                            </div>
-
-                            <div id="weather-satellite-scrubber" style="display:none; margin-top:8px;">
-                                <div class="wx-radar-action-row" style="margin-bottom:6px;">
-                                    <button id="weather-satellite-step-back" type="button">Prev</button>
-                                    <button id="weather-satellite-step-fwd" type="button">Next</button>
-                                </div>
-                                <input id="weather-satellite-scrubber-slider" type="range" min="0" max="0" value="0"
-                                    step="1">
-                                <div class="wx-small" id="weather-satellite-scrubber-count" style="margin-top:4px;">0/0
-                                </div>
-                                <div class="wx-small" id="weather-satellite-scrubber-ts" style="margin-top:2px;">--
+                                <input id="weather-satellite-lookback-slider" type="range" min="1" max="12" value="1"
+                                    step="1" style="width:100%; cursor:pointer;">
+                                <div
+                                    style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-top:3px;">
+                                    <span>1h</span>
+                                    <span>12h</span>
                                 </div>
                             </div>
                         </div>
@@ -3465,7 +3542,8 @@
                                 <div class="wx-check-row"><span>MultiSensor Pass2</span><input class="mrms-sub-radio"
                                         type="radio" name="mrms-qpe-source" value="MS2" checked></div>
                                 <div class="wx-check-row"><span>MultiSensor Pass1</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-qpe-source" value="MS1"></div>
+                                        type="radio" name="mrms-qpe-source" value="MS1">
+                                </div>
                                 <div class="wx-check-row"><span>Radar Only</span><input class="mrms-sub-radio"
                                         type="radio" name="mrms-qpe-source" value="RO"></div>
                             </div>
@@ -3521,7 +3599,8 @@
                                 <div class="wx-check-row"><span>Low Level (0-2 km)</span><input class="mrms-sub-radio"
                                         type="radio" name="mrms-rotation-level" value="LL" checked></div>
                                 <div class="wx-check-row"><span>Mid Level (3-6 km)</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-rotation-level" value="ML"></div>
+                                        type="radio" name="mrms-rotation-level" value="ML">
+                                </div>
                             </div>
                             <div class="mrms-sub-group">
                                 <span class="mrms-sub-group-label">Window</span>
@@ -3572,7 +3651,8 @@
                                 <div class="wx-check-row"><span>Low Level (0-2 km)</span><input class="mrms-sub-radio"
                                         type="radio" name="mrms-azshear-level" value="Low" checked></div>
                                 <div class="wx-check-row"><span>Mid Level (3-6 km)</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-azshear-level" value="Mid"></div>
+                                        type="radio" name="mrms-azshear-level" value="Mid">
+                                </div>
                             </div>
                         </div>
                         <div class="wx-check-row mrms-product-row">
@@ -3677,7 +3757,7 @@
                         </div>
                     </div>
 
-                    <div class="wx-block">
+                    <div id="wx-mode-controls" class="wx-block">
                         <div class="wx-mode-tabs">
                             <button id="weather-mode-current" class="wx-mode-tab active" type="button">Current</button>
                             <button id="weather-mode-archive" class="wx-mode-tab" type="button">Archive</button>
@@ -3712,7 +3792,8 @@
                                 <button class="wx-preset-btn" type="button" data-hours="24">24 hr</button>
                             </div>
                             <div class="wx-archive-presets">
-                                <button class="wx-preset-btn" type="button" data-hours="snapshot">Single Frame</button>
+                                <button class="wx-preset-btn" type="button" data-hours="snapshot">Single
+                                    Frame</button>
                                 <button class="wx-preset-btn" type="button" data-hours="custom">Custom</button>
                             </div>
                             <div class="wx-archive-field">
@@ -3914,6 +3995,15 @@
                         <button id="scrubber-step-back" type="button" title="Previous frame">&#9664;</button>
                         <button id="scrubber-play" type="button" title="Play/Pause">&#9654;</button>
                         <button id="scrubber-step-fwd" type="button" title="Next frame">&#9654;&#9654;</button>
+                        <div class="scrubber-speed-controls" aria-label="Playback speed controls">
+                            <button id="scrubber-speed-down" type="button" title="Slower playback"
+                                aria-label="Slower playback">&minus;</button>
+                            <span id="scrubber-speed-label" title="Playback speed">1x</span>
+                            <button id="scrubber-speed-up" type="button" title="Faster playback"
+                                aria-label="Faster playback">+</button>
+                        </div>
+                        <button id="weather-satellite-auto-refresh" type="button"
+                            title="Auto refresh satellite animation frames" aria-pressed="false">Auto</button>
                         <input type="range" id="scrubber-slider" min="0" max="0" value="0" step="1">
                         <span id="scrubber-frame-count"></span>
                         <span id="scrubber-timestamp">--</span>
@@ -3929,7 +4019,7 @@
         <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
         <script src="js/shared.js?v=20260504c"></script>
         <script src="js/radar-site-locations.js?v=20260504c"></script>
-        <script src="js/weather.js?v=20260504c"></script>
+        <script src="js/weather.js?v=20260511m"></script>
         <script>initNav('weather');</script>
     </body>
 

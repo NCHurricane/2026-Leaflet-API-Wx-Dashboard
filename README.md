@@ -212,6 +212,66 @@ Notes:
 - `GET /api/satellite/archive`
 - `GET /api/satellite` (legacy multiplexer)
 
+### Satellite v2 Worker Tuning
+
+Satellite v2 scheduled workers pre-render missing/invalid tiles with bounded
+process parallelism. Defaults are tuned for a high-core local workstation:
+
+- Current-sector worker: `4` tile render processes
+- Mesoscale worker: `4` tile render processes
+- Light-composite worker: `2` tile render processes
+- GEOColor worker: `1` tile render process
+
+Tune lower-core machines with environment variables before starting workers:
+
+```powershell
+$env:WX_SATELLITE_V2_TILE_WORKERS = "4"
+$env:WX_SATELLITE_V2_MESO_TILE_WORKERS = "2"
+```
+
+For one-off runs, use the CLI override:
+
+```powershell
+python -m workers.satellite_v2_worker --force --tile-workers 4
+python -m workers.satellite_v2_meso_worker --force --tile-workers 2
+python -m workers.satellite_v2_light_composites_worker --force --tile-workers 2
+python -m workers.satellite_v2_geocolor_worker --force --tile-workers 1
+```
+
+Worker ownership profiles split work between the regular, mesoscale, and
+composite lanes:
+
+- `goes19-freshness`: optimized GOES-19 current/full-disk single-channel lane.
+- `goes19-meso`: optimized GOES-19 `MESO1`/`MESO2` single-channel lane.
+- `goes19-light-composites`: GOES-19 CONUS `TrueColor`, `NaturalColor`,
+  `Dust`, and `RocketPlume`.
+- `goes19-geocolor`: GOES-19 CONUS `GeoColor` and `GeoColorBlkMar`.
+- `local-primary`: GOES-19/18 CONUS high-use single-channel lane.
+- `remote-backfill`: GOES-18 products plus lower-priority GOES-19 products.
+- `full`: all configured Satellite v2 worker jobs.
+
+Examples:
+
+```powershell
+python -m workers.satellite_v2_worker --profile goes19-freshness --tile-workers 4
+python -m workers.satellite_v2_meso_worker --profile goes19-meso --tile-workers 4
+python -m workers.satellite_v2_light_composites_worker --profile goes19-light-composites --tile-workers 2
+python -m workers.satellite_v2_geocolor_worker --profile goes19-geocolor --tile-workers 1
+python -m workers.satellite_v2_worker --profile local-primary --tile-workers 4
+python -m workers.satellite_v2_worker --profile remote-backfill --tile-workers 3
+```
+
+For one-off helper-machine backfill, add `--all-frames` to render every
+cataloged frame in the worker window for the selected profile:
+
+```powershell
+python -m workers.satellite_v2_worker --profile remote-backfill --tile-workers 3 --force --all-frames
+python -m workers.satellite_v2_meso_worker --profile remote-backfill --tile-workers 2 --force --all-frames
+```
+
+The `tools/run_satellite_v2_network_backfill.ps1` helper uses `--all-frames`
+by default. Pass `-FastWarmOnly` to use the normal baseline/deep rotation.
+
 ### MRMS
 
 - `GET /api/mrms/current`

@@ -19,8 +19,8 @@ _COLORTABLE_DIR = Path(__file__).parent / "radar_colortables"
 
 # Map product key → .pal filename (without the directory path)
 _PAL_FILENAMES: dict[str, str] = {
-    "BR": "samBR.pal",
-    "BV": "samVEL.pal",
+    "BR": "RadarScope_BR.pal",
+    "BV": "BV_grl3v2.pal",
 }
 
 
@@ -62,7 +62,8 @@ def _parse_pal(path: Path) -> dict:
 
     # Re-join lines that were soft-wrapped (continuation lines start with a
     # digit or sign and do NOT start with a keyword).
-    _keywords = re.compile(r"^(color|nd|rf|product|units|step|scale):?\b", re.I)
+    _keywords = re.compile(
+        r"^(color|nd|rf|product|units|step|scale):?\b", re.I)
     joined: list[str] = []
     for line in raw_lines:
         if joined and not _keywords.match(line):

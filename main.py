@@ -1,12 +1,18 @@
 from surface import surface_utils
 from config.rtma_config import RTMA_STREAM_MAX_HOURS, clamp_stream_hours
-from config.satellite_config import SATELLITE_LEAFLET_PHASE1_PRODUCTS
+from config.satellite_v2_config import (
+    SATELLITE_V2_DEFAULT_CHANNEL,
+    SATELLITE_V2_DEFAULT_HOURS,
+    SATELLITE_V2_DEFAULT_MAX_FRAMES,
+    SATELLITE_V2_DEFAULT_SAT_ID,
+    SATELLITE_V2_DEFAULT_SECTOR,
+)
 from io import StringIO
 from datetime import datetime, timezone, timedelta
 import json
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI, HTTPException
 import glob
@@ -19,8 +25,16 @@ from pathlib import Path
 from config.geo_config import STATE_BOUNDS
 from font_utils import resolve_logo_path
 from satellite import satellite_utils as satellite_thredds_utils
+from satellite_v2 import service as satellite_v2_service
 import sys
 from io import StringIO as _StringIO
+
+_TRANSPARENT_PNG_1X1 = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+    b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+    b"\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01"
+    b"\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 
 # Suppress Py-ART license banner that prints to stderr on first import
 _stderr_cap = _StringIO()
@@ -290,7 +304,11 @@ def _run_startup_sequence():
 
 @app.on_event("shutdown")
 def _stop_background_workers():
-    """Shut down the APScheduler scheduler on app exit."""
+    """Shut down background schedulers and live render pools on app exit."""
+    try:
+        satellite_v2_service.shutdown_live_tile_pool()
+    except Exception:
+        pass
     if _SCHEDULER_AVAILABLE:
         try:
             stop_scheduler()
@@ -408,6 +426,7 @@ os.makedirs(os.path.join(_CACHE_ROOT, "rtma"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "archive"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "radar"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "satellite"), exist_ok=True)
+os.makedirs(os.path.join(_CACHE_ROOT, "satellite_v2"), exist_ok=True)
 app.mount("/cache", StaticFiles(directory=_CACHE_ROOT), name="cache")
 
 app.mount("/css", StaticFiles(directory=os.path.join(BASE_DIR, "css")), name="css")
@@ -1127,7 +1146,7 @@ def _enrich_alert_features_geometry(features: list[dict]) -> None:
 _WORLD_BORDERS_CACHE_PATH = os.path.join(
     os.path.dirname(__file__), "cache", "overlays", "world_borders.geojson"
 )
-_WORLD_BORDERS_CACHE_VERSION = 2
+_WORLD_BORDERS_CACHE_VERSION = 3
 _world_borders_lock = threading.Lock()
 
 
@@ -1147,8 +1166,8 @@ def _build_world_borders_geojson() -> dict:
     - Ocean coastlines (no Great Lakes / inland water body shores)
     - International borders clipped out of lakes (no mid-lake US-Canada boundary)
 
-    Strategy:
-    - Coastlines come from ne_50m_land exterior rings only. ne_50m_land is a
+        Strategy:
+        - Coastlines come from ne_10m_land exterior rings only. ne_10m_land is a
       single merged polygon where the Great Lakes, Chesapeake Bay, NC sounds,
       etc. are interior holes. Extracting only exterior rings gives true ocean
       coastlines with no inland water body lines.
@@ -1165,7 +1184,7 @@ def _build_world_borders_geojson() -> dict:
     # ── Coastlines from merged land polygon exterior rings ─────────────────
     try:
         land_shp = shpreader.natural_earth(
-            resolution="50m", category="physical", name="land"
+            resolution="10m", category="physical", name="land"
         )
         reader = shpreader.Reader(land_shp)
         for geom in reader.geometries():
@@ -1255,6 +1274,123 @@ def _get_world_borders_geojson() -> dict:
 def get_world_borders():
     try:
         data = _get_world_borders_geojson()
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(content=data)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+_US_BOUNDARIES_CACHE_PATH = os.path.join(
+    os.path.dirname(__file__), "cache", "overlays", "us_boundaries.geojson"
+)
+_US_BOUNDARIES_CACHE_VERSION = 3
+_us_boundaries_lock = threading.Lock()
+
+
+def _build_us_boundaries_geojson() -> dict:
+    """Return a GeoJSON FeatureCollection for US state and county overlays.
+
+    - States: Natural Earth admin_1 states/provinces (10m) filtered to US
+    - Counties: Census counties shapefile (5m)
+    """
+    import cartopy.io.shapereader as shpreader
+    from shapely.geometry import mapping
+    from shapely.ops import unary_union
+
+    from geo_utils import CensusCounties, load_state_geometries
+
+    features = []
+    lake_geometry = None
+    lake_mask = None
+
+    try:
+        lakes_shp = shpreader.natural_earth(
+            resolution="10m", category="physical", name="lakes"
+        )
+        lake_geoms = [
+            geom
+            for geom in shpreader.Reader(lakes_shp).geometries()
+            if geom is not None and not geom.is_empty
+        ]
+        if lake_geoms:
+            lake_geometry = unary_union(lake_geoms)
+            lake_mask = lake_geometry.buffer(-0.02)
+            if lake_mask.is_empty:
+                lake_mask = lake_geometry
+    except Exception as exc:
+        print(f"[us-boundaries] Lake geometry load failed: {exc}")
+
+    try:
+        state_geoms = load_state_geometries() or {}
+        for state_code, geom in state_geoms.items():
+            if geom is None or getattr(geom, "is_empty", False):
+                continue
+            state_boundary = geom.boundary
+            if lake_mask is not None:
+                state_boundary = state_boundary.difference(lake_mask)
+            for line_geom in _iter_line_geometries(state_boundary):
+                features.append(
+                    {
+                        "type": "Feature",
+                        "geometry": mapping(line_geom),
+                        "properties": {"layer": "state", "state": state_code},
+                    }
+                )
+    except Exception as exc:
+        print(f"[us-boundaries] State geometry load failed: {exc}")
+
+    try:
+        CensusCounties.load()
+        county_geoms = getattr(CensusCounties, "_fips_map", {}) or {}
+        for fips, geom in county_geoms.items():
+            if geom is None or getattr(geom, "is_empty", False):
+                continue
+            geo = getattr(geom, "__geo_interface__", None)
+            if not geo:
+                continue
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": geo,
+                    "properties": {"layer": "county", "fips": fips},
+                }
+            )
+    except Exception as exc:
+        print(f"[us-boundaries] County geometry load failed: {exc}")
+
+    return {
+        "type": "FeatureCollection",
+        "properties": {"cache_version": _US_BOUNDARIES_CACHE_VERSION},
+        "features": features,
+    }
+
+
+def _get_us_boundaries_geojson() -> dict:
+    with _us_boundaries_lock:
+        if os.path.exists(_US_BOUNDARIES_CACHE_PATH):
+            try:
+                with open(_US_BOUNDARIES_CACHE_PATH, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                props = data.get("properties") if isinstance(data, dict) else {}
+                if props.get("cache_version") == _US_BOUNDARIES_CACHE_VERSION:
+                    return data
+            except Exception:
+                pass
+        data = _build_us_boundaries_geojson()
+        os.makedirs(os.path.dirname(_US_BOUNDARIES_CACHE_PATH), exist_ok=True)
+        try:
+            with open(_US_BOUNDARIES_CACHE_PATH, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, separators=(",", ":"))
+        except Exception as exc:
+            print(f"[us-boundaries] Cache write failed: {exc}")
+        return data
+
+
+@app.get("/api/overlay/us-boundaries")
+def get_us_boundaries():
+    try:
+        data = _get_us_boundaries_geojson()
         from fastapi.responses import JSONResponse
 
         return JSONResponse(content=data)
@@ -1993,7 +2129,11 @@ def get_data_surface(region: str = "NC", product: str = "temperature"):
 
             # Migration guard: pre-source-timestamp cache entries used local
             # generation time. Rebuild once so Current tab reflects source time.
-            if cached.get("timestamp_source") == "station_valid":
+            # Also skip the cache if timestamp is null (pre-source-ts build).
+            if (
+                cached.get("timestamp_source") == "station_valid"
+                and cached.get("timestamp") is not None
+            ):
                 age = _time.time() - os.path.getmtime(cache_file)
                 if age >= _SURFACE_CACHE_TTL_SECONDS:
                     _kickoff_surface_refresh_if_needed(
@@ -4266,6 +4406,42 @@ def _radar_live_is_configured(site: str, product_key: str) -> bool:
     return site in set(_radar_live_sites()) and product_key in _radar_live_catalog()
 
 
+def _radar_live_filter_stale_latest_meta(
+    meta: dict | None, *, max_age_hours: float
+) -> dict | None:
+    """Return latest-frame meta only when it is within the live lookback window."""
+    if not meta:
+        return None
+
+    dt = None
+    ts = str(meta.get("timestamp") or "").strip()
+    if ts:
+        try:
+            dt = parse_utc_datetime(ts)
+        except Exception:
+            dt = None
+
+    if dt is None:
+        frame_key = str(
+            meta.get("frame_key") or meta.get("source_data_key") or ""
+        ).strip()
+        if frame_key:
+            try:
+                from cache.overlay_cache_utils import datetime_from_frame_key
+
+                dt = datetime_from_frame_key(frame_key)
+            except Exception:
+                dt = None
+
+    if dt is None:
+        return None
+
+    cutoff_dt = datetime.now(timezone.utc) - timedelta(
+        hours=max(0.25, float(max_age_hours or 0.25))
+    )
+    return meta if dt >= cutoff_dt else None
+
+
 @app.get("/api/radar/tile/{z}/{x}/{y}")
 def get_radar_tile(z: int, x: int, y: int):
     """Serve a cached NEXRAD backdrop tile proxied from mesonet.agron.iastate.edu (IEM).
@@ -4410,11 +4586,13 @@ def get_radar_live_latest(
 ):
     """Return latest live radar frame from cache."""
     from cache.overlay_cache_utils import radar_read_latest_frame
+    from config.radar_config import LIVE_RADAR_LOOKBACK_HOURS
 
     site_id = normalize_radar_site_id(site)
     product_key = str(product or "L3_N0B").strip().upper()
     configured = _radar_live_is_configured(site_id, product_key)
     level_code = "L2" if product_key.startswith("L2_") else "L3"
+    freshness_hours = max(0.25, float(LIVE_RADAR_LOOKBACK_HOURS or 3.0))
 
     if not _radar_live_product_supported(product_key):
         raise HTTPException(
@@ -4427,7 +4605,10 @@ def get_radar_live_latest(
             detail=f"Live radar site is not supported: {site_id}.",
         )
 
-    meta = radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key)
+    meta = _radar_live_filter_stale_latest_meta(
+        radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key),
+        max_age_hours=freshness_hours,
+    )
     fallback_cached = 0
     if force:
         try:
@@ -4442,7 +4623,10 @@ def get_radar_live_latest(
                 f"[radar_live_fallback] forced latest {site_id}/{product_key} failed: "
                 f"{type(exc).__name__}: {exc}"
             )
-        meta = radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key)
+        meta = _radar_live_filter_stale_latest_meta(
+            radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key),
+            max_age_hours=freshness_hours,
+        )
 
     if not meta:
         try:
@@ -4457,7 +4641,10 @@ def get_radar_live_latest(
                 f"[radar_live_fallback] latest {site_id}/{product_key} failed: "
                 f"{type(exc).__name__}: {exc}"
             )
-        meta = radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key)
+        meta = _radar_live_filter_stale_latest_meta(
+            radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key),
+            max_age_hours=freshness_hours,
+        )
 
     # Cold-start edge case: latest-only probe may miss while broader frame render succeeds.
     # Render the newest frame first so Current can paint immediately, then
@@ -4480,9 +4667,15 @@ def get_radar_live_latest(
                 f"[radar_live_fallback] full latest {site_id}/{product_key} failed: "
                 f"{type(exc).__name__}: {exc}"
             )
-        meta = radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key)
+        meta = _radar_live_filter_stale_latest_meta(
+            radar_read_latest_frame(_CACHE_ROOT, site_id, level_code, product_key),
+            max_age_hours=freshness_hours,
+        )
     if not meta:
-        raise HTTPException(status_code=404, detail="No live radar frame cached yet.")
+        raise HTTPException(
+            status_code=404,
+            detail="No live radar frame cached yet within lookback window.",
+        )
 
     image_url = (meta.get("render") or {}).get("image_url")
     if not image_url:
@@ -4575,6 +4768,39 @@ def get_radar_live_frames(site: str = "KMHX", product: str = "L3_N0B", hours: in
         if dt and dt < cutoff_dt:
             continue
         filtered.append(frame)
+
+    # If cache only contains stale frames, run one on-demand pass and re-check.
+    if not filtered and frames:
+        try:
+            fallback_cached = max(
+                fallback_cached,
+                _radar_live_render_on_demand(
+                    site_id,
+                    product_key,
+                    latest_only=False,
+                    backfill_history=False,
+                ),
+            )
+        except Exception as exc:
+            print(
+                f"[radar_live_fallback] stale-only frames {site_id}/{product_key} failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+        frames = radar_list_frames(_CACHE_ROOT, site_id, level_code, product_key)
+        filtered = []
+        for frame in frames:
+            ts = frame.get("timestamp")
+            if ts:
+                try:
+                    dt = parse_utc_datetime(ts)
+                except Exception:
+                    dt = None
+            else:
+                dt = None
+            if dt and dt < cutoff_dt:
+                continue
+            filtered.append(frame)
 
     return {
         "status": "success",
@@ -5696,7 +5922,7 @@ def get_radar_archive(
                 "states": first_frame.get("states_url") or states_overlay_url,
                 "range_rings": first_frame.get("rings_url") or rings_overlay_url,
                 "legend": first_frame.get("legend_url")
-                or (f"/img/{legend_overlay_rel}" if legend_overlay_rel else None),
+                or (f"/img/{legend_overlay_path}" if legend_overlay_path else None),
                 "hud_right": first_frame.get("hud_right_url"),
             }
             layers_payload = {k: v for k, v in layers_payload.items() if v}
@@ -6033,56 +6259,73 @@ def get_satellite_current(
     return attach_mode_and_source(response, "recent")
 
 
-@app.get("/api/satellite/live/frames")
-def get_satellite_live_frames(
-    sat_id: str = "goes19",
-    sector: str = "CONUS",
-    channel: str = "Channel13",
-    hours: int = 2,
-    source: str = "auto",
-    max_frames: int = 90,
+@app.get("/api/satellite-v2/catalog")
+def get_satellite_v2_catalog(
+    sat_id: str = SATELLITE_V2_DEFAULT_SAT_ID,
+    sector: str = SATELLITE_V2_DEFAULT_SECTOR,
+    channel: str = SATELLITE_V2_DEFAULT_CHANNEL,
+    hours: int = SATELLITE_V2_DEFAULT_HOURS,
+    max_frames: int = SATELLITE_V2_DEFAULT_MAX_FRAMES,
+    refresh: bool = False,
 ):
-    if satellite_tile_utils is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Satellite tile workflow module is unavailable.",
-        )
-
-    product_key = str(channel or "Channel13").strip()
-    if product_key not in SATELLITE_LEAFLET_PHASE1_PRODUCTS:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Satellite product is not supported by Leaflet phase 1: {product_key}",
-        )
-
     try:
-        payload = satellite_tile_utils.build_live_frames(
+        return satellite_v2_service.get_catalog_payload(
             cache_root=_CACHE_ROOT,
-            base_dir=BASE_DIR,
             sat_id=sat_id,
             sector=sector,
-            channel_key=product_key,
-            hours=max(1, int(hours or 2)),
-            source=source,
-            max_frames=max(1, int(max_frames or 90)),
+            channel=channel,
+            hours=max(1, int(hours or SATELLITE_V2_DEFAULT_HOURS)),
+            max_frames=max(1, int(max_frames or SATELLITE_V2_DEFAULT_MAX_FRAMES)),
+            refresh=refresh,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        import traceback
+
+        print(
+            "[satellite-v2 tile] ERROR "
+            f"sat_id={sat_id} sector={sector} channel={channel} "
+            f"frame_key={frame_key} z={z} x={x} y={y}: {exc}",
+            flush=True,
+        )
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/satellite-v2/status")
+def get_satellite_v2_status():
+    try:
+        return satellite_v2_service.get_status_payload(_CACHE_ROOT)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/satellite-v2/legend")
+def get_satellite_v2_legend(channel: str = SATELLITE_V2_DEFAULT_CHANNEL):
+    try:
+        return satellite_v2_service.get_legend_payload(channel=channel)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    payload["data_mode"] = "current"
-    payload["requested_source"] = str(source or "auto").strip().lower() or "auto"
-    payload["source_used"] = payload.get("provider", "aws")
-    payload["tile_url_template"] = (
-        "/api/satellite/tile/{z}/{x}/{y}"
-        f"?sat_id={sat_id}&sector={sector}&channel={product_key}&source={source}&frame_key={{frame_key}}"
-    )
-    return payload
+
+def _satellite_v2_tile_source_label(cache_status: object) -> str:
+    status = str(cache_status or "hit").strip().lower()
+    if status == "hit":
+        return "cached"
+    if status in {"empty", "missing"}:
+        return "cache-empty"
+    if status in {"miss", "rendered"}:
+        return "rendered-live"
+    if status == "invalid":
+        return "invalid"
+    return status or "unknown"
 
 
-@app.get("/api/satellite/tile/{z}/{x}/{y}")
-def get_satellite_tile(
+@app.get("/api/satellite-v2/tile/{z}/{x}/{y}")
+def get_satellite_v2_tile(
     z: int,
     x: int,
     y: int,
@@ -6090,51 +6333,75 @@ def get_satellite_tile(
     sector: str,
     channel: str,
     frame_key: str,
-    source: str = "auto",
+    render_live: bool = True,
 ):
-    if satellite_tile_utils is None:
+    try:
+        tile_file, tile_stats = satellite_v2_service.resolve_tile(
+            cache_root=_CACHE_ROOT,
+            sat_id=sat_id,
+            sector=sector,
+            channel=channel,
+            frame_key=frame_key,
+            z=z,
+            x=x,
+            y=y,
+            allow_render=render_live,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    cache_status = str(tile_stats.get("cache_status") or "hit")
+    source_label = _satellite_v2_tile_source_label(cache_status)
+    print(
+        "[satellite-v2 tile] "
+        f"source={source_label} "
+        f"cache_status={cache_status.upper()} "
+        f"miss_reason={str(tile_stats.get('miss_reason') or 'none')} "
+        f"elapsed_ms={int(tile_stats.get('elapsed_ms') or 0)} "
+        f"sat_id={tile_stats.get('sat_id') or sat_id} "
+        f"sector={tile_stats.get('sector') or sector} "
+        f"channel={tile_stats.get('channel') or channel} "
+        f"frame_key={frame_key} z={z} x={x} y={y}",
+        flush=True,
+    )
+
+    if not tile_file.exists():
+        if cache_status.lower() in {"empty", "invalid", "missing"}:
+            response = Response(content=_TRANSPARENT_PNG_1X1, media_type="image/png")
+            response.headers["X-Satellite-V2-Cache"] = cache_status.upper()
+            response.headers["X-Satellite-V2-Provider"] = str(
+                tile_stats.get("provider") or "aws"
+            )
+            response.headers["X-Satellite-V2-Elapsed-Ms"] = str(
+                int(tile_stats.get("elapsed_ms") or 0)
+            )
+            response.headers["X-Satellite-V2-Frame-Key"] = str(frame_key or "")
+            response.headers["Cache-Control"] = "no-store, max-age=0"
+            response.headers["ETag"] = (
+                f"satv2-empty-{sat_id}-{sector}-{channel}-{frame_key}-{z}-{x}-{y}"
+            )
+            response.headers["Vary"] = "Accept-Encoding"
+            return response
         raise HTTPException(
-            status_code=503,
-            detail="Satellite tile workflow module is unavailable.",
+            status_code=404, detail="Satellite tile could not be generated."
         )
 
-    product_key = str(channel or "").strip()
-    if product_key not in SATELLITE_LEAFLET_PHASE1_PRODUCTS:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Satellite product is not supported by Leaflet phase 1: {product_key}",
-        )
-
-    tile_path, tile_stats = satellite_tile_utils.ensure_tile_cached_with_stats(
-        cache_root=_CACHE_ROOT,
-        sat_id=sat_id,
-        sector=sector,
-        channel_key=product_key,
-        source=source,
-        frame_key=frame_key,
-        z=z,
-        x=x,
-        y=y,
+    response = FileResponse(tile_file, media_type="image/png")
+    response.headers["X-Satellite-V2-Cache"] = cache_status.upper()
+    response.headers["X-Satellite-V2-Provider"] = str(
+        tile_stats.get("provider") or "aws"
     )
-
-    if not tile_path or not os.path.exists(tile_path):
-        raise HTTPException(status_code=404, detail="Satellite tile not available.")
-
-    response = FileResponse(tile_path, media_type="image/png")
-    cache_status = str(tile_stats.get("cache_status") or "miss").strip().lower()
-    response.headers["X-Satellite-Tile-Cache"] = (
-        "HIT" if cache_status == "hit" else "MISS"
-    )
-    response.headers["X-Satellite-Tile-Provider"] = str(
-        tile_stats.get("provider") or "unknown"
-    )
-    response.headers["X-Satellite-Tile-Elapsed-Ms"] = str(
+    response.headers["X-Satellite-V2-Elapsed-Ms"] = str(
         int(tile_stats.get("elapsed_ms") or 0)
     )
-    response.headers["X-Satellite-Tile-Render-Ms"] = str(
-        int(tile_stats.get("render_ms") or 0)
+    response.headers["X-Satellite-V2-Frame-Key"] = str(frame_key or "")
+    response.headers["Cache-Control"] = "public, max-age=86400, immutable"
+    response.headers["ETag"] = (
+        f"satv2-{sat_id}-{sector}-{channel}-{frame_key}-{z}-{x}-{y}"
     )
-    response.headers["X-Satellite-Frame-Key"] = str(frame_key or "")
+    response.headers["Vary"] = "Accept-Encoding"
     return response
 
 
@@ -7014,6 +7281,7 @@ if __name__ == "__main__":
         "host": "0.0.0.0",
         "port": 8000,
         "reload": use_reload,
+        "timeout_graceful_shutdown": 5,
     }
     if use_reload:
         run_kwargs["reload_includes"] = ["*.py"]

@@ -62,6 +62,7 @@ def start_scheduler() -> None:
         run_satellite_current_worker,
         run_satellite_meso_worker,
     )
+    from satellite_v2.worker import run_satellite_v2_worker
     from workers.surface_worker import run_surface_worker
 
     now = datetime.now(timezone.utc)
@@ -158,6 +159,50 @@ def start_scheduler() -> None:
         misfire_grace_time=60,
         next_run_time=now + timedelta(seconds=40),
     )
+    _scheduler.add_job(
+        lambda: run_satellite_v2_worker(profile="local-primary"),
+        "interval",
+        minutes=15,
+        id="satellite_v2_worker",
+        max_instances=1,
+        misfire_grace_time=60,
+        next_run_time=now + timedelta(seconds=55),
+    )
+    _scheduler.add_job(
+        lambda: run_satellite_v2_worker(meso=True, profile="goes19-meso"),
+        "interval",
+        minutes=5,
+        id="satellite_v2_meso_worker",
+        max_instances=1,
+        misfire_grace_time=60,
+        next_run_time=now + timedelta(seconds=65),
+    )
+    _scheduler.add_job(
+        lambda: run_satellite_v2_worker(
+            profile="goes19-light-composites",
+            tile_workers=2,
+            worker_name_override="satellite_v2_light_composites",
+        ),
+        "interval",
+        minutes=5,
+        id="satellite_v2_light_composites_worker",
+        max_instances=1,
+        misfire_grace_time=60,
+        next_run_time=now + timedelta(seconds=75),
+    )
+    _scheduler.add_job(
+        lambda: run_satellite_v2_worker(
+            profile="goes19-geocolor",
+            tile_workers=1,
+            worker_name_override="satellite_v2_geocolor",
+        ),
+        "interval",
+        minutes=10,
+        id="satellite_v2_geocolor_worker",
+        max_instances=1,
+        misfire_grace_time=60,
+        next_run_time=now + timedelta(seconds=85),
+    )
 
     _scheduler.start()
 
@@ -167,7 +212,10 @@ def start_scheduler() -> None:
         "radar_tiles (5 min, +25s delay), "
         "rtma_hourly (60 min, +45s delay), rtma_rapid (15 min, +50s delay), "
         "surface (30 min), satellite_current (15 min, +35s delay), "
-        "satellite_meso (5 min, +40s delay)"
+        "satellite_meso (5 min, +40s delay), satellite_v2 (15 min, +55s delay), "
+        "satellite_v2_meso (5 min, +65s delay), "
+        "satellite_v2_light_composites (5 min, +75s delay), "
+        "satellite_v2_geocolor (10 min, +85s delay)"
     )
 
 

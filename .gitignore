@@ -81,3 +81,5 @@ tools/install_tasks.ps1
 # Downloaded data files
 *.nc
 tools/install_tasks.ps1
+*.md
+tools/install_tasks.ps1

@@ -139,17 +139,17 @@ def build_world_land_geometry():
     if _WORLD_LAND_GEOM_CACHE is not None:
         return _WORLD_LAND_GEOM_CACHE
 
-    # 50m is a good balance between coastline detail and worker speed.
+    # 10m provides maximum coastline detail for performance testing.
     shp_path = shpreader.natural_earth(
-        resolution="50m", category="physical", name="land"
+        resolution="10m", category="physical", name="land"
     )
     reader = shpreader.Reader(shp_path)
     geoms = [geom for geom in reader.geometries() if geom is not None]
 
     if not geoms:
-        # Fallback to lower-resolution land polygons if needed.
+        # Fallback to medium-resolution land polygons if needed.
         shp_path = shpreader.natural_earth(
-            resolution="110m", category="physical", name="land"
+            resolution="50m", category="physical", name="land"
         )
         reader = shpreader.Reader(shp_path)
         geoms = [geom for geom in reader.geometries() if geom is not None]

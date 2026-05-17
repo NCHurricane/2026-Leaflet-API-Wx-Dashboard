@@ -466,10 +466,17 @@ SATELLITE_PREWARM_MESO = {
     "products": ("Channel02", "Channel13", "GeoColor"),
     "lookback_hours": 1,
     "max_frames": 60,
+    # Meso cadence can yield ~60 frames in a 1h window, so prewarm the
+    # newest hour to avoid cold misses when Animate is opened.
+    "prewarm_newest_frames": 60,
 }
 
 # Tile zoom levels to pre-render per frame during worker warming.
-SATELLITE_PREWARM_ZOOMS = (3, 4, 5, 6)
+# Capped at zoom 8 for CONUS (Band 13 native res ~2 km ≈ zoom 9 wall).
+SATELLITE_PREWARM_ZOOMS = (2, 3, 4, 5, 6, 7, 8)
+
+# Meso sectors have a smaller footprint so zoom 9 adds meaningful detail.
+SATELLITE_PREWARM_ZOOMS_MESO = (2, 3, 4, 5, 6, 7, 8, 9)
 
 # Number of newest frames to prewarm per product/sector each run.
 # Keeping this bounded prevents warm cycles from growing unbounded while still
@@ -477,9 +484,14 @@ SATELLITE_PREWARM_ZOOMS = (3, 4, 5, 6)
 SATELLITE_PREWARM_NEWEST_FRAMES = 12
 
 # Prewarm neighborhood radius by zoom level (radius 2 => 5x5 tile grid).
+# Used only for FULLDISK / unknown sectors; CONUS and MESO use bounding-box
+# and fixed-radius helpers in the worker respectively.
 SATELLITE_PREWARM_TILE_RADIUS_BY_ZOOM = {
     3: 1,
     4: 2,
     5: 2,
     6: 2,
+    7: 2,
+    8: 2,
+    9: 1,
 }

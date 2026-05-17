@@ -397,7 +397,8 @@ def _get_world_station_name_map(force_refresh=False):
         print(f"[WARN] WORLD station-name metadata fetch failed: {e}")
         return _WORLD_STATION_NAME_CACHE
 
-    rows = payload if isinstance(payload, list) else payload.get("features", [])
+    rows = payload if isinstance(
+        payload, list) else payload.get("features", [])
     mapping = {}
     for row in rows:
         props = row.get("properties", {}) if isinstance(row, dict) else {}
@@ -439,7 +440,8 @@ def _fetch_world_current_observations():
 
     out = pd.DataFrame()
     out["station_id"] = station_ids
-    out["name"] = station_ids.str.upper().map(station_name_map).fillna(station_ids)
+    out["name"] = station_ids.str.upper().map(
+        station_name_map).fillna(station_ids)
     out["valid"] = df.get("observation_time")
     out["latitude"] = pd.to_numeric(df.get("latitude"), errors="coerce")
     out["longitude"] = pd.to_numeric(df.get("longitude"), errors="coerce")
@@ -450,13 +452,15 @@ def _fetch_world_current_observations():
     out["dew_point_temperature"] = (dew_c * 9.0 / 5.0) + 32.0
 
     out["wind_speed"] = pd.to_numeric(df.get("wind_speed_kt"), errors="coerce")
-    out["wind_dir"] = pd.to_numeric(df.get("wind_dir_degrees"), errors="coerce")
+    out["wind_dir"] = pd.to_numeric(
+        df.get("wind_dir_degrees"), errors="coerce")
     out["wind_gust"] = pd.to_numeric(df.get("wind_gust_kt"), errors="coerce")
     out["altimeter"] = pd.to_numeric(df.get("altim_in_hg"), errors="coerce")
     out["mean_sea_level_pressure"] = pd.to_numeric(
         df.get("sea_level_pressure_mb"), errors="coerce"
     )
-    out["visibility"] = df.get("visibility_statute_mi", np.nan).apply(_to_float_mi)
+    out["visibility"] = df.get(
+        "visibility_statute_mi", np.nan).apply(_to_float_mi)
     out["wxcodes"] = df.get("wx_string", np.nan)
 
     # Keep network taxonomy aligned with the existing frontend filters.
@@ -478,6 +482,7 @@ def process_dataframe(df, state_code):
         "site_name": "name",
         "station_name": "name",
         "location": "name",
+        "utc_valid": "valid",
         "lat": "latitude",
         "lon": "longitude",
         "tmpf": "air_temperature",
@@ -540,7 +545,8 @@ def process_dataframe(df, state_code):
         else:
             df["relative_humidity"] = 50
 
-    df["heat_index"] = calc_heat_index(df["air_temperature"], df["relative_humidity"])
+    df["heat_index"] = calc_heat_index(
+        df["air_temperature"], df["relative_humidity"])
 
     wspd_mph = wspd_safe * 1.15078
     cond_cold = (df["air_temperature"] <= 50) & (wspd_mph >= 3)
@@ -679,7 +685,8 @@ def fetch_metar_data(state_code, use_nws_first=False):
     # Fall back to IEM
     cache_dir, cache_file = get_cache_path(state_upper)
     base_path = os.path.dirname(os.path.abspath(__file__))
-    legacy_cache_file = os.path.join(base_path, "surface_data", state_upper, "data.csv")
+    legacy_cache_file = os.path.join(
+        base_path, "surface_data", state_upper, "data.csv")
 
     for candidate in (cache_file, legacy_cache_file):
         if is_cache_valid(candidate, minutes=30):
@@ -706,7 +713,8 @@ def fetch_metar_data(state_code, use_nws_first=False):
                 df_awc.to_csv(cache_file, index=False)
                 return df_awc
         except Exception as e:
-            print(f"[surface] AWC CONUS fetch failed, falling back to IEM: {e}")
+            print(
+                f"[surface] AWC CONUS fetch failed, falling back to IEM: {e}")
 
         # Fallback: per-state IEM (may be rate-limited)
         all_dfs = []
@@ -750,7 +758,8 @@ def fetch_metar_data(state_code, use_nws_first=False):
                 if station_names:
                     # Fill missing names for this network
                     mask = (df_processed["network"] == network_type) & (
-                        (df_processed["name"].isna()) | (df_processed["name"] == "")
+                        (df_processed["name"].isna()) | (
+                            df_processed["name"] == "")
                     )
                     df_processed.loc[mask, "name"] = df_processed.loc[
                         mask, "station_id"
@@ -807,7 +816,8 @@ def _select_nearest_station_rows(df, target_dt, max_delta_seconds=75 * 60):
     if df_work.empty:
         return pd.DataFrame()
 
-    out = df_work.drop(columns=["_valid_ts", "_delta_seconds"], errors="ignore")
+    out = df_work.drop(
+        columns=["_valid_ts", "_delta_seconds"], errors="ignore")
     if "network" not in out.columns:
         out["network"] = "ASOS"
     return out
@@ -883,7 +893,8 @@ def _fetch_iem_state_archive_window(state, start_dt, end_dt):
                 raise ValueError("No processed rows")
 
             ts = pd.to_datetime(df["valid"], utc=True, errors="coerce")
-            out = df.assign(_valid_ts=ts).dropna(subset=["_valid_ts", "station_id"])
+            out = df.assign(_valid_ts=ts).dropna(
+                subset=["_valid_ts", "station_id"])
             if out.empty:
                 raise ValueError("No timestamped rows")
 
@@ -979,7 +990,7 @@ def _fetch_awc_metar_bulk(icao_ids: set[str], hours: int) -> list[dict]:
     """Fetch historical METAR observations from AWC in batches of 30 stations."""
     station_list = sorted(icao_ids)
     batches = [
-        station_list[i : i + _AWC_BATCH_SIZE]
+        station_list[i: i + _AWC_BATCH_SIZE]
         for i in range(0, len(station_list), _AWC_BATCH_SIZE)
     ]
     all_records: list[dict] = []
@@ -1181,12 +1192,14 @@ def fetch_metar_data_archive_frames(state_code, frame_times_utc, source="iem"):
     # Single state — use AWC with state-specific station IDs
     icao_ids = _get_state_icao_ids(state)
     if icao_ids:
-        df_window = _fetch_awc_archive_window(icao_ids, window_start, window_end)
+        df_window = _fetch_awc_archive_window(
+            icao_ids, window_start, window_end)
         if df_window is not None and not df_window.empty:
             return [_select_nearest_station_rows(df_window, ts) for ts in frame_times]
 
     # Fallback to IEM if AWC returned nothing for this state
-    df_window = _fetch_iem_state_archive_window(state, window_start, window_end)
+    df_window = _fetch_iem_state_archive_window(
+        state, window_start, window_end)
     return [_select_nearest_station_rows(df_window, ts) for ts in frame_times]
 
 
@@ -1198,7 +1211,8 @@ def fetch_metar_data_at_time(state_code, valid_time_utc, source="iem"):
     # NWS and aviationweather are near-real-time sources; use NWS opportunistically
     # for recent targets, then fall back to IEM.
     if source_key in {"nws", "aviationweather", "auto"}:
-        age_seconds = abs((datetime.now(timezone.utc) - target_dt).total_seconds())
+        age_seconds = abs(
+            (datetime.now(timezone.utc) - target_dt).total_seconds())
         if age_seconds <= 2 * 3600:
             try:
                 df_nws = fetch_nws_current_observations(state_code)
@@ -1220,7 +1234,8 @@ def fetch_metar_data_at_time(state_code, valid_time_utc, source="iem"):
         return _select_nearest_station_rows(df, target_dt)
 
     if state == "CONUS":
-        frames = fetch_metar_data_archive_frames("CONUS", [target_dt], source="iem")
+        frames = fetch_metar_data_archive_frames(
+            "CONUS", [target_dt], source="iem")
         if frames:
             return frames[0]
         return pd.DataFrame()
@@ -1234,7 +1249,8 @@ def fetch_metar_data_at_time(state_code, valid_time_utc, source="iem"):
 def get_weather_symbol_index(wx_code):
     if pd.isna(wx_code) or not wx_code:
         return 0
-    search_str = " ".join(wx_code) if isinstance(wx_code, list) else str(wx_code)
+    search_str = " ".join(wx_code) if isinstance(
+        wx_code, list) else str(wx_code)
 
     mapping = {
         "FC": 99,
@@ -1364,7 +1380,8 @@ def plot_cities(
                 ),
             )
             txt.set_path_effects(
-                [PathEffects.withStroke(linewidth=halo_width, foreground=halo_color)]
+                [PathEffects.withStroke(
+                    linewidth=halo_width, foreground=halo_color)]
             )
             drawn_bboxes.append((cx_min, cx_max, cy_min, cy_max))
 
@@ -1428,7 +1445,8 @@ def generate_surface_map(
         dot_size = int(style_config.get("dot_size", 500))
         density_km = float(
             style_config.get(
-                "density_km", 330 - (int(style_config.get("station_density", 5)) * 30)
+                "density_km", 330 -
+                (int(style_config.get("station_density", 5)) * 30)
             )
         )
         city_text_size = int(style_config.get("city_text_size", 10))
@@ -1448,8 +1466,10 @@ def generate_surface_map(
         show_country = style_config.get("show_country", True)
         if isinstance(show_country, str):
             show_country = show_country.lower() not in ("false", "0", "no")
-        country_border_width = float(style_config.get("country_border_width", 0.8))
-        country_border_color = style_config.get("country_border_color", "black")
+        country_border_width = float(
+            style_config.get("country_border_width", 0.8))
+        country_border_color = style_config.get(
+            "country_border_color", "black")
 
         # State Styling
         show_states = style_config.get("show_states", True)
@@ -1496,11 +1516,13 @@ def generate_surface_map(
         # HUD Colors
         hud_left_text_color = style_config.get("hud_left_text_color", "white")
         hud_left_bg_color = style_config.get("hud_left_bg_color", "black")
-        hud_left_edge_color = style_config.get("hud_left_edge_color", "#555555")
+        hud_left_edge_color = style_config.get(
+            "hud_left_edge_color", "#555555")
         hud_left_opacity = float(style_config.get("hud_left_opacity", 0.7))
         hud_right_text_color = style_config.get("hud_right_text_color", "gold")
         hud_right_bg_color = style_config.get("hud_right_bg_color", "black")
-        hud_right_edge_color = style_config.get("hud_right_edge_color", "#555555")
+        hud_right_edge_color = style_config.get(
+            "hud_right_edge_color", "#555555")
         hud_right_opacity = float(style_config.get("hud_right_opacity", 0.7))
 
         output_time_utc = datetime.now(timezone.utc)
@@ -1614,7 +1636,8 @@ def generate_surface_map(
         city_text_size = int(city_text_size * scale_factor)
         font_size = int(font_size * scale_factor)
         # Smaller for station plots (many fields per station)
-        station_font_scale = float(style_config.get("station_font_scale", 0.55))
+        station_font_scale = float(
+            style_config.get("station_font_scale", 0.55))
         station_font_size = max(7, int(font_size * station_font_scale))
         dot_size = int(dot_size * scale_factor)
 
@@ -1645,8 +1668,10 @@ def generate_surface_map(
             ax.patch.set_alpha(0)  # Let basemap show through axes background
             _perf_log(perf, "load_basemap", t_base)
         else:
-            ax.add_feature(cfeature.LAND, facecolor=land_color, zorder=zo["land"])
-            ax.add_feature(cfeature.OCEAN, facecolor=ocean_color, zorder=zo["land"])
+            ax.add_feature(cfeature.LAND, facecolor=land_color,
+                           zorder=zo["land"])
+            ax.add_feature(cfeature.OCEAN, facecolor=ocean_color,
+                           zorder=zo["land"])
             ax.add_feature(
                 cfeature.COASTLINE.with_scale("10m"),
                 linewidth=coastline_width,
@@ -1655,14 +1680,14 @@ def generate_surface_map(
             )
             if show_country:
                 ax.add_feature(
-                    cfeature.BORDERS,
+                    cfeature.BORDERS.with_scale("10m"),
                     linewidth=country_border_width,
                     edgecolor=country_border_color,
                     zorder=zo["borders"],
                 )
             if show_states:
                 ax.add_feature(
-                    cfeature.STATES,
+                    cfeature.STATES.with_scale("10m"),
                     linewidth=state_border_width,
                     edgecolor=state_border_color,
                     zorder=zo["borders"],
@@ -1714,7 +1739,8 @@ def generate_surface_map(
                     pass
             _perf_log(perf, "draw_base_features", t_base)
 
-        ax.set_extent([ext_lon0, ext_lon1, ext_lat0, ext_lat1], crs=ccrs.PlateCarree())
+        ax.set_extent([ext_lon0, ext_lon1, ext_lat0, ext_lat1],
+                      crs=ccrs.PlateCarree())
         x_min, x_max = ax.get_xlim()
         y_min, y_max = ax.get_ylim()
         x_span = x_max - x_min
@@ -1724,8 +1750,10 @@ def generate_surface_map(
         expand_left = float(style_config.get("map_margin_left", 0.0))
         expand_right = float(style_config.get("map_margin_right", 0.0))
 
-        ax.set_xlim(x_min - x_span * expand_left, x_max + x_span * expand_right)
-        ax.set_ylim(y_min - y_span * expand_bottom, y_max + y_span * expand_top)
+        ax.set_xlim(x_min - x_span * expand_left,
+                    x_max + x_span * expand_right)
+        ax.set_ylim(y_min - y_span * expand_bottom,
+                    y_max + y_span * expand_top)
 
         # Data processing
         xy = proj.transform_points(
@@ -1748,7 +1776,8 @@ def generate_surface_map(
             # ... (Standard Station Plot Logic) ...
             df_plot["wx_idx"] = 0
             if "wxcodes" in df_plot.columns:
-                df_plot["wx_idx"] = df_plot["wxcodes"].apply(get_weather_symbol_index)
+                df_plot["wx_idx"] = df_plot["wxcodes"].apply(
+                    get_weather_symbol_index)
 
             sky_vals = np.zeros(len(df_plot))
             if "relative_humidity" in df_plot.columns:
@@ -1760,7 +1789,8 @@ def generate_surface_map(
                     .values
                 )
 
-            station_spacing = float(style_config.get("station_spacing_factor", 1.2))
+            station_spacing = float(style_config.get(
+                "station_spacing_factor", 1.2))
             sp = StationPlot(
                 ax,
                 df_plot["longitude"].values,
@@ -1774,7 +1804,8 @@ def generate_surface_map(
 
             stn_halo_w = int(style_config.get("station_text_halo_width", 2))
             stn_halo_c = style_config.get("station_text_halo_color", "white")
-            halo = [PathEffects.withStroke(linewidth=stn_halo_w, foreground=stn_halo_c)]
+            halo = [PathEffects.withStroke(
+                linewidth=stn_halo_w, foreground=stn_halo_c)]
 
             stn_weight = style_config.get("station_text_weight", "bold")
             sp.plot_parameter(
@@ -1804,7 +1835,8 @@ def generate_surface_map(
                 sp.plot_parameter(
                     "E",
                     df_plot["visibility"].values,
-                    color=style_config.get("station_visibility_color", "purple"),
+                    color=style_config.get(
+                        "station_visibility_color", "purple"),
                     formatter=lambda v: f"{v:.0f}" if not pd.isna(v) else "",
                 ).set_path_effects(halo)
             sp.plot_symbol("C", sky_vals, sky_cover)
@@ -1925,7 +1957,8 @@ def generate_surface_map(
                 grid_points,
                 method="nearest",
             )
-            temp_linear[np.isnan(temp_linear)] = temp_nearest[np.isnan(temp_linear)]
+            temp_linear[np.isnan(temp_linear)
+                        ] = temp_nearest[np.isnan(temp_linear)]
             temp_grid = temp_linear.reshape(lon_mesh.shape)
 
             if use_smoothing:
@@ -2003,11 +2036,13 @@ def generate_surface_map(
                 else 10
             )
             cb.set_ticklabels(
-                [str(t) if t % temp_label_step == 0 else "" for t in tick_values]
+                [str(t) if t % temp_label_step ==
+                 0 else "" for t in tick_values]
             )
             for tick in cb.ax.get_xticklabels():
                 tick.set_fontname(font_family)
-                tick.set_fontweight(style_config.get("cbar_tick_weight", "bold"))
+                tick.set_fontweight(style_config.get(
+                    "cbar_tick_weight", "bold"))
 
             # --- DEFERRED: OVERLAY VALUES (drawn after masks so they're on top) ---
             if _draw_gradient_values:
@@ -2026,7 +2061,8 @@ def generate_surface_map(
                         transform=ccrs.PlateCarree(),
                         fontsize=font_size,
                         fontname=font_family,
-                        fontweight=style_config.get("value_text_weight", "black"),
+                        fontweight=style_config.get(
+                            "value_text_weight", "black"),
                         color=style_config.get("value_text_color", "white"),
                         ha="center",
                         va="center",
@@ -2037,7 +2073,8 @@ def generate_surface_map(
                         [
                             PathEffects.withStroke(
                                 linewidth=int(
-                                    style_config.get("value_text_halo_width", 2)
+                                    style_config.get(
+                                        "value_text_halo_width", 2)
                                 ),
                                 foreground=style_config.get(
                                     "value_text_halo_color", "black"
@@ -2131,7 +2168,8 @@ def generate_surface_map(
                 txt.set_path_effects(
                     [
                         PathEffects.withStroke(
-                            linewidth=int(style_config.get("value_text_halo_width", 2)),
+                            linewidth=int(style_config.get(
+                                "value_text_halo_width", 2)),
                             foreground=style_config.get(
                                 "value_text_halo_color", "black"
                             ),
@@ -2155,8 +2193,10 @@ def generate_surface_map(
                     color=style_config.get("wind_arrow_color", "black"),
                     scale=float(style_config.get("wind_arrow_scale", 25)),
                     width=float(style_config.get("wind_arrow_width", 0.004)),
-                    headwidth=float(style_config.get("wind_arrow_headwidth", 4)),
-                    headlength=float(style_config.get("wind_arrow_headlength", 5)),
+                    headwidth=float(style_config.get(
+                        "wind_arrow_headwidth", 4)),
+                    headlength=float(style_config.get(
+                        "wind_arrow_headlength", 5)),
                     zorder=zo["scatter"] - 1,
                     clip_on=False,
                 )
@@ -2172,7 +2212,8 @@ def generate_surface_map(
             cb = plt.colorbar(sc, cax=cbar_ax, orientation="horizontal")
             for tick in cb.ax.get_xticklabels():
                 tick.set_fontname(font_family)
-                tick.set_fontweight(style_config.get("cbar_tick_weight", "bold"))
+                tick.set_fontweight(style_config.get(
+                    "cbar_tick_weight", "bold"))
             _perf_log(perf, f"render_parameter:{parameter}", t_param)
 
         # --- REGION BORDER (selected state outline only) ---
@@ -2186,12 +2227,14 @@ def generate_surface_map(
                     vx0, vx1, vy0, vy1 = ax.get_extent(crs=ccrs.PlateCarree())
 
                     # Always draw border live so sel_border_color/width are respected
-                    simplified_border = _REGION_MASK_CACHE.get((code, "border"))
+                    simplified_border = _REGION_MASK_CACHE.get(
+                        (code, "border"))
                     if simplified_border is None:
                         simplified_border = selected_geom.simplify(
                             0.02, preserve_topology=True
                         )
-                        _REGION_MASK_CACHE[(code, "border")] = simplified_border
+                        _REGION_MASK_CACHE[(code, "border")
+                                           ] = simplified_border
                     border_path_key = (
                         code,
                         round(vx0, 2),
@@ -2240,7 +2283,8 @@ def generate_surface_map(
             _perf_log(perf, "plot_cities", t_cities)
 
         # HUD
-        dt_local = datetime.now(timezone.utc).astimezone(tz.gettz("America/New_York"))
+        dt_local = datetime.now(timezone.utc).astimezone(
+            tz.gettz("America/New_York"))
         hud_box = style_config.get("hud_box_style", "round,pad=0.5")
         text_style_left = dict(
             boxstyle=hud_box,
@@ -2255,7 +2299,8 @@ def generate_surface_map(
             alpha=hud_right_opacity,
         )
 
-        hud_left_size = int(float(style_config.get("hud_left_size", 15)) * scale_factor)
+        hud_left_size = int(float(style_config.get(
+            "hud_left_size", 15)) * scale_factor)
         hud_right_size = int(
             float(style_config.get("hud_right_size", 15)) * scale_factor
         )
@@ -2309,7 +2354,8 @@ def generate_surface_map(
         if os.path.exists(logo_file):
             try:
                 logo_size = (
-                    float(style_config.get("logo_user_size", 0.08)) * scale_factor
+                    float(style_config.get("logo_user_size", 0.08)) *
+                    scale_factor
                 )
                 logo_x = float(style_config.get("logo_user_x", 0.98))
                 logo_y = float(style_config.get("logo_user_y", 0.01))
@@ -2380,7 +2426,8 @@ def generate_surface_current_layers(
     # Create request-scoped layer directory
     timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     session_key = request_id or f"current_{timestamp_str}_{int(time_module.time())}"
-    layer_dir = os.path.join(output_dir, state_code.upper(), parameter, session_key)
+    layer_dir = os.path.join(
+        output_dir, state_code.upper(), parameter, session_key)
 
     if os.path.isdir(layer_dir):
         shutil.rmtree(layer_dir, ignore_errors=True)

@@ -488,6 +488,53 @@
     const map = L.map('weather-map', { layers: [tilesDarkNoLabels] });
     map.fitBounds(CONUS_DEFAULT_BOUNDS, { animate: false });
 
+    function _normalizedLonSpanDegrees(west, east) {
+        let span = Number(east) - Number(west);
+        if (!Number.isFinite(span)) return 0;
+        while (span < 0) span += 360;
+        while (span > 360) span -= 360;
+        return span;
+    }
+
+    function _effectiveViewportZoom() {
+        const bounds = map.getBounds();
+        const widthPx = Math.max(1, Number(map.getSize()?.x || 0));
+        const lonSpan = Math.max(
+            1e-6,
+            _normalizedLonSpanDegrees(bounds.getWest(), bounds.getEast())
+        );
+        // Web Mercator x is linear in longitude, and zoom 0 is 256 px wide.
+        const zoom = Math.log2((360 * widthPx) / (256 * lonSpan));
+        return Number.isFinite(zoom) ? zoom : (Number(map.getZoom()) || 0);
+    }
+
+    function _initLeafletZoomIndicator() {
+        const zoomContainer = map.zoomControl?.getContainer?.();
+        if (!zoomContainer) return;
+
+        zoomContainer.classList.add('wx-zoom-indicator-enabled');
+        let indicator = zoomContainer.querySelector('.wx-leaflet-zoom-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.className = 'wx-leaflet-zoom-indicator';
+            indicator.setAttribute('role', 'status');
+            indicator.setAttribute('aria-live', 'polite');
+            zoomContainer.appendChild(indicator);
+        }
+
+        const update = () => {
+            const effectiveZoom = _effectiveViewportZoom();
+            const leafletZoom = Number(map.getZoom()) || 0;
+            indicator.textContent = `z ${effectiveZoom.toFixed(2)}`;
+            indicator.title = `Viewport ${effectiveZoom.toFixed(2)} | Leaflet ${leafletZoom.toFixed(2)}`;
+        };
+
+        update();
+        map.on('zoom zoomend move moveend resize', update);
+    }
+
+    _initLeafletZoomIndicator();
+
     function _ensureSpcCigPatternDefs(svgRoot) {
         if (!svgRoot) return;
         let defs = svgRoot.querySelector('defs');
@@ -689,10 +736,37 @@
     let _satelliteAutoRefreshTimer = null;
     let _satelliteScrubMode = false;
     let _satelliteScrubPlayTimer = null;
+    let _satelliteScrubFrameAdvanceInFlight = false;
+    let _satelliteScrubResumeAfterZoom = false;
     let _satelliteScrubLoadSeq = 0;
     let _satelliteScrubRenderSeq = 0;
     let _satelliteBackgroundWarmSeq = 0;
+    let _satellitePendingSwapToken = 0;
+    let _satelliteApiMode = 'v2';
+    let _satelliteCatalog = null;
     let _satelliteAnimateNewFrameTimer = null;
+    let _satelliteAnimateAutoRefreshEnabled = false;
+    let _satelliteAnimateAutoRefreshTimer = null;
+    let _satelliteAnimateAutoRefreshInFlight = false;
+    let _satelliteAutoRefreshFlashActive = false;
+    let _satelliteTileRefreshToken = 0;
+    let _satelliteProgressiveRedrawSeq = 0;
+    let _satelliteProgressiveRedrawTimers = [];
+    let _satellitePrefetchTimer = null;
+    let _satellitePrefetchSeq = 0;
+    let _satellitePrefetchQueue = [];
+    let _satellitePrefetchActive = 0;
+    let _satellitePrefetchController = null;
+    let _satellitePrefetchContextKey = '';
+    const _satellitePrefetchSeenUrls = new Map();
+    let _satelliteFetchController = null;
+    let _satelliteScrubFetchController = null;
+    let _satelliteLookbackReloadTimer = null;
+    let _satelliteManualScrubTimer = null;
+    let _satelliteLayerZCounter = 0;
+    let _scrubberPlaybackSpeedIndex = 2;
+    const _satelliteLayerPool = new Map(); // frameKey → L.tileLayer
+    const _satelliteLegendCache = new Map();
     let radarSiteLayer = null;
     let radarSiteHighlightLayer = null;
     let radarBackdropLayer = null;
@@ -912,13 +986,33 @@
     };
     const RTMA_POINTS_DEBOUNCE_MS = 180;
     const RTMA_POINTS_MIN_FETCH_INTERVAL_MS = 500;
+    const SCRUBBER_PLAYBACK_SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3, 4];
     const RTMA_SCRUB_PLAY_INTERVAL_MS = 300;
     const RTMA_SCRUB_LOOP_HOLD_MS = 2000;
     const RTMA_SCRUB_SWAP_FADE_MS = 90;
     const RADAR_CROSSFADE_MS = 10;
+    const SATELLITE_CROSSFADE_MS = RADAR_CROSSFADE_MS;
+    const SATELLITE_LOOKBACK_HOURS_MAX = 12;
+    const SATELLITE_FRAME_REQUEST_MAX = 360;
+    const SATELLITE_LOOKBACK_RELOAD_DEBOUNCE_MS = 250;
+    const SATELLITE_MANUAL_SCRUB_DEBOUNCE_MS = 80;
+    const SATELLITE_TILE_READY_TIMEOUT_MS = 15000;
+    const SATELLITE_INITIAL_TILE_READY_TIMEOUT_MS = 45000;
+    const SATELLITE_HOT_FRAME_RADIUS = 3;
+    const SATELLITE_PROGRESSIVE_REDRAW_DELAYS_MS = [2500, 6000, 12000, 20000];
+    const SATELLITE_ANIMATION_RETAIN_LAYER_LIMIT = 72;
+    const SATELLITE_PREFETCH_AHEAD_FRAMES = 8;
+    const SATELLITE_PREFETCH_BEHIND_FRAMES = 2;
+    const SATELLITE_PREFETCH_MAX_CONCURRENT = 2;
+    const SATELLITE_PREFETCH_MAX_TILES_PER_FRAME = 32;
+    const SATELLITE_PREFETCH_MAX_QUEUE_TILES = 180;
+    const SATELLITE_PREFETCH_DEBOUNCE_MS = 220;
+    const SATELLITE_PREFETCH_RETRY_AFTER_MS = 20000;
+    const SATELLITE_PREFETCH_SEEN_LIMIT = 1200;
     const RTMA_SCRUB_POINTS_ONLY = false;
     const RADAR_AUTO_REFRESH_MS = 3 * 60 * 1000; // 3 minutes
     const SATELLITE_AUTO_REFRESH_MS = 5 * 60 * 1000;
+    const SATELLITE_ANIMATE_AUTO_REFRESH_MS = SATELLITE_AUTO_REFRESH_MS;
     const RADAR_MULTI_SITE_MAX = 5;
     const RADAR_MULTI_SITE_Z_BASE = 320;
     const RADAR_MULTI_SITE_Z_STEP = 1;
@@ -3369,7 +3463,7 @@
 
     function _setTimestampSource(type, provenance, ts) {
         const key = (type && _timestampSourceByType[type]) ? type : 'global';
-        const tsMs = Number(ts);
+        const tsMs = ts != null ? Number(ts) : NaN;
         _timestampSourceByType[key].provenance = provenance || null;
         _timestampSourceByType[key].ts = Number.isFinite(tsMs) ? tsMs : null;
         _renderReliability();
@@ -3392,7 +3486,7 @@
         const key = (targetType && _reliabilityByType[targetType]) ? targetType : 'global';
         _reliabilityByType[key].label = targetLabel || null;
         _reliabilityByType[key].source = targetSource || null;
-        const tsMs = Number(targetTs);
+        const tsMs = targetTs != null ? Number(targetTs) : NaN;
         _reliabilityByType[key].ts = Number.isFinite(tsMs) ? tsMs : null;
         _renderReliability();
     }
@@ -3652,6 +3746,7 @@
             // Dismiss every other queued banner — user committed to this one.
             _dismissAllNewAlertBanners(banner);
             dismiss();
+            _setRegionAlertLocationState();
             map.flyTo(center, Math.max(map.getZoom(), 9), { duration: 1.0 });
             map.once('moveend', () => {
                 if (_alertQualifiesForDetail(feat)) {
@@ -4043,6 +4138,7 @@
 
             const center = _alertFeatureCenterLatLng(feat);
             if (!center) return;
+            _setRegionAlertLocationState();
             map.flyTo(center, Math.max(map.getZoom(), 9), { duration: 1.0 });
             map.once('moveend', () => {
                 _openAlertsPagerAt(center);
@@ -5204,6 +5300,21 @@
         refreshActiveLayers();
     }
 
+    function _setRegionAlertLocationState() {
+        const regionSelect = byId('weather-region');
+        if (!regionSelect) return;
+        let sentinelOpt = regionSelect.querySelector('option[value="__ALERT_LOCATION__"]');
+        if (!sentinelOpt) {
+            sentinelOpt = document.createElement('option');
+            sentinelOpt.value = '__ALERT_LOCATION__';
+            sentinelOpt.disabled = true;
+            sentinelOpt.hidden = true;
+            sentinelOpt.textContent = 'Choose Location';
+            regionSelect.insertBefore(sentinelOpt, regionSelect.firstChild);
+        }
+        regionSelect.value = '__ALERT_LOCATION__';
+    }
+
     function _setRegionRadarSiteSelectedState() {
         const regionSelect = byId('weather-region');
         if (!regionSelect) return;
@@ -5293,11 +5404,13 @@
         const radarActive = _isTypeEnabled('radar');
         const animBtn = byId('weather-rtma-load-scrubber');
         const animWin = byId('rtma-animate-window');
+        const modeControls = byId('wx-mode-controls');
         const radarOnly = radarActive && !rtmaActive && !mrmsActive;
         const radarHasSite = !!_activeRadarSite();
         const radarProductLabel = document.querySelector('label[for="weather-radar-product"]');
         const radarProductWrap = byId('wx-radar-select');
         const showRadarProductControls = radarActive && radarHasSite;
+        if (modeControls) modeControls.style.display = _isTypeEnabled('satellite') ? 'none' : '';
         if (radarProductLabel) radarProductLabel.style.display = showRadarProductControls ? '' : 'none';
         if (radarProductWrap) radarProductWrap.style.display = showRadarProductControls ? '' : 'none';
         const showAnim = (rtmaActive || mrmsActive) || (radarActive && (!radarOnly || radarHasSite));
@@ -5378,6 +5491,7 @@
         surfaceLayer = null;
         radarLiveOverlay = null;
         satelliteOverlay = null;
+        _clearSatelliteLayerPool();
         rtmaOverlay = null;
         rtmaGradientLayer = null;
         rtmaPointLayer = null;
@@ -5991,10 +6105,29 @@
         return Math.max(RADAR_MULTI_SITE_Z_MIN, z);
     }
 
-    async function _crossfadeOverlays(oldOverlay, newOverlay, targetOpacity, typeEnabledCheck, canContinue = () => true, fadeDurationMs = RADAR_CROSSFADE_MS) {
+    function _radarOverlayUrl(rawUrl) {
+        const value = String(rawUrl || '').trim();
+        if (!value) return '';
+
+        if (/^https?:\/\//i.test(value)) {
+            try {
+                const parsed = new URL(value);
+                const normalizedPath = `${parsed.pathname || ''}${parsed.search || ''}${parsed.hash || ''}`;
+                return apiUrl(normalizedPath || value);
+            } catch (_) {
+                return apiUrl(value);
+            }
+        }
+
+        return apiUrl(value);
+    }
+
+    async function _crossfadeOverlays(oldOverlay, newOverlay, targetOpacity, typeEnabledCheck, canContinue = () => true, fadeDurationMs = RADAR_CROSSFADE_MS, options = {}) {
         if (!oldOverlay || !newOverlay || !typeEnabledCheck()) return true;
 
-        newOverlay.setOpacity(0);
+        const keepNewAtTarget = options?.keepNewAtTarget === true;
+        const removeOldAfterFade = options?.removeOldAfterFade !== false;
+        newOverlay.setOpacity(keepNewAtTarget ? targetOpacity : 0);
         await new Promise((resolve) => requestAnimationFrame(resolve));
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
@@ -6003,18 +6136,29 @@
             return false;
         }
 
-        const oldElement = typeof oldOverlay.getElement === 'function' ? oldOverlay.getElement() : null;
-        const newElement = typeof newOverlay.getElement === 'function' ? newOverlay.getElement() : null;
-        if (oldElement) oldElement.style.transition = `opacity ${fadeDurationMs}ms linear`;
-        if (newElement) newElement.style.transition = `opacity ${fadeDurationMs}ms linear`;
+        const transitionElements = (overlay) => {
+            const elements = [];
+            const root = typeof overlay.getElement === 'function'
+                ? overlay.getElement()
+                : (typeof overlay.getContainer === 'function' ? overlay.getContainer() : overlay._container || null);
+            if (root) elements.push(root);
+            Object.values(overlay._tiles || {}).forEach((rec) => {
+                if (rec?.el) elements.push(rec.el);
+            });
+            return elements;
+        };
+        const oldElements = transitionElements(oldOverlay);
+        const newElements = transitionElements(newOverlay);
+        oldElements.forEach((el) => { el.style.transition = `opacity ${fadeDurationMs}ms linear`; });
+        newElements.forEach((el) => { el.style.transition = `opacity ${fadeDurationMs}ms linear`; });
 
         if (map.hasLayer(oldOverlay)) oldOverlay.setOpacity(0);
-        newOverlay.setOpacity(targetOpacity);
+        if (!keepNewAtTarget) newOverlay.setOpacity(targetOpacity);
 
         setTimeout(() => {
-            if (oldOverlay && map.hasLayer(oldOverlay)) map.removeLayer(oldOverlay);
-            if (oldElement) oldElement.style.transition = '';
-            if (newElement) newElement.style.transition = '';
+            if (removeOldAfterFade && oldOverlay && map.hasLayer(oldOverlay)) map.removeLayer(oldOverlay);
+            oldElements.forEach((el) => { el.style.transition = ''; });
+            newElements.forEach((el) => { el.style.transition = ''; });
         }, fadeDurationMs);
 
         return true;
@@ -6022,6 +6166,18 @@
 
     async function _crossfadeRadarOverlays(oldOverlay, newOverlay, canContinue = () => true) {
         return _crossfadeOverlays(oldOverlay, newOverlay, 0.9, () => _isTypeEnabled('radar'), canContinue, RADAR_CROSSFADE_MS);
+    }
+
+    async function _crossfadeSatelliteLayers(oldLayer, newLayer, canContinue = () => true) {
+        return _crossfadeOverlays(
+            oldLayer,
+            newLayer,
+            0.92,
+            () => _isTypeEnabled('satellite'),
+            canContinue,
+            SATELLITE_CROSSFADE_MS,
+            { removeOldAfterFade: !_satelliteScrubMode },
+        );
     }
 
     function _clearRadarMultiSiteOverlays() {
@@ -6133,14 +6289,14 @@
                     const img = new Image();
                     img.onload = resolve;
                     img.onerror = resolve;
-                    img.src = apiUrl(imageUrl);
+                    img.src = _radarOverlayUrl(imageUrl);
                 });
 
                 if (requestSeq !== _radarLiveRequestSeq || !_radarMultiSites.has(site) || !_isTypeEnabled('radar')) return;
 
                 const leafletBnds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
                 const oldOverlay = _radarSiteOverlays.get(site);
-                const newOverlay = L.imageOverlay(apiUrl(imageUrl), leafletBnds, {
+                const newOverlay = L.imageOverlay(_radarOverlayUrl(imageUrl), leafletBnds, {
                     opacity: oldOverlay ? 0 : 0.9,
                     pane: 'radar-overlays',
                     zIndex: _radarMultiSiteZIndex(site, siteOrder),
@@ -6242,14 +6398,14 @@
                 const img = new Image();
                 img.onload = resolve;
                 img.onerror = resolve;
-                img.src = apiUrl(imageUrl);
+                img.src = _radarOverlayUrl(imageUrl);
             });
 
             if (requestSeq !== _radarLiveRequestSeq || !_canApplyRadarResponse(site, product)) return;
 
             const oldOverlay = radarLiveOverlay;
             const leafletBounds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
-            const newOverlay = L.imageOverlay(apiUrl(imageUrl), leafletBounds, {
+            const newOverlay = L.imageOverlay(_radarOverlayUrl(imageUrl), leafletBounds, {
                 opacity: oldOverlay ? 0 : 0.9,
                 pane: 'radar-overlays',
                 zIndex: 320,
@@ -6452,21 +6608,21 @@
                     if (_radarScrubPlayTimer) {
                         await _renderRadarScrubFrame(0);
                         if (_radarScrubPlayTimer) {
-                            _radarScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+                            _radarScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(RTMA_SCRUB_PLAY_INTERVAL_MS));
                         }
                     }
-                }, RTMA_SCRUB_LOOP_HOLD_MS);
+                }, _scrubberPlaybackDelay(RTMA_SCRUB_LOOP_HOLD_MS, 350));
             } else {
                 // Advance to next frame
                 const next = _radarScrubFrameIndex + 1;
                 await _renderRadarScrubFrame(next);
                 const stillFrames = _radarScrubIsTimeMode ? _radarScrubTimelineMs.length : _radarScrubFrames.length;
                 if (!_radarScrubPlayTimer || !stillFrames) return;
-                _radarScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+                _radarScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(RTMA_SCRUB_PLAY_INTERVAL_MS));
             }
         };
 
-        _radarScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+        _radarScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(RTMA_SCRUB_PLAY_INTERVAL_MS));
     }
 
     function _radarScrubFrameTsMs(frame) {
@@ -6576,13 +6732,13 @@
                         const img = new Image();
                         img.onload = resolve;
                         img.onerror = resolve;
-                        img.src = apiUrl(imageUrl);
+                        img.src = _radarOverlayUrl(imageUrl);
                     });
                     if (!_canApplyRadarScrubResponse(renderSeq)) return;
 
                     const oldOverlay = _radarSiteOverlays.get(site) || null;
                     const leafletBounds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
-                    const newOverlay = L.imageOverlay(apiUrl(imageUrl), leafletBounds, {
+                    const newOverlay = L.imageOverlay(_radarOverlayUrl(imageUrl), leafletBounds, {
                         opacity: oldOverlay ? 0 : 0.9,
                         pane: 'radar-overlays',
                         zIndex: _radarMultiSiteZIndex(site, selectedSiteOrder),
@@ -6624,13 +6780,13 @@
                 const img = new Image();
                 img.onload = resolve;
                 img.onerror = resolve;
-                img.src = apiUrl(imageUrl);
+                img.src = _radarOverlayUrl(imageUrl);
             });
             if (!_canApplyRadarScrubResponse(renderSeq)) return;
 
             const oldOverlay = radarLiveOverlay;
             const leafletBounds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
-            const newOverlay = L.imageOverlay(apiUrl(imageUrl), leafletBounds, {
+            const newOverlay = L.imageOverlay(_radarOverlayUrl(imageUrl), leafletBounds, {
                 opacity: oldOverlay ? 0 : 0.9,
                 pane: 'radar-overlays',
                 zIndex: 320,
@@ -7115,11 +7271,103 @@
         return String(byId('weather-satellite-channel')?.value || 'Channel13').trim() || 'Channel13';
     }
 
+    async function _fetchSatelliteLegend(channel) {
+        const key = String(channel || '').trim() || 'Channel13';
+        if (_satelliteLegendCache.has(key)) return _satelliteLegendCache.get(key);
+
+        const resp = await fetch(apiUrl(`/api/satellite-v2/legend?channel=${encodeURIComponent(key)}`), { cache: 'no-store' });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || data.status !== 'success') {
+            throw new Error(data.detail || data.message || resp.statusText || 'Satellite legend request failed');
+        }
+        _satelliteLegendCache.set(key, data);
+        return data;
+    }
+
+    async function _updateSatelliteLegend() {
+        if (!_isTypeEnabled('satellite')) return;
+        const channel = _activeSatelliteChannel();
+        try {
+            const legend = await _fetchSatelliteLegend(channel);
+            if (!_isTypeEnabled('satellite') || _activeSatelliteChannel() !== channel) return;
+            if (!legend?.available || !Array.isArray(legend.anchors) || !legend.anchors.length) {
+                setLegend(null);
+                return;
+            }
+
+            const title = legend.title ? `Satellite: ${legend.title}` : 'Satellite';
+            const units = legend.units ? `Brightness Temperature (${legend.units})` : 'Brightness Temperature';
+            setLegend(renderContinuousLegend(title, units, legend.anchors, legend.ticks));
+        } catch (err) {
+            console.warn('[satellite-v2] Legend unavailable:', err?.message || err);
+            if (_isTypeEnabled('satellite') && _activeSatelliteChannel() === channel) setLegend(null);
+        }
+    }
+
     function _activeSatelliteLookbackHours() {
-        const activeBtn = document.querySelector('.weather-satellite-lookback-btn.active');
-        const parsed = Number(activeBtn?.dataset.hours || 1);
-        if (!Number.isFinite(parsed) || parsed <= 0) return 1;
-        return Math.max(1, Math.min(12, Math.round(parsed)));
+        const slider = byId('weather-satellite-lookback-slider');
+        const hours = Number(slider?.value || _recommendedSatelliteLookbackHours());
+        if (!Number.isFinite(hours) || hours <= 0) return _recommendedSatelliteLookbackHours();
+        return Math.max(1, Math.min(SATELLITE_LOOKBACK_HOURS_MAX, Math.round(hours)));
+    }
+
+    function _recommendedSatelliteLookbackHours() {
+        const sector = _activeSatelliteSector().toUpperCase();
+        if (sector === 'MESO1' || sector === 'MESO2') {
+            return 1;
+        }
+        return 1; // CONUS: 1 hour default
+    }
+
+    function _setSatelliteLookbackHours(hours) {
+        const slider = byId('weather-satellite-lookback-slider');
+        const displayEl = byId('weather-satellite-lookback-value');
+        const safeHours = Math.max(1, Math.min(SATELLITE_LOOKBACK_HOURS_MAX, Math.round(Number(hours) || 1)));
+        if (slider) slider.value = String(safeHours);
+        if (displayEl) displayEl.textContent = `${safeHours}h`;
+    }
+
+    function _satelliteMaxFramesForRequest(hours) {
+        const sector = _activeSatelliteSector().toUpperCase();
+        const safeHours = Math.max(1, Math.min(SATELLITE_LOOKBACK_HOURS_MAX, Math.round(Number(hours) || 1)));
+        if (sector === 'MESO1' || sector === 'MESO2') {
+            return Math.min(SATELLITE_FRAME_REQUEST_MAX, safeHours * 60);
+        }
+        if (sector === 'FULLDISK') {
+            return Math.min(SATELLITE_FRAME_REQUEST_MAX, safeHours * 6);
+        }
+        return Math.min(SATELLITE_FRAME_REQUEST_MAX, safeHours * 12);
+    }
+
+    function _currentSatelliteFrameRequestWindow() {
+        const hours = _activeSatelliteLookbackHours();
+        return {
+            hours,
+            maxFrames: _satelliteMaxFramesForRequest(hours),
+        };
+    }
+
+    function _satelliteCurrentFrameRequestWindows() {
+        const activeHours = _activeSatelliteLookbackHours();
+        const candidates = [activeHours, 3, 6, SATELLITE_LOOKBACK_HOURS_MAX];
+        const seen = new Set();
+        return candidates
+            .map((hours) => Math.max(1, Math.min(SATELLITE_LOOKBACK_HOURS_MAX, Math.round(Number(hours) || 1))))
+            .filter((hours) => {
+                if (seen.has(hours)) return false;
+                seen.add(hours);
+                return true;
+            })
+            .map((hours) => ({
+                hours,
+                maxFrames: _satelliteMaxFramesForRequest(hours),
+            }));
+    }
+
+    function _activeSatelliteWarmZoomMax() {
+        const sector = _activeSatelliteSector().toUpperCase();
+        if (sector === 'FULLDISK') return 6;
+        return (sector === 'MESO1' || sector === 'MESO2') ? 10 : 8;
     }
 
     function _setSatelliteStatus(message) {
@@ -7130,6 +7378,17 @@
     function _setSatelliteAnimateControlsVisible(visible) {
         const wrap = byId('weather-satellite-lookback-wrap');
         if (wrap) wrap.style.display = visible ? '' : 'none';
+        _syncSatelliteAnimateAutoRefresh();
+    }
+
+    function _setSatelliteModeActive(mode) {
+        byId('weather-satellite-current')?.classList.toggle('active', mode === 'current');
+        byId('weather-satellite-animate')?.classList.toggle('active', mode === 'animate');
+        _setSatelliteAnimateControlsVisible(mode === 'animate');
+        if (mode === 'current') {
+            _setArchiveScrubber(false);
+            _setScrubberControlsEnabled(false);
+        }
     }
 
     function _setSatelliteAnimateButtonFilling(filling, loadedCount = null, targetCount = null) {
@@ -7160,40 +7419,496 @@
         }
     }
 
-    function _flashSatelliteAnimateNewFrame() {
+    function _flashSatelliteAnimateNewFrame(addedCount = 1) {
+        const label = Number(addedCount) === 1 ? 'New Frame Added' : 'New Frames Added';
+        const autoBtn = byId('weather-satellite-auto-refresh');
+        if (autoBtn && _satelliteAnimateAutoRefreshEnabled) {
+            _satelliteAutoRefreshFlashActive = true;
+            autoBtn.classList.add('radar-animate-newframe');
+            autoBtn.textContent = label;
+            autoBtn.title = label;
+        }
+
         const btn = byId('weather-satellite-animate');
-        if (!btn) return;
-        btn.classList.remove('radar-animate-filling');
-        btn.classList.add('radar-animate-newframe');
-        btn.textContent = 'New Frame Added';
+        if (btn) {
+            btn.classList.remove('radar-animate-filling');
+            btn.classList.add('radar-animate-newframe');
+            btn.textContent = label;
+        }
+
         if (_satelliteAnimateNewFrameTimer) clearTimeout(_satelliteAnimateNewFrameTimer);
         _satelliteAnimateNewFrameTimer = setTimeout(() => {
+            const stillAutoBtn = byId('weather-satellite-auto-refresh');
+            if (stillAutoBtn) {
+                _satelliteAutoRefreshFlashActive = false;
+                stillAutoBtn.classList.remove('radar-animate-newframe');
+            }
+
             const stillBtn = byId('weather-satellite-animate');
-            if (!stillBtn) return;
-            stillBtn.classList.remove('radar-animate-newframe');
-            stillBtn.textContent = 'Animate';
+            if (stillBtn) {
+                stillBtn.classList.remove('radar-animate-newframe');
+                stillBtn.textContent = 'Animate';
+            }
             _satelliteAnimateNewFrameTimer = null;
+            _syncSatelliteAnimateAutoRefreshUi();
         }, 1400);
     }
 
+    function _syncSatelliteAnimateAutoRefreshUi() {
+        const btn = byId('weather-satellite-auto-refresh');
+        if (!btn) return;
+        const visible = _satelliteScrubMode && _isTypeEnabled('satellite');
+        btn.classList.toggle('is-visible', visible);
+        btn.classList.toggle('is-active', _satelliteAnimateAutoRefreshEnabled);
+        btn.disabled = !visible;
+        btn.setAttribute('aria-pressed', _satelliteAnimateAutoRefreshEnabled ? 'true' : 'false');
+        if (!_satelliteAutoRefreshFlashActive) {
+            btn.textContent = _satelliteAnimateAutoRefreshEnabled ? 'Auto On' : 'Auto';
+            btn.title = _satelliteAnimateAutoRefreshEnabled
+                ? 'Auto refresh is on for satellite animation frames.'
+                : 'Auto refresh satellite animation frames.';
+        }
+    }
+
+    function _stopSatelliteAnimateAutoRefresh() {
+        if (_satelliteAnimateAutoRefreshTimer) {
+            clearInterval(_satelliteAnimateAutoRefreshTimer);
+            _satelliteAnimateAutoRefreshTimer = null;
+        }
+    }
+
+    function _startSatelliteAnimateAutoRefresh() {
+        if (_satelliteAnimateAutoRefreshTimer) return;
+        _satelliteAnimateAutoRefreshTimer = setInterval(() => {
+            if (document.hidden) return;
+            if (!_satelliteAnimateAutoRefreshEnabled || !_satelliteScrubMode || !_isTypeEnabled('satellite')) return;
+            void _refreshSatelliteAnimationFrames({ auto: true, silent: true });
+        }, SATELLITE_ANIMATE_AUTO_REFRESH_MS);
+    }
+
+    function _syncSatelliteAnimateAutoRefresh() {
+        const shouldRun = _satelliteAnimateAutoRefreshEnabled
+            && _satelliteScrubMode
+            && _isTypeEnabled('satellite');
+        if (shouldRun) {
+            _startSatelliteAnimateAutoRefresh();
+        } else {
+            _stopSatelliteAnimateAutoRefresh();
+        }
+        _syncSatelliteAnimateAutoRefreshUi();
+    }
+
+    function _setSatelliteAnimateAutoRefreshEnabled(enabled) {
+        _satelliteAnimateAutoRefreshEnabled = !!enabled;
+        _syncSatelliteAnimateAutoRefresh();
+    }
+
+    async function _refreshSatelliteAnimationFrames(options = {}) {
+        if (!_satelliteScrubMode || !_isTypeEnabled('satellite')) return false;
+        if (_satelliteAnimateAutoRefreshInFlight) return false;
+        if (_satelliteLookbackReloadTimer || _satelliteManualScrubTimer) return false;
+
+        const loadSeq = _satelliteScrubLoadSeq;
+        const previousFrameKey = _satelliteFrames[_satelliteFrameIndex]?.frame_key || '';
+        const previousKeys = new Set(_satelliteFrames.map((frame) => String(frame?.frame_key || '')).filter(Boolean));
+        const requestWindow = _currentSatelliteFrameRequestWindow();
+        const controller = new AbortController();
+        _satelliteAnimateAutoRefreshInFlight = true;
+
+        try {
+            if (!options.silent) {
+                _setRtmaScrubberStatus(`Checking for new satellite frames (${requestWindow.hours}h window)...`);
+            }
+            const frameSet = await _fetchSatelliteFrameSet({
+                hours: requestWindow.hours,
+                maxFrames: requestWindow.maxFrames,
+                signal: controller.signal,
+                refresh: options.auto === true,
+                requireTiles: false,
+                minFrames: 0,
+            });
+            if (!_satelliteScrubMode || loadSeq !== _satelliteScrubLoadSeq || !_isTypeEnabled('satellite')) return false;
+            _setSatelliteApiMode(frameSet.mode, frameSet.data);
+
+            const nextFrames = frameSet.frames;
+            if (!nextFrames.length) return false;
+
+            const addedCount = nextFrames.filter((frame) => {
+                const key = String(frame?.frame_key || '');
+                return key && !previousKeys.has(key);
+            }).length;
+
+            _satelliteFrames = nextFrames;
+            _satelliteFrameIndex = addedCount > 0
+                ? _satelliteFrameIndexForReload(_satelliteFrames)
+                : _satelliteFrameIndexForReload(_satelliteFrames, previousFrameKey);
+            _primeSatelliteAnimationLayers(_satelliteFrameIndex);
+            _scheduleSatelliteTilePrefetch();
+            _updateSatelliteScrubberUi();
+            _updateRtmaScrubberUi();
+
+            const activeFrameKey = _satelliteFrames[_satelliteFrameIndex]?.frame_key || '';
+            if (!previousFrameKey || activeFrameKey !== previousFrameKey || !satelliteOverlay) {
+                await _setSatelliteFrame(_satelliteFrameIndex, { waitForTiles: false });
+            }
+
+            if (addedCount > 0) {
+                _flashSatelliteAnimateNewFrame(addedCount);
+                _setRtmaScrubberStatus(`${addedCount} new satellite frame${addedCount === 1 ? '' : 's'} added to the loop.`);
+                _setSatelliteStatus('Satellite animation auto-refresh added new frames.');
+                return true;
+            }
+
+            if (!options.silent) {
+                _setRtmaScrubberStatus(`${_satelliteFrames.length} satellite frames current (${requestWindow.hours}h window).`);
+            }
+            return false;
+        } catch (err) {
+            if (err.name === 'AbortError') return false;
+            if (!_satelliteScrubMode || loadSeq !== _satelliteScrubLoadSeq) return false;
+            if (!options.silent) {
+                _setRtmaScrubberStatus(`Satellite auto-refresh error: ${err.message}`);
+            }
+            console.warn('[satellite] Animation auto-refresh failed:', err.message);
+            return false;
+        } finally {
+            _satelliteAnimateAutoRefreshInFlight = false;
+            _syncSatelliteAnimateAutoRefreshUi();
+        }
+    }
+
+    function _satelliteFrameTileCount(frame) {
+        const counts = frame?.tile_counts || {};
+        return Object.values(counts).reduce((sum, value) => {
+            const parsed = Number(value);
+            return sum + (Number.isFinite(parsed) ? parsed : 0);
+        }, 0);
+    }
+
+    function _satelliteExpectedReadyZoom(frame = null) {
+        const configuredZoom = Number(frame?.max_native_zoom ?? _satelliteCatalog?.max_native_zoom);
+        if (Number.isFinite(configuredZoom) && configuredZoom > 0) return Math.round(configuredZoom);
+        return _activeSatelliteWarmZoomMax();
+    }
+
+    function _satelliteFrameReadyTileCount(frame) {
+        const counts = frame?.tile_counts || {};
+        const readyZoom = _satelliteExpectedReadyZoom(frame);
+        const parsed = Number(counts[String(readyZoom)]);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function _satelliteFrameHasTiles(frame) {
+        return _satelliteFrameReadyTileCount(frame) > 0;
+    }
+
+    function _satelliteFrameTimestampMs(frame) {
+        return _resolveDataTimestampMs(frame?.timestamp_utc || frame?.frame_key || null);
+    }
+
+    function _satelliteLatestFrame(frames) {
+        if (!Array.isArray(frames) || !frames.length) return null;
+        return frames.reduce((latest, frame) => {
+            if (!latest) return frame;
+            const frameMs = _satelliteFrameTimestampMs(frame);
+            const latestMs = _satelliteFrameTimestampMs(latest);
+            if (!Number.isFinite(latestMs)) return frame;
+            if (!Number.isFinite(frameMs)) return latest;
+            return frameMs >= latestMs ? frame : latest;
+        }, null);
+    }
+
+    function _satelliteLatestReadyFrame(frames) {
+        return _satelliteLatestFrame((Array.isArray(frames) ? frames : []).filter(_satelliteFrameHasTiles));
+    }
+
+    function _satelliteFrameAgeLabel(ms) {
+        const minutes = Math.max(0, Math.round(Number(ms || 0) / 60000));
+        if (minutes < 60) return `${minutes} min`;
+        const hours = Math.floor(minutes / 60);
+        const rem = minutes % 60;
+        return rem ? `${hours}h ${rem}m` : `${hours}h`;
+    }
+
+    function _satelliteFrameIndexForReload(frames, preferredFrameKey = '') {
+        if (!Array.isArray(frames) || !frames.length) return 0;
+        const preferredKey = String(preferredFrameKey || '');
+        if (preferredKey) {
+            const preferredIndex = frames.findIndex((frame) => String(frame?.frame_key || '') === preferredKey);
+            if (preferredIndex >= 0) return preferredIndex;
+        }
+        return frames.length - 1;
+    }
+
+    function _satelliteFrameMaxNativeZoom(frame) {
+        const configuredZoom = Number(frame?.max_native_zoom ?? _satelliteCatalog?.max_native_zoom);
+        if (Number.isFinite(configuredZoom)) return configuredZoom;
+        const zooms = Array.isArray(frame?.available_zooms)
+            ? frame.available_zooms.map(Number).filter(Number.isFinite)
+            : [];
+        if (zooms.length) return Math.max(...zooms);
+        const counts = frame?.tile_counts || {};
+        const countZooms = Object.entries(counts)
+            .filter(([, count]) => Number(count) > 0)
+            .map(([zoom]) => Number(zoom))
+            .filter(Number.isFinite);
+        return countZooms.length ? Math.max(...countZooms) : null;
+    }
+
+    function _satelliteMinNativeZoomForSector(sector) {
+        const s = String(sector || '').toUpperCase();
+        if (s === 'FULLDISK') return 1;
+        if (s === 'MESO1' || s === 'MESO2') return 7;
+        return 5; // CONUS
+    }
+
+    function _satelliteActiveFrameByKey(frameKey) {
+        return _satelliteFrames.find((frame) => String(frame?.frame_key || '') === String(frameKey || '')) || null;
+    }
+
+    function _setSatelliteApiMode(mode, catalog = null) {
+        const nextMode = 'v2';
+        if (_satelliteApiMode !== nextMode) {
+            _clearSatelliteLayerPool();
+        }
+        _satelliteApiMode = nextMode;
+        _satelliteCatalog = catalog;
+    }
+
+    function _satelliteLayerPoolKey(frameKey) {
+        return [
+            _satelliteApiMode,
+            _activeSatelliteSatId(),
+            _activeSatelliteSector(),
+            _activeSatelliteChannel(),
+            String(frameKey || ''),
+        ].join('|');
+    }
+
     function _satelliteTileTemplate(frameKey) {
+        const key = String(frameKey || '');
         const params = new URLSearchParams({
             sat_id: _activeSatelliteSatId(),
             sector: _activeSatelliteSector(),
             channel: _activeSatelliteChannel(),
-            source: 'auto',
-            frame_key: String(frameKey || ''),
+            frame_key: key,
+            render_live: '1',
+            rv: String(_satelliteCatalog?.render_version || 'products'),
+            t: String(_satelliteTileRefreshToken || 0),
         });
-        return apiUrl(`/api/satellite/tile/{z}/{x}/{y}?${params.toString()}`);
+        return apiUrl(`/api/satellite-v2/tile/{z}/{x}/{y}?${params.toString()}`);
+    }
+
+    function _satelliteTileUrlForCoords(frameKey, zoomLevel, tileX, tileY) {
+        return _satelliteTileTemplate(frameKey)
+            .replace('{z}', String(zoomLevel))
+            .replace('{x}', String(tileX))
+            .replace('{y}', String(tileY));
+    }
+
+    function _satelliteEffectiveTileZoom(frame = null) {
+        const maxNativeZoom = Number(_satelliteFrameMaxNativeZoom(frame));
+        const minNativeZoom = Number(_satelliteMinNativeZoomForSector(_activeSatelliteSector()));
+        let zoomLevel = Math.round(map.getZoom());
+        if (Number.isFinite(maxNativeZoom)) zoomLevel = Math.min(zoomLevel, maxNativeZoom);
+        if (Number.isFinite(minNativeZoom)) zoomLevel = Math.max(zoomLevel, minNativeZoom);
+        return Math.max(0, zoomLevel);
+    }
+
+    function _satelliteViewportTileCoords(zoomLevel) {
+        if (!Number.isFinite(zoomLevel) || !map.getBounds) return [];
+        const bounds = map.getBounds();
+        const northWest = map.project(bounds.getNorthWest(), zoomLevel);
+        const southEast = map.project(bounds.getSouthEast(), zoomLevel);
+        const tileSize = 256;
+        const maxTileIndex = Math.max(0, (2 ** Math.round(zoomLevel)) - 1);
+        const minTileX = Math.max(0, Math.floor(Math.min(northWest.x, southEast.x) / tileSize) - 1);
+        const maxTileX = Math.min(maxTileIndex, Math.floor(Math.max(northWest.x, southEast.x) / tileSize) + 1);
+        const minTileY = Math.max(0, Math.floor(Math.min(northWest.y, southEast.y) / tileSize) - 1);
+        const maxTileY = Math.min(maxTileIndex, Math.floor(Math.max(northWest.y, southEast.y) / tileSize) + 1);
+        const centerPoint = map.project(map.getCenter(), zoomLevel);
+        const centerTileX = centerPoint.x / tileSize;
+        const centerTileY = centerPoint.y / tileSize;
+        const coords = [];
+        for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
+            for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
+                coords.push({ tileX, tileY });
+            }
+        }
+        coords.sort((left, right) => {
+            const leftDistance = Math.abs(left.tileX - centerTileX) + Math.abs(left.tileY - centerTileY);
+            const rightDistance = Math.abs(right.tileX - centerTileX) + Math.abs(right.tileY - centerTileY);
+            return leftDistance - rightDistance;
+        });
+        return coords.slice(0, SATELLITE_PREFETCH_MAX_TILES_PER_FRAME);
+    }
+
+    function _satellitePrefetchFrameIndexes(activeIndex = _satelliteFrameIndex) {
+        const frameCount = _satelliteFrames.length;
+        const indexes = [];
+        if (!_satelliteScrubMode || frameCount < 2) return indexes;
+        const active = Math.max(0, Math.min(frameCount - 1, Number(activeIndex) || 0));
+        const seen = new Set([active]);
+        for (let offset = 1; offset <= SATELLITE_PREFETCH_AHEAD_FRAMES; offset += 1) {
+            const frameIndex = (active + offset) % frameCount;
+            if (!seen.has(frameIndex)) {
+                seen.add(frameIndex);
+                indexes.push(frameIndex);
+            }
+        }
+        for (let offset = 1; offset <= SATELLITE_PREFETCH_BEHIND_FRAMES; offset += 1) {
+            const frameIndex = (active - offset + frameCount) % frameCount;
+            if (!seen.has(frameIndex)) {
+                seen.add(frameIndex);
+                indexes.push(frameIndex);
+            }
+        }
+        return indexes;
+    }
+
+    function _currentSatellitePrefetchContextKey() {
+        if (!_satelliteScrubMode || !_satelliteFrames.length || !_isTypeEnabled('satellite')) return '';
+        const zoomLevel = Math.round(map.getZoom());
+        const bounds = map.getBounds();
+        const northWest = map.project(bounds.getNorthWest(), zoomLevel);
+        const southEast = map.project(bounds.getSouthEast(), zoomLevel);
+        const tileSize = 256;
+        const minTileX = Math.floor(Math.min(northWest.x, southEast.x) / tileSize);
+        const maxTileX = Math.floor(Math.max(northWest.x, southEast.x) / tileSize);
+        const minTileY = Math.floor(Math.min(northWest.y, southEast.y) / tileSize);
+        const maxTileY = Math.floor(Math.max(northWest.y, southEast.y) / tileSize);
+        return [
+            _satelliteApiMode,
+            _activeSatelliteSatId(),
+            _activeSatelliteSector(),
+            _activeSatelliteChannel(),
+            zoomLevel,
+            minTileX,
+            maxTileX,
+            minTileY,
+            maxTileY,
+        ].join('|');
+    }
+
+    function _cancelSatelliteTilePrefetch() {
+        _satellitePrefetchSeq += 1;
+        if (_satellitePrefetchTimer) {
+            clearTimeout(_satellitePrefetchTimer);
+            _satellitePrefetchTimer = null;
+        }
+        if (_satellitePrefetchController) {
+            try { _satellitePrefetchController.abort(); } catch (_) { /* ignore */ }
+            _satellitePrefetchController = null;
+        }
+        _satellitePrefetchQueue = [];
+        _satellitePrefetchActive = 0;
+        _satellitePrefetchContextKey = '';
+        _satellitePrefetchSeenUrls.clear();
+    }
+
+    function _enqueueSatelliteTilePrefetch(seq) {
+        if (seq !== _satellitePrefetchSeq || !_satelliteScrubMode || !_satelliteFrames.length || !_isTypeEnabled('satellite')) return;
+        const nowMs = Date.now();
+        const queuedUrls = new Set(_satellitePrefetchQueue.map((item) => item.url));
+        const frameIndexes = _satellitePrefetchFrameIndexes(_satelliteFrameIndex);
+        for (const frameIndex of frameIndexes) {
+            const frame = _satelliteFrames[frameIndex];
+            const frameKey = frame?.frame_key || '';
+            if (!frameKey) continue;
+            const zoomLevel = _satelliteEffectiveTileZoom(frame);
+            const coords = _satelliteViewportTileCoords(zoomLevel);
+            for (const coord of coords) {
+                if (_satellitePrefetchQueue.length >= SATELLITE_PREFETCH_MAX_QUEUE_TILES) return;
+                const url = _satelliteTileUrlForCoords(frameKey, zoomLevel, coord.tileX, coord.tileY);
+                const lastSeenMs = Number(_satellitePrefetchSeenUrls.get(url));
+                if (queuedUrls.has(url) || (Number.isFinite(lastSeenMs) && nowMs - lastSeenMs < SATELLITE_PREFETCH_RETRY_AFTER_MS)) continue;
+                queuedUrls.add(url);
+                _satellitePrefetchSeenUrls.set(url, nowMs);
+                if (_satellitePrefetchSeenUrls.size > SATELLITE_PREFETCH_SEEN_LIMIT) {
+                    const oldestUrl = _satellitePrefetchSeenUrls.keys().next().value;
+                    if (oldestUrl) _satellitePrefetchSeenUrls.delete(oldestUrl);
+                }
+                _satellitePrefetchQueue.push({ url });
+            }
+        }
+    }
+
+    function _pumpSatelliteTilePrefetch(seq) {
+        if (seq !== _satellitePrefetchSeq || !_satelliteScrubMode || !_isTypeEnabled('satellite')) return;
+        if (typeof fetch !== 'function') return;
+        if (!_satellitePrefetchController) {
+            _satellitePrefetchController = new AbortController();
+        }
+        const signal = _satellitePrefetchController.signal;
+        while (_satellitePrefetchActive < SATELLITE_PREFETCH_MAX_CONCURRENT && _satellitePrefetchQueue.length) {
+            const item = _satellitePrefetchQueue.shift();
+            _satellitePrefetchActive += 1;
+            fetch(item.url, { cache: 'force-cache', signal })
+                .then((response) => {
+                    if (!response.ok) return null;
+                    return response.blob();
+                })
+                .catch(() => { })
+                .finally(() => {
+                    if (seq !== _satellitePrefetchSeq) return;
+                    _satellitePrefetchActive = Math.max(0, _satellitePrefetchActive - 1);
+                    _pumpSatelliteTilePrefetch(seq);
+                });
+        }
+    }
+
+    function _scheduleSatelliteTilePrefetch(delayMs = SATELLITE_PREFETCH_DEBOUNCE_MS) {
+        if (!_satelliteScrubMode || !_satelliteFrames.length || !_isTypeEnabled('satellite')) {
+            _cancelSatelliteTilePrefetch();
+            return;
+        }
+        const contextKey = _currentSatellitePrefetchContextKey();
+        if (!contextKey) return;
+        if (contextKey !== _satellitePrefetchContextKey) {
+            _cancelSatelliteTilePrefetch();
+            _satellitePrefetchContextKey = contextKey;
+        }
+        if (_satellitePrefetchTimer) clearTimeout(_satellitePrefetchTimer);
+        const seq = _satellitePrefetchSeq;
+        _satellitePrefetchTimer = setTimeout(() => {
+            _satellitePrefetchTimer = null;
+            _enqueueSatelliteTilePrefetch(seq);
+            _pumpSatelliteTilePrefetch(seq);
+        }, Math.max(0, Number(delayMs) || 0));
+    }
+
+    async function _fetchSatelliteFrameSet({ hours, maxFrames, signal, refresh = false, requireTiles = false, minFrames = 1 }) {
+        const v2Params = new URLSearchParams({
+            sat_id: _activeSatelliteSatId(),
+            sector: _activeSatelliteSector(),
+            channel: _activeSatelliteChannel(),
+            hours: String(hours),
+            max_frames: String(maxFrames),
+            refresh: refresh ? 'true' : 'false',
+        });
+        const resp = await fetch(apiUrl(`/api/satellite-v2/catalog?${v2Params.toString()}`), { cache: 'no-store', signal });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || (data.status !== 'success' && data.status !== 'stale')) {
+            throw new Error(data.detail || data.message || resp.statusText || 'Satellite catalog request failed');
+        }
+        const frames = Array.isArray(data.frames)
+            ? data.frames.filter((frame) => frame && frame.frame_key)
+            : [];
+        const playableFrames = requireTiles ? frames.filter(_satelliteFrameHasTiles) : frames;
+        const requiredFrameCount = Math.max(0, Number.isFinite(Number(minFrames)) ? Number(minFrames) : 1);
+        if (playableFrames.length < requiredFrameCount) {
+            throw new Error('Satellite catalog does not have enough frames yet.');
+        }
+        return { mode: 'v2', data, frames: playableFrames };
     }
 
     function _updateSatelliteScrubberUi() {
-        const wrap = byId('weather-satellite-scrubber');
-        const slider = byId('weather-satellite-scrubber-slider');
-        const countEl = byId('weather-satellite-scrubber-count');
-        const tsEl = byId('weather-satellite-scrubber-ts');
+        // Left sidebar scrubber removed - update bottom archive scrubber instead
+        const slider = byId('scrubber-slider');
+        const countEl = byId('scrubber-frame-count');
+        const tsEl = byId('scrubber-timestamp');
         const n = _satelliteFrames.length;
-        if (wrap) wrap.style.display = n ? '' : 'none';
+        const frame = n ? _satelliteFrames[_satelliteFrameIndex] : null;
         if (slider) {
             slider.min = '0';
             slider.max = String(Math.max(0, n - 1));
@@ -7204,7 +7919,6 @@
             countEl.textContent = n ? `${_satelliteFrameIndex + 1}/${n}` : '0/0';
         }
         if (tsEl) {
-            const frame = n ? _satelliteFrames[_satelliteFrameIndex] : null;
             if (!frame?.timestamp_utc) {
                 tsEl.textContent = '--';
             } else {
@@ -7223,51 +7937,407 @@
         }
     }
 
-    function _setSatelliteFrame(index) {
+    function _scheduleSatelliteScrubberReload() {
+        if (!_satelliteScrubMode || !_isTypeEnabled('satellite')) return;
+        if (_satelliteLookbackReloadTimer) clearTimeout(_satelliteLookbackReloadTimer);
+        _satelliteScrubLoadSeq += 1;
+        _satelliteScrubRenderSeq += 1;
+        _satelliteBackgroundWarmSeq += 1;
+        if (_satelliteScrubFetchController) {
+            _satelliteScrubFetchController.abort();
+            _satelliteScrubFetchController = null;
+        }
+        if (_satelliteManualScrubTimer) {
+            clearTimeout(_satelliteManualScrubTimer);
+            _satelliteManualScrubTimer = null;
+        }
+        _stopSatelliteScrubPlay();
+        _cancelSatellitePendingSwap();
+        _cancelSatelliteTilePrefetch();
+        _setScrubberControlsEnabled(false);
+        const requestWindow = _currentSatelliteFrameRequestWindow();
+        _setRtmaScrubberStatus(`Updating satellite frames for ${requestWindow.hours}h window...`);
+        _satelliteLookbackReloadTimer = setTimeout(() => {
+            _satelliteLookbackReloadTimer = null;
+            loadSatelliteScrubberFrames();
+        }, SATELLITE_LOOKBACK_RELOAD_DEBOUNCE_MS);
+    }
+
+    function _scheduleSatelliteManualScrubFrame(index) {
+        if (!_satelliteScrubMode || !_satelliteFrames.length || !_isTypeEnabled('satellite')) return;
+        const target = Math.max(0, Math.min(_satelliteFrames.length - 1, Number(index) || 0));
+        _stopSatelliteScrubPlay();
+        if (_satelliteManualScrubTimer) clearTimeout(_satelliteManualScrubTimer);
+        _setRtmaScrubberStatus(`Preparing frame ${target + 1} / ${_satelliteFrames.length}...`);
+        _satelliteManualScrubTimer = setTimeout(async () => {
+            _satelliteManualScrubTimer = null;
+            await _setSatelliteFrame(target, { waitForTiles: false });
+        }, SATELLITE_MANUAL_SCRUB_DEBOUNCE_MS);
+    }
+
+    function _satelliteLayerHasLoadedTilesForZoom(layer, zoomLevel) {
+        if (!layer || !Number.isFinite(zoomLevel)) return false;
+        const maxNativeZoom = Number(layer?.options?.maxNativeZoom);
+        const minNativeZoom = Number(layer?.options?.minNativeZoom);
+        let targetZoom = Math.round(zoomLevel);
+        if (Number.isFinite(maxNativeZoom)) targetZoom = Math.min(targetZoom, maxNativeZoom);
+        if (Number.isFinite(minNativeZoom)) targetZoom = Math.max(targetZoom, minNativeZoom);
+        const tiles = layer._tiles || {};
+        const targetTiles = Object.values(tiles).filter((rec) => (
+            rec?.coords?.z === targetZoom && rec.current !== false
+        ));
+        if (!targetTiles.length) return false;
+        return targetTiles.every((rec) => {
+            const element = rec?.el;
+            const imageOk = !element || (element.complete !== false && Number(element.naturalWidth || 0) > 0);
+            return rec?.loaded && imageOk;
+        });
+    }
+
+    function _satelliteLayerHasAnyLoadedTileForZoom(layer, zoomLevel) {
+        if (!layer || !Number.isFinite(zoomLevel)) return false;
+        const maxNativeZoom = Number(layer?.options?.maxNativeZoom);
+        const minNativeZoom = Number(layer?.options?.minNativeZoom);
+        let targetZoom = Math.round(zoomLevel);
+        if (Number.isFinite(maxNativeZoom)) targetZoom = Math.min(targetZoom, maxNativeZoom);
+        if (Number.isFinite(minNativeZoom)) targetZoom = Math.max(targetZoom, minNativeZoom);
+        const tiles = layer._tiles || {};
+        return Object.values(tiles).some((rec) => {
+            if (rec?.coords?.z !== targetZoom || rec.current === false || !rec?.loaded) return false;
+            const element = rec?.el;
+            return !element || (element.complete !== false && Number(element.naturalWidth || 0) > 0);
+        });
+    }
+
+    function _satelliteLayerReadyForSwap(layer, zoomLevel) {
+        return _satelliteLayerHasLoadedTilesForZoom(layer, zoomLevel) && layer._loading !== true;
+    }
+
+    function _setSatelliteLayerZIndex(layer, active = false) {
+        if (!layer || typeof layer.setZIndex !== 'function') return;
+        if (active) {
+            _satelliteLayerZCounter += 1;
+            layer.setZIndex(1000 + _satelliteLayerZCounter);
+            return;
+        }
+        layer.setZIndex(1);
+    }
+
+    function _satelliteHotFrameIndexes(activeIndex = _satelliteFrameIndex) {
+        const count = _satelliteFrames.length;
+        const indexes = new Set();
+        if (!_satelliteScrubMode || !count) return indexes;
+        const center = Math.max(0, Math.min(count - 1, Number(activeIndex) || 0));
+        const radius = Math.max(0, Math.min(SATELLITE_HOT_FRAME_RADIUS, count - 1));
+        if (count <= radius * 2 + 1) {
+            for (let idx = 0; idx < count; idx += 1) indexes.add(idx);
+            return indexes;
+        }
+        for (let offset = -radius; offset <= radius; offset += 1) {
+            indexes.add((center + offset + count) % count);
+        }
+        return indexes;
+    }
+
+    function _satelliteShouldRetainAnimationLayers() {
+        return _satelliteScrubMode
+            && _satelliteFrames.length > 0
+            && _satelliteFrames.length <= SATELLITE_ANIMATION_RETAIN_LAYER_LIMIT;
+    }
+
+    function _refreshSatelliteHotFrameWindow(activeIndex = _satelliteFrameIndex, keepLayers = new Set()) {
+        if (!_satelliteScrubMode || !_satelliteFrames.length || !_isTypeEnabled('satellite')) return;
+        const active = Math.max(0, Math.min(_satelliteFrames.length - 1, Number(activeIndex) || 0));
+        const hotIndexes = _satelliteHotFrameIndexes(active);
+        const hotLayers = new Set(keepLayers);
+        hotIndexes.forEach((idx) => {
+            const frame = _satelliteFrames[idx];
+            const frameKey = frame?.frame_key || '';
+            if (!frameKey) return;
+            const layer = _getOrCreateSatelliteLayer(frameKey);
+            if (!map.hasLayer(layer)) layer.addTo(map);
+            if (typeof layer.setOpacity === 'function') {
+                layer.setOpacity(idx === active ? 0.92 : 0);
+            }
+            _setSatelliteLayerZIndex(layer, idx === active);
+            hotLayers.add(layer);
+        });
+        _satelliteLayerPool.forEach((layer) => {
+            if (!layer || hotLayers.has(layer)) return;
+            if (_satelliteShouldRetainAnimationLayers() && map.hasLayer(layer)) {
+                if (typeof layer.setOpacity === 'function') layer.setOpacity(0);
+                _setSatelliteLayerZIndex(layer, false);
+                return;
+            }
+            if (map.hasLayer(layer)) map.removeLayer(layer);
+        });
+    }
+
+    function _primeSatelliteAnimationLayers(activeIndex = _satelliteFrameIndex) {
+        _refreshSatelliteHotFrameWindow(activeIndex);
+    }
+
+    function _hideInactiveSatelliteAnimationLayers(activeLayer, previousLayer = null) {
+        if (!_satelliteScrubMode) return;
+        _refreshSatelliteHotFrameWindow(_satelliteFrameIndex, new Set([activeLayer, previousLayer].filter(Boolean)));
+    }
+
+    function _cancelSatellitePendingSwap() {
+        _satellitePendingSwapToken += 1;
+        _satelliteScrubFrameAdvanceInFlight = false;
+    }
+
+    function _cancelSatelliteProgressiveRedraws() {
+        _satelliteProgressiveRedrawSeq += 1;
+        _satelliteProgressiveRedrawTimers.forEach((timerId) => clearTimeout(timerId));
+        _satelliteProgressiveRedrawTimers = [];
+    }
+
+    function _scheduleSatelliteProgressiveRedraws(layer, frameKey, options = {}) {
+        if (!layer || !frameKey || !_isTypeEnabled('satellite')) return;
+        const forceRetry = options?.force === true;
+        const retryKey = `${frameKey}|${Math.round(map.getZoom())}`;
+        const retainAnimationLayer = _satelliteShouldRetainAnimationLayers();
+        if (forceRetry) {
+            layer._wxSatelliteProgressiveRetryKey = '';
+            layer._wxSatelliteLoadCompleteKey = '';
+        }
+        if (!forceRetry && retainAnimationLayer && layer._wxSatelliteProgressiveRetryKey === retryKey) return;
+        if (!forceRetry && _satelliteScrubMode && layer._wxSatelliteLoadCompleteKey === retryKey) return;
+        if (!retainAnimationLayer) {
+            _cancelSatelliteProgressiveRedraws();
+        }
+        layer._wxSatelliteProgressiveRetryKey = retryKey;
+        const markLayerLoaded = () => {
+            if (!_satelliteLayerReadyForSwap(layer, map.getZoom())) return;
+            layer._wxSatelliteLoadCompleteKey = retryKey;
+            layer._wxSatelliteTileErrorCount = 0;
+            layer.off('load', markLayerLoaded);
+        };
+        if (_satelliteScrubMode && _satelliteLayerReadyForSwap(layer, map.getZoom())) {
+            markLayerLoaded();
+            return;
+        }
+        layer.on('load', markLayerLoaded);
+        const redrawSeq = _satelliteProgressiveRedrawSeq;
+        const timers = SATELLITE_PROGRESSIVE_REDRAW_DELAYS_MS.map((delayMs) => setTimeout(() => {
+            if (redrawSeq !== _satelliteProgressiveRedrawSeq) return;
+            if (!_isTypeEnabled('satellite') || !map.hasLayer(layer)) return;
+            if (!retainAnimationLayer && satelliteOverlay !== layer) return;
+            if (_satelliteScrubMode && layer._wxSatelliteLoadCompleteKey === retryKey) return;
+            _satelliteTileRefreshToken = Date.now();
+            if (typeof layer.setUrl === 'function') {
+                layer.setUrl(_satelliteTileTemplate(frameKey), false);
+                return;
+            }
+            if (typeof layer.redraw === 'function') {
+                layer.redraw();
+            }
+        }, delayMs));
+        _satelliteProgressiveRedrawTimers.push(...timers);
+    }
+
+    function _canApplySatelliteFrame(renderSeq) {
+        return renderSeq === _satelliteScrubRenderSeq && _isTypeEnabled('satellite');
+    }
+
+    async function _waitForSatelliteLayerReady(layer, zoomLevel, renderSeq, timeoutMs = 5000) {
+        if (!layer || _satelliteLayerReadyForSwap(layer, zoomLevel)) return true;
+
+        return new Promise((resolve) => {
+            let settled = false;
+            let timeoutId = null;
+
+            const finish = (ready) => {
+                if (settled) return;
+                settled = true;
+                layer.off('load', onLoad);
+                clearTimeout(timeoutId);
+                resolve(ready);
+            };
+
+            const onLoad = () => finish(_satelliteLayerHasLoadedTilesForZoom(layer, zoomLevel));
+
+            timeoutId = setTimeout(() => {
+                finish(_satelliteLayerHasLoadedTilesForZoom(layer, zoomLevel));
+            }, timeoutMs);
+
+            if (!_canApplySatelliteFrame(renderSeq)) {
+                finish(false);
+                return;
+            }
+
+            layer.on('load', onLoad);
+        });
+    }
+
+    async function _setSatelliteFrame(index, options = {}) {
         if (!_satelliteFrames.length || !_isTypeEnabled('satellite')) return;
+        const waitForTiles = options?.waitForTiles === true;
+        const forceReloadSameLayer = options?.forceReloadSameLayer === true;
+        const requestedTileTimeoutMs = Number(options?.tileTimeoutMs);
+        const tileTimeoutMs = Number.isFinite(requestedTileTimeoutMs)
+            ? Math.max(1000, requestedTileTimeoutMs)
+            : SATELLITE_TILE_READY_TIMEOUT_MS;
         const clamped = Math.max(0, Math.min(_satelliteFrames.length - 1, Number(index) || 0));
-        _satelliteFrameIndex = clamped;
-        const frame = _satelliteFrames[_satelliteFrameIndex];
+        const frame = _satelliteFrames[clamped];
         const frameKey = frame?.frame_key || '';
         if (!frameKey) return;
 
-        const nextUrl = _satelliteTileTemplate(frameKey);
-        if (!satelliteOverlay) {
-            satelliteOverlay = L.tileLayer(nextUrl, {
-                pane: 'satellite-overlays',
-                maxZoom: 19,
-                opacity: 0.92,
-                updateWhenIdle: true,
-                updateWhenZooming: false,
-                crossOrigin: true,
-            });
-        } else {
-            satelliteOverlay.setUrl(nextUrl, false);
-        }
-        if (!map.hasLayer(satelliteOverlay)) {
-            satelliteOverlay.addTo(map);
-        }
-        _updateSatelliteScrubberUi();
+        const nextLayer = _getOrCreateSatelliteLayer(frameKey);
+        const targetZoom = map.getZoom();
+        const prevLayer = satelliteOverlay;
+        const renderSeq = ++_satelliteScrubRenderSeq;
+        _satelliteScrubFrameAdvanceInFlight = waitForTiles;
 
-        const tsMs = _resolveDataTimestampMs(frame.timestamp_utc || frame.frame_key || null);
-        _setViewerTimestamp(tsMs);
-        if (_satelliteScrubMode) {
-            _setRtmaScrubberStatus(`${_satelliteFrameIndex + 1} / ${_satelliteFrames.length} frames.`);
-        } else {
-            _setSatelliteStatus(`Current frame loaded (${_satelliteFrameIndex + 1}/${_satelliteFrames.length}).`);
+        const updateFrameUi = () => {
+            satelliteOverlay = nextLayer;
+            _satelliteFrameIndex = clamped;
+
+            _updateSatelliteScrubberUi();
+
+            const tsMs = _resolveDataTimestampMs(frame.timestamp_utc || frame.frame_key || null);
+            _setViewerTimestamp(tsMs);
+            if (_satelliteScrubMode) {
+                _setRtmaScrubberStatus(`${_satelliteFrameIndex + 1} / ${_satelliteFrames.length} frames.`);
+            } else {
+                _setSatelliteStatus(`Current frame loaded (${_satelliteFrameIndex + 1}/${_satelliteFrames.length}).`);
+            }
+            _scheduleSatelliteProgressiveRedraws(nextLayer, frameKey);
+            _scheduleSatelliteTilePrefetch();
+        };
+
+        if (prevLayer === nextLayer) {
+            if (forceReloadSameLayer && typeof nextLayer.setUrl === 'function') {
+                nextLayer.setUrl(_satelliteTileTemplate(frameKey), false);
+                if (typeof nextLayer.redraw === 'function') {
+                    nextLayer.redraw();
+                }
+            }
+            _satelliteScrubFrameAdvanceInFlight = false;
+            if (!_canApplySatelliteFrame(renderSeq)) return false;
+            updateFrameUi();
+            return true;
         }
+
+        const swapToken = ++_satellitePendingSwapToken;
+
+        if (!map.hasLayer(nextLayer)) nextLayer.addTo(map);
+        if (typeof nextLayer.setOpacity === 'function') {
+            nextLayer.setOpacity(prevLayer ? 0 : 0.92);
+        }
+        _setSatelliteLayerZIndex(nextLayer, true);
+        _hideInactiveSatelliteAnimationLayers(nextLayer, prevLayer);
+
+        const ready = waitForTiles
+            ? await _waitForSatelliteLayerReady(nextLayer, targetZoom, renderSeq, tileTimeoutMs)
+            : true;
+        if (!ready || swapToken !== _satellitePendingSwapToken || !_canApplySatelliteFrame(renderSeq)) {
+            if (!prevLayer && ready === false && _satelliteLayerHasAnyLoadedTileForZoom(nextLayer, targetZoom) && swapToken === _satellitePendingSwapToken && _canApplySatelliteFrame(renderSeq)) {
+                _satelliteScrubFrameAdvanceInFlight = false;
+                updateFrameUi();
+                return true;
+            }
+            if (map.hasLayer(nextLayer)) map.removeLayer(nextLayer);
+            _satelliteScrubFrameAdvanceInFlight = false;
+            return false;
+        }
+
+        if (prevLayer && map.hasLayer(prevLayer)) {
+            const applied = await _crossfadeSatelliteLayers(
+                prevLayer,
+                nextLayer,
+                () => swapToken === _satellitePendingSwapToken && _canApplySatelliteFrame(renderSeq),
+            );
+            if (!applied) {
+                _satelliteScrubFrameAdvanceInFlight = false;
+                return false;
+            }
+        } else if (typeof nextLayer.setOpacity === 'function') {
+            nextLayer.setOpacity(0.92);
+        }
+
+        if (swapToken !== _satellitePendingSwapToken || !_canApplySatelliteFrame(renderSeq)) {
+            _satelliteScrubFrameAdvanceInFlight = false;
+            return false;
+        }
+        _satelliteScrubFrameAdvanceInFlight = false;
+        updateFrameUi();
+        _hideInactiveSatelliteAnimationLayers(nextLayer);
+        return true;
     }
 
     function _clearSatelliteLayer(clearFrames = false) {
-        if (satelliteOverlay && map.hasLayer(satelliteOverlay)) {
-            map.removeLayer(satelliteOverlay);
-        }
-        satelliteOverlay = null;
+        _cancelSatelliteProgressiveRedraws();
+        _cancelSatelliteTilePrefetch();
+        _clearSatelliteLayerPool();
         if (clearFrames) {
             _satelliteFrames = [];
             _satelliteFrameIndex = 0;
             _updateSatelliteScrubberUi();
         }
+    }
+
+    function _getOrCreateSatelliteLayer(frameKey) {
+        const poolKey = _satelliteLayerPoolKey(frameKey);
+        if (!_satelliteLayerPool.has(poolKey)) {
+            const frame = _satelliteActiveFrameByKey(frameKey);
+            const maxNativeZoom = _satelliteFrameMaxNativeZoom(frame);
+            const minNativeZoom = _satelliteMinNativeZoomForSector(_activeSatelliteSector());
+            const layer = L.tileLayer(_satelliteTileTemplate(frameKey), {
+                pane: 'satellite-overlays',
+                maxZoom: 19,
+                ...(Number.isFinite(maxNativeZoom) ? { maxNativeZoom } : {}),
+                minNativeZoom,
+                opacity: 0.92,
+                updateWhenIdle: false,
+                updateWhenZooming: false,
+                keepBuffer: 4,
+                crossOrigin: true,
+            });
+            layer.on('tileerror', () => {
+                layer._wxSatelliteLoadCompleteKey = '';
+                const retryCount = Number(layer._wxSatelliteTileErrorCount || 0) + 1;
+                layer._wxSatelliteTileErrorCount = retryCount;
+                if (retryCount > 8 || !_isTypeEnabled('satellite') || !map.hasLayer(layer)) return;
+                if (layer._wxSatelliteTileErrorRetryTimer) {
+                    clearTimeout(layer._wxSatelliteTileErrorRetryTimer);
+                }
+                const retryDelayMs = Math.min(6000, 900 + retryCount * 500);
+                layer._wxSatelliteTileErrorRetryTimer = setTimeout(() => {
+                    layer._wxSatelliteTileErrorRetryTimer = null;
+                    if (!_isTypeEnabled('satellite') || !map.hasLayer(layer)) return;
+                    _satelliteTileRefreshToken = Date.now();
+                    if (typeof layer.setUrl === 'function') {
+                        layer.setUrl(_satelliteTileTemplate(frameKey), false);
+                        _scheduleSatelliteProgressiveRedraws(layer, frameKey, { force: true });
+                        return;
+                    }
+                    if (typeof layer.redraw === 'function') {
+                        layer.redraw();
+                        _scheduleSatelliteProgressiveRedraws(layer, frameKey, { force: true });
+                    }
+                }, retryDelayMs);
+            });
+            _satelliteLayerPool.set(poolKey, layer);
+        }
+        return _satelliteLayerPool.get(poolKey);
+    }
+
+    function _clearSatelliteLayerPool() {
+        _cancelSatellitePendingSwap();
+        _cancelSatelliteProgressiveRedraws();
+        _cancelSatelliteTilePrefetch();
+        _satelliteLayerPool.forEach((layer) => {
+            if (layer?._wxSatelliteTileErrorRetryTimer) {
+                clearTimeout(layer._wxSatelliteTileErrorRetryTimer);
+                layer._wxSatelliteTileErrorRetryTimer = null;
+            }
+            if (map.hasLayer(layer)) map.removeLayer(layer);
+        });
+        _satelliteLayerPool.clear();
+        _satelliteLayerZCounter = 0;
+        satelliteOverlay = null;
     }
 
     function _canApplySatelliteResponse(requestSeq) {
@@ -7312,9 +8382,10 @@
 
     function _stopSatelliteScrubPlay() {
         if (_satelliteScrubPlayTimer) {
-            clearInterval(_satelliteScrubPlayTimer);
+            clearTimeout(_satelliteScrubPlayTimer);
             _satelliteScrubPlayTimer = null;
         }
+        _cancelSatellitePendingSwap();
         if (_satelliteScrubMode) {
             const btn = byId('scrubber-play');
             if (btn) btn.textContent = '▶';
@@ -7324,128 +8395,150 @@
     function _startSatelliteScrubPlay() {
         if (!_satelliteFrames.length || !_satelliteScrubMode) return;
         if (_satelliteScrubPlayTimer) return;
+        if (_satelliteManualScrubTimer) {
+            clearTimeout(_satelliteManualScrubTimer);
+            _satelliteManualScrubTimer = null;
+        }
         const btn = byId('scrubber-play');
         if (btn) btn.textContent = '⏸';
-        _satelliteScrubPlayTimer = setInterval(() => {
-            const next = (_satelliteFrameIndex + 1) % _satelliteFrames.length;
-            _setSatelliteFrame(next);
-            _updateRtmaScrubberUi();
-        }, 650);
+
+        let _stalledTicks = 0;
+
+        const tick = async () => {
+            if (!_satelliteScrubPlayTimer || !_satelliteFrames.length || !_satelliteScrubMode) return;
+
+            if (_satelliteScrubFrameAdvanceInFlight) {
+                _satelliteScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(220, 120));
+                return;
+            }
+
+            const atLast = _satelliteFrameIndex >= _satelliteFrames.length - 1;
+            if (atLast) {
+                _satelliteScrubPlayTimer = setTimeout(async () => {
+                    if (!_satelliteScrubPlayTimer || !_satelliteFrames.length || !_satelliteScrubMode) return;
+                    const advanced = await _setSatelliteFrame(0, { waitForTiles: false });
+                    if (!_satelliteScrubPlayTimer || !_satelliteFrames.length || !_satelliteScrubMode) return;
+                    if (advanced) {
+                        _stalledTicks = 0;
+                        _updateRtmaScrubberUi();
+                        _satelliteScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(650, 120));
+                        return;
+                    }
+                    _satelliteScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(220, 120));
+                }, _scrubberPlaybackDelay(RTMA_SCRUB_LOOP_HOLD_MS, 350));
+                return;
+            }
+
+            const next = _satelliteFrameIndex + 1;
+            const advanced = await _setSatelliteFrame(next, { waitForTiles: false });
+            if (!_satelliteScrubPlayTimer || !_satelliteFrames.length || !_satelliteScrubMode) return;
+            if (advanced) {
+                _stalledTicks = 0;
+                _updateRtmaScrubberUi();
+                _satelliteScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(650, 120));
+                return;
+            }
+
+            _stalledTicks += 1;
+            if (_stalledTicks >= 8) {
+                _stalledTicks = 0;
+                _setRtmaScrubberStatus(`Frame ${next + 1} / ${_satelliteFrames.length}; tiles are filling.`);
+                _satelliteScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(650, 120));
+                return;
+            }
+
+            _satelliteScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(220, 120));
+        };
+
+        _satelliteScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(650, 120));
     }
 
     function _exitSatelliteScrubMode(restoreCurrent = true) {
+        if (_satelliteLookbackReloadTimer) {
+            clearTimeout(_satelliteLookbackReloadTimer);
+            _satelliteLookbackReloadTimer = null;
+        }
+        if (_satelliteManualScrubTimer) {
+            clearTimeout(_satelliteManualScrubTimer);
+            _satelliteManualScrubTimer = null;
+        }
+        if (_satelliteScrubFetchController) {
+            _satelliteScrubFetchController.abort();
+            _satelliteScrubFetchController = null;
+        }
         _stopSatelliteScrubPlay();
         _satelliteScrubMode = false;
         _satelliteScrubLoadSeq += 1;
         _satelliteScrubRenderSeq += 1;
         _satelliteBackgroundWarmSeq += 1;
+        _cancelSatelliteTilePrefetch();
         _setArchiveScrubber(false);
         _setScrubberControlsEnabled(false);
         _setRtmaScrubberStatus('');
         _setSatelliteAnimateButtonFilling(false);
-        byId('weather-satellite-animate')?.classList.remove('active');
+        _setSatelliteModeActive('current');
+        _clearSatelliteLayerPool();
         _syncSatelliteAutoRefresh();
         if (restoreCurrent && _isTypeEnabled('satellite')) {
             loadSatelliteCurrentFrame({ silent: true });
         }
     }
 
-    async function _warmSatelliteFramesInBackground(loadSeq, pollParams) {
+    async function _warmSatelliteFramesInBackground(loadSeq, _pollParams) {
         if (!_satelliteScrubMode || loadSeq !== _satelliteScrubLoadSeq) return;
-        const center = map.getCenter();
-        const z = Math.max(2, Math.min(7, Math.round(map.getZoom())));
-        const scale = 2 ** z;
-        const centerX = Math.floor(((center.lng + 180) / 360) * scale);
-        const latRad = center.lat * Math.PI / 180;
-        const centerY = Math.floor(
-            ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale
-        );
-
-        const targetCount = _satelliteFrames.length;
-        let loadedCount = 0;
-        _setSatelliteAnimateButtonFilling(true, loadedCount, targetCount);
-
-        for (const frame of _satelliteFrames) {
-            if (!_satelliteScrubMode || loadSeq !== _satelliteScrubLoadSeq) return;
-            const frameKey = frame?.frame_key;
-            if (!frameKey) continue;
-            const params = new URLSearchParams({
-                sat_id: _activeSatelliteSatId(),
-                sector: _activeSatelliteSector(),
-                channel: _activeSatelliteChannel(),
-                source: 'auto',
-                frame_key: String(frameKey),
-            });
-            const tileUrl = apiUrl(`/api/satellite/tile/${z}/${centerX}/${centerY}?${params.toString()}`);
-            try {
-                await fetch(tileUrl, { cache: 'force-cache' });
-            } catch {
-                // Best-effort prewarm; keep going.
-            }
-            loadedCount += 1;
-            _setSatelliteAnimateButtonFilling(true, loadedCount, targetCount);
-        }
-
-        const pollDeadline = Date.now() + 90_000;
-        let knownCount = _satelliteFrames.length;
-        while (_satelliteScrubMode && loadSeq === _satelliteScrubLoadSeq && Date.now() < pollDeadline) {
-            await new Promise((resolve) => setTimeout(resolve, 3000));
-            try {
-                const pollResp = await fetch(apiUrl(`/api/satellite/live/frames?${pollParams.toString()}`), { cache: 'no-store' });
-                if (!pollResp.ok) continue;
-                const pollData = await pollResp.json();
-                const nextFrames = Array.isArray(pollData.frames)
-                    ? pollData.frames.filter((f) => f && f.frame_key)
-                    : [];
-                if (nextFrames.length > knownCount) {
-                    const prevFrameKey = _satelliteFrames[_satelliteFrameIndex]?.frame_key || '';
-                    _satelliteFrames = nextFrames;
-                    const idx = _satelliteFrames.findIndex((f) => f.frame_key === prevFrameKey);
-                    _satelliteFrameIndex = idx >= 0 ? idx : (_satelliteFrames.length - 1);
-                    _updateRtmaScrubberUi();
-                    _flashSatelliteAnimateNewFrame();
-                    _setRtmaScrubberStatus(`${_satelliteFrames.length} frames loaded. New frame added.`);
-                    knownCount = _satelliteFrames.length;
-                }
-            } catch {
-                // Keep polling until deadline.
-            }
-        }
-
-        if (_satelliteScrubMode && loadSeq === _satelliteScrubLoadSeq) {
-            _setSatelliteAnimateButtonFilling(false);
-        }
+        const catalogAge = Number(_satelliteCatalog?.catalog_age_seconds);
+        const ageLabel = Number.isFinite(catalogAge) ? ` • catalog age ${Math.round(catalogAge)}s` : '';
+        const totalTiles = _satelliteFrames.reduce((sum, frame) => sum + _satelliteFrameTileCount(frame), 0);
+        _setSatelliteAnimateButtonFilling(false);
+        _setRtmaScrubberStatus(`${_satelliteFrames.length} v2 frames loaded (${totalTiles} cached tiles${ageLabel}); tiles fill as they render.`);
     }
 
     async function loadSatelliteCurrentFrame(options = {}) {
         if (!_isTypeEnabled('satellite')) return;
         if (_satelliteScrubMode) return;
+        _setSatelliteModeActive('current');
+        void _updateSatelliteLegend();
         const silent = options.silent === true;
+        const refreshCatalog = options.refresh === true || silent;
+        const previousFrameKey = _satelliteFrames[_satelliteFrameIndex]?.frame_key || '';
         const requestSeq = ++_satelliteRequestSeq;
 
-        const params = new URLSearchParams({
-            sat_id: _activeSatelliteSatId(),
-            sector: _activeSatelliteSector(),
-            channel: _activeSatelliteChannel(),
-            source: 'auto',
-            hours: '1',
-            max_frames: '1',
-        });
+        // F7: cancel any in-flight frame-list request before starting a new one
+        if (_satelliteFetchController) _satelliteFetchController.abort();
+        _satelliteFetchController = new AbortController();
+        const { signal } = _satelliteFetchController;
 
         try {
             if (!silent) {
                 _setSatelliteStatus('Loading current satellite frame...');
             }
-            const resp = await fetch(apiUrl(`/api/satellite/live/frames?${params.toString()}`), { cache: 'no-store' });
-            const data = await resp.json().catch(() => ({}));
-            if (!resp.ok || data.status === 'error') {
-                throw new Error(data.detail || data.message || resp.statusText || 'Satellite frame request failed');
+            let frameSet = null;
+            let requestWindow = null;
+            let lastFrameSetError = null;
+            for (const candidateWindow of _satelliteCurrentFrameRequestWindows()) {
+                try {
+                    frameSet = await _fetchSatelliteFrameSet({
+                        hours: candidateWindow.hours,
+                        maxFrames: candidateWindow.maxFrames,
+                        signal,
+                        refresh: refreshCatalog,
+                        requireTiles: false,
+                        minFrames: 1,
+                    });
+                    requestWindow = candidateWindow;
+                    break;
+                } catch (err) {
+                    if (err.name === 'AbortError') throw err;
+                    lastFrameSetError = err;
+                }
+            }
+            if (!frameSet || !requestWindow) {
+                throw lastFrameSetError || new Error('Satellite catalog does not have enough frames yet.');
             }
             if (!_canApplySatelliteResponse(requestSeq)) return;
+            _setSatelliteApiMode(frameSet.mode, frameSet.data);
 
-            _satelliteFrames = Array.isArray(data.frames)
-                ? data.frames.filter((f) => f && f.frame_key)
-                : [];
+            _satelliteFrames = Array.isArray(frameSet.frames) ? frameSet.frames : [];
 
             if (!_satelliteFrames.length) {
                 _clearSatelliteLayer(true);
@@ -7453,11 +8546,33 @@
                 return;
             }
 
-            _satelliteFrameIndex = _satelliteFrames.length - 1;
-            _setSatelliteFrame(_satelliteFrameIndex);
-            _setSatelliteStatus('Current frame loaded.');
+            _satelliteFrameIndex = _satelliteFrameIndexForReload(_satelliteFrames);
+            const currentFrameKey = _satelliteFrames[_satelliteFrameIndex]?.frame_key || '';
+            const forceReloadSameLayer = (
+                silent
+                && Boolean(currentFrameKey)
+                && currentFrameKey === previousFrameKey
+            );
+            if (forceReloadSameLayer) {
+                _satelliteTileRefreshToken = Date.now();
+            }
+            _primeSatelliteAnimationLayers(_satelliteFrameIndex);
+            const frameDisplayed = await _setSatelliteFrame(_satelliteFrameIndex, {
+                waitForTiles: false,
+                tileTimeoutMs: SATELLITE_INITIAL_TILE_READY_TIMEOUT_MS,
+                forceReloadSameLayer,
+            });
+            if (frameDisplayed) {
+                const fallbackLabel = requestWindow.hours > _activeSatelliteLookbackHours()
+                    ? `; latest found within ${requestWindow.hours}h`
+                    : '';
+                _setSatelliteStatus(`Current satellite frame loaded; tiles will fill as needed (${_satelliteFrameTileCount(_satelliteFrames[_satelliteFrameIndex])} cached tiles${fallbackLabel}).`);
+            } else {
+                _setSatelliteStatus('Satellite frame listed; tiles will fill as they render.');
+            }
             _syncSatelliteAutoRefresh();
         } catch (err) {
+            if (err.name === 'AbortError') return;
             if (!_canApplySatelliteResponse(requestSeq)) return;
             _setSatelliteStatus(`Satellite error: ${err.message}`);
         }
@@ -7465,67 +8580,110 @@
 
     async function loadSatelliteScrubberFrames() {
         if (!_isTypeEnabled('satellite')) return;
+        const previousFrameKey = _satelliteFrames[_satelliteFrameIndex]?.frame_key || '';
+        if (_satelliteLookbackReloadTimer) {
+            clearTimeout(_satelliteLookbackReloadTimer);
+            _satelliteLookbackReloadTimer = null;
+        }
+        if (_satelliteManualScrubTimer) {
+            clearTimeout(_satelliteManualScrubTimer);
+            _satelliteManualScrubTimer = null;
+        }
         if (_radarScrubMode) _exitRadarScrubMode(false);
         if (_rtmaScrubMode) _exitRtmaScrubMode(false);
         if (_mrmsScrubMode) _exitMrmsScrubMode(false);
 
         const loadSeq = ++_satelliteScrubLoadSeq;
         _satelliteBackgroundWarmSeq = loadSeq;
+        if (_satelliteScrubFetchController) {
+            _satelliteScrubFetchController.abort();
+        }
+        _satelliteScrubFetchController = new AbortController();
+        const { signal } = _satelliteScrubFetchController;
         _satelliteScrubMode = true;
         _satelliteScrubRenderSeq += 1;
         _stopSatelliteAutoRefresh();
         _stopSatelliteScrubPlay();
-        _setSatelliteAnimateControlsVisible(true);
-        byId('weather-satellite-animate')?.classList.add('active');
+        _setSatelliteModeActive('animate');
+        void _updateSatelliteLegend();
         byId('weather-mode-current')?.classList.remove('active');
         byId('weather-mode-archive')?.classList.remove('active');
         _setArchiveScrubber(true);
         _setScrubberControlsEnabled(false);
+        _satelliteFrames = [];
+        _satelliteFrameIndex = 0;
+        _updateSatelliteScrubberUi();
         _setRtmaScrubberStatus('Loading satellite animation frames...');
 
-        const params = new URLSearchParams({
-            sat_id: _activeSatelliteSatId(),
-            sector: _activeSatelliteSector(),
-            channel: _activeSatelliteChannel(),
-            source: 'auto',
-            hours: String(_activeSatelliteLookbackHours()),
-            max_frames: '120',
-        });
-
         try {
-            const resp = await fetch(apiUrl(`/api/satellite/live/frames?${params.toString()}`), { cache: 'no-store' });
-            const data = await resp.json().catch(() => ({}));
-            if (!resp.ok || data.status === 'error') {
-                throw new Error(data.detail || data.message || resp.statusText || 'Satellite frame request failed');
-            }
+            const requestWindow = _currentSatelliteFrameRequestWindow();
+            const frameSet = await _fetchSatelliteFrameSet({
+                hours: requestWindow.hours,
+                maxFrames: requestWindow.maxFrames,
+                signal,
+                requireTiles: false,
+                minFrames: 0,
+            });
             if (!_satelliteScrubMode || loadSeq !== _satelliteScrubLoadSeq) return;
+            _setSatelliteApiMode(frameSet.mode, frameSet.data);
 
-            _satelliteFrames = Array.isArray(data.frames)
-                ? data.frames.filter((f) => f && f.frame_key)
-                : [];
+            _satelliteFrames = frameSet.frames;
 
             if (!_satelliteFrames.length) {
                 _setScrubberControlsEnabled(false);
+                _updateSatelliteScrubberUi();
                 _setRtmaScrubberStatus('No frames found for selected lookback window.');
                 _setSatelliteStatus('No animation frames available for this selection.');
                 _setSatelliteAnimateButtonFilling(false);
                 return;
             }
 
-            _satelliteFrameIndex = _satelliteFrames.length - 1;
-            _setSatelliteFrame(_satelliteFrameIndex);
+            _satelliteFrameIndex = _satelliteFrameIndexForReload(_satelliteFrames, previousFrameKey);
+            // Show frame count and enable scrubber handle immediately — don't wait for tiles.
             _updateRtmaScrubberUi();
             _setScrubberControlsEnabled(true);
-            _setRtmaScrubberStatus(`${_satelliteFrames.length} frames loaded (${_activeSatelliteLookbackHours()}h window).`);
-            _setSatelliteStatus('Animate loaded. Press Play to start scrubbing.');
-
-            _warmSatelliteFramesInBackground(loadSeq, params);
-        } catch (err) {
+            _primeSatelliteAnimationLayers(_satelliteFrameIndex);
+            let frameDisplayed = await _setSatelliteFrame(_satelliteFrameIndex, {
+                waitForTiles: false,
+                tileTimeoutMs: SATELLITE_INITIAL_TILE_READY_TIMEOUT_MS,
+            });
+            if (!frameDisplayed) {
+                const fallbackIndex = _satelliteFrameIndexForReload(_satelliteFrames);
+                if (fallbackIndex !== _satelliteFrameIndex) {
+                    _satelliteFrameIndex = fallbackIndex;
+                    _updateRtmaScrubberUi();
+                    _primeSatelliteAnimationLayers(_satelliteFrameIndex);
+                    frameDisplayed = await _setSatelliteFrame(_satelliteFrameIndex, {
+                        waitForTiles: false,
+                        tileTimeoutMs: SATELLITE_INITIAL_TILE_READY_TIMEOUT_MS,
+                    });
+                }
+            }
             if (!_satelliteScrubMode || loadSeq !== _satelliteScrubLoadSeq) return;
+            _updateRtmaScrubberUi();
+            if (frameDisplayed) {
+                _setRtmaScrubberStatus(`${_satelliteFrames.length} v2 frames loaded (${requestWindow.hours}h window); tiles fill as they render.`);
+                _setSatelliteStatus('Animate mode loaded. Press Play to start scrubbing while tiles fill.');
+            } else {
+                _setRtmaScrubberStatus(`${_satelliteFrames.length} v2 frames listed (${requestWindow.hours}h window).`);
+                _setSatelliteStatus('Satellite animation frames listed; tiles will fill as requested.');
+            }
+
+            _warmSatelliteFramesInBackground(loadSeq, null);
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            if (!_satelliteScrubMode || loadSeq !== _satelliteScrubLoadSeq) return;
+            _satelliteFrames = [];
+            _satelliteFrameIndex = 0;
+            _updateSatelliteScrubberUi();
             _setScrubberControlsEnabled(false);
             _setRtmaScrubberStatus(`Error: ${err.message}`);
             _setSatelliteStatus(`Satellite animate error: ${err.message}`);
             _setSatelliteAnimateButtonFilling(false);
+        } finally {
+            if (_satelliteScrubFetchController?.signal === signal) {
+                _satelliteScrubFetchController = null;
+            }
         }
     }
 
@@ -8564,11 +9722,11 @@
         return Number.isInteger(value) ? String(value) : value.toFixed(1);
     }
 
-    function renderContinuousLegend(title, axisLabel, anchors) {
+    function renderContinuousLegend(title, axisLabel, anchors, ticks = null) {
         const normalized = (Array.isArray(anchors) ? anchors : [])
             .map((item) => Array.isArray(item)
-                ? [Number(item[0]), item[1]]
-                : [Number(item?.value), item?.color])
+                ? [Number(item[0]), item[1], item[2]]
+                : [Number(item?.value), item?.color, item?.label])
             .filter(([value, color]) => Number.isFinite(value) && color);
         if (!normalized.length) return '';
 
@@ -8579,15 +9737,20 @@
             const pct = ((value - min) / range) * 100;
             return `${color} ${pct.toFixed(2)}%`;
         }).join(', ');
-        const ticks = normalized.map(([value]) => (
-            `<span>${escapeHtml(_formatSurfaceTick(value))}</span>`
+        const normalizedTicks = (Array.isArray(ticks) && ticks.length ? ticks : normalized)
+            .map((item) => Array.isArray(item)
+                ? [Number(item[0]), item[2] ?? item[0]]
+                : [Number(item?.value), item?.label ?? item?.value])
+            .filter(([value]) => Number.isFinite(value));
+        const tickHtml = normalizedTicks.map(([value, label]) => (
+            `<span>${escapeHtml(label ?? _formatSurfaceTick(value))}</span>`
         )).join('');
 
         return (
             `<h4>${escapeHtml(title)}</h4>` +
             `<div class="surface-colorbar">` +
             `<div class="surface-colorbar-bar" style="background: linear-gradient(to right, ${gradient});"></div>` +
-            `<div class="surface-colorbar-ticks">${ticks}</div>` +
+            `<div class="surface-colorbar-ticks">${tickHtml}</div>` +
             `<div class="surface-colorbar-label">${escapeHtml(axisLabel)}</div>` +
             `</div>`
         );
@@ -9177,8 +10340,53 @@
         el.style.display = text ? 'block' : 'none';
     }
 
+    function _activeScrubberPlaybackSpeed() {
+        const speed = SCRUBBER_PLAYBACK_SPEEDS[_scrubberPlaybackSpeedIndex];
+        return Number.isFinite(speed) && speed > 0 ? speed : 1;
+    }
+
+    function _scrubberPlaybackDelay(baseMs, minMs = 60) {
+        const base = Math.max(1, Number(baseMs) || 1);
+        const min = Math.max(1, Number(minMs) || 1);
+        return Math.max(min, Math.round(base / _activeScrubberPlaybackSpeed()));
+    }
+
+    function _formatScrubberPlaybackSpeed(speed) {
+        if (Number.isInteger(speed)) return `${speed}x`;
+        return `${String(speed).replace(/0+$/, '').replace(/\.$/, '')}x`;
+    }
+
+    function _updateScrubberPlaybackSpeedUi() {
+        const speed = _activeScrubberPlaybackSpeed();
+        const label = byId('scrubber-speed-label');
+        if (label) label.textContent = _formatScrubberPlaybackSpeed(speed);
+    }
+
+    function _setScrubberPlaybackSpeedIndex(index) {
+        const safeIndex = Math.max(0, Math.min(SCRUBBER_PLAYBACK_SPEEDS.length - 1, Number(index) || 0));
+        if (safeIndex === _scrubberPlaybackSpeedIndex) return;
+        _scrubberPlaybackSpeedIndex = safeIndex;
+        _updateScrubberPlaybackSpeedUi();
+        if (_archivePlayTimer) {
+            clearInterval(_archivePlayTimer);
+            _archivePlayTimer = null;
+            startScrubberPlay();
+        }
+    }
+
+    function _adjustScrubberPlaybackSpeed(delta) {
+        _setScrubberPlaybackSpeedIndex(_scrubberPlaybackSpeedIndex + (Number(delta) || 0));
+    }
+
     function _setScrubberControlsEnabled(enabled) {
-        ['scrubber-step-back', 'scrubber-play', 'scrubber-step-fwd', 'scrubber-slider'].forEach((id) => {
+        [
+            'scrubber-step-back',
+            'scrubber-play',
+            'scrubber-step-fwd',
+            'scrubber-speed-down',
+            'scrubber-speed-up',
+            'scrubber-slider',
+        ].forEach((id) => {
             const el = byId(id);
             if (el) el.disabled = !enabled;
         });
@@ -9263,20 +10471,20 @@
                     if (_rtmaScrubPlayTimer) {
                         await _renderRtmaScrubFrame(0);
                         if (_rtmaScrubPlayTimer) {
-                            _rtmaScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+                            _rtmaScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(RTMA_SCRUB_PLAY_INTERVAL_MS));
                         }
                     }
-                }, RTMA_SCRUB_LOOP_HOLD_MS);
+                }, _scrubberPlaybackDelay(RTMA_SCRUB_LOOP_HOLD_MS, 350));
             } else {
                 // Advance to next frame
                 const next = _rtmaScrubFrameIndex + 1;
                 await _renderRtmaScrubFrame(next);
                 if (!_rtmaScrubPlayTimer || !_rtmaScrubFrames.length) return;
-                _rtmaScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+                _rtmaScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(RTMA_SCRUB_PLAY_INTERVAL_MS));
             }
         };
 
-        _rtmaScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+        _rtmaScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(RTMA_SCRUB_PLAY_INTERVAL_MS));
     }
 
     function _canApplyRtmaScrubResponse(renderSeq) {
@@ -9331,20 +10539,20 @@
                     if (_mrmsScrubPlayTimer) {
                         await _renderMrmsScrubFrame(0);
                         if (_mrmsScrubPlayTimer) {
-                            _mrmsScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+                            _mrmsScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(RTMA_SCRUB_PLAY_INTERVAL_MS));
                         }
                     }
-                }, RTMA_SCRUB_LOOP_HOLD_MS);
+                }, _scrubberPlaybackDelay(RTMA_SCRUB_LOOP_HOLD_MS, 350));
             } else {
                 // Advance to next frame
                 const next = _mrmsScrubFrameIndex + 1;
                 await _renderMrmsScrubFrame(next);
                 if (!_mrmsScrubPlayTimer || !_mrmsScrubFrames.length) return;
-                _mrmsScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+                _mrmsScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(RTMA_SCRUB_PLAY_INTERVAL_MS));
             }
         };
 
-        _mrmsScrubPlayTimer = setTimeout(tick, RTMA_SCRUB_PLAY_INTERVAL_MS);
+        _mrmsScrubPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(RTMA_SCRUB_PLAY_INTERVAL_MS));
     }
 
     function _canApplyMrmsScrubResponse(renderSeq) {
@@ -10460,7 +11668,7 @@
         _archivePlayTimer = setInterval(() => {
             const next = (_archiveFrameIndex + 1) % _archiveFrames.length;
             renderArchiveFrame(next);
-        }, ARCHIVE_PLAY_INTERVAL_MS);
+        }, _scrubberPlaybackDelay(ARCHIVE_PLAY_INTERVAL_MS));
     }
 
     function stopScrubberPlay() {
@@ -10520,6 +11728,27 @@
     byId('archive-from')?.addEventListener('input', () => _setActivePreset('custom'));
     byId('archive-to')?.addEventListener('input', () => _setActivePreset('custom'));
 
+    byId('scrubber-speed-down')?.addEventListener('click', () => {
+        _adjustScrubberPlaybackSpeed(-1);
+    });
+
+    byId('scrubber-speed-up')?.addEventListener('click', () => {
+        _adjustScrubberPlaybackSpeed(1);
+    });
+
+    byId('weather-satellite-auto-refresh')?.addEventListener('click', () => {
+        if (!_satelliteScrubMode || !_isTypeEnabled('satellite')) return;
+        const enabled = !_satelliteAnimateAutoRefreshEnabled;
+        _setSatelliteAnimateAutoRefreshEnabled(enabled);
+        if (enabled) {
+            void _refreshSatelliteAnimationFrames({ auto: true, silent: false });
+        } else {
+            _setRtmaScrubberStatus(`${_satelliteFrames.length} satellite frames loaded. Auto refresh off.`);
+        }
+    });
+
+    _updateScrubberPlaybackSpeedUi();
+
     byId('scrubber-play')?.addEventListener('click', () => {
         if (_radarScrubMode) {
             if (_radarScrubPlayTimer) {
@@ -10556,7 +11785,7 @@
         if (_archivePlayTimer) { stopScrubberPlay(); } else { startScrubberPlay(); }
     });
 
-    byId('scrubber-step-back')?.addEventListener('click', () => {
+    byId('scrubber-step-back')?.addEventListener('click', async () => {
         if (_radarScrubMode) {
             _stopRadarScrubPlay();
             _renderRadarScrubFrame(_radarScrubFrameIndex - 1);
@@ -10564,8 +11793,7 @@
         }
         if (_satelliteScrubMode) {
             _stopSatelliteScrubPlay();
-            _setSatelliteFrame(_satelliteFrameIndex - 1);
-            _updateRtmaScrubberUi();
+            await _setSatelliteFrame(_satelliteFrameIndex - 1, { waitForTiles: false });
             return;
         }
         if (_rtmaScrubMode) {
@@ -10582,7 +11810,7 @@
         renderArchiveFrame(_archiveFrameIndex - 1);
     });
 
-    byId('scrubber-step-fwd')?.addEventListener('click', () => {
+    byId('scrubber-step-fwd')?.addEventListener('click', async () => {
         if (_radarScrubMode) {
             _stopRadarScrubPlay();
             _renderRadarScrubFrame(_radarScrubFrameIndex + 1);
@@ -10590,8 +11818,7 @@
         }
         if (_satelliteScrubMode) {
             _stopSatelliteScrubPlay();
-            _setSatelliteFrame(_satelliteFrameIndex + 1);
-            _updateRtmaScrubberUi();
+            await _setSatelliteFrame(_satelliteFrameIndex + 1, { waitForTiles: false });
             return;
         }
         if (_rtmaScrubMode) {
@@ -10608,16 +11835,14 @@
         renderArchiveFrame(_archiveFrameIndex + 1);
     });
 
-    byId('scrubber-slider')?.addEventListener('input', (e) => {
+    byId('scrubber-slider')?.addEventListener('input', async (e) => {
         if (_radarScrubMode) {
             _stopRadarScrubPlay();
             _renderRadarScrubFrame(parseInt(e.target.value, 10));
             return;
         }
         if (_satelliteScrubMode) {
-            _stopSatelliteScrubPlay();
-            _setSatelliteFrame(parseInt(e.target.value, 10));
-            _updateRtmaScrubberUi();
+            _scheduleSatelliteManualScrubFrame(parseInt(e.target.value, 10));
             return;
         }
         if (_rtmaScrubMode) {
@@ -10636,13 +11861,19 @@
 
     async function _ensureBoundaryLayers() {
         if (statesLayer && countiesLayer) return;
-        if (typeof window.topojson === 'undefined') return;
         try {
-            const resp = await fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json');
+            const resp = await fetch(apiUrl('/api/overlay/us-boundaries'));
             if (!resp.ok) return;
-            const topo = await resp.json();
-            const states = window.topojson.feature(topo, topo.objects.states);
-            const counties = window.topojson.feature(topo, topo.objects.counties);
+            const geojson = await resp.json();
+            const allFeatures = Array.isArray(geojson?.features) ? geojson.features : [];
+            const states = {
+                type: 'FeatureCollection',
+                features: allFeatures.filter((feat) => feat?.properties?.layer === 'state'),
+            };
+            const counties = {
+                type: 'FeatureCollection',
+                features: allFeatures.filter((feat) => feat?.properties?.layer === 'county'),
+            };
 
             statesLayer = L.geoJSON(states, {
                 style: { color: '#dbe6ef', weight: 1, opacity: 0.8, fillOpacity: 0 },
@@ -10936,6 +12167,10 @@
             const sentinelOpt = regionSelect?.querySelector('option[value="__RADAR_SITE_SELECTED__"]');
             if (sentinelOpt) sentinelOpt.remove();
         }
+        if (nextRegion !== '__ALERT_LOCATION__') {
+            const alertSentinel = regionSelect?.querySelector('option[value="__ALERT_LOCATION__"]');
+            if (alertSentinel) alertSentinel.remove();
+        }
         if (nextRegion === 'CONUS') {
             _clearRadarSiteAndZoomConus();
             return;
@@ -11059,10 +12294,8 @@
                     _setViewerTimestamp(null);
                 }
                 if (type === 'satellite') {
-                    document.querySelectorAll('.weather-satellite-lookback-btn').forEach((btn) => {
-                        btn.classList.toggle('active', btn.dataset.hours === '1');
-                    });
-                    _setSatelliteAnimateControlsVisible(_satelliteScrubMode);
+                    _setSatelliteLookbackHours(_recommendedSatelliteLookbackHours());
+                    _setSatelliteModeActive(_satelliteScrubMode ? 'animate' : 'current');
                     if (!_satelliteScrubMode) {
                         _setRtmaScrubberStatus('');
                         _setArchiveScrubber(false);
@@ -11489,6 +12722,9 @@
         if (!document.hidden && _isTypeEnabled('satellite') && !_archiveMode && !_satelliteScrubMode) {
             loadSatelliteCurrentFrame({ silent: true });
         }
+        if (!document.hidden && _satelliteAnimateAutoRefreshEnabled && _satelliteScrubMode && _isTypeEnabled('satellite')) {
+            void _refreshSatelliteAnimationFrames({ auto: true, silent: true });
+        }
         _updateRadarNextUpdateCountdown();
     });
 
@@ -11709,6 +12945,7 @@
     ].forEach((id) => {
         byId(id)?.addEventListener('change', () => {
             if (_isTypeEnabled('satellite')) {
+                _clearSatelliteLayerPool();
                 if (_satelliteScrubMode) {
                     loadSatelliteScrubberFrames();
                     return;
@@ -11718,29 +12955,15 @@
         });
     });
 
-    document.querySelectorAll('.weather-satellite-lookback-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.weather-satellite-lookback-btn').forEach((other) => {
-                other.classList.remove('active');
-            });
-            btn.classList.add('active');
-            if (_satelliteScrubMode && _isTypeEnabled('satellite')) {
-                loadSatelliteScrubberFrames();
-            }
-        });
+    byId('weather-satellite-lookback-slider')?.addEventListener('input', (event) => {
+        const hours = parseInt(event.target.value, 10);
+        _setSatelliteLookbackHours(hours);
+        if (_satelliteScrubMode && _isTypeEnabled('satellite')) {
+            _scheduleSatelliteScrubberReload();
+        }
     });
 
-    byId('weather-satellite-step-back')?.addEventListener('click', () => {
-        _setSatelliteFrame(_satelliteFrameIndex - 1);
-    });
-
-    byId('weather-satellite-step-fwd')?.addEventListener('click', () => {
-        _setSatelliteFrame(_satelliteFrameIndex + 1);
-    });
-
-    byId('weather-satellite-scrubber-slider')?.addEventListener('input', (event) => {
-        _setSatelliteFrame(parseInt(event.target.value, 10));
-    });
+    // Left sidebar satellite lookback and scrubber controls removed - functionality moved to bottom archive bar
 
 
     byId('weather-toggle-cities')?.addEventListener('change', _syncRightSidebarLayers);
@@ -11767,6 +12990,40 @@
         if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0 && _allAlertFeatures.length) {
             buildAlertsLegend(_allAlertFeatures);
         }
+        if (_satelliteScrubMode && _satelliteFrames.length && _isTypeEnabled('satellite')) {
+            _scheduleSatelliteTilePrefetch(350);
+        }
+    });
+
+    map.on('zoomstart', () => {
+        if (!_satelliteScrubMode) return;
+        _satelliteScrubResumeAfterZoom = !!_satelliteScrubPlayTimer;
+        if (_satelliteScrubPlayTimer) {
+            _stopSatelliteScrubPlay();
+        }
+        _cancelSatellitePendingSwap();
+        _cancelSatelliteTilePrefetch();
+        _setRtmaScrubberStatus('Zooming... preparing animation tiles.');
+    });
+
+    map.on('zoomend', () => {
+        if (!_satelliteScrubMode || !_satelliteFrames.length || !_isTypeEnabled('satellite')) return;
+
+        _setSatelliteFrame(_satelliteFrameIndex, { waitForTiles: false });
+        _scheduleSatelliteTilePrefetch(450);
+        _updateRtmaScrubberUi();
+
+        if (_satelliteScrubResumeAfterZoom) {
+            _satelliteScrubResumeAfterZoom = false;
+            setTimeout(() => {
+                if (_satelliteScrubMode && !_satelliteScrubPlayTimer) {
+                    _startSatelliteScrubPlay();
+                }
+            }, 450);
+            return;
+        }
+
+        _setRtmaScrubberStatus(`${_satelliteFrameIndex + 1} / ${_satelliteFrames.length} frames.`);
     });
 
     // Close active alerts pager when the user pans/zooms the map.

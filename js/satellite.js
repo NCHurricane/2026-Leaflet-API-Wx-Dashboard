@@ -20,6 +20,9 @@
 
     let autoRefreshTimer = null;
     let hasLoadedFrames = false;
+    let isLoadingFrames = false;
+    let tileRefreshToken = 0;
+    let catalogRenderVersion = 'products';
 
     function byId(id) { return document.getElementById(id); }
     function value(id) { const el = byId(id); return el ? el.value : ''; }
@@ -59,10 +62,11 @@
             sat_id: value('satellite-sat-id') || 'goes19',
             sector: value('satellite-sector') || 'CONUS',
             channel: value('satellite-channel') || 'Channel13',
-            source: value('satellite-source') || 'aws',
             frame_key: frameKey,
+            rv: catalogRenderVersion,
+            t: String(tileRefreshToken || 0),
         });
-        return apiUrl(`/api/satellite/tile/{z}/{x}/{y}?${params.toString()}`);
+        return apiUrl(`/api/satellite-v2/tile/{z}/{x}/{y}?${params.toString()}`);
     }
 
     function updateFrameMeta() {
@@ -75,6 +79,34 @@
             return;
         }
         meta.textContent = `Loaded ${scrubberFrames.length} frames. Current index: ${scrubberIndex + 1}.`;
+    }
+
+    function frameKeyAt(index, frames = scrubberFrames) {
+        const frame = frames[index];
+        return frame && frame.frame_key ? String(frame.frame_key) : '';
+    }
+
+    function displayedFrameKey() {
+        return frameKeyAt(scrubberIndex);
+    }
+
+    function latestFrameKey(frames = scrubberFrames) {
+        return frames.length ? frameKeyAt(frames.length - 1, frames) : '';
+    }
+
+    function isDisplayingLatestFrame() {
+        if (!scrubberFrames.length) {
+            return true;
+        }
+        return scrubberIndex >= scrubberFrames.length - 1 || displayedFrameKey() === latestFrameKey();
+    }
+
+    function indexForFrameKey(frames, frameKey) {
+        const key = String(frameKey || '');
+        if (!key) {
+            return -1;
+        }
+        return frames.findIndex((frame) => String(frame?.frame_key || '') === key);
     }
 
     function updateScrubberFrame(index) {
@@ -96,8 +128,9 @@
             satelliteLayer = L.tileLayer(urlTemplate, {
                 maxZoom: 19,
                 opacity: 0.92,
-                updateWhenIdle: true,
+                updateWhenIdle: false,
                 updateWhenZooming: false,
+                keepBuffer: 4,
                 crossOrigin: true,
             }).addTo(mapInstance);
         } else {
@@ -122,6 +155,14 @@
 
     async function loadFrames(options = {}) {
         const silent = Boolean(options.silent);
+        const refresh = Boolean(options.refresh);
+        const preserveFrameKey = String(options.preserveFrameKey || '');
+        const preferLatest = options.preferLatest !== false;
+
+        if (isLoadingFrames) {
+            return;
+        }
+        isLoadingFrames = true;
 
         try {
             ensureMap();
@@ -130,9 +171,9 @@
                 sat_id: value('satellite-sat-id') || 'goes19',
                 sector: value('satellite-sector') || 'CONUS',
                 channel: value('satellite-channel') || 'Channel13',
-                source: value('satellite-source') || 'aws',
                 hours: value('satellite-lookback-hours') || '2',
                 max_frames: '90',
+                refresh: refresh ? 'true' : 'false',
             });
 
             if (!silent) {
@@ -141,19 +182,40 @@
                 window.setOutputMeta?.({ state: 'running' });
             }
 
-            const response = await fetch(apiUrl(`/api/satellite/live/frames?${params.toString()}`));
+            const response = await fetch(apiUrl(`/api/satellite-v2/catalog?${params.toString()}`));
             const data = await response.json();
 
-            if (!response.ok || data.status === 'error') {
+            if (!response.ok || (data.status !== 'success' && data.status !== 'stale')) {
                 throw new Error(data.detail || data.message || 'Failed to load satellite frames');
             }
 
-            scrubberFrames = Array.isArray(data.frames) ? data.frames.filter((f) => f && f.frame_key) : [];
+            const nextFrames = Array.isArray(data.frames) ? data.frames.filter((f) => f && f.frame_key) : [];
+            catalogRenderVersion = String(data.render_version || catalogRenderVersion || 'products');
+            if (silent && !nextFrames.length && scrubberFrames.length) {
+                return;
+            }
+
+            const previousFrameKey = displayedFrameKey();
+            const nextLatestKey = latestFrameKey(nextFrames);
+            let nextIndex = Math.max(0, nextFrames.length - 1);
+
+            if (!preferLatest && preserveFrameKey) {
+                const preservedIndex = indexForFrameKey(nextFrames, preserveFrameKey);
+                if (preservedIndex >= 0) {
+                    nextIndex = preservedIndex;
+                }
+            }
+
+            scrubberFrames = nextFrames;
             showScrubber();
 
+            if (silent && nextLatestKey && nextLatestKey === previousFrameKey) {
+                tileRefreshToken = Date.now();
+            }
+
             window.setOutputMeta?.({
-                source: data.source || data.data_source || value('satellite-source'),
-                requestedSource: value('satellite-source'),
+                source: 'aws',
+                requestedSource: 'aws',
                 dataMode: 'current',
             });
 
@@ -168,8 +230,13 @@
                 return;
             }
 
-            updateScrubberFrame(scrubberFrames.length - 1);
-            setStatus(`Satellite frames loaded (${scrubberFrames.length}).`);
+            updateScrubberFrame(nextIndex);
+            if (!silent) {
+                setStatus(`Satellite frames loaded (${scrubberFrames.length}).`);
+            } else if (preferLatest && nextLatestKey && nextLatestKey !== previousFrameKey) {
+                const frame = scrubberFrames[scrubberIndex];
+                setStatus(`Satellite auto-updated to ${frame.timestamp_utc || nextLatestKey}.`);
+            }
             hasLoadedFrames = true;
             ensureAutoRefreshTimer();
 
@@ -177,14 +244,29 @@
                 showProgress(100, 'Completed');
             }
         } catch (error) {
-            hasLoadedFrames = false;
-            setStatus(`Error: ${error.message}`);
-            window.setOutputMeta?.({ state: 'unavailable' });
+            if (!silent) {
+                hasLoadedFrames = false;
+                setStatus(`Error: ${error.message}`);
+                window.setOutputMeta?.({ state: 'unavailable' });
+            } else {
+                console.warn('Satellite auto-refresh failed:', error);
+            }
         } finally {
+            isLoadingFrames = false;
             if (!silent) {
                 setTimeout(hideProgress, 1500);
             }
         }
+    }
+
+    function refreshSatelliteForActiveMode(options = {}) {
+        const followLatest = isDisplayingLatestFrame();
+        return loadFrames({
+            ...options,
+            refresh: true,
+            preferLatest: followLatest,
+            preserveFrameKey: followLatest ? '' : displayedFrameKey(),
+        });
     }
 
     function shouldAutoRefresh() {
@@ -199,7 +281,7 @@
             if (!shouldAutoRefresh()) {
                 return;
             }
-            loadFrames({ silent: true });
+            refreshSatelliteForActiveMode({ silent: true });
         }, SATELLITE_AUTO_REFRESH_MS);
     }
 
@@ -207,7 +289,7 @@
         applyControlDefaults();
         ensureMap();
 
-        byId('satellite-generate')?.addEventListener('click', () => loadFrames());
+        byId('satellite-generate')?.addEventListener('click', () => loadFrames({ refresh: true }));
 
         byId('scrubber-range')?.addEventListener('input', (event) => {
             updateScrubberFrame(event.target.value);
@@ -221,10 +303,10 @@
 
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && shouldAutoRefresh()) {
-                loadFrames({ silent: true });
+                refreshSatelliteForActiveMode({ silent: true });
             }
         });
 
-        loadFrames();
+        loadFrames({ refresh: true });
     });
 })();
