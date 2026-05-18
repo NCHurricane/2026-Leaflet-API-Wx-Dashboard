@@ -594,12 +594,16 @@
                 'Basemap: Dark': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
                     attribution: '&copy; OpenStreetMap &copy; CartoDB',
                     subdomains: 'abcd',
-                    maxZoom: 19
+                    maxZoom: 19,
+                    maxCacheSize: 5000, // Increase the cache size to 5000 entries
+                    maxCacheAge: 86400000 // Increase the cache age to 24 hours (in milliseconds)
                 }),
                 'Basemap: Light': L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                     attribution: '&copy; OpenStreetMap &copy; CartoDB',
                     subdomains: 'abcd',
-                    maxZoom: 19
+                    maxZoom: 19,
+                    maxCacheSize: 5000, // Increase the cache size to 5000 entries
+                    maxCacheAge: 86400000 // Increase the cache age to 24 hours (in milliseconds)
                 })
             };
             mapInstance.__selectorBaseLayerKey = 'Basemap: Dark';

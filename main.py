@@ -28,6 +28,8 @@ from satellite import satellite_utils as satellite_thredds_utils
 from satellite_v2 import service as satellite_v2_service
 import sys
 from io import StringIO as _StringIO
+from routes.health import router as health_router
+
 
 _TRANSPARENT_PNG_1X1 = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
@@ -87,6 +89,7 @@ DIRS = {
 
 # Defer directory creation and module initialization to startup handler
 app = FastAPI(title="NCHurricane Weather API")
+app.include_router(health_router)
 
 
 def _initialize_modules() -> None:
