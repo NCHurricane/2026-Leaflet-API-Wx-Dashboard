@@ -842,56 +842,6 @@ def build_rtma_legend(config: dict) -> dict:
     }
 
 
-def sample_rtma_points(
-    grib_path: str,
-    product: str,
-    crop_extent: list[float],
-    stride: int = 30,
-) -> list[dict]:
-    """Return a subsampled list of {lat, lon, value} dicts from the GRIB2 grid."""
-    config = get_product_config(product)
-    data_array, latitude, longitude, _valid_time = _extract_dataset(
-        grib_path, config["var"]
-    )
-    data = np.asarray(getattr(data_array, "values", data_array), dtype=float)
-    if config.get("convert"):
-        data = config["convert"](data)
-    data = np.ma.masked_invalid(data)
-    data, latitude, longitude = _crop_grid(data, latitude, longitude, crop_extent)
-
-    # Normalise longitude to -180..180
-    longitude = np.where(longitude > 180.0, longitude - 360.0, longitude)
-
-    is_1d = latitude.ndim == 1  # lat=rows vector, lon=cols vector
-    rows, cols = data.shape
-    stride = max(1, stride)
-    points: list[dict] = []
-
-    for r in range(0, rows, stride):
-        for c in range(0, cols, stride):
-            val = data[r, c]
-            if np.ma.is_masked(val):
-                continue
-            fval = float(val)
-            if not np.isfinite(fval):
-                continue
-            if is_1d:
-                lat_val = float(latitude[r])
-                lon_val = float(longitude[c])
-            else:
-                lat_val = float(latitude[r, c])
-                lon_val = float(longitude[r, c])
-            points.append(
-                {
-                    "lat": lat_val,
-                    "lon": lon_val,
-                    "value": _format_display_value(product, fval),
-                }
-            )
-
-    return points
-
-
 def ensure_rtma_city_geojson(
     cache_root: str,
     source: RtmaSource,
