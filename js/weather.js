@@ -803,6 +803,8 @@
     let rtmaGradientLayer = null;
     let _rtmaPointsAll = [];
     let _rtmaPointsUnits = '';
+    let _rtmaSecondaryPoints = [];
+    let _rtmaSecondaryUnits = '';
     let _rtmaPointsKey = null;
     // GRIB-subgrid gradient state (replaces IDW on live view)
     let _rtmaGridPoints = [];   // [[lat, lon, value], ...]
@@ -8655,6 +8657,7 @@
         if (!rtmaEnabled && rtmaOverlay && map.hasLayer(rtmaOverlay)) map.removeLayer(rtmaOverlay);
         if (!rtmaEnabled && rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
         if (!rtmaEnabled && rtmaPointLayer && map.hasLayer(rtmaPointLayer)) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
+        if (!rtmaEnabled) { _rtmaSecondaryPoints = []; _rtmaSecondaryUnits = ''; }
         if (!mrmsEnabled && mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
         if (!mrmsEnabled && mrmsRadarSiteLayer && map.hasLayer(mrmsRadarSiteLayer)) map.removeLayer(mrmsRadarSiteLayer);
         if (!droughtEnabled && droughtLayer && map.hasLayer(droughtLayer)) { map.removeLayer(droughtLayer); droughtLayer = null; }
@@ -8692,6 +8695,11 @@
         }
         if (rtmaEnabled) {
             loadRtma();
+            const windPair = _getWindProductPair();
+            if (windPair.length === 2) {
+                const otherWind = windPair.find(p => p !== _activeRtmaProduct());
+                if (otherWind) loadRtmaSecondary(otherWind);
+            }
         }
         if (mrmsEnabled) {
             loadMrms();
@@ -9760,6 +9768,16 @@
         return document.querySelector('.weather-rtma-product:checked')?.value || null;
     }
 
+    function _activeRtmaProducts() {
+        return Array.from(document.querySelectorAll('.weather-rtma-product:checked')).map(el => el.value);
+    }
+
+    function _getWindProductPair() {
+        const products = _activeRtmaProducts();
+        const windProds = products.filter(p => p === 'wind_speed' || p === 'wind_direction');
+        return windProds.length === 2 ? windProds : [];
+    }
+
     function _syncRtmaProductForStream() {
         const stream = _activeRtmaStream();
         const delta24h = document.querySelector('.weather-rtma-product[value="temperature_change_24h"]');
@@ -10185,21 +10203,39 @@
         // in loadRtma() / _renderRtmaScrubFrame(). This function only renders
         // the optional city-value markers on top.
         if (rtmaPointLayer) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
-        if (!_rtmaPointsAll.length) return;
+        if (!_rtmaPointsAll.length && !_rtmaSecondaryPoints.length) return;
 
         if (byId('weather-rtma-show-values')?.checked) {
-            const isWindDir = _rtmaPointsUnits === 'deg';
-            const rtmaProduct = _activeRtmaProduct();
-            const integerLabelProducts = new Set(['temperature', 'dew_point']);
-            const useIntegerLabels = integerLabelProducts.has(rtmaProduct);
-            const thin = _thinRtmaPoints(_rtmaPointsAll);
-            if (thin.length) {
-                const markers = thin.map(p => {
+            const markers = [];
+
+            // Render primary product points
+            if (_rtmaPointsAll.length) {
+                const isWindDir = _rtmaPointsUnits === 'deg';
+                const rtmaProduct = _activeRtmaProduct();
+                const integerLabelProducts = new Set(['temperature', 'dew_point']);
+                const useIntegerLabels = integerLabelProducts.has(rtmaProduct);
+                const thin = _thinRtmaPoints(_rtmaPointsAll);
+                thin.forEach(p => {
                     const icon = isWindDir
                         ? windDirectionBarbIcon(p.value, 0.9)
                         : surfaceColoredTextIcon(p.value, _rtmaPointsUnits, 0.9, useIntegerLabels);
-                    return L.marker([p.lat, p.lon], { icon });
+                    markers.push(L.marker([p.lat, p.lon], { icon }));
                 });
+            }
+
+            // Render secondary wind product points (if both wind_speed and wind_direction selected)
+            if (_rtmaSecondaryPoints.length) {
+                const isWindDir = _rtmaSecondaryUnits === 'deg';
+                const thin = _thinRtmaPoints(_rtmaSecondaryPoints);
+                thin.forEach(p => {
+                    const icon = isWindDir
+                        ? windDirectionBarbIcon(p.value, 0.9)
+                        : surfaceColoredTextIcon(p.value, _rtmaSecondaryUnits, 0.9, false);
+                    markers.push(L.marker([p.lat, p.lon], { icon }));
+                });
+            }
+
+            if (markers.length) {
                 rtmaPointLayer = L.layerGroup(markers);
                 if (_isTypeEnabled('rtma')) rtmaPointLayer.addTo(map);
             }
@@ -10261,6 +10297,30 @@
             console.error('[rtma points] Load error:', err);
         } finally {
             if (_rtmaPointsInFlightKey === queryKey) _rtmaPointsInFlightKey = null;
+        }
+    }
+
+    async function loadRtmaSecondary(product) {
+        if (!byId('weather-rtma-show-values')?.checked) return;
+        if (!product) return;
+
+        const region = _activeRtmaRegion();
+        const stream = _activeRtmaStream();
+        if (!region || !stream || !product) return;
+
+        try {
+            const url = apiUrl(
+                `/api/data/rtma/points?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
+            );
+            const resp = await fetch(url);
+            if (!resp.ok) return;
+
+            const data = await resp.json();
+            _rtmaSecondaryPoints = Array.isArray(data.points) ? data.points : [];
+            _rtmaSecondaryUnits = data.units || '';
+            _renderRtmaPoints();
+        } catch (err) {
+            // Silent fail for secondary product
         }
     }
 
@@ -12479,12 +12539,29 @@
                     if (rapid) rapid.checked = false;
                     _syncRtmaProductForStream();
                 }
+                const isWindProduct = evt.target.value === 'wind_speed' || evt.target.value === 'wind_direction';
                 document.querySelectorAll('.weather-rtma-product').forEach((other) => {
-                    if (other !== evt.target) other.checked = false;
+                    if (other !== evt.target) {
+                        const otherIsWind = other.value === 'wind_speed' || other.value === 'wind_direction';
+                        if (isWindProduct && otherIsWind) {
+                            // Allow wind_speed and wind_direction together
+                            return;
+                        }
+                        other.checked = false;
+                    }
                 });
             }
 
-            if (!_activeRtmaProduct()) evt.target.checked = true;
+            const checkedProducts = Array.from(document.querySelectorAll('.weather-rtma-product:checked')).map(el => el.value);
+            if (!checkedProducts.length) evt.target.checked = true;
+
+            // Clear secondary wind points if only one wind product is selected
+            const windProds = checkedProducts.filter(p => p === 'wind_speed' || p === 'wind_direction');
+            if (windProds.length < 2) {
+                _rtmaSecondaryPoints = [];
+                _rtmaSecondaryUnits = '';
+            }
+
             if (_rtmaScrubMode) {
                 loadRtmaScrubberFrames();
                 return;
