@@ -91,7 +91,7 @@ def _render_overlay_for_source(
         flat_overlay_write_processed_keys,
         frame_key_from_datetime,
     )
-    from rtma_utils import ensure_rtma_grib, render_rtma_png
+    from rtma_utils import ensure_rtma_grib, _render_rtma_png_standalone
 
     path_parts = (region.upper(), stream, product)
     frame_key = frame_key_from_datetime(source.valid_time)
@@ -109,7 +109,7 @@ def _render_overlay_for_source(
     try:
         img_path = flat_overlay_image_path(cache_root, "rtma", path_parts, frame_key)
         grib_path = ensure_rtma_grib(cache_root, source)
-        _out_path, actual_bounds, render_meta = render_rtma_png(
+        _out_path, actual_bounds, render_meta = _render_rtma_png_standalone(
             grib_path,
             product,
             crop_extent,

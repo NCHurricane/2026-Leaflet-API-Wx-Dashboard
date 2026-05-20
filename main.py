@@ -30,7 +30,6 @@ import sys
 from io import StringIO as _StringIO
 from routes.health import router as health_router
 
-
 _TRANSPARENT_PNG_1X1 = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
     b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
@@ -53,7 +52,6 @@ del _stderr_cap, _real_stderr, _StringIO
 USING_NODD = False
 radar_utils = None
 satellite_utils = None
-radar_archive_utils = None
 satellite_archive_utils = None
 satellite_tile_utils = None
 weather_utils = None
@@ -94,7 +92,7 @@ app.include_router(health_router)
 
 def _initialize_modules() -> None:
     """Load all optional modules at startup (NODD, Archive, Weather, Scheduler) with timing."""
-    global USING_NODD, radar_utils, satellite_utils, radar_archive_utils
+    global USING_NODD, radar_utils, satellite_utils
     global \
         satellite_archive_utils, \
         satellite_tile_utils, \
@@ -130,16 +128,6 @@ def _initialize_modules() -> None:
 
     # 2. Initialize Radar Archive module
     _t0 = _time.time()
-    try:
-        from radar import radar_archive_utils as rad_archive
-
-        radar_archive_utils = rad_archive
-        startup_events.append(("[OK] Radar archive module", _time.time() - _t0))
-    except Exception as archive_err:
-        startup_events.append(
-            (f"[WARN] Radar archive unavailable: {archive_err}", _time.time() - _t0)
-        )
-
     # 3. Initialize Satellite Archive module
     _t0 = _time.time()
     try:
@@ -234,15 +222,6 @@ def _initialize_modules() -> None:
                 print(f"[Perf] Radar Cartopy warmup {_time.time() - _w0:.2f}s (bg)")
         except Exception as e:
             print(f"[WARN] Radar warmup failed (bg): {e}")
-        try:
-            if radar_archive_utils and hasattr(
-                radar_archive_utils, "warm_radar_cartopy_cache"
-            ):
-                _w0 = _time.time()
-                radar_archive_utils.warm_radar_cartopy_cache()
-                print(f"[Perf] Radar archive warmup {_time.time() - _w0:.2f}s (bg)")
-        except Exception as e:
-            print(f"[WARN] Radar archive warmup failed (bg): {e}")
 
     threading.Thread(
         target=_warm_cartopy_async, name="cartopy-warmup", daemon=True
@@ -252,7 +231,7 @@ def _initialize_modules() -> None:
     # 9. Start background workers (scheduler returns immediately; first ticks
     # run in background threads via APScheduler `next_run_time=now`)
     _t0 = _time.time()
-    if _SCHEDULER_AVAILABLE:
+    if _SCHEDULER_AVAILABLE and start_scheduler is not None:
         try:
             start_scheduler()
             startup_events.append(
@@ -314,7 +293,7 @@ def _stop_background_workers():
         pass
     if _SCHEDULER_AVAILABLE:
         try:
-            stop_scheduler()
+            stop_scheduler() # type: ignore
         except Exception:
             pass
 
@@ -833,7 +812,7 @@ def read_status():
 # ── MRMS app state (Phase 3) ─────────────────────────────────────────────────
 # Tracks which MRMS product the worker is actively refreshing.
 # Mutated by /api/mrms/set-product; read by the mrms_worker.
-_active_mrms_product: str = "PrecipRate"
+_active_mrms_product: str = "Refl_BaseQC"
 
 # ── Surface color helpers (Phase 2) ─────────────────────────────────────────
 try:
@@ -2984,7 +2963,7 @@ def get_data_rtma(
         get_product_config,
         iter_rtma_sources,
         resolve_rtma_source_by_data_key,
-        render_rtma_png,
+        _render_rtma_png_standalone,
         resolve_rtma_source,
     )
 
@@ -3070,7 +3049,7 @@ def get_data_rtma(
 
     if png_stale:
         try:
-            png_path, actual_bounds, render_meta = render_rtma_png(
+            png_path, actual_bounds, render_meta = _render_rtma_png_standalone(
                 grib_path,
                 product,
                 [west, east, south, north],
@@ -3093,7 +3072,7 @@ def get_data_rtma(
             # interrupted download). Retry once with a force-refreshed file.
             try:
                 grib_path = ensure_rtma_grib(_CACHE_ROOT, source, force_refresh=True)
-                png_path, actual_bounds, render_meta = render_rtma_png(
+                png_path, actual_bounds, render_meta = _render_rtma_png_standalone(
                     grib_path,
                     product,
                     [west, east, south, north],
@@ -3120,7 +3099,7 @@ def get_data_rtma(
                         alt_grib_path = ensure_rtma_grib(
                             _CACHE_ROOT, alt_source, force_refresh=True
                         )
-                        alt_render = render_rtma_png(
+                        alt_render = _render_rtma_png_standalone(
                             alt_grib_path,
                             product,
                             [west, east, south, north],
@@ -4816,40 +4795,6 @@ def get_radar_live_frames(site: str = "KMHX", product: str = "L3_N0B", hours: in
     }
 
 
-@app.get("/api/radar/basemap/{site}")
-def get_radar_basemap(site: str):
-    """Return the URL to a pre-rendered basemap for the given radar site, or 404 if not found."""
-    try:
-        site_normalized = normalize_radar_site_id(site.upper())
-        # Check if basemap exists at the actual location: basemap_cache/radar/{SITE}/{SITE}.png
-        basemap_path = os.path.join(
-            BASE_DIR,
-            "basemap_cache",
-            "radar",
-            site_normalized,
-            f"{site_normalized}.png",
-        )
-        if not os.path.exists(basemap_path):
-            raise HTTPException(
-                status_code=404, detail=f"Basemap not found for site {site_normalized}"
-            )
-
-        # Construct the relative URL path
-        basemap_url = (
-            f"/img/basemap_cache/radar/{site_normalized}/{site_normalized}.png"
-        )
-        return {
-            "status": "success",
-            "basemap_url": basemap_url,
-            "site": site_normalized,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Radar basemap endpoint error for site {site}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 def get_radar_latest(
     request_id: str,
     site: str = "KMHX",
@@ -5328,711 +5273,6 @@ def get_radar_latest(
         }
 
 
-@app.get("/api/radar/archive")
-def get_radar_archive_endpoint(
-    request_id: str = "",
-    site: str = "KMHX",
-    product: str = "N0B",
-    level: str = "Level 3",
-    date_from: str = "",
-    date_to: str = "",
-    user_tz: str = "America/New_York",
-    frames: int = 150,
-    fps: int = 4,
-    sm_speed: int = 30,
-    sm_dir: int = 225,
-    show_places: bool = False,
-    show_counties: bool = False,
-    n: Optional[float] = None,
-    s: Optional[float] = None,
-    e: Optional[float] = None,
-    w: Optional[float] = None,
-    source: str = "aws",
-    style_config: Optional[str] = None,
-    latest_only: bool = False,
-    view_mode: str = "layers",
-):
-    response = get_radar_archive(
-        request_id=request_id,
-        site=site,
-        product=product,
-        level=level,
-        date_from=date_from,
-        date_to=date_to,
-        user_tz=user_tz,
-        frames=frames,
-        fps=fps,
-        sm_speed=sm_speed,
-        sm_dir=sm_dir,
-        show_places=show_places,
-        show_counties=show_counties,
-        n=n,
-        s=s,
-        e=e,
-        w=w,
-        source=source,
-        style_config=style_config,
-        latest_only=latest_only,
-        view_mode=view_mode,
-    )
-    return attach_mode_and_source(response, "archive")
-
-
-@app.get("/api/radar")
-def get_radar(
-    request_id: str = "",
-    site: str = "KMHX",
-    product: str = "N0B",
-    level: str = "Level 3",
-    frames: int = 1,
-    fps: int = 4,
-    lookback: float = 0.5,
-    sm_speed: int = 30,
-    sm_dir: int = 225,
-    show_places: bool = False,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    user_tz: str = "America/New_York",
-    n: Optional[float] = None,
-    s: Optional[float] = None,
-    e: Optional[float] = None,
-    w: Optional[float] = None,
-    source: str = "auto",
-    style_config: Optional[str] = None,
-    latest_only: bool = False,
-    view_mode: str = "layers",
-):
-    """Deprecated: Use /api/radar/archive."""
-    data_mode = infer_data_mode(date_from, date_to)
-    if data_mode == "recent":
-        response = get_radar_latest(
-            request_id=request_id,
-            site=site,
-            product=product,
-            level=level,
-            # Legacy endpoint is constrained to a single static frame.
-            frames=1,
-            fps=fps,
-            lookback=lookback,
-            sm_speed=sm_speed,
-            sm_dir=sm_dir,
-            show_places=show_places,
-            n=n,
-            s=s,
-            e=e,
-            w=w,
-            source=source,
-            style_config=style_config,
-            latest_only=latest_only,
-        )
-        return attach_mode_and_source(response, "recent")
-
-    return get_radar_archive_endpoint(
-        request_id=request_id,
-        site=site,
-        product=product,
-        level=level,
-        date_from=date_from or "",
-        date_to=date_to or "",
-        user_tz=user_tz,
-        frames=frames,
-        fps=fps,
-        sm_speed=sm_speed,
-        sm_dir=sm_dir,
-        show_places=show_places,
-        n=n,
-        s=s,
-        e=e,
-        w=w,
-        source=source,
-        style_config=style_config,
-        latest_only=latest_only,
-        view_mode=view_mode,
-    )
-
-
-# ─── Radar Archive (standalone) ─────────────────────────────────────────────
-def get_radar_archive(
-    request_id: str,
-    site: str = "KMHX",
-    product: str = "N0B",
-    level: str = "Level 3",
-    date_from: str = "",
-    date_to: str = "",
-    user_tz: str = "America/New_York",
-    frames: int = 150,
-    fps: int = 4,
-    sm_speed: int = 30,
-    sm_dir: int = 225,
-    show_places: bool = False,
-    show_counties: bool = False,
-    n: Optional[float] = None,
-    s: Optional[float] = None,
-    e: Optional[float] = None,
-    w: Optional[float] = None,
-    source: str = "aws",
-    style_config: Optional[str] = None,
-    latest_only: bool = False,
-    view_mode: str = "layers",
-):
-    """Radar archive endpoint — uses entirely separate download/render pipeline."""
-    requested_source = str(source or "aws").strip().lower() or "aws"
-    source_used = requested_source
-    if radar_archive_utils is None:
-        return {
-            "status": "error",
-            "message": "Radar archive module is not available.",
-            "data_source": "ARCHIVE",
-            "requested_source": requested_source,
-            "source_used": source_used,
-        }
-
-    data_source = "ARCHIVE"
-    try:
-        site = normalize_radar_site_id(site)
-        provider = str(source or "aws").strip().lower()
-        if provider not in {"aws", "gcp", "thredds"}:
-            provider = "aws"
-        requested_source = provider
-        source_used = provider
-        data_source = f"ARCHIVE-{provider.upper()}"
-        render_mode = str(view_mode or "layers").strip().lower()
-        if render_mode not in {"video", "layers"}:
-            render_mode = "layers"
-
-        if not date_from or not date_to:
-            return {
-                "status": "error",
-                "message": "date_from and date_to are required for archive mode.",
-                "data_source": data_source,
-            }
-
-        parsed_from = parse_utc_datetime(date_from)
-        parsed_to = parse_utc_datetime(date_to)
-        validate_archive_range("radar", parsed_from, parsed_to)
-        frames = 1 if latest_only else max(1, int(frames))
-        single_target_utc = None
-        if latest_only:
-            single_target_utc = parsed_from + (parsed_to - parsed_from) / 2
-
-        # Single-frame mode should pick the scan closest to the selected time.
-        # Build one or more download windows so we have nearby candidates even when
-        # no file exists at the exact requested minute.
-        download_windows = []
-        if latest_only and single_target_utc is not None:
-            half_span_minutes = 30
-            near_start = single_target_utc - timedelta(minutes=half_span_minutes)
-            near_end = single_target_utc + timedelta(minutes=half_span_minutes)
-            download_windows.append((near_start, near_end))
-
-            if parsed_from != parsed_to:
-                download_windows.append((parsed_from, parsed_to))
-            else:
-                day_start = single_target_utc.replace(
-                    hour=0, minute=0, second=0, microsecond=0
-                )
-                day_end = day_start + timedelta(days=1) - timedelta(seconds=1)
-                download_windows.append((day_start, day_end))
-        else:
-            download_windows.append((parsed_from, parsed_to))
-
-        # Dedupe windows while preserving order.
-        unique_windows = []
-        seen_windows = set()
-        for window_start, window_end in download_windows:
-            window_key = (window_start, window_end)
-            if window_key in seen_windows:
-                continue
-            seen_windows.add(window_key)
-            unique_windows.append((window_start, window_end))
-
-        parsed_styles = parse_styles(style_config)
-        if not isinstance(parsed_styles, dict):
-            parsed_styles = {}
-        parsed_styles["show_counties"] = bool(show_counties)
-
-        def download_progress(curr, total, *, message=None):
-            active_tasks[request_id] = {
-                "percent": int((curr / total) * 100) if total else 0,
-                "message": message or f"Downloading {curr}/{total}",
-                "stage": "download",
-                "source": data_source,
-            }
-
-        def render_progress(curr, total):
-            active_tasks[request_id] = {
-                "percent": int((curr / total) * 100),
-                "message": f"Rendering {curr}/{total}",
-                "stage": "render",
-                "source": data_source,
-            }
-
-        custom_extent = (
-            (s, n, w, e) if all(v is not None for v in [n, s, e, w]) else None
-        )
-        site_candidates = [site]
-        if custom_extent:
-            center_lat = (custom_extent[0] + custom_extent[1]) / 2  # (s + n) / 2
-            center_lon = (custom_extent[2] + custom_extent[3]) / 2  # (w + e) / 2
-            site_candidates = find_nearest_radar_sites(center_lat, center_lon, limit=8)
-            site = site_candidates[0]
-            print(
-                f"[INFO] Custom extent active — auto-selected closest radar: {site} "
-                f"(fallback pool: {', '.join(site_candidates[:4])}{'...' if len(site_candidates) > 4 else ''})"
-            )
-
-        logo_path_to_use = LOGO_PATH
-        if parsed_styles:
-            lp = parsed_styles.get("logo_path")
-            if lp:
-                abs_lp = lp if os.path.isabs(lp) else os.path.join(BASE_DIR, lp)
-                if os.path.exists(abs_lp):
-                    logo_path_to_use = abs_lp
-
-        # Download archive files, trying nearby sites when custom extent is active.
-        data_dir = None
-        total_files = 0
-        downloaded = 0
-        resolved_product = product
-        selected_files = None
-        site_attempt_errors = []
-        thredds_fallback_used = False
-
-        if provider == "thredds":
-            # Direct THREDDS download — skip NODD entirely
-            try:
-                _now_utc = datetime.now(timezone.utc)
-                _thredds_lb = max(0.5, (_now_utc - parsed_from).total_seconds() / 3600)
-                _td, _tt, _ = radar_thredds_utils.download_radar_data(
-                    level,
-                    site,
-                    product,
-                    _thredds_lb,
-                    os.path.join(_CACHE_ROOT, "radar", "archive"),
-                    download_progress,
-                    latest_only=False,
-                    start_time=parsed_from,
-                    end_time=parsed_to,
-                )
-                if _tt > 0:
-                    data_dir = _td
-                    total_files = _tt
-                    source_used = "thredds"
-                    data_source = "ARCHIVE-THREDDS"
-            except Exception as _te:
-                print(f"[WARN] THREDDS archive download failed: {_te}")
-        else:
-            provider_attempts = [provider]
-            if provider == "gcp":
-                provider_attempts.append("aws")
-
-            for idx, candidate_site in enumerate(site_candidates, start=1):
-                candidate_error = None
-                for provider_try in provider_attempts:
-                    data_source = f"ARCHIVE-{provider_try.upper()}"
-                    for window_start, window_end in unique_windows:
-                        try:
-                            (
-                                candidate_dir,
-                                candidate_total,
-                                candidate_downloaded,
-                                candidate_product,
-                                candidate_selected_files,
-                            ) = radar_archive_utils.download_archive_data(
-                                level=level,
-                                station_id=candidate_site,
-                                product=product,
-                                date_from=window_start,
-                                date_to=window_end,
-                                base_dir=os.path.join(_CACHE_ROOT, "radar"),
-                                progress_callback=download_progress,
-                                provider=provider_try,
-                                # Archive single-frame behavior is handled by renderer
-                                # with closest-timestamp selection from downloaded files.
-                                latest_only=False,
-                            )
-                            if candidate_total > 0:
-                                data_dir = candidate_dir
-                                total_files = candidate_total
-                                downloaded = candidate_downloaded
-                                resolved_product = candidate_product
-                                selected_files = candidate_selected_files
-                                if custom_extent and idx > 1:
-                                    print(
-                                        f"[INFO] Closest radar lacked archive data. Using fallback site {candidate_site}"
-                                    )
-                                if provider_try != provider:
-                                    print(
-                                        f"[INFO] Requested source {provider.upper()} had no files; "
-                                        f"using {provider_try.upper()} fallback."
-                                    )
-                                source_used = provider_try
-                                site = candidate_site
-                                break
-                        except Exception as window_error:
-                            candidate_error = window_error
-
-                    if total_files > 0:
-                        break
-
-                    if provider_try == "gcp" and provider == "gcp":
-                        print(
-                            "[INFO] No GCP archive files found for this window; "
-                            "trying AWS fallback."
-                        )
-
-                if total_files > 0:
-                    break
-
-                if candidate_error is not None:
-                    site_attempt_errors.append(f"{candidate_site}: {candidate_error}")
-                    if len(site_candidates) > 1:
-                        print(
-                            f"[WARN] Radar site {candidate_site} unavailable: {candidate_error}"
-                        )
-                else:
-                    site_attempt_errors.append(f"{candidate_site}: no files")
-
-            # NODD exhausted — try THREDDS as final fallback
-            if total_files == 0:
-                try:
-                    _now_utc = datetime.now(timezone.utc)
-                    _thredds_lb = max(
-                        0.5, (_now_utc - parsed_from).total_seconds() / 3600
-                    )
-                    _td, _tt, _ = radar_thredds_utils.download_radar_data(
-                        level,
-                        site,
-                        product,
-                        _thredds_lb,
-                        os.path.join(_CACHE_ROOT, "radar", "archive"),
-                        download_progress,
-                        latest_only=False,
-                        start_time=parsed_from,
-                        end_time=parsed_to,
-                    )
-                    if _tt > 0:
-                        data_dir = _td
-                        total_files = _tt
-                        source_used = "thredds"
-                        data_source = "ARCHIVE-THREDDS"
-                        thredds_fallback_used = True
-                        print(
-                            "[INFO] NODD archive exhausted; THREDDS fallback succeeded."
-                        )
-                except Exception as _te:
-                    print(f"[WARN] THREDDS archive fallback failed: {_te}")
-
-        if total_files == 0:
-            if request_id in active_tasks:
-                del active_tasks[request_id]
-            attempted_sites = ", ".join(site_candidates)
-            details = (
-                " | ".join(site_attempt_errors[-3:]) if site_attempt_errors else ""
-            )
-            return {
-                "status": "warning",
-                "message": (
-                    "No archive files found for the specified date range. "
-                    f"Sites attempted: {attempted_sites}"
-                    + (f" ({details})" if details else "")
-                ),
-                "data_source": data_source,
-                "requested_source": requested_source,
-                "source_used": source_used,
-            }
-
-        layered_result = radar_archive_utils.generate_archive_layers(
-            level=level,
-            data_dir=data_dir,
-            product_label=resolved_product,
-            logo_file=logo_path_to_use,
-            station_id=site,
-            sm_speed=sm_speed,
-            sm_dir=sm_dir,
-            frames=frames,
-            custom_extent=custom_extent,
-            progress_callback=render_progress,
-            show_places=show_places,
-            style_config=parsed_styles,
-            selected_files=selected_files,
-            latest_only=latest_only,
-            target_time_utc=single_target_utc,
-            request_id=request_id,
-            user_tz=user_tz,
-        )
-
-        if request_id in active_tasks:
-            del active_tasks[request_id]
-
-        if not layered_result:
-            return {
-                "status": "error",
-                "message": "Failed to generate layered radar archive output.",
-                "data_source": data_source,
-                "requested_source": requested_source,
-                "source_used": source_used,
-            }
-
-        if render_mode == "layers":
-            basemap_path = layered_result.get("basemap_path")
-            static_overlay_path = layered_result.get("static_overlay_path")
-            legend_overlay_path = layered_result.get("legend_overlay_path")
-            counties_overlay_path = layered_result.get("counties_overlay_path")
-            states_overlay_path = layered_result.get("states_overlay_path")
-            rings_overlay_path = layered_result.get("rings_overlay_path")
-            frame_entries = layered_result.get("frames", [])
-            layer_dir = layered_result.get("layer_dir")
-            manifest = layered_result.get("manifest") or {}
-            map_extent = layered_result.get("map_extent")
-            ui_margin_bottom = layered_result.get("ui_margin_bottom")
-            map_axes_pos = layered_result.get("map_axes_pos")
-            map_projection = layered_result.get("map_projection")
-            extent_info = None
-            if isinstance(map_extent, (list, tuple)) and len(map_extent) == 4:
-                min_lon, max_lon, min_lat, max_lat = map_extent
-                try:
-                    extent_info = {
-                        "min_lon": float(min_lon),
-                        "max_lon": float(max_lon),
-                        "min_lat": float(min_lat),
-                        "max_lat": float(max_lat),
-                        "lon_span": float(max_lon) - float(min_lon),
-                        "lat_span": float(max_lat) - float(min_lat),
-                    }
-                except (TypeError, ValueError):
-                    extent_info = None
-            if extent_info is not None:
-                try:
-                    axes_text = (
-                        ",".join(f"{float(v):.3f}" for v in map_axes_pos)
-                        if isinstance(map_axes_pos, (list, tuple))
-                        else "n/a"
-                    )
-                except (TypeError, ValueError):
-                    axes_text = "n/a"
-                print(
-                    "[INFO] Layered extent "
-                    f"lon={extent_info['min_lon']:.3f}..{extent_info['max_lon']:.3f} "
-                    f"(span {extent_info['lon_span']:.3f}), "
-                    f"lat={extent_info['min_lat']:.3f}..{extent_info['max_lat']:.3f} "
-                    f"(span {extent_info['lat_span']:.3f}), "
-                    f"proj={map_projection or 'unknown'}, "
-                    f"ui_margin_bottom={float(ui_margin_bottom or 0.0):.3f}, "
-                    f"map_axes_pos=[{axes_text}]"
-                )
-            if not basemap_path or not frame_entries:
-                return {
-                    "status": "warning",
-                    "message": "No layered frames were generated for the requested range.",
-                    "data_source": data_source,
-                    "requested_source": requested_source,
-                    "source_used": source_used,
-                }
-
-            basemap_abs = os.path.normpath(basemap_path)
-            radar_root_abs = os.path.normpath(DIRS["radar"])
-            cache_root_abs = os.path.normpath(_CACHE_ROOT)
-            basemap_cache_root_abs = os.path.normpath(
-                os.path.join(BASE_DIR, "basemap_cache")
-            )
-
-            def _resolve_layer_url(abs_path: str | None):
-                if not abs_path:
-                    return None
-                norm_path = os.path.normpath(abs_path)
-                if norm_path.startswith(cache_root_abs):
-                    rel = os.path.relpath(norm_path, cache_root_abs).replace("\\", "/")
-                    return f"/cache/{rel}"
-                if norm_path.startswith(radar_root_abs):
-                    rel = os.path.relpath(norm_path, radar_root_abs).replace("\\", "/")
-                    return f"/img/{rel}"
-                if norm_path.startswith(basemap_cache_root_abs):
-                    rel = os.path.relpath(norm_path, basemap_cache_root_abs).replace(
-                        "\\", "/"
-                    )
-                    return f"/img/basemap_cache/{rel}"
-                return None
-
-            basemap_url = _resolve_layer_url(basemap_path)
-            if not basemap_url:
-                return {
-                    "status": "error",
-                    "message": "Layered basemap path is outside allowed static directories.",
-                    "data_source": data_source,
-                    "requested_source": requested_source,
-                    "source_used": source_used,
-                }
-            static_overlay_url = _resolve_layer_url(static_overlay_path)
-            legend_overlay_url = _resolve_layer_url(legend_overlay_path)
-
-            counties_overlay_url = _resolve_layer_url(counties_overlay_path)
-            states_overlay_url = _resolve_layer_url(states_overlay_path)
-            rings_overlay_url = _resolve_layer_url(rings_overlay_path)
-            frames_payload = []
-            for entry in frame_entries:
-                frame_path = entry.get("path")
-                if not frame_path:
-                    continue
-                frame_url = _resolve_layer_url(frame_path)
-                if not frame_url:
-                    continue
-                radar_url = _resolve_layer_url(entry.get("radar_path"))
-                alerts_url = _resolve_layer_url(entry.get("alerts_path"))
-                cities_url = _resolve_layer_url(entry.get("cities_path"))
-                counties_url = _resolve_layer_url(entry.get("counties_path"))
-                states_url = _resolve_layer_url(entry.get("states_path"))
-                rings_url = _resolve_layer_url(entry.get("rings_path"))
-                legend_url = _resolve_layer_url(entry.get("legend_path"))
-                hud_right_url = _resolve_layer_url(entry.get("hud_right_path"))
-                frames_payload.append(
-                    {
-                        "index": int(entry.get("index", len(frames_payload))),
-                        "url": frame_url,
-                        "radar_url": radar_url,
-                        "alerts_url": alerts_url,
-                        "cities_url": cities_url,
-                        "counties_url": counties_url,
-                        "states_url": states_url,
-                        "rings_url": rings_url,
-                        "legend_url": legend_url,
-                        "hud_right_url": hud_right_url,
-                        "timestamp_utc": entry.get("timestamp_utc", ""),
-                        "timestamp_local": entry.get("timestamp_local", ""),
-                    }
-                )
-
-            if not frames_payload:
-                return {
-                    "status": "warning",
-                    "message": "No layered frames were generated for the requested range.",
-                    "data_source": data_source,
-                    "requested_source": requested_source,
-                    "source_used": source_used,
-                }
-
-            layer_rel = None
-            if layer_dir:
-                layer_rel = _resolve_layer_url(layer_dir)
-
-            first_frame = frames_payload[0]
-            layers_payload = {
-                "basemap": basemap_url,
-                "radar": first_frame.get("radar_url"),
-                "alerts": first_frame.get("alerts_url"),
-                "cities": first_frame.get("cities_url"),
-                "counties": first_frame.get("counties_url") or counties_overlay_url,
-                "states": first_frame.get("states_url") or states_overlay_url,
-                "range_rings": first_frame.get("rings_url") or rings_overlay_url,
-                "legend": first_frame.get("legend_url")
-                or (f"/img/{legend_overlay_path}" if legend_overlay_path else None),
-                "hud_right": first_frame.get("hud_right_url"),
-            }
-            layers_payload = {k: v for k, v in layers_payload.items() if v}
-            layer_defs_payload = [
-                {
-                    "id": "radar",
-                    "label": "Radar Layer",
-                    "default_visible": True,
-                    "default_opacity": 1,
-                    "sort": 10,
-                },
-                {
-                    "id": "alerts",
-                    "label": "Alerts Layer",
-                    "default_visible": True,
-                    "default_opacity": 0.9,
-                    "sort": 20,
-                },
-                {
-                    "id": "cities",
-                    "label": "Cities Layer",
-                    "default_visible": True,
-                    "default_opacity": 1,
-                    "sort": 30,
-                },
-                {
-                    "id": "counties",
-                    "label": "County Lines Layer",
-                    "default_visible": True,
-                    "default_opacity": 1,
-                    "sort": 40,
-                },
-                {
-                    "id": "states",
-                    "label": "State Outlines Layer",
-                    "default_visible": True,
-                    "default_opacity": 1,
-                    "sort": 45,
-                },
-                {
-                    "id": "range_rings",
-                    "label": "Range Rings Layer",
-                    "default_visible": True,
-                    "default_opacity": 1,
-                    "sort": 50,
-                },
-            ]
-            layer_defs_payload = [
-                item for item in layer_defs_payload if item["id"] in layers_payload
-            ]
-
-            return {
-                "status": "success",
-                "message": "Radar archive layers generated."
-                + (
-                    " Note: THREDDS fallback used — data limited to recent scans only."
-                    if thredds_fallback_used
-                    else ""
-                ),
-                "image_url": frames_payload[0]["url"],
-                "basemap_url": basemap_url,
-                "static_overlay_url": static_overlay_url,
-                "legend_overlay_url": legend_overlay_url,
-                "frames": frames_payload,
-                "frame_count": len(frames_payload),
-                "layers_path": layer_rel,
-                "session_expires_utc": manifest.get("expires_utc"),
-                "output_mode": "layers",
-                "layers": layers_payload,
-                "layer_defs": layer_defs_payload,
-                "data_source": data_source,
-                "requested_source": requested_source,
-                "source_used": source_used,
-                "site_used": site,
-                "extent": extent_info,
-                "ui_margin_bottom": ui_margin_bottom,
-                "map_axes_pos": map_axes_pos,
-            }
-
-        # Video (MP4 export) mode has been removed.
-        return {
-            "status": "error",
-            "message": "Only 'layers' view mode is supported.",
-            "data_source": data_source,
-            "requested_source": requested_source,
-            "source_used": source_used,
-        }
-
-    except Exception as e:
-        import traceback
-
-        traceback.print_exc()
-        if request_id:
-            active_tasks[request_id] = {
-                "percent": 0,
-                "message": f"Error: {str(e)}",
-                "stage": "error",
-                "source": data_source if "data_source" in locals() else None,
-            }
-        return {
-            "status": "error",
-            "message": str(e),
-            "data_source": data_source,
-            "requested_source": requested_source,
-            "source_used": source_used,
-        }
-
 
 def get_satellite_latest(
     request_id: str,
@@ -6287,9 +5527,9 @@ def get_satellite_v2_catalog(
         import traceback
 
         print(
-            "[satellite-v2 tile] ERROR "
+            "[satellite-v2 catalog] ERROR "
             f"sat_id={sat_id} sector={sector} channel={channel} "
-            f"frame_key={frame_key} z={z} x={x} y={y}: {exc}",
+            f"hours={hours} max_frames={max_frames} refresh={refresh}: {exc}",
             flush=True,
         )
         traceback.print_exc()
@@ -6357,11 +5597,13 @@ def get_satellite_v2_tile(
 
     cache_status = str(tile_stats.get("cache_status") or "hit")
     source_label = _satellite_v2_tile_source_label(cache_status)
+    validate_ms = int(tile_stats.get("validate_elapsed_ms") or 0)
     print(
         "[satellite-v2 tile] "
         f"source={source_label} "
         f"cache_status={cache_status.upper()} "
         f"miss_reason={str(tile_stats.get('miss_reason') or 'none')} "
+        f"validate_ms={validate_ms} "
         f"elapsed_ms={int(tile_stats.get('elapsed_ms') or 0)} "
         f"sat_id={tile_stats.get('sat_id') or sat_id} "
         f"sector={tile_stats.get('sector') or sector} "

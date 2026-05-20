@@ -10690,6 +10690,24 @@
             _setReliability('rtma', `RTMA ${title}`, `NOAA ${frame.stream || _activeRtmaStream()}`, dataTsMs);
             _setTimestampSource('rtma', payload._fromPrerender ? 'overlay_meta_timestamp' : 'points_source_timestamp', dataTsMs);
             _setRtmaScrubberStatus(`${_rtmaScrubFrameIndex + 1} / ${_rtmaScrubFrames.length} frames.`);
+
+            // Prefetch next 2 frames in parallel into browser cache (fire-and-forget)
+            const prefetchCount = Math.min(2, _rtmaScrubFrames.length - _rtmaScrubFrameIndex - 1);
+            const prefetchPromises = [];
+            for (let i = 1; i <= prefetchCount; i++) {
+                const nextFrame = _rtmaScrubFrames[_rtmaScrubFrameIndex + i];
+                if (nextFrame?.image_url) {
+                    prefetchPromises.push(
+                        new Promise((resolve) => {
+                            const img = new Image();
+                            img.onload = resolve;
+                            img.onerror = resolve;
+                            img.src = apiUrl(nextFrame.image_url);
+                        })
+                    );
+                }
+            }
+            Promise.all(prefetchPromises).catch(() => {}); // Silent fail
         } catch (err) {
             if (!_canApplyRtmaScrubResponse(renderSeq)) return;
             console.error('[rtma scrub] Frame render error:', err);

@@ -1274,3 +1274,119 @@ def render_rtma_png(
     with open(out_path.replace(".png", "_meta.json"), "w", encoding="utf-8") as handle:
         json.dump(meta, handle)
     return out_path, actual_bounds, meta
+
+
+def _render_rtma_png_standalone(
+    grib_path: str,
+    product: str,
+    crop_extent: list[float],
+    out_path: str,
+    cache_root: str | None = None,
+    source: RtmaSource | None = None,
+    region: str | None = None,
+    stream: str | None = None,
+) -> tuple[str, list[float], dict]:
+    """Standalone RTMA PNG renderer using PIL for ~3-5x faster rendering."""
+    import json
+    from PIL import Image
+    import numpy as np
+    import matplotlib.colors as mcolors
+
+    config = get_product_config(product)
+
+    # Extract data (same as matplotlib version)
+    if (
+        product == "temperature_change_24h"
+        and cache_root is not None
+        and source is not None
+        and region is not None
+        and stream is not None
+    ):
+        data, latitude, longitude, source_timestamp = _load_rtma_product_grid(
+            cache_root,
+            source,
+            region,
+            stream,
+            product,
+        )
+        valid_time = source_timestamp
+    else:
+        data_array, latitude, longitude, valid_time = _extract_dataset(
+            grib_path, config["var"]
+        )
+        data = np.asarray(getattr(data_array, "values", data_array), dtype=float)
+        if config.get("convert"):
+            data = config["convert"](data)
+        data = np.ma.masked_invalid(data)
+
+    data, latitude, longitude = _crop_grid(data, latitude, longitude, crop_extent)
+
+    lat_arr = np.asarray(latitude, dtype=float)
+    lon_arr = np.asarray(longitude, dtype=float)
+    if lat_arr.ndim == 2:
+        data, actual_bounds = _warp_to_latlon_grid(data, lat_arr, lon_arr)
+    else:
+        lon_arr = np.where(lon_arr > 180.0, lon_arr - 360.0, lon_arr)
+        _dlat = abs(float(lat_arr[1] - lat_arr[0])) if lat_arr.size > 1 else 0.01
+        _dlon = abs(float(lon_arr[1] - lon_arr[0])) if lon_arr.size > 1 else 0.01
+        actual_bounds = [
+            float(np.nanmin(lon_arr) - 0.5 * _dlon),
+            float(np.nanmax(lon_arr) + 0.5 * _dlon),
+            float(np.nanmin(lat_arr) - 0.5 * _dlat),
+            float(np.nanmax(lat_arr) + 0.5 * _dlat),
+        ]
+
+    from mrms.mrms_utils import warp_array_to_mercator
+
+    if lat_arr.ndim == 2:
+        lat_1d = np.linspace(
+            float(np.nanmin(lat_arr)), float(np.nanmax(lat_arr)), data.shape[0]
+        )
+        lon_1d = np.linspace(
+            float(np.nanmin(lon_arr)), float(np.nanmax(lon_arr)), data.shape[1]
+        )
+    else:
+        lat_1d = lat_arr
+        lon_1d = lon_arr
+
+    data, actual_bounds = warp_array_to_mercator(data, lat_1d, lon_1d)
+
+    # Apply colormap and norm using PIL pipeline
+    cmap = _resolve_render_colormap(config).copy()
+    cmap.set_bad((0, 0, 0, 0))
+    norm = mcolors.Normalize(vmin=config["vmin"], vmax=config["vmax"])
+
+    # Normalize data and apply colormap
+    masked = np.ma.getmaskarray(data)
+    normalized = norm(data)
+    rgb = cmap(normalized)
+
+    # Convert to 8-bit RGBA
+    rgba = (rgb * 255).astype(np.uint8)
+
+    # Set masked/invalid pixels to transparent (alpha=0)
+    invalid = masked | np.isnan(data)
+    if np.any(invalid):
+        rgba[invalid, 3] = 0
+
+    # Create PIL image from RGBA array
+    img = Image.fromarray(rgba, mode="RGBA")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    img.save(out_path, format="PNG", optimize=False)
+
+    # Write sidecars
+    with open(out_path.replace(".png", "_bounds.json"), "w", encoding="utf-8") as f:
+        json.dump(actual_bounds, f)
+
+    meta = {
+        "full_name": config["label"],
+        "units": config["units"],
+        "vmin": config["vmin"],
+        "vmax": config["vmax"],
+        "legend": build_rtma_legend(config),
+        "timestamp": source_timestamp if product == "temperature_change_24h" and source is not None else _serialize_timestamp(valid_time),
+    }
+    with open(out_path.replace(".png", "_meta.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f)
+
+    return out_path, actual_bounds, meta
