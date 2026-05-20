@@ -8797,7 +8797,7 @@
             className: '',
             html: `<div style="width:${size}px;height:${size}px;">${svg}</div>`,
             iconSize: [size, size],
-            iconAnchor: [Math.round(size / 2), Math.round(size / 2)],
+            iconAnchor: [Math.round(size / 2), size],
         });
     }
 
