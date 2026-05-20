@@ -46,12 +46,13 @@ from datetime import datetime, timezone
 # first so the cache is useful as quickly as possible).
 # ---------------------------------------------------------------------------
 _PRELOAD_PRODUCTS: list[str] = [
+    # Reflectivity (critical radar overlay for UI)
+    "Refl_BaseQC",  # Base Reflectivity QC - Primary radar overlay
     # Precipitation
     "PrecipFlag",
     "PrecipRate",
-    # Reflectivity
+    # Reflectivity variants
     "Refl_HSR",  # Hybrid Scan Reflectivity
-    "Refl_BaseQC",  # Base Reflectivity QC
     # Rotation tracks
     "RotationTrack_LL_60min",
     "RotationTrack_ML_60min",
@@ -197,10 +198,9 @@ def _backfill_product(
     verbose: bool = False,
 ) -> tuple[int, int, int]:
     """Backfill all frames for one product.  Returns (ok, skipped, failed)."""
+    from concurrent.futures import ProcessPoolExecutor, as_completed
     from datetime import timedelta
-
     from mrms.mrms_nodd_utils import list_mrms_files
-
     from datetime import datetime as _dt
 
     end_time = _dt.now(tz=timezone.utc)
@@ -223,33 +223,48 @@ def _backfill_product(
         print(f"  [FAIL list] {product}: no files found in window")
         return 0, 0, 1
 
-    print(f"  {len(frames)} frame(s) found — rendering...")
+    print(f"  {len(frames)} frame(s) found — rendering ({os.cpu_count()} workers)...")
     ok = skipped = failed = 0
     t0 = _time.perf_counter()
 
-    for idx, (s3_key, file_dt) in enumerate(frames, 1):
-        result = _render_frame(
-            product,
-            s3_key,
-            file_dt,
-            product_cache_dir,
-            force=force,
-            verbose=verbose,
-        )
-        if result == "ok":
-            ok += 1
-        elif result == "skip":
-            skipped += 1
-        else:
-            failed += 1
+    # Render frames in parallel using ProcessPoolExecutor
+    max_workers = min(os.cpu_count() or 1, 4)
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(
+                _render_frame,
+                product,
+                s3_key,
+                file_dt,
+                product_cache_dir,
+                force=force,
+                verbose=verbose,
+            ): idx
+            for idx, (s3_key, file_dt) in enumerate(frames, 1)
+        }
 
-        if idx % 10 == 0 or idx == len(frames):
-            pct = idx / len(frames) * 100
-            print(
-                f"  [progress] {idx}/{len(frames)} ({pct:.0f}%) "
-                f"ok={ok} skip={skipped} fail={failed} "
-                f"elapsed={_time.perf_counter() - t0:.0f}s"
-            )
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                result = future.result()
+                if result == "ok":
+                    ok += 1
+                elif result == "skip":
+                    skipped += 1
+                else:
+                    failed += 1
+            except Exception as exc:
+                failed += 1
+                print(f"    [FAIL exception] frame {idx}: {exc}")
+
+            total = idx
+            if total % 10 == 0 or total == len(frames):
+                pct = total / len(frames) * 100
+                print(
+                    f"  [progress] {total}/{len(frames)} ({pct:.0f}%) "
+                    f"ok={ok} skip={skipped} fail={failed} "
+                    f"elapsed={_time.perf_counter() - t0:.0f}s"
+                )
 
     # Single prune pass now that all frames are written.
     kn = _keep_n(product)

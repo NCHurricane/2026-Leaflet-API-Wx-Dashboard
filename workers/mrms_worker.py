@@ -21,6 +21,7 @@ _MRMS_CACHE = os.path.join(_CACHE_ROOT, "mrms")
 
 # User-selected high-value products to keep hot in cache.
 _PREWARM_PRODUCTS = [
+    "Refl_BaseQC",  # Base Reflectivity (QC) - Primary radar overlay
     "Refl_HSR",  # Reflectivity - Hybrid Scan
     "PrecipFlag",  # Surface Precip Type
     "QPE_MS2_01H",  # QPE Multisensor Pass2 1-hour
@@ -30,7 +31,7 @@ _PREWARM_PRODUCTS = [
 ]
 
 # Module-level active product state (also mirrored in app.state for API access)
-_active_product: str = "PrecipFlag"
+_active_product: str = "Refl_BaseQC"
 
 # Skip if a successful refresh happened within the last ~11 min
 # (75% of the 15 min Task Scheduler interval).
@@ -329,17 +330,14 @@ def _render_mrms_png_standalone(
     crop_extent: list,
     out_path: str,
 ) -> None:
-    """Standalone MRMS PNG renderer — mirrors main._render_mrms_png without
-    importing FastAPI/main so it is safe to call from the worker process."""
+    """Standalone MRMS PNG renderer using PIL for ~3-5x faster rendering."""
     import json
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+    from PIL import Image
+    import numpy as np
     import matplotlib.colors as mcolors
 
     from mrms.legend_utils import build_mrms_overlay_meta, mask_mrms_data
-    from mrms.mrms_utils import read_mrms_grib2
+    from mrms.mrms_utils import read_mrms_grib2, warp_array_to_mercator
     from config.mrms_config import MRMS_PRODUCTS, MRMS_COLORMAPS
 
     prod_info = MRMS_PRODUCTS[product]
@@ -347,10 +345,7 @@ def _render_mrms_png_standalone(
     vmin = prod_info.get("vmin", 0)
     vmax = prod_info.get("vmax", 100)
 
-    west, east, south, north = crop_extent
-
     data, meta = read_mrms_grib2(grib_path, product, crop_extent=crop_extent)
-
     data = mask_mrms_data(data, prod_info)
 
     lat = meta.get("latitude")
@@ -358,48 +353,40 @@ def _render_mrms_png_standalone(
     if lat is None or lon is None:
         raise ValueError("GRIB2 read did not return lat/lon metadata")
 
-    import numpy as _np_mrms
+    data, actual_bounds = warp_array_to_mercator(data, np.asarray(lat), np.asarray(lon))
 
-    _lat = _np_mrms.asarray(lat)
-    _lon = _np_mrms.asarray(lon)
-
+    # Extract colormap and norm
     cmap_obj = MRMS_COLORMAPS.get(cmap_key)
     if isinstance(cmap_obj, tuple):
         cmap = cmap_obj[0]
-        norm = (
-            cmap_obj[1]
-            if len(cmap_obj) > 1
-            else mcolors.Normalize(vmin=vmin, vmax=vmax)
-        )
+        norm = cmap_obj[1] if len(cmap_obj) > 1 else mcolors.Normalize(vmin=vmin, vmax=vmax)
     elif cmap_obj is not None:
         cmap = cmap_obj
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
     else:
-        cmap = plt.get_cmap("viridis")
+        # Fallback to viridis if colormap not found
+        from matplotlib import cm
+        cmap = cm.get_cmap("viridis")
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
 
-    from mrms.mrms_utils import warp_array_to_mercator
+    # Apply normalization and colormap
+    masked = np.ma.getmaskarray(data)
+    normalized = norm(data)
+    rgb = cmap(normalized)
 
-    data, actual_bounds = warp_array_to_mercator(data, _lat, _lon)
+    # Convert to 8-bit RGBA
+    rgba = (rgb * 255).astype(np.uint8)
 
-    h, w = data.shape
-    dpi = 100
-    fig, ax = plt.subplots(1, 1, figsize=(w / dpi, h / dpi), dpi=dpi)
-    ax.set_position([0, 0, 1, 1])
-    ax.set_axis_off()
-    ax.imshow(
-        data,
-        origin="upper",
-        cmap=cmap,
-        norm=norm,
-        aspect="auto",
-        interpolation="nearest",
-    )
-    fig.patch.set_alpha(0)
-    ax.patch.set_alpha(0)
-    fig.savefig(out_path, dpi=dpi, bbox_inches=None, transparent=True, format="png")
-    plt.close(fig)
+    # Set masked/invalid pixels to transparent (alpha=0)
+    invalid = masked | np.isnan(data)
+    if np.any(invalid):
+        rgba[invalid, 3] = 0
 
+    # Create PIL image from RGBA array
+    img = Image.fromarray(rgba, mode="RGBA")
+    img.save(out_path, format="PNG", optimize=False)
+
+    # Write sidecars
     sidecar = out_path.replace(".png", "_bounds.json")
     with open(sidecar, "w") as f:
         json.dump(actual_bounds, f)

@@ -1891,6 +1891,71 @@
                 margin-top: 6px;
             }
 
+            .wx-animate-slider-container {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .wx-animate-slider-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 0.7rem;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+            }
+
+            .wx-animate-slider-value {
+                color: var(--wx-text);
+                font-weight: 700;
+            }
+
+            .wx-animate-slider {
+                width: 100%;
+                height: 6px;
+                appearance: none;
+                background: linear-gradient(to right, #1e293b 0%, #1e293b 100%);
+                border: none;
+                border-radius: 3px;
+                outline: none;
+                cursor: pointer;
+            }
+
+            .wx-animate-slider::-webkit-slider-thumb {
+                appearance: none;
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: var(--wx-cyan);
+                cursor: pointer;
+                box-shadow: 0 0 4px rgba(34, 232, 255, 0.5);
+            }
+
+            .wx-animate-slider::-moz-range-thumb {
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: var(--wx-cyan);
+                border: none;
+                cursor: pointer;
+                box-shadow: 0 0 4px rgba(34, 232, 255, 0.5);
+            }
+
+            .wx-animate-slider::-moz-range-track {
+                background: transparent;
+                border: none;
+            }
+
+            .wx-animate-slider-labels {
+                display: flex;
+                justify-content: space-between;
+                font-size: 0.65rem;
+                color: var(--wx-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.02em;
+            }
+
             .wx-animate-presets {
                 display: flex;
                 gap: 4px;
@@ -3730,6 +3795,19 @@
                             <span>Radar Quality Index</span>
                             <input class="mrms-product-check" type="checkbox" value="RadarQualityIndex">
                         </div>
+                        <div id="mrms-animate-window" class="wx-animate-window" style="display:none;">
+                            <div class="wx-animate-slider-container">
+                                <div class="wx-animate-slider-header">
+                                    <span style="color:#94a3b8;">LOOKBACK HOURS</span>
+                                    <span id="mrms-animate-slider-value" class="wx-animate-slider-value">1H</span>
+                                </div>
+                                <input id="mrms-animate-slider" type="range" min="1" max="12" step="0.5" value="1" class="wx-animate-slider">
+                                <div class="wx-animate-slider-labels">
+                                    <span>1H</span>
+                                    <span>12H</span>
+                                </div>
+                            </div>
+                        </div>
                         <span id="weather-mrms-status" class="wx-small"></span>
                         <button id="weather-refresh-mrms" type="button">Refresh</button>
                     </div>
@@ -3772,13 +3850,16 @@
                             Auto-update <span id="wx-radar-auto-update-status" style="color:#94a3b8;"></span>
                         </label>
                         <div id="rtma-animate-window" class="wx-animate-window" style="display:none;">
-                            <label class="wx-small" style="color:#94a3b8; display:block; margin-bottom:3px;">Animation
-                                Window</label>
-                            <div class="wx-animate-presets">
-                                <button class="wx-animate-window-btn active" type="button" data-hours="3">3h</button>
-                                <button class="wx-animate-window-btn" type="button" data-hours="6">6h</button>
-                                <button class="wx-animate-window-btn" type="button" data-hours="12">12h</button>
-                                <button class="wx-animate-window-btn" type="button" data-hours="24">24h</button>
+                            <div class="wx-animate-slider-container">
+                                <div class="wx-animate-slider-header">
+                                    <span style="color:#94a3b8;">LOOKBACK HOURS</span>
+                                    <span id="rtma-animate-slider-value" class="wx-animate-slider-value">3H</span>
+                                </div>
+                                <input id="rtma-animate-slider" type="range" min="1" max="12" step="0.5" value="3" class="wx-animate-slider">
+                                <div class="wx-animate-slider-labels">
+                                    <span>1H</span>
+                                    <span>12H</span>
+                                </div>
                             </div>
                         </div>
                         <div id="wx-archive-actions" style="display:none; margin-top:8px;">

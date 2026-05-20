@@ -1352,7 +1352,10 @@
             onEachFeature: (feat, layer) => {
                 layer.on('click', (e) => {
                     if (_stormTrackDrawMode) return;
-                    if (e?.latlng) _openAlertsPagerAt(e.latlng);
+                    if (e?.latlng) {
+                        _setRegionAlertLocationState();
+                        _openAlertsPagerAt(e.latlng);
+                    }
                 });
                 // Throttled hover — PIP is expensive at CONUS scale with many polygons.
                 // Click is immediate; hover is deduplicated within _HOVER_THROTTLE_MS window.
@@ -2610,6 +2613,7 @@
                 const feat = ctx.features?.[ctx.index];
                 const center = _alertFeatureCenterLatLng(feat) || latlng;
                 if (!center) return;
+                _setRegionAlertLocationState();
                 map.flyTo(center, 9, { duration: 0.9 });
                 _ensureRadarOverlayOn();
             });
@@ -5286,7 +5290,7 @@
         if (regionSelect) regionSelect.value = 'CONUS';
         if (_radarScrubMode) _exitRadarScrubMode(false);
         // Keep national IEM radar overlay workflow consistent for Home + CONUS paths.
-        _ensureIemRadarOverlayEnabled();
+        _ensureMrmsRadarOverlayEnabled();
         // Recompute tab control visibility (including Animate button) after clearing site.
         _updateTypeSections();
         fitRegion('CONUS');
@@ -5307,10 +5311,13 @@
         if (!sentinelOpt) {
             sentinelOpt = document.createElement('option');
             sentinelOpt.value = '__ALERT_LOCATION__';
-            sentinelOpt.disabled = true;
-            sentinelOpt.hidden = true;
-            sentinelOpt.textContent = 'Choose Location';
-            regionSelect.insertBefore(sentinelOpt, regionSelect.firstChild);
+            sentinelOpt.textContent = 'Alert Selected';
+            const conusOpt = regionSelect.querySelector('option[value="CONUS"]');
+            if (conusOpt?.nextSibling) {
+                regionSelect.insertBefore(sentinelOpt, conusOpt.nextSibling);
+            } else {
+                regionSelect.appendChild(sentinelOpt);
+            }
         }
         regionSelect.value = '__ALERT_LOCATION__';
     }
@@ -5318,8 +5325,6 @@
     function _setRegionRadarSiteSelectedState() {
         const regionSelect = byId('weather-region');
         if (!regionSelect) return;
-        const currentValue = String(regionSelect.value || '').toUpperCase();
-        if (currentValue !== 'CONUS') return;
 
         let sentinelOpt = regionSelect.querySelector('option[value="__RADAR_SITE_SELECTED__"]');
         if (!sentinelOpt) {
@@ -5344,7 +5349,7 @@
         target.dispatchEvent(new Event('change'));
     }
 
-    function _ensureIemRadarOverlayEnabled() {
+    function _ensureMrmsRadarOverlayEnabled() {
         const radarOverlayToggle = byId('weather-alerts-radar');
         if (!radarOverlayToggle) return;
         if (!radarOverlayToggle.checked) {
@@ -5352,10 +5357,10 @@
             radarOverlayToggle.dispatchEvent(new Event('change'));
             return;
         }
-        _syncIemRadarOverlay();
+        _syncMrmsRadarOverlay();
     }
 
-    function _ensureIemRadarOverlayDisabled() {
+    function _ensureMrmsRadarOverlayDisabled() {
         const radarOverlayToggle = byId('weather-alerts-radar');
         if (!radarOverlayToggle) return;
         if (!radarOverlayToggle.checked) return;
@@ -5586,187 +5591,126 @@
         if (el) el.textContent = message || '';
     }
 
-    const _IEM_RADAR_OVERLAY_ALLOWED_TYPES = new Set(['current', 'alerts', 'spc', 'rtma', 'radar']);
-    const _IEM_RADAR_OVERLAY_FRAMES = 12;
-    const _IEM_RADAR_OVERLAY_STEP_MIN = 5;
-    const _IEM_RADAR_OVERLAY_FRAME_MS = 500;
-    const _IEM_RADAR_OVERLAY_PAUSE_MS = 900;
-    let _iemRadarOverlayLoop = null;
+    const _MRMS_RADAR_OVERLAY_ALLOWED_TYPES = new Set(['current', 'alerts', 'spc', 'rtma', 'radar']);
+    const _MRMS_RADAR_REFRESH_INTERVAL_MS = 120000; // 2 minutes (MRMS update cadence)
+    let _mrmsRadarOverlayState = null;
+    let _mrmsRadarOverlayStarting = false;
 
     function _activeWeatherType() {
         const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'];
         return allTypes.find((type) => _isTypeEnabled(type)) || '';
     }
 
-    function _iemRadarOverlayAllowedInContext() {
+    function _mrmsRadarOverlayAllowedInContext() {
         if (_archiveMode || _rtmaScrubMode || _mrmsScrubMode || _radarScrubMode) {
             return false;
         }
-        return _IEM_RADAR_OVERLAY_ALLOWED_TYPES.has(_activeWeatherType());
+        return _MRMS_RADAR_OVERLAY_ALLOWED_TYPES.has(_activeWeatherType());
     }
 
-    function _iemRadarOverlayCacheBust() {
-        const bucket = _IEM_RADAR_OVERLAY_STEP_MIN * 60 * 1000;
-        return Math.floor(Date.now() / bucket);
-    }
-
-    function _iemRadarOverlayFrameOffsets() {
-        const offsets = [];
-        for (let i = _IEM_RADAR_OVERLAY_FRAMES - 1; i >= 0; i -= 1) {
-            offsets.push(i * _IEM_RADAR_OVERLAY_STEP_MIN);
+    async function _mrmsRadarOverlayFetchImageUrl() {
+        try {
+            const resp = await fetch(apiUrl('/api/data/mrms?product=Refl_BaseQC'));
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            return data?.image_url ? apiUrl(data.image_url) : null;
+        } catch (_) {
+            return null;
         }
-        return offsets;
     }
 
-    function _iemRadarOverlayTileUrl(mins, cacheBust = null) {
-        const cb = Number.isFinite(cacheBust) ? cacheBust : _iemRadarOverlayCacheBust();
-        const slug = mins === 0
-            ? 'nexrad-n0q-900913'
-            : `nexrad-n0q-m${String(mins).padStart(2, '0')}m-900913`;
-        return `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/${slug}/{z}/{x}/{y}.png?_cb=${cb}`;
-    }
-
-    function _iemRadarOverlayBuildLayerForState(state, mins, opacity = 0) {
-        return L.tileLayer(_iemRadarOverlayTileUrl(mins, state.cacheBust), {
-            opacity,
-            zIndex: 300,
-            attribution: '&copy; Iowa State Mesonet / NWS',
-        });
-    }
-
-    function _iemRadarOverlayStop() {
-        const s = _iemRadarOverlayLoop;
+    function _mrmsRadarOverlayStop() {
+        const s = _mrmsRadarOverlayState;
         if (!s) return;
-        if (s.cycleTimer) clearTimeout(s.cycleTimer);
         if (s.refreshTimer) clearInterval(s.refreshTimer);
-        if (s.swapTimer) clearTimeout(s.swapTimer);
-        const layers = Array.isArray(s.layers) ? s.layers : [s.currentLayer, s.transitionLayer];
-        layers.forEach((lyr) => {
+        if (s.layer && map.hasLayer(s.layer)) {
             try {
-                if (lyr && map.hasLayer(lyr)) map.removeLayer(lyr);
+                map.removeLayer(s.layer);
             } catch (_) {
                 // ignore layer removal errors
             }
-        });
-        _iemRadarOverlayLoop = null;
-    }
-
-    function _iemRadarOverlayShowFrame(state, frameIdx) {
-        const offsets = state.offsets;
-        const clampedIdx = ((frameIdx % offsets.length) + offsets.length) % offsets.length;
-        const mins = offsets[clampedIdx];
-        const nextLayer = state.layers?.[clampedIdx];
-        if (!nextLayer) return;
-
-        const previousIdx = Number.isFinite(state.activeIdx) ? state.activeIdx : -1;
-        const previousLayer = state.layers?.[previousIdx] || null;
-
-        if (previousLayer && previousLayer !== nextLayer) {
-            previousLayer.setOpacity(0);
         }
-        nextLayer.setOpacity(state.opacity);
-
-        state.currentLayer = nextLayer;
-        state.activeIdx = clampedIdx;
-        state.activeOffsetMinutes = mins;
-        state.transitionLayer = null;
+        _mrmsRadarOverlayState = null;
     }
 
-    function _iemRadarOverlayPrimeLayers(state) {
-        state.layers = state.offsets.map((mins) => {
-            const layer = _iemRadarOverlayBuildLayerForState(state, mins, 0);
-            layer.addTo(map);
-            layer.setOpacity(0);
-            return layer;
-        });
+    async function _mrmsRadarOverlayRefresh() {
+        const s = _mrmsRadarOverlayState;
+        if (!s || !s.layer) return;
+        if (!_mrmsRadarOverlayAllowedInContext()) {
+            _mrmsRadarOverlayStop();
+            return;
+        }
+        const newUrl = await _mrmsRadarOverlayFetchImageUrl();
+        if (newUrl) s.layer.setUrl(newUrl);
     }
 
-    function _iemRadarOverlayRefreshLayerUrls(state) {
-        const nextCb = _iemRadarOverlayCacheBust();
-        if (!Number.isFinite(nextCb) || nextCb === state.cacheBust) return;
-        state.cacheBust = nextCb;
-        state.layers.forEach((layer, idx) => {
-            const mins = state.offsets[idx];
-            if (!layer || !Number.isFinite(mins)) return;
-            layer.setUrl(_iemRadarOverlayTileUrl(mins, state.cacheBust));
-        });
-    }
-
-    function _iemRadarOverlayStart(initialOpacity) {
-        _iemRadarOverlayStop();
-        const opacity = Number.isFinite(initialOpacity) ? initialOpacity : 0.6;
-        const state = {
-            offsets: _iemRadarOverlayFrameOffsets(),
-            opacity,
-            cacheBust: _iemRadarOverlayCacheBust(),
-            idx: 0,
-            activeIdx: -1,
-            activeOffsetMinutes: null,
-            currentLayer: null,
-            transitionLayer: null,
-            layers: [],
-            cycleTimer: null,
-            refreshTimer: null,
-            swapTimer: null,
-        };
-
-        _iemRadarOverlayPrimeLayers(state);
-
-        const tick = () => {
-            if (!_iemRadarOverlayLoop) return;
-            const s = _iemRadarOverlayLoop;
-            _iemRadarOverlayShowFrame(s, s.idx);
-            const hold = s.idx === s.offsets.length - 1
-                ? _IEM_RADAR_OVERLAY_PAUSE_MS
-                : _IEM_RADAR_OVERLAY_FRAME_MS;
-            s.idx = (s.idx + 1) % s.offsets.length;
-            s.cycleTimer = setTimeout(tick, hold);
-        };
-
-        state.refreshTimer = setInterval(() => {
-            if (!_iemRadarOverlayLoop) return;
-            if (!_iemRadarOverlayAllowedInContext()) {
-                _iemRadarOverlayStop();
-                return;
-            }
-            const s = _iemRadarOverlayLoop;
-            _iemRadarOverlayRefreshLayerUrls(s);
-            _iemRadarOverlayShowFrame(s, s.activeIdx);
-        }, IEM_RADAR_OVERLAY_REFRESH_MS);
-
-        _iemRadarOverlayLoop = state;
-        _iemRadarOverlayShowFrame(state, state.idx);
-        state.idx = (state.idx + 1) % state.offsets.length;
-        state.cycleTimer = setTimeout(tick, _IEM_RADAR_OVERLAY_FRAME_MS);
-    }
-
-    function _iemRadarOverlaySetOpacity(value) {
-        if (!_iemRadarOverlayLoop) return;
+    function _mrmsRadarOverlaySetOpacity(value) {
+        const s = _mrmsRadarOverlayState;
+        if (!s || !s.layer) return;
         const op = parseFloat(value);
         if (!Number.isFinite(op)) return;
-        _iemRadarOverlayLoop.opacity = op;
-        if (_iemRadarOverlayLoop.currentLayer) {
-            _iemRadarOverlayLoop.currentLayer.setOpacity(op);
+        s.opacity = op;
+        s.layer.setOpacity(op);
+    }
+
+    async function _mrmsRadarOverlayStart(initialOpacity) {
+        if (_mrmsRadarOverlayStarting || _mrmsRadarOverlayState) return; // prevent race conditions
+        _mrmsRadarOverlayStarting = true;
+        _mrmsRadarOverlayStop();
+
+        try {
+            const opacity = Number.isFinite(initialOpacity) ? initialOpacity : 0.6;
+            const bounds = [[21.0, -130.0], [52.0, -60.0]]; // [[south, west], [north, east]]
+
+            const imageUrl = await _mrmsRadarOverlayFetchImageUrl();
+            if (!imageUrl) {
+                console.warn('[MRMS Overlay] Failed to fetch initial image URL');
+                return;
+            }
+
+            const layer = L.imageOverlay(imageUrl, bounds, {
+                opacity,
+                zIndex: 300,
+                alt: 'MRMS Refl_BaseQC',
+                interactive: false,
+            });
+            layer.addTo(map);
+
+            const state = {
+                layer,
+                opacity,
+                refreshTimer: null,
+            };
+
+            state.refreshTimer = setInterval(() => {
+                _mrmsRadarOverlayRefresh();
+            }, _MRMS_RADAR_REFRESH_INTERVAL_MS);
+
+            _mrmsRadarOverlayState = state;
+        } finally {
+            _mrmsRadarOverlayStarting = false;
         }
     }
 
-    function _syncIemRadarOverlay() {
+    function _syncMrmsRadarOverlay() {
         const cb = byId('weather-alerts-radar');
         const opacitySlider = byId('weather-alerts-radar-opacity');
         if (!cb || !cb.checked) {
-            _iemRadarOverlayStop();
+            _mrmsRadarOverlayStop();
             return;
         }
-        if (!_iemRadarOverlayAllowedInContext()) {
-            _iemRadarOverlayStop();
+        if (!_mrmsRadarOverlayAllowedInContext()) {
+            _mrmsRadarOverlayStop();
             return;
         }
         const opacity = parseFloat(opacitySlider?.value ?? 0.6);
-        if (!_iemRadarOverlayLoop) {
-            _iemRadarOverlayStart(opacity);
+        if (!_mrmsRadarOverlayState && !_mrmsRadarOverlayStarting) {
+            _mrmsRadarOverlayStart(opacity); // async, but fire-and-forget
             return;
         }
-        _iemRadarOverlaySetOpacity(opacity);
+        if (_mrmsRadarOverlayState) {
+            _mrmsRadarOverlaySetOpacity(opacity);
+        }
     }
 
     function _ensureRadarBackdropLayer() {
@@ -6070,7 +6014,7 @@
                         }
                         const sel = byId('weather-radar-site');
                         if (sel) sel.value = siteId;
-                        _ensureIemRadarOverlayDisabled();
+                        _ensureMrmsRadarOverlayDisabled();
                         _setRegionRadarSiteSelectedState();
                         _updateTypeSections();
                         _syncRadarSiteSelectionHighlight();
@@ -6210,7 +6154,7 @@
             map.removeLayer(radarBackdropLayer);
             radarBackdropLayer = null;
         }
-        _iemRadarOverlayStop();
+        _mrmsRadarOverlayStop();
 
         _setRadarStatus('Radar overlays cleared.');
         _setRtmaScrubberStatus('Radar overlays cleared.');
@@ -6841,12 +6785,10 @@
         _setRtmaScrubberStatus('');
         byId('weather-rtma-load-scrubber')?.classList.remove('active');
         byId('weather-mode-current')?.classList.add('active');
-        const animWin = byId('rtma-animate-window');
-        if (animWin) animWin.style.display = 'none';
-        const exitPresets = animWin?.querySelector('.wx-animate-presets');
-        if (exitPresets) exitPresets.style.display = '';
-        const exitLabel = animWin?.querySelector('label.wx-small');
-        if (exitLabel) exitLabel.style.display = '';
+        const rtmaWin = byId('rtma-animate-window');
+        const mrmsWin = byId('mrms-animate-window');
+        if (rtmaWin) rtmaWin.style.display = 'none';
+        if (mrmsWin) mrmsWin.style.display = 'none';
         _showRadarAutoUpdateRow(false);
         _updateRadarNextUpdateCountdown();
         if (shouldRefresh) loadRadarLiveLatest();
@@ -6885,8 +6827,8 @@
         _setRadarStatus(`Loading ${site} ${product} radar animation frames...`);
         _updateRtmaScrubberUi();
 
-        const windowBtn = document.querySelector('#rtma-animate-window .wx-animate-window-btn.active');
-        const maxHours = Math.max(1, Number(windowBtn ? windowBtn.dataset.hours : 3) || 3);
+        const rtmaSlider = document.querySelector('#rtma-animate-slider');
+        const maxHours = Math.max(1, rtmaSlider ? Number(rtmaSlider.value) : 3);
         const multiSites = _radarMultiSites.size > 1 ? [..._radarMultiSites] : [];
 
         try {
@@ -7092,8 +7034,8 @@
         }
 
         try {
-            const windowBtn = document.querySelector('#rtma-animate-window .wx-animate-window-btn.active');
-            const maxHours = Math.max(1, Number(windowBtn ? windowBtn.dataset.hours : 3) || 3);
+            const rtmaSlider = document.querySelector('#rtma-animate-slider');
+            const maxHours = Math.max(1, rtmaSlider ? Number(rtmaSlider.value) : 3);
 
             if (_radarScrubIsTimeMode) {
                 const sites = _radarScrubFramesBySite.size
@@ -7221,10 +7163,9 @@
             } else if (site) {
                 loadRadarLiveLatest();
             } else {
-                // National Composite — refresh IEM overlay tiles via cache-bust.
-                if (_iemRadarOverlayLoop) {
-                    _iemRadarOverlayRefreshLayerUrls(_iemRadarOverlayLoop);
-                    _iemRadarOverlayShowFrame(_iemRadarOverlayLoop, _iemRadarOverlayLoop.activeIdx);
+                // National Composite — refresh MRMS overlay via cache-bust.
+                if (_mrmsRadarOverlayState) {
+                    _mrmsRadarOverlayRefresh();
                     _setRadarAutoUpdateStatus('updated', 4000);
                 }
             }
@@ -8710,6 +8651,7 @@
         if (!satelliteEnabled && satelliteOverlay && map.hasLayer(satelliteOverlay)) map.removeLayer(satelliteOverlay);
         if (!radarEnabled && radarBackdropLayer && map.hasLayer(radarBackdropLayer)) map.removeLayer(radarBackdropLayer);
         if (!radarEnabled && radarSiteLayer && map.hasLayer(radarSiteLayer)) map.removeLayer(radarSiteLayer);
+        if (!radarEnabled && radarSiteHighlightLayer && map.hasLayer(radarSiteHighlightLayer)) map.removeLayer(radarSiteHighlightLayer);
         if (!rtmaEnabled && rtmaOverlay && map.hasLayer(rtmaOverlay)) map.removeLayer(rtmaOverlay);
         if (!rtmaEnabled && rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
         if (!rtmaEnabled && rtmaPointLayer && map.hasLayer(rtmaPointLayer)) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
@@ -10507,8 +10449,10 @@
         _setRtmaScrubberStatus('');
         byId('weather-rtma-load-scrubber')?.classList.remove('active');
         byId('weather-mode-current')?.classList.add('active');
-        const animWin = byId('rtma-animate-window');
-        if (animWin) animWin.style.display = 'none';
+        const rtmaWin = byId('rtma-animate-window');
+        const mrmsWin = byId('mrms-animate-window');
+        if (rtmaWin) rtmaWin.style.display = 'none';
+        if (mrmsWin) mrmsWin.style.display = 'none';
         if (shouldRefresh) {
             refreshActiveLayers();
         }
@@ -10574,8 +10518,10 @@
         _setRtmaScrubberStatus('');
         byId('weather-rtma-load-scrubber')?.classList.remove('active');
         byId('weather-mode-current')?.classList.add('active');
-        const animWin = byId('rtma-animate-window');
-        if (animWin) animWin.style.display = 'none';
+        const rtmaWin = byId('rtma-animate-window');
+        const mrmsWin = byId('mrms-animate-window');
+        if (rtmaWin) rtmaWin.style.display = 'none';
+        if (mrmsWin) mrmsWin.style.display = 'none';
         if (shouldRefresh) {
             refreshActiveLayers();
         }
@@ -10787,8 +10733,8 @@
         _updateRtmaScrubberUi();
 
         const streamMax = RTMA_STREAM_MAX_HOURS[stream] || 24;
-        const windowBtn = document.querySelector('#rtma-animate-window .wx-animate-window-btn.active');
-        const maxHours = Math.min(windowBtn ? Number(windowBtn.dataset.hours) : streamMax, streamMax);
+        const rtmaSlider = document.querySelector('#rtma-animate-slider');
+        const maxHours = Math.min(rtmaSlider ? Number(rtmaSlider.value) : streamMax, streamMax);
         const cutoffMs = Date.now() - maxHours * 60 * 60 * 1000;
 
         try {
@@ -10935,12 +10881,23 @@
             _setTimestampSource('mrms', 'overlay_frame_timestamp', tsMs);
             _setRtmaScrubberStatus(`${_mrmsScrubFrameIndex + 1} / ${_mrmsScrubFrames.length} frames.`);
 
-            // Prefetch next frame image into browser cache (fire-and-forget)
-            const nextFrame = _mrmsScrubFrames[_mrmsScrubFrameIndex + 1];
-            if (nextFrame?.image_url) {
-                const prefetch = new Image();
-                prefetch.src = apiUrl(nextFrame.image_url);
+            // Prefetch next 2 frames in parallel into browser cache (fire-and-forget)
+            const prefetchCount = Math.min(2, _mrmsScrubFrames.length - _mrmsScrubFrameIndex - 1);
+            const prefetchPromises = [];
+            for (let i = 1; i <= prefetchCount; i++) {
+                const nextFrame = _mrmsScrubFrames[_mrmsScrubFrameIndex + i];
+                if (nextFrame?.image_url) {
+                    prefetchPromises.push(
+                        new Promise((resolve) => {
+                            const img = new Image();
+                            img.onload = resolve;
+                            img.onerror = resolve;
+                            img.src = apiUrl(nextFrame.image_url);
+                        })
+                    );
+                }
             }
+            Promise.all(prefetchPromises).catch(() => {}); // Silent fail
         } catch (err) {
             if (!_canApplyMrmsScrubResponse(renderSeq)) return;
             setStatus(`MRMS scrubber error: ${err.message}`);
@@ -10969,8 +10926,8 @@
         _setScrubberControlsEnabled(false);
         _updateRtmaScrubberUi();
 
-        const windowBtn = document.querySelector('#rtma-animate-window .wx-animate-window-btn.active');
-        const maxHours = Math.max(1, Number(windowBtn ? windowBtn.dataset.hours : 3) || 3);
+        const mrmsSlider = document.querySelector('#mrms-animate-slider');
+        const maxHours = Math.max(1, mrmsSlider ? Number(mrmsSlider.value) : 1);
         const cutoffMs = Date.now() - maxHours * 60 * 60 * 1000;
 
         try {
@@ -11076,7 +11033,7 @@
     function enterArchiveMode() {
         _archiveMode = true;
         // Disable live radar overlay — it would show current radar against historical data
-        _iemRadarOverlayStop();
+        _mrmsRadarOverlayStop();
         const radarCb = byId('weather-alerts-radar');
         if (radarCb && radarCb.checked) radarCb.dispatchEvent(new Event('change'));
         if (radarCb) radarCb.disabled = true;
@@ -11185,7 +11142,7 @@
 
     function exitArchiveMode() {
         stopScrubberPlay();
-        _iemRadarOverlayStop();
+        _mrmsRadarOverlayStop();
         const radarCb = byId('weather-alerts-radar');
         if (radarCb) radarCb.disabled = false;
         _archiveMode = false;
@@ -11330,7 +11287,10 @@
                 style: alertStyle,
                 onEachFeature(feat, layer) {
                     layer.on('click', (e) => {
-                        if (e?.latlng) _openAlertsPagerAt(e.latlng);
+                        if (e?.latlng) {
+                            _setRegionAlertLocationState();
+                            _openAlertsPagerAt(e.latlng);
+                        }
                     });
                 },
             });
@@ -12286,7 +12246,7 @@
                 _resetTransientInteractiveUiForTabChange();
                 _resetTabControlsToDefaults(type);
                 if (type === 'radar' && !_radarTabVisitedOnce) {
-                    _ensureIemRadarOverlayEnabled();
+                    _ensureMrmsRadarOverlayEnabled();
                     _radarTabVisitedOnce = true;
                 }
                 fitRegion(byId('weather-region')?.value || 'CONUS');
@@ -12314,7 +12274,7 @@
             } else {
                 refreshActiveLayers();
             }
-            _syncIemRadarOverlay();
+            _syncMrmsRadarOverlay();
         });
     });
 
@@ -12523,35 +12483,61 @@
         byId('weather-mode-current')?.classList.remove('active');
         byId('weather-mode-archive')?.classList.remove('active');
         byId('weather-rtma-load-scrubber')?.classList.add('active');
-        const animWin = byId('rtma-animate-window');
-        if (animWin) animWin.style.display = '';
+
+        // Hide both animate windows first
+        const rtmaWin = byId('rtma-animate-window');
+        const mrmsWin = byId('mrms-animate-window');
+        if (rtmaWin) rtmaWin.style.display = 'none';
+        if (mrmsWin) mrmsWin.style.display = 'none';
+
         if (_isTypeEnabled('radar')) {
             _restartRadarAutoRefreshInterval();
             _updateRadarNextUpdateCountdown();
-            const radarPresets = animWin?.querySelector('.wx-animate-presets');
-            if (radarPresets) radarPresets.style.display = 'none';
-            const radarLabel = animWin?.querySelector('label.wx-small');
-            if (radarLabel) radarLabel.style.display = 'none';
+            if (rtmaWin) rtmaWin.style.display = '';
             loadRadarScrubberFrames();
             return;
         }
         if (_isTypeEnabled('mrms')) {
+            if (mrmsWin) mrmsWin.style.display = '';
             loadMrmsScrubberFrames();
             return;
         }
+        if (rtmaWin) rtmaWin.style.display = '';
         loadRtmaScrubberFrames();
     });
 
-    // Animate window pill buttons
-    document.querySelectorAll('.wx-animate-window-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.wx-animate-window-btn').forEach((b) => b.classList.remove('active'));
-            btn.classList.add('active');
-            if (_radarScrubMode) loadRadarScrubberFrames();
+    // RTMA slider handler
+    const rtmaSlider = byId('rtma-animate-slider');
+    if (rtmaSlider) {
+        rtmaSlider.addEventListener('input', () => {
+            const displayValue = Number(rtmaSlider.value);
+            const displayText = displayValue === Math.floor(displayValue) ?
+                Math.floor(displayValue) + 'H' :
+                displayValue + 'H';
+            const valueDisplay = byId('rtma-animate-slider-value');
+            if (valueDisplay) valueDisplay.textContent = displayText;
+        });
+        rtmaSlider.addEventListener('change', () => {
             if (_rtmaScrubMode) loadRtmaScrubberFrames();
+            if (_radarScrubMode) loadRadarScrubberFrames();
+        });
+    }
+
+    // MRMS slider handler
+    const mrmsSlider = byId('mrms-animate-slider');
+    if (mrmsSlider) {
+        mrmsSlider.addEventListener('input', () => {
+            const displayValue = Number(mrmsSlider.value);
+            const displayText = displayValue === Math.floor(displayValue) ?
+                Math.floor(displayValue) + 'H' :
+                displayValue + 'H';
+            const valueDisplay = byId('mrms-animate-slider-value');
+            if (valueDisplay) valueDisplay.textContent = displayText;
+        });
+        mrmsSlider.addEventListener('change', () => {
             if (_mrmsScrubMode) loadMrmsScrubberFrames();
         });
-    });
+    }
 
     byId('weather-rtma-show-values')?.addEventListener('change', () => {
         if (!_isTypeEnabled('rtma')) return;
@@ -12806,25 +12792,25 @@
         if (opacityLabel) opacityLabel.style.display = this.checked ? '' : 'none';
         if (opacitySlider) opacitySlider.style.display = this.checked ? '' : 'none';
 
-        _syncIemRadarOverlay();
+        _syncMrmsRadarOverlay();
 
-        if (this.checked && !_iemRadarOverlayAllowedInContext()) {
+        if (this.checked && !_mrmsRadarOverlayAllowedInContext()) {
             setStatus('Radar overlay is available on Current, Alerts, SPC, RTMA, and Radar tabs only.');
         }
 
         if (_isTypeEnabled('radar') && !_activeRadarSite()) {
-            if (this.checked && _iemRadarOverlayAllowedInContext()) {
-                _setRadarStatus('National Composite overlay (IEM).');
-                setStatus('Radar tab: national animated radar overlay active.');
+            if (this.checked && _mrmsRadarOverlayAllowedInContext()) {
+                _setRadarStatus('National Composite overlay (MRMS Refl_BaseQC).');
+                setStatus('Radar tab: national composite MRMS overlay active.');
             } else {
-                _setRadarStatus('Radar overlay is off (IEM only mode).');
-                setStatus('Radar tab: IEM overlay is off.');
+                _setRadarStatus('Radar overlay is off.');
+                setStatus('Radar tab: MRMS overlay is off.');
             }
         }
     });
 
     byId('weather-alerts-radar-opacity')?.addEventListener('input', function () {
-        _iemRadarOverlaySetOpacity(this.value);
+        _mrmsRadarOverlaySetOpacity(this.value);
     });
 
     byId('weather-alerts-nowcoast')?.addEventListener('change', function () {
@@ -12879,12 +12865,19 @@
         if (!_activeRadarSite()) {
             _setActiveWeatherType('radar');
             _clearRadarSiteAndZoomConus();
-            _ensureIemRadarOverlayEnabled();
+            _ensureMrmsRadarOverlayEnabled();
             _updateTypeSections();
             _syncRadarSiteSelectionHighlight();
             return;
         }
-        _ensureIemRadarOverlayDisabled();
+        // Zoom to selected site location
+        const siteId = _activeRadarSite();
+        const coords = _radarSiteCoords.get(siteId);
+        if (coords && _isTypeEnabled('radar')) {
+            const [lat, lon] = coords;
+            map.flyTo([lat, lon], Math.max(map.getZoom(), 9), { duration: 0.6 });
+        }
+        _ensureMrmsRadarOverlayDisabled();
         _setRegionRadarSiteSelectedState();
         _updateTypeSections();
         _syncRadarSiteSelectionHighlight();
@@ -13056,6 +13049,7 @@
                 const feat = _activeAlertsPopup?.features?.[_activeAlertsPopup?.index || 0];
                 const center = _alertFeatureCenterLatLng(feat) || _activeAlertsPopup?.latlng || null;
                 if (!center) return;
+                _setRegionAlertLocationState();
                 map.flyTo(center, Math.max(map.getZoom(), 9), { duration: 0.9 });
                 map.once('moveend', () => {
                     _openAlertsPagerAt(center);
@@ -13133,7 +13127,7 @@
         _syncRightSidebarLayers();
         _setViewerTimestamp(null);
         refreshActiveLayers();
-        _syncIemRadarOverlay();
+        _syncMrmsRadarOverlay();
         _startReliabilityTicker();
     }
 

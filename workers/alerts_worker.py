@@ -48,8 +48,7 @@ def run_alerts_worker(force: bool = False) -> None:
 
         # Fetch and enrich full features.
         fetch_start = time.time()
-        features, source = fetch_active_alerts_with_source(
-            state=None, source="nws")
+        features, source = fetch_active_alerts_with_source(state=None, source="nws")
         enrich_start = time.time()
 
         _enrich_alert_features_geometry(features)
@@ -67,8 +66,7 @@ def run_alerts_worker(force: bool = False) -> None:
 
         # Create and write simplified display-low variant.
         simplify_start = time.time()
-        display_features, simplify_metrics = _create_display_low_features(
-            features)
+        display_features, simplify_metrics = _create_display_low_features(features)
         simplify_elapsed = time.time() - simplify_start
 
         display_payload = {
@@ -79,8 +77,7 @@ def run_alerts_worker(force: bool = False) -> None:
             "_simplification_metrics": simplify_metrics,
             "features": display_features,
         }
-        CACHE_FILE_DISPLAY_LOW.write_text(
-            json.dumps(display_payload), encoding="utf-8")
+        CACHE_FILE_DISPLAY_LOW.write_text(json.dumps(display_payload), encoding="utf-8")
 
         # Write legacy backward-compatible cache (full geometry).
         CACHE_FILE.write_text(json.dumps(full_payload), encoding="utf-8")
@@ -111,13 +108,17 @@ def run_alerts_worker(force: bool = False) -> None:
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Run the alerts worker once.")
-    parser.add_argument("--force", action="store_true",
-                        help="Bypass freshness gate.")
-    parser.add_argument("--log-to-file", action="store_true",
-                        help="Redirect stdout/stderr to logs/scheduled/alerts.log (for headless task runs).")
+    parser.add_argument("--force", action="store_true", help="Bypass freshness gate.")
+    parser.add_argument(
+        "--log-to-file",
+        action="store_true",
+        help="Redirect stdout/stderr to logs/scheduled/alerts.log (for headless task runs).",
+    )
     args = parser.parse_args()
     if args.log_to_file:
         from workers._freshness import redirect_stdio_to_log
+
         redirect_stdio_to_log("alerts")
     run_alerts_worker(force=args.force)
