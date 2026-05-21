@@ -1031,11 +1031,9 @@
     function alertStyle(feat) {
         const event = feat?.properties?.event || '';
         const color = ALERT_COLORS[event] || ALERT_DEFAULT;
-        // Z-order: Tornado > Severe Thunderstorm > Flash Flood > others
-        let zIndex = 200; // default for all other alerts
-        if (event === 'Flash Flood Warning') zIndex = 220;
-        if (event === 'Severe Thunderstorm Warning') zIndex = 240;
-        if (event === 'Tornado Warning') zIndex = 260;
+        // Z-order based on ALERT_PRIORITY: priority 1 = z-index 399, priority 101 = z-index 299
+        const priority = ALERT_PRIORITY[event] || 200;
+        const zIndex = 400 - priority;
         return { color, weight: 1.5, fillColor: color, fillOpacity: alertsOpacity * 0.5, opacity: alertsOpacity, zIndex };
     }
 
@@ -1363,8 +1361,14 @@
                 // Click is immediate; hover is deduplicated within _HOVER_THROTTLE_MS window.
                 // Use mousemove so the tooltip recomputes as the cursor crosses overlapping
                 // polygons (e.g. a Severe Tstorm Warning sitting inside a Tornado Watch).
-                layer.on('mousemove', _makeThrottledHoverHandler(() => feat, () => layer));
-                layer.on('mouseout', () => layer.closeTooltip());
+                layer.on('mousemove', (e) => {
+                    layer.bringToFront();
+                    _makeThrottledHoverHandler(() => feat, () => layer)(e);
+                });
+                layer.on('mouseout', () => {
+                    layer.bringToBack();
+                    layer.closeTooltip();
+                });
                 // Pulse high-priority polygons.
                 if (ALERT_PULSE_EVENTS.has(feat?.properties?.event || '')) {
                     layer.on('add', () => layer.getElement?.()?.classList.add('wx-alert-pulse'));
@@ -3220,6 +3224,7 @@
             buildDroughtLegend(enabledCats, stateStats, stateCode);
 
             const tsMs = _resolveDataTimestampMs(date + 'T12:00:00Z');
+            _setViewerTimestamp(tsMs);
             _setReliability('drought', 'USDM Drought', 'USDM/NDMC', tsMs);
             _setTimestampSource('drought', 'usdm_valid_date', tsMs);
             if (statusEl) statusEl.textContent = `Valid: ${date}`;
@@ -12198,6 +12203,16 @@
         }
     }
 
+    // Helper function to show/hide network filters based on region
+    function _updateNetworkFiltersVisibility(region) {
+        const filtersContainer = byId('weather-network-filters');
+        const filtersTitle = byId('weather-network-filters-title');
+        const isWorldOrConus = region === 'WORLD' || region === 'CONUS';
+
+        if (filtersContainer) filtersContainer.style.display = isWorldOrConus ? 'none' : '';
+        if (filtersTitle) filtersTitle.style.display = isWorldOrConus ? 'none' : '';
+    }
+
     byId('weather-region')?.addEventListener('change', (e) => {
         const nextRegion = String(e.target.value || '').toUpperCase();
         const regionSelect = byId('weather-region');
@@ -12209,6 +12224,9 @@
             const alertSentinel = regionSelect?.querySelector('option[value="__ALERT_LOCATION__"]');
             if (alertSentinel) alertSentinel.remove();
         }
+
+        _updateNetworkFiltersVisibility(nextRegion);
+
         if (nextRegion === 'CONUS') {
             _clearRadarSiteAndZoomConus();
             return;
@@ -12271,8 +12289,12 @@
         }
     });
 
+    // Initialize network filters visibility based on current region
+    const initialRegion = (byId('weather-region')?.value || 'CONUS').toUpperCase();
+    _updateNetworkFiltersVisibility(initialRegion);
+
     // Add event listeners to network filter checkboxes
-    document.querySelectorAll('.weather-network-filter').forEach(checkbox => {
+    document.querySelectorAll('.weather-network-filter input[type="checkbox"]').forEach(checkbox => {
         checkbox.addEventListener('change', (e) => {
             _networkFilters[e.target.value] = e.target.checked;
             _saveNetworkFilters();

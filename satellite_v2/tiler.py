@@ -96,7 +96,7 @@ def _render_tile_to_target(
             write_negative_tile_marker(target)
             os.unlink(tmp_name)
             return "invalid"
-        image.save(tmp_name, format="PNG", optimize=True)
+        image.save(tmp_name, format="PNG", optimize=False)
         if not is_valid_tile_file(Path(tmp_name)):
             if target_was_invalid:
                 target.unlink(missing_ok=True)
@@ -251,7 +251,7 @@ def _render_warm_zoom_canvas_task(task: dict[str, Any]) -> dict[str, int]:
         )
         os.close(fd)
         try:
-            tile_img.save(tmp_name, format="PNG", optimize=True)
+            tile_img.save(tmp_name, format="PNG", optimize=False)
             if not is_valid_tile_file(Path(tmp_name)):
                 if target_was_invalid:
                     target.unlink(missing_ok=True)

@@ -83,3 +83,16 @@ tools/install_tasks.ps1
 tools/install_tasks.ps1
 *.md
 tools/install_tasks.ps1
+.aider.conf.yml
+.gitignore
+.aider.input.history
+.aider.model.metadata.json
+
+#AIDER
+.ai-index/
+.aider.tags.cache.v4/
+.ai-index
+
+#TOOLs
+tools/
+.aider*

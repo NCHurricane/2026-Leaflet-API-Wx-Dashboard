@@ -48,6 +48,12 @@ def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, value))
 
 
+# NetCDF dataset memory cache (keyed by file path, avoid re-reading from disk)
+_NETCDF_CACHE: dict[str, tuple[xr.Dataset, int]] = {}
+_NETCDF_CACHE_LOCK = threading.RLock()
+_NETCDF_CACHE_MAX = _env_int("WX_SATELLITE_V2_NETCDF_CACHE_SIZE", 16, 1, 64)
+
+
 _RENDERER_CACHE_MAX = _env_int("WX_SATELLITE_V2_RENDERER_CACHE_SIZE", 8, 0, 64)
 _RENDERER_CACHE_LOCK = threading.RLock()
 _RENDERER_CACHE: OrderedDict[tuple[object, ...], "SatelliteTileRenderer"] = (
@@ -318,32 +324,58 @@ def _get_cached_renderer(
         return renderer
 
 
+def _load_netcdf_dataset(source_file: str | Path) -> xr.Dataset:
+    """Load NetCDF dataset from cache or disk, reusing opened datasets to avoid re-reads."""
+    source_path = Path(source_file).resolve()
+    cache_key = str(source_path)
+    file_mtime = int(source_path.stat().st_mtime_ns)
+
+    with _NETCDF_CACHE_LOCK:
+        cached = _NETCDF_CACHE.get(cache_key)
+        if cached is not None:
+            cached_dataset, cached_mtime = cached
+            if cached_mtime == file_mtime:
+                return cached_dataset
+
+        dataset = xr.open_dataset(source_path, engine="netcdf4", mask_and_scale=True)
+        _NETCDF_CACHE[cache_key] = (dataset, file_mtime)
+
+        if len(_NETCDF_CACHE) > _NETCDF_CACHE_MAX:
+            old_key, (old_ds, _) = _NETCDF_CACHE.popitem(last=False)
+            try:
+                old_ds.close()
+            except Exception:
+                pass
+
+        return dataset
+
+
 def _load_source_grid(source_file: str | Path) -> SourceGrid:
-    with xr.open_dataset(source_file, engine="netcdf4", mask_and_scale=True) as dataset:
-        cmi_var = "CMI" if "CMI" in dataset else None
-        if cmi_var is None and "Sectorized_CMI" in dataset:
-            cmi_var = "Sectorized_CMI"
-        if cmi_var is None:
-            raise ValueError(f"Source file is missing CMI variable: {source_file}")
-        if "x" not in dataset or "y" not in dataset:
-            raise ValueError(
-                f"Source file is missing x/y scan coordinates: {source_file}"
-            )
-        if "goes_imager_projection" not in dataset:
-            raise ValueError(
-                f"Source file is missing GOES projection metadata: {source_file}"
-            )
+    dataset = _load_netcdf_dataset(source_file)
+    cmi_var = "CMI" if "CMI" in dataset else None
+    if cmi_var is None and "Sectorized_CMI" in dataset:
+        cmi_var = "Sectorized_CMI"
+    if cmi_var is None:
+        raise ValueError(f"Source file is missing CMI variable: {source_file}")
+    if "x" not in dataset or "y" not in dataset:
+        raise ValueError(
+            f"Source file is missing x/y scan coordinates: {source_file}"
+        )
+    if "goes_imager_projection" not in dataset:
+        raise ValueError(
+            f"Source file is missing GOES projection metadata: {source_file}"
+        )
 
-        projection = dataset["goes_imager_projection"].attrs
-        height = float(projection["perspective_point_height"])
-        lon_origin = float(projection["longitude_of_projection_origin"])
-        semi_major = float(projection["semi_major_axis"])
-        semi_minor = float(projection["semi_minor_axis"])
-        sweep = str(projection.get("sweep_angle_axis", "x"))
+    projection = dataset["goes_imager_projection"].attrs
+    height = float(projection["perspective_point_height"])
+    lon_origin = float(projection["longitude_of_projection_origin"])
+    semi_major = float(projection["semi_major_axis"])
+    semi_minor = float(projection["semi_minor_axis"])
+    sweep = str(projection.get("sweep_angle_axis", "x"))
 
-        x_values = np.asarray(dataset["x"].values, dtype=np.float64) * height
-        y_values = np.asarray(dataset["y"].values, dtype=np.float64) * height
-        cmi = np.asarray(dataset[cmi_var].values, dtype=np.float32)
+    x_values = np.asarray(dataset["x"].values, dtype=np.float64) * height
+    y_values = np.asarray(dataset["y"].values, dtype=np.float64) * height
+    cmi = np.asarray(dataset[cmi_var].values, dtype=np.float32)
 
     if cmi.ndim != 2:
         raise ValueError(f"CMI variable must be 2D: {source_file}")
@@ -372,31 +404,31 @@ def _load_source_grid(source_file: str | Path) -> SourceGrid:
 
 def _load_source_raster(source_file: str | Path) -> SourceRaster:
     """Load a GOES NetCDF source file into a SourceRaster for rasterio reprojection."""
-    with xr.open_dataset(source_file, engine="netcdf4", mask_and_scale=True) as dataset:
-        cmi_var = "CMI" if "CMI" in dataset else None
-        if cmi_var is None and "Sectorized_CMI" in dataset:
-            cmi_var = "Sectorized_CMI"
-        if cmi_var is None:
-            raise ValueError(f"Source file is missing CMI variable: {source_file}")
-        if "x" not in dataset or "y" not in dataset:
-            raise ValueError(
-                f"Source file is missing x/y scan coordinates: {source_file}"
-            )
-        if "goes_imager_projection" not in dataset:
-            raise ValueError(
-                f"Source file is missing GOES projection metadata: {source_file}"
-            )
+    dataset = _load_netcdf_dataset(source_file)
+    cmi_var = "CMI" if "CMI" in dataset else None
+    if cmi_var is None and "Sectorized_CMI" in dataset:
+        cmi_var = "Sectorized_CMI"
+    if cmi_var is None:
+        raise ValueError(f"Source file is missing CMI variable: {source_file}")
+    if "x" not in dataset or "y" not in dataset:
+        raise ValueError(
+            f"Source file is missing x/y scan coordinates: {source_file}"
+        )
+    if "goes_imager_projection" not in dataset:
+        raise ValueError(
+            f"Source file is missing GOES projection metadata: {source_file}"
+        )
 
-        projection = dataset["goes_imager_projection"].attrs
-        height = float(projection["perspective_point_height"])
-        lon_origin = float(projection["longitude_of_projection_origin"])
-        semi_major = float(projection["semi_major_axis"])
-        semi_minor = float(projection["semi_minor_axis"])
-        sweep = str(projection.get("sweep_angle_axis", "x"))
+    projection = dataset["goes_imager_projection"].attrs
+    height = float(projection["perspective_point_height"])
+    lon_origin = float(projection["longitude_of_projection_origin"])
+    semi_major = float(projection["semi_major_axis"])
+    semi_minor = float(projection["semi_minor_axis"])
+    sweep = str(projection.get("sweep_angle_axis", "x"))
 
-        x_values = np.asarray(dataset["x"].values, dtype=np.float64) * height
-        y_values = np.asarray(dataset["y"].values, dtype=np.float64) * height
-        cmi = np.asarray(dataset[cmi_var].values, dtype=np.float32)
+    x_values = np.asarray(dataset["x"].values, dtype=np.float64) * height
+    y_values = np.asarray(dataset["y"].values, dtype=np.float64) * height
+    cmi = np.asarray(dataset[cmi_var].values, dtype=np.float32)
 
     if cmi.ndim != 2:
         raise ValueError(f"CMI variable must be 2D: {source_file}")

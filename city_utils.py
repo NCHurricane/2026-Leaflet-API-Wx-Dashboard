@@ -1,15 +1,5 @@
-"""
-Shared city plotting utilities for the Weather Dashboard.
-
-Provides a single, configurable ``plot_cities`` function with collision
-detection, data loading with caching, and density filtering — replacing five
-near-duplicate implementations across surface, satellite, radar, MRMS,
-lightning, and alerts modules.
-"""
-
 import os
 import json
-
 import cartopy.crs as ccrs
 import matplotlib.patheffects as PathEffects
 
@@ -32,7 +22,7 @@ def load_cities(filename="us-cities.json"):
 
     Supports two formats:
 
-    * **dict** — ``{"CityName": [lat, lon]}`` or ``{"CityName": [lat, lon, align]}``
+    * **dict** — ``{"CityName": [lat, lon]}`` or ``{"CityName": [lat, lon, align]}
     * **list** — ``[{"city": "Name", "latitude": ..., "longitude": ..., "rank": ...}, ...]``
 
     Returns:

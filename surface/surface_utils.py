@@ -466,6 +466,15 @@ def _fetch_world_current_observations():
     # Keep network taxonomy aligned with the existing frontend filters.
     out["network"] = "ASOS"
 
+    # Filter out stations with placeholder/invalid coordinates
+    # Aviation Weather uses -99.99, -99.99 for stations with unknown locations
+    valid_coords = (
+        (out["latitude"].notna()) & (out["longitude"].notna()) &
+        (out["latitude"].abs() <= 90) & (out["longitude"].abs() <= 180) &
+        (out["latitude"] != -99.99) & (out["longitude"] != -99.99)
+    )
+    out = out[valid_coords].copy()
+
     return out
 
 

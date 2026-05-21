@@ -36,7 +36,7 @@ from datetime import datetime, timedelta, timezone
 import matplotlib
 import numpy as np
 
-from main import _SURFACE_PRODUCTS, _build_surface_stations
+from main_old import _SURFACE_PRODUCTS, _build_surface_stations
 from surface import surface_utils
 from workers import surface_worker
 

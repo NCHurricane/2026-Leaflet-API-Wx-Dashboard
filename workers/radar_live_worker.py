@@ -8,7 +8,10 @@ overlay cache schema.
 from __future__ import annotations
 
 import math
+import multiprocessing
+import os
 import shutil
+import time
 import zlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -178,6 +181,18 @@ def _frame_dt_from_radar(radar, file_path: Path) -> datetime | None:
     return _parse_dt_from_filename(file_path)
 
 
+def _frame_dt_from_radar_file_lazy(file_path: Path) -> datetime | None:
+    """Extract frame timestamp from file path without fully reading radar data."""
+    dt = _parse_dt_from_filename(file_path)
+    if dt:
+        return dt
+    try:
+        radar = _read_radar("Level 3", str(file_path))
+        return _frame_dt_from_radar(radar, file_path)
+    except Exception:
+        return None
+
+
 def _field_for_product(
     level: str, product_code: str, available_fields: list[str]
 ) -> str | None:
@@ -252,11 +267,20 @@ def _render_overlay_png(
     bounds: list[float],
     out_path: Path,
     product_code: str,
+    profile: bool = False,
 ) -> bool:
+    from config.radar_config import LIVE_RADAR_FIGURE_SIZE_INCHES, LIVE_RADAR_RENDER_DPI
+
     try:
         import pyart
 
-        fig = plt.figure(figsize=(8, 8), dpi=150)
+        t_start = time.time() if profile else None
+
+        fig_size = float(LIVE_RADAR_FIGURE_SIZE_INCHES or 10)
+        dpi = int(LIVE_RADAR_RENDER_DPI or 150)
+        fig = plt.figure(figsize=(fig_size, fig_size), dpi=dpi)
+        t_fig = time.time() if profile else None
+
         ax = fig.add_axes([0.0, 0.0, 1.0, 1.0], projection=ccrs.PlateCarree())
         fig.patch.set_alpha(0.0)
         ax.patch.set_alpha(0.0)
@@ -279,6 +303,7 @@ def _render_overlay_png(
             invalid = ~np.isfinite(field_data) | (field_data <= -31.5)
 
         radar.fields[field_name]["data"] = np.ma.masked_where(invalid, field_data)
+        t_mask = time.time() if profile else None
 
         display = pyart.graph.RadarMapDisplay(radar)
         from config.radar_colortable_utils import get_radar_colortable as _get_ct
@@ -291,6 +316,8 @@ def _render_overlay_png(
         vmin = _vmin
         vmax = _vmax
         sweep = _best_sweep(radar, field_name)
+        t_sweep = time.time() if profile else None
+
         display.plot_ppi_map(
             field_name,
             sweep=sweep,
@@ -310,12 +337,27 @@ def _render_overlay_png(
             edgecolors="face",
             linewidths=0,
         )
+        t_plot = time.time() if profile else None
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(
-            str(out_path), format="png", dpi=150, transparent=True, pad_inches=0
+            str(out_path), format="png", dpi=dpi, transparent=True, pad_inches=0
         )
+        t_save = time.time() if profile else None
+
         plt.close(fig)
+        t_close = time.time() if profile else None
+
+        if profile and t_start:
+            print(f"[PROFILE] Render {out_path.name}:")
+            print(f"  Figure setup: {(t_fig - t_start)*1000:.1f}ms")
+            print(f"  Data masking: {(t_mask - t_fig)*1000:.1f}ms")
+            print(f"  Sweep select: {(t_sweep - t_mask)*1000:.1f}ms")
+            print(f"  PPI plot: {(t_plot - t_sweep)*1000:.1f}ms")
+            print(f"  Save PNG: {(t_save - t_plot)*1000:.1f}ms")
+            print(f"  Close fig: {(t_close - t_save)*1000:.1f}ms")
+            print(f"  TOTAL: {(t_close - t_start)*1000:.1f}ms")
+
         return out_path.exists() and out_path.stat().st_size > 0
     except Exception as exc:
         print(f"[radar_live_worker] render failed: {type(exc).__name__}: {exc}")
@@ -324,6 +366,46 @@ def _render_overlay_png(
         except Exception:
             pass
         return False
+
+
+def _render_single_frame_worker(
+    src_file_path: str,
+    level: str,
+    product_code: str,
+    bounds: list[float],
+    temp_render_path: str,
+) -> tuple[bool, str, str]:
+    """Worker function for parallel frame rendering. Returns (success, source_key, frame_key or error)."""
+    try:
+        src_file = Path(src_file_path)
+        source_key = src_file.name
+
+        radar = _read_radar(level, str(src_file))
+        available_fields = list(getattr(radar, "fields", {}).keys())
+        field_name = _field_for_product(level, product_code, available_fields)
+        if not field_name:
+            return (False, source_key, "no_field")
+
+        frame_dt = _frame_dt_from_radar(radar, src_file)
+        if frame_dt is None:
+            return (False, source_key, "no_timestamp")
+
+        frame_key = frame_key_from_datetime(frame_dt)
+        success = _render_overlay_png(
+            radar=radar,
+            field_name=field_name,
+            bounds=bounds,
+            out_path=Path(temp_render_path),
+            product_code=product_code,
+            profile=False,
+        )
+
+        if success:
+            return (True, source_key, frame_key)
+        else:
+            return (False, source_key, "render_failed")
+    except Exception as exc:
+        return (False, src_file_path, f"error: {type(exc).__name__}")
 
 
 def _units_for_product(product_key: str, product_code: str) -> str:
@@ -401,65 +483,161 @@ def _render_site_product(
         str(_CACHE_ROOT), site, level_code, product_key
     )
 
+    from config.radar_config import LIVE_RADAR_PARALLEL_WORKERS
+
     cached = 0
     read_failures = 0
     _TMP_RENDER_ROOT.mkdir(parents=True, exist_ok=True)
-    for src_file in selected_files:
-        source_key = src_file.name
-        if source_key in processed_keys:
-            continue
 
-        try:
-            radar = _read_radar(level, str(src_file))
-        except Exception:
-            read_failures += 1
-            continue
+    # Filter out already-processed files
+    unprocessed_files = [f for f in selected_files if f.name not in processed_keys]
+    if not unprocessed_files:
+        return 0
 
-        available_fields = list(getattr(radar, "fields", {}).keys())
-        field_name = _field_for_product(level, product_code, available_fields)
-        if not field_name:
-            continue
+    # Determine if we should use parallel rendering
+    use_parallel = len(unprocessed_files) > 1 and int(LIVE_RADAR_PARALLEL_WORKERS or 0) != 1
+    num_workers = int(LIVE_RADAR_PARALLEL_WORKERS or 0)
+    if num_workers <= 0:
+        num_workers = max(1, min(4, os.cpu_count() or 1))
 
-        frame_dt = _frame_dt_from_radar(radar, src_file)
-        if frame_dt is None:
-            continue
+    if use_parallel:
+        print(
+            f"[radar_live_worker] {site}/{product_key}: "
+            f"rendering {len(unprocessed_files)} frames in parallel ({num_workers} workers)"
+        )
 
-        frame_key = frame_key_from_datetime(frame_dt)
-        temp_render = _TMP_RENDER_ROOT / f"{site}_{product_key}_{frame_key}.png"
-        if not _render_overlay_png(
-            radar=radar,
-            field_name=field_name,
-            bounds=bounds,
-            out_path=temp_render,
-            product_code=product_code,
-        ):
-            continue
+        # Prepare work items for parallel processing
+        work_items = []
+        for src_file in unprocessed_files:
+            frame_dt = _frame_dt_from_radar_file_lazy(src_file)
+            if not frame_dt:
+                read_failures += 1
+                continue
+            frame_key = frame_key_from_datetime(frame_dt)
+            temp_render_path = str(_TMP_RENDER_ROOT / f"{site}_{product_key}_{frame_key}.png")
+            work_items.append((str(src_file), level, product_code, bounds, temp_render_path))
 
-        dest_image = Path(
-            radar_overlay_image_path(
-                str(_CACHE_ROOT), site, level_code, product_key, frame_key
+        # Render in parallel
+        with multiprocessing.Pool(processes=num_workers) as pool:
+            results = pool.starmap(_render_single_frame_worker, work_items)
+
+        # Process results
+        frame_data = {}
+        for success, source_key, result_info in results:
+            if success:
+                frame_key = result_info
+                temp_render_path = str(_TMP_RENDER_ROOT / f"{site}_{product_key}_{frame_key}.png")
+                frame_data[source_key] = (frame_key, temp_render_path)
+            else:
+                read_failures += 1
+
+        # Copy files and update index (must be done serially)
+        for source_key, (frame_key, temp_render_path) in frame_data.items():
+            try:
+                dest_image = Path(
+                    radar_overlay_image_path(
+                        str(_CACHE_ROOT), site, level_code, product_key, frame_key
+                    )
+                )
+                dest_image.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(temp_render_path, str(dest_image))
+
+                processed_keys.add(source_key)
+                radar_update_index(
+                    str(_CACHE_ROOT),
+                    site,
+                    level_code,
+                    product_key,
+                    frame_key,
+                    bounds=bounds,
+                    full_name=product_label,
+                    units=_units_for_product(product_key, product_code),
+                )
+                cached += 1
+            except Exception as exc:
+                print(f"[radar_live_worker] Failed to finalize {frame_key}: {exc}")
+            finally:
+                try:
+                    Path(temp_render_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+    else:
+        # Sequential rendering (original behavior)
+        profile_first_frame = True
+        for src_file in unprocessed_files:
+            source_key = src_file.name
+            t_frame_start = time.time()
+
+            try:
+                t_read_start = time.time()
+                radar = _read_radar(level, str(src_file))
+                t_read = time.time() - t_read_start
+            except Exception:
+                read_failures += 1
+                continue
+
+            available_fields = list(getattr(radar, "fields", {}).keys())
+            field_name = _field_for_product(level, product_code, available_fields)
+            if not field_name:
+                continue
+
+            frame_dt = _frame_dt_from_radar(radar, src_file)
+            if frame_dt is None:
+                continue
+
+            frame_key = frame_key_from_datetime(frame_dt)
+            temp_render = _TMP_RENDER_ROOT / f"{site}_{product_key}_{frame_key}.png"
+
+            should_profile = profile_first_frame and latest_only
+            if not _render_overlay_png(
+                radar=radar,
+                field_name=field_name,
+                bounds=bounds,
+                out_path=temp_render,
+                product_code=product_code,
+                profile=should_profile,
+            ):
+                continue
+
+            t_copy_start = time.time()
+            dest_image = Path(
+                radar_overlay_image_path(
+                    str(_CACHE_ROOT), site, level_code, product_key, frame_key
+                )
             )
-        )
-        dest_image.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(str(temp_render), str(dest_image))
+            dest_image.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(str(temp_render), str(dest_image))
+            t_copy = time.time() - t_copy_start
 
-        processed_keys.add(source_key)
+            t_index_start = time.time()
+            processed_keys.add(source_key)
+            radar_update_index(
+                str(_CACHE_ROOT),
+                site,
+                level_code,
+                product_key,
+                frame_key,
+                bounds=bounds,
+                full_name=product_label,
+                units=_units_for_product(product_key, product_code),
+            )
+            t_index = time.time() - t_index_start
 
-        radar_update_index(
-            str(_CACHE_ROOT),
-            site,
-            level_code,
-            product_key,
-            frame_key,
-            bounds=bounds,
-            full_name=product_label,
-            units=_units_for_product(product_key, product_code),
-        )
-        cached += 1
-        try:
-            temp_render.unlink(missing_ok=True)
-        except Exception:
-            pass
+            t_frame_total = time.time() - t_frame_start
+            if should_profile:
+                print(f"[PROFILE] Frame {frame_key} ({site}/{product_key}):")
+                print(f"  Read radar file: {t_read*1000:.1f}ms")
+                print(f"  Render to PNG: (see above)")
+                print(f"  Copy file: {t_copy*1000:.1f}ms")
+                print(f"  Update index: {t_index*1000:.1f}ms")
+                print(f"  FRAME TOTAL: {t_frame_total*1000:.1f}ms")
+                profile_first_frame = False
+
+            cached += 1
+            try:
+                temp_render.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     if read_failures:
         print(

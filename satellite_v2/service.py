@@ -211,7 +211,9 @@ def resolve_tile(
     path = tile_path(cache_root, sat_key, sector_key, channel_key, frame_key, z, x, y)
     path_exists_before = path.exists()
     path_size_before = int(path.stat().st_size) if path_exists_before else 0
+    validate_start = time.perf_counter()
     tile_valid = is_valid_tile_file(path) if path_exists_before else False
+    validate_elapsed = int((time.perf_counter() - validate_start) * 1000)
     cache_status = "hit"
     miss_reason = ""
     if not tile_valid:
@@ -288,6 +290,7 @@ def resolve_tile(
         "miss_reason": miss_reason,
         "tile_exists_before": path_exists_before,
         "tile_size_before": path_size_before,
+        "validate_elapsed_ms": validate_elapsed,
         "elapsed_ms": int((time.perf_counter() - started) * 1000),
         "provider": "aws",
         "frame_key": frame_key,
