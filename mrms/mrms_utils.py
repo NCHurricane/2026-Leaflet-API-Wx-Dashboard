@@ -20,11 +20,11 @@ import threading
 import time as _time
 from datetime import datetime
 from typing import List, Tuple, Optional, Callable
-from font_utils import register_montserrat_fonts
+from lib.font_utils import register_montserrat_fonts
 from config.mrms_config import MRMS_PRODUCTS, MRMS_COLORMAPS
 from config.geo_config import STATE_BOUNDS, STATES_FULL
 from config.style_config import resolve_mrms_style_config
-from geo_utils import (
+from lib.geo_utils import (
     CensusCounties,
     load_state_geometries,
     build_conus_geometry,
@@ -65,9 +65,9 @@ _MRMS_GRIB_DECOMPRESS_LOCK = threading.Lock()
 
 
 # =============================================================================
-# CENSUS COUNTIES SHAPEFILE SUPPORT — imported from geo_utils
+# CENSUS COUNTIES SHAPEFILE SUPPORT — imported from lib.geo_utils
 # =============================================================================
-# CensusCounties is imported at the top of this file from geo_utils.
+# CensusCounties is imported at the top of this file from lib.geo_utils.
 
 
 def warp_array_to_mercator(

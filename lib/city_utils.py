@@ -5,7 +5,7 @@ import matplotlib.patheffects as PathEffects
 
 # ── Module-level constants ───────────────────────────────────────────────────
 
-_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DATA_DIR = os.path.join(_PROJECT_ROOT, "data")
 
 # In-process cache so the same file is only read once.

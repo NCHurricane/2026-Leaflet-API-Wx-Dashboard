@@ -25,11 +25,11 @@ if PARENT_DIR not in sys.path:
 
 
 # Cache configuration (check if listing_cache module is available)
-CACHE_AVAILABLE = importlib.util.find_spec("listing_cache") is not None
+CACHE_AVAILABLE = importlib.util.find_spec("lib.listing_cache") is not None
 
 
 # Consolidated S3 client — shared across all NODD modules
-from s3_utils import get_s3_client  # noqa: E402
+from lib.s3_utils import get_s3_client  # noqa: E402
 
 
 def _is_valid_gzip_file(path: str, chunk_size: int = 1024 * 1024) -> bool:

@@ -231,7 +231,6 @@ def _state_bbox_filter(feature_geom, state_code: str | None) -> bool:
 def fetch_active_alerts_iem(
     state: str | None = None,
     lookback_hours: int = 168,
-    cache_minutes: int = 5,
 ):
     """Fetch active alerts via IEM WatchWarn shapefile service.
 
@@ -242,22 +241,6 @@ def fetch_active_alerts_iem(
     - IEM doesn't always provide NWS-style JSON; we normalize into the NWS feature shape.
     - We keep the time window modest to avoid huge downloads.
     """
-
-    base_path = os.path.dirname(os.path.abspath(__file__))
-    region_key = state.upper() if state else "NATIONAL"
-    cache_dir = os.path.join(base_path, "alert_data", region_key)
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_file = os.path.join(cache_dir, "alerts_iem.json")
-
-    if os.path.exists(cache_file):
-        age_sec = time.time() - os.path.getmtime(cache_file)
-        if age_sec < cache_minutes * 60:
-            try:
-                with open(cache_file, "r") as f:
-                    data = json.load(f)
-                return data.get("features", [])
-            except Exception:
-                pass
 
     now = datetime.now(timezone.utc)
     start = now - timedelta(hours=max(int(lookback_hours), 1))
@@ -396,11 +379,5 @@ def fetch_active_alerts_iem(
         import shutil
 
         shutil.rmtree(tmpdir, ignore_errors=True)
-
-    try:
-        with open(cache_file, "w") as f:
-            json.dump({"_source": "IEM", "features": features}, f)
-    except Exception:
-        pass
 
     return features

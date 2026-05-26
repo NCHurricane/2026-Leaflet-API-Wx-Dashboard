@@ -1,6 +1,6 @@
 from config.radar_config import L3_PRODUCTS
 from config.style_config import resolve_radar_style_config
-from font_utils import register_montserrat_fonts
+from lib.font_utils import register_montserrat_fonts
 from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 import matplotlib.image as mpimg
 from dateutil import tz
@@ -8,6 +8,9 @@ from metpy.plots import USCOUNTIES
 from siphon.radarserver import RadarServer
 from datetime import datetime, timedelta, timezone
 import matplotlib.patheffects as PathEffects
+import matplotlib.patches as mpatches
+import matplotlib.text as mtext
+import matplotlib.colors as mcolors
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import numpy as np
@@ -24,10 +27,11 @@ import matplotlib
 import requests
 from shapely.geometry import shape
 from matplotlib.lines import Line2D
+from typing import Any, cast
 
 from alerts import alerts_utils
 
-from listing_cache import (
+from lib.listing_cache import (
     cached_call,
     load_json_config as _load_json_config_raw,
     check_dependencies as _check_deps_raw,
@@ -130,7 +134,7 @@ def _suppress_geo_labels(ax_obj, fig_obj=None):
     if fig_obj is not None:
         try:
             text_pool = fig_obj.findobj(
-                match=lambda artist: isinstance(artist, matplotlib.text.Text)
+                match=lambda artist: isinstance(artist, mtext.Text)
             )
         except Exception:
             text_pool = []
@@ -187,7 +191,6 @@ RADAR_BASEMAP_CACHE_DIR = os.path.join(
     "basemap_cache",
     "radar",
 )
-os.makedirs(RADAR_BASEMAP_CACHE_DIR, exist_ok=True)
 
 # Range rings are drawn at 25 nm, 50 nm, and 100 nm.
 # Basemaps are generated with a 1.20× padding factor beyond the 100 nm ring.
@@ -718,8 +721,10 @@ def generate_radar_animation(
 
         fig_base = plt.figure(
             figsize=(fig_width, fig_height), dpi=_RADAR_OUTPUT_DPI)
-        ax_base = fig_base.add_axes(
-            [0.0, 0.0, 1.0, 1.0], projection=ccrs.PlateCarree())
+        ax_base = cast(
+            Any,
+            fig_base.add_axes((0.0, 0.0, 1.0, 1.0), projection=ccrs.PlateCarree()),
+        )
         ax_base.set_extent(
             [min_lon, max_lon, min_lat, max_lat], crs=ccrs.PlateCarree())
         ax_base.set_aspect("auto")
@@ -907,7 +912,12 @@ def generate_radar_animation(
                 sweep_to_plot = 0
 
             # Time Conversion
-            raw_dt = pyart.util.datetimes_from_radar(radar)[0]
+            raw_datetimes = pyart.util.datetimes_from_radar(radar)
+            raw_dt = (
+                raw_datetimes[0]
+                if isinstance(raw_datetimes, (list, tuple, np.ndarray))
+                else raw_datetimes
+            )
             if isinstance(raw_dt, np.datetime64):
                 unix_ts = (
                     raw_dt - np.datetime64("1970-01-01T00:00:00")
@@ -1043,7 +1053,7 @@ def generate_radar_animation(
             fig_width = map_fig_width
             fig_height = map_fig_height + footer_inches
             footer_height = footer_inches / fig_height
-            map_axes_rect = [0.0, footer_height, 1.0, 1.0 - footer_height]
+            map_axes_rect = (0.0, footer_height, 1.0, 1.0 - footer_height)
             cbar_height_frac = min(
                 (max(cbar_height_px, 14.0) / float(_RADAR_OUTPUT_DPI)) / fig_height,
                 footer_height * 0.7,
@@ -1056,7 +1066,7 @@ def generate_radar_animation(
             if cbar_bottom_frac + cbar_height_frac > footer_height - 0.003:
                 cbar_bottom_frac = max(
                     0.003, footer_height - cbar_height_frac - 0.003)
-            cbar_axes_rect = [0.02, cbar_bottom_frac, 0.96, cbar_height_frac]
+            cbar_axes_rect = (0.02, cbar_bottom_frac, 0.96, cbar_height_frac)
             scale_factor = max(map_fig_width / 12.8, 0.55)
             hud_left_size = int(hud_left_size_base * scale_factor)
             hud_right_size = int(hud_right_size_base * scale_factor)
@@ -1068,7 +1078,7 @@ def generate_radar_animation(
                 figsize=(fig_width, fig_height),
                 dpi=_RADAR_OUTPUT_DPI,
             )
-            ax = fig.add_axes(map_axes_rect, projection=map_projection)
+            ax = cast(Any, fig.add_axes(map_axes_rect, projection=map_projection))
             ax.set_zorder(1)
             display = pyart.graph.RadarMapDisplay(radar)
             display.plot_ppi_map(
@@ -1150,7 +1160,7 @@ def generate_radar_animation(
 
             # Colorbar at bottom for static and animated parity
             cbar = None
-            footer_bg = matplotlib.patches.Rectangle(
+            footer_bg = mpatches.Rectangle(
                 (0.0, 0.0),
                 1.0,
                 footer_height,
@@ -1308,7 +1318,7 @@ def generate_radar_animation(
             if not use_local_projection:
                 ax.imshow(
                     _bm,
-                    extent=[min_lon, max_lon, min_lat, max_lat],
+                    extent=(min_lon, max_lon, min_lat, max_lat),
                     transform=ccrs.PlateCarree(),
                     zorder=zo["land"],
                     origin="upper",
@@ -1349,14 +1359,17 @@ def generate_radar_animation(
                         if not _is_radar_alert_event_allowed(event_name):
                             continue
                         event_color = str(props.get("color", "") or "").strip()
-                        if not matplotlib.colors.is_color_like(event_color):
+                        if not mcolors.is_color_like(event_color):
                             event_color = "#C0C0C0"
                         if event_name and event_name not in seen_alert_events:
                             seen_alert_events.add(event_name)
                             alert_legend_entries.append(
                                 (event_name, event_color))
                         try:
-                            geom = shape(feature.get("geometry"))
+                            geometry = feature.get("geometry")
+                            if geometry is None:
+                                continue
+                            geom = shape(geometry)
                         except Exception:
                             continue
                         if geom.is_empty:
@@ -1638,31 +1651,3 @@ def generate_radar_image(
     if max_frames > 1 and movie_path:
         return movie_path
     return latest_path
-
-
-def purge_old_files(days_to_keep, base_dir):
-    """Deletes radar files and images older than a specified number of days."""
-    cutoff_sec = datetime.now().timestamp() - (days_to_keep * 86400)
-    purged_count = 0
-    errors = 0
-    target_patterns = [
-        os.path.join(base_dir, "radar_level*_downloads"),
-        os.path.join(base_dir, "radar_level*_images"),
-    ]
-    for pattern in target_patterns:
-        for root_dir in glob.glob(pattern):
-            for root, dirs, files in os.walk(root_dir, topdown=False):
-                for name in files:
-                    file_path = os.path.join(root, name)
-                    try:
-                        if os.path.getmtime(file_path) < cutoff_sec:
-                            os.remove(file_path)
-                            purged_count += 1
-                    except Exception:
-                        errors += 1
-                if not os.listdir(root) and root != root_dir:
-                    try:
-                        os.rmdir(root)
-                    except Exception:
-                        pass
-    return purged_count, errors

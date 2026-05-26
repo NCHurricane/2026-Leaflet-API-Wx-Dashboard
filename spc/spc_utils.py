@@ -20,11 +20,11 @@ from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from matplotlib.patches import Rectangle
 from matplotlib.colors import to_rgba
 
-from city_utils import plot_cities
+from lib.city_utils import plot_cities
 from config.geo_config import STATE_BOUNDS, STATES_FULL
-from font_utils import register_montserrat_fonts
-from geo_utils import CensusCounties, load_state_geometries
-from listing_cache import cached_call
+from lib.font_utils import register_montserrat_fonts
+from lib.geo_utils import CensusCounties, load_state_geometries
+from lib.listing_cache import cached_call
 
 register_montserrat_fonts()
 

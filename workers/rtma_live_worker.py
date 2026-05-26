@@ -41,7 +41,7 @@ def _render_rtma_frame_to_overlay(
         frame_key_from_datetime,
     )
     from config.geo_config import STATE_BOUNDS
-    from rtma_utils import ensure_rtma_grib, _render_rtma_png_standalone
+    from rtma.rtma_utils import ensure_rtma_grib, _render_rtma_png_standalone
 
     path_parts = (region.upper(), stream, product)
     frame_key = frame_key_from_datetime(source.valid_time)
@@ -150,7 +150,7 @@ def run_rtma_live_product(
         return 0
 
     try:
-        from rtma_utils import iter_rtma_sources_within_hours
+        from rtma.rtma_utils import iter_rtma_sources_within_hours
         from config.rtma_config import clamp_stream_hours
     except Exception as exc:
         print(f"[rtma_live] Import error: {exc}")

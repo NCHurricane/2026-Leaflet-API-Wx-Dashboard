@@ -10,12 +10,11 @@ from config.satellite_v2_config import (
 from io import StringIO
 from datetime import datetime, timezone, timedelta
 import json
-from typing import Optional
+from typing import Any, Optional, cast
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI, HTTPException
-import glob
 import uvicorn
 import time as _time
 import os
@@ -23,7 +22,6 @@ import shutil
 import threading
 from pathlib import Path
 from config.geo_config import STATE_BOUNDS
-from font_utils import resolve_logo_path
 from satellite_v2 import service as satellite_v2_service
 import sys
 from io import StringIO as _StringIO
@@ -50,7 +48,6 @@ del _stderr_cap, _real_stderr, _StringIO
 # Module state — initialized at startup
 USING_NODD = False
 radar_utils = None
-weather_utils = None
 _SCHEDULER_AVAILABLE = False
 start_scheduler = None
 stop_scheduler = None
@@ -60,26 +57,6 @@ active_tasks = {}
 
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGO_PATH = os.path.join(BASE_DIR, "img", "nchurricane_logo.png")
-
-DIRS = {
-    "surface": os.path.join(BASE_DIR, "surface", "surface_images"),
-    "surface_archive": os.path.join(
-        BASE_DIR, "surface", "surface_archive", "surface_images"
-    ),
-    "alerts": os.path.join(BASE_DIR, "alerts", "alert_images"),
-    "alerts_archive": os.path.join(
-        BASE_DIR, "alerts", "alerts_archive", "alert_images"
-    ),
-    "radar": os.path.join(BASE_DIR, "radar"),
-    "satellite": os.path.join(BASE_DIR, "satellite", "satellite_images"),
-    "satellite_archive": os.path.join(
-        BASE_DIR, "satellite", "satellite_archive", "satellite_images"
-    ),
-    "mrms": os.path.join(BASE_DIR, "mrms", "mrms_images"),
-    "spc": os.path.join(BASE_DIR, "spc", "spc_images"),
-    "spc_archive": os.path.join(BASE_DIR, "spc", "spc_archive", "spc_images"),
-}
 
 # Defer directory creation and module initialization to startup handler
 app = FastAPI(title="NCHurricane Weather API")
@@ -87,11 +64,9 @@ app.include_router(health_router)
 
 
 def _initialize_modules() -> None:
-    """Load all optional modules at startup (NODD, Archive, Weather, Scheduler) with timing."""
+    """Load optional runtime modules at startup with timing."""
     global USING_NODD, radar_utils
-    global \
-        weather_utils, \
-        _SCHEDULER_AVAILABLE
+    global _SCHEDULER_AVAILABLE
     global start_scheduler, stop_scheduler
 
     startup_events = []
@@ -117,21 +92,7 @@ def _initialize_modules() -> None:
             (f"[WARN] NODD fallback to THREDDS: {import_error}", _time.time() - _t0)
         )
 
-    # 2. Initialize Radar Archive module
-    _t0 = _time.time()
-    # 3. Initialize Weather unified module
-    _t0 = _time.time()
-    try:
-        from weather import weather_utils as wx_utils
-
-        weather_utils = wx_utils
-        startup_events.append(("[OK] Weather unified module", _time.time() - _t0))
-    except Exception as weather_err:
-        startup_events.append(
-            (f"[WARN] Weather module unavailable: {weather_err}", _time.time() - _t0)
-        )
-
-    # 4. Initialize Background Scheduler
+    # 2. Initialize Background Scheduler
     _t0 = _time.time()
     try:
         from workers.scheduler import start_scheduler as _start, stop_scheduler as _stop
@@ -145,50 +106,7 @@ def _initialize_modules() -> None:
             (f"[WARN] APScheduler unavailable: {sched_err}", _time.time() - _t0)
         )
 
-    # 6. Create base directories (non-weather)
-    _t0 = _time.time()
-    os.makedirs(DIRS["surface"], exist_ok=True)
-    os.makedirs(DIRS["surface_archive"], exist_ok=True)
-    os.makedirs(DIRS["alerts"], exist_ok=True)
-    os.makedirs(DIRS["alerts_archive"], exist_ok=True)
-    os.makedirs(DIRS["mrms"], exist_ok=True)
-    os.makedirs(DIRS["spc"], exist_ok=True)
-    os.makedirs(DIRS["spc_archive"], exist_ok=True)
-    startup_events.append(("[OK] Base directories created", _time.time() - _t0))
-
-    # 7. Create weather directories if weather_utils is available
-    _t0 = _time.time()
-    if weather_utils:
-        DIRS["weather"] = weather_utils.WEATHER_IMAGES
-        DIRS["weather_archive"] = weather_utils.WEATHER_ARCHIVE
-        DIRS["weather_archive_layers"] = weather_utils.WEATHER_ARCHIVE_LAYERS
-        for _wd in [
-            DIRS["weather"],
-            DIRS["weather_archive"],
-            DIRS["weather_archive_layers"],
-        ]:
-            os.makedirs(_wd, exist_ok=True)
-        startup_events.append(("[OK] Weather directories", _time.time() - _t0))
-
-    # 8. Warm radar Cartopy assets in a background thread.
-    # First radar request typically arrives several seconds after launch, so
-    # the warmup completes long before it's needed without blocking startup.
-    _t0 = _time.time()
-
-    def _warm_cartopy_async():
-        try:
-            if hasattr(radar_thredds_utils, "warm_radar_cartopy_cache"):
-                # Inner function already prints its own timing line.
-                radar_thredds_utils.warm_radar_cartopy_cache()
-        except Exception as e:
-            print(f"[WARN] Radar warmup failed (bg): {e}")
-
-    threading.Thread(
-        target=_warm_cartopy_async, name="cartopy-warmup", daemon=True
-    ).start()
-    startup_events.append(("[OK] Cartopy warmup dispatched (bg)", _time.time() - _t0))
-
-    # 9. Start background workers (scheduler returns immediately; first ticks
+    # 3. Start background workers (scheduler returns immediately; first ticks
     # run in background threads via APScheduler `next_run_time=now`)
     _t0 = _time.time()
     if _SCHEDULER_AVAILABLE and start_scheduler is not None:
@@ -202,7 +120,7 @@ def _initialize_modules() -> None:
                 (f"[WARN] Background workers failed: {e}", _time.time() - _t0)
             )
 
-    # 10. Cache freshness health check. The OS-level Task Scheduler is the
+    # 4. Cache freshness health check. The OS-level Task Scheduler is the
     # default source of truth for cache refresh; warn loudly if any sentinel
     # is missing or stale so the operator knows to check `tools/install_tasks.ps1`.
     _t0 = _time.time()
@@ -266,90 +184,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/img/surface", StaticFiles(directory=DIRS["surface"]), name="surface_images")
-app.mount(
-    "/img/surface_archive",
-    StaticFiles(directory=DIRS["surface_archive"]),
-    name="surface_archive_images",
-)
-app.mount("/img/alerts", StaticFiles(directory=DIRS["alerts"]), name="alert_images")
-app.mount(
-    "/img/alerts_archive",
-    StaticFiles(directory=DIRS["alerts_archive"]),
-    name="alert_archive_images",
-)
-# Recent radar image mounts
-os.makedirs(os.path.join(DIRS["radar"], "radar_level2_images"), exist_ok=True)
-os.makedirs(os.path.join(DIRS["radar"], "radar_level3_images"), exist_ok=True)
-app.mount(
-    "/img/radar_level2_images",
-    StaticFiles(directory=os.path.join(DIRS["radar"], "radar_level2_images")),
-    name="radar_level2_images",
-)
-app.mount(
-    "/img/radar_level3_images",
-    StaticFiles(directory=os.path.join(DIRS["radar"], "radar_level3_images")),
-    name="radar_level3_images",
-)
-# Archive radar image mounts
-os.makedirs(
-    os.path.join(BASE_DIR, "cache", "radar", "archive", "radar_level2_images"),
-    exist_ok=True,
-)
-os.makedirs(
-    os.path.join(BASE_DIR, "cache", "radar", "archive", "radar_level3_images"),
-    exist_ok=True,
-)
-app.mount(
-    "/img/radar_archive/radar_level2_images",
-    StaticFiles(
-        directory=os.path.join(
-            BASE_DIR, "cache", "radar", "archive", "radar_level2_images"
-        )
-    ),
-    name="radar_archive_level2_images",
-)
-app.mount(
-    "/img/radar_archive/radar_level3_images",
-    StaticFiles(
-        directory=os.path.join(
-            BASE_DIR, "cache", "radar", "archive", "radar_level3_images"
-        )
-    ),
-    name="radar_archive_level3_images",
-)
-app.mount("/img/mrms", StaticFiles(directory=DIRS["mrms"]), name="mrms_images")
-app.mount("/img/spc", StaticFiles(directory=DIRS["spc"]), name="spc_images")
-app.mount(
-    "/img/spc_archive",
-    StaticFiles(directory=DIRS["spc_archive"]),
-    name="spc_archive_images",
-)
 # Sound files
 app.mount("/sounds", StaticFiles(directory="sounds"), name="sounds")
-# Weather unified static mounts
-if weather_utils:
-    app.mount(
-        "/img/weather",
-        StaticFiles(directory=DIRS["weather"]),
-        name="weather_images",
-    )
-    app.mount(
-        "/img/weather_archive",
-        StaticFiles(directory=DIRS["weather_archive"]),
-        name="weather_archive_images",
-    )
-    app.mount(
-        "/img/weather_archive_layers",
-        StaticFiles(directory=DIRS["weather_archive_layers"]),
-        name="weather_archive_layers",
-    )
-
-app.mount(
-    "/img/basemap_cache",
-    StaticFiles(directory=os.path.join(BASE_DIR, "basemap_cache")),
-    name="basemap_cache",
-)
 
 # Cache directory — worker-written GeoJSON artifacts (gitignored)
 _CACHE_ROOT = os.path.join(BASE_DIR, "cache")
@@ -361,7 +197,6 @@ os.makedirs(os.path.join(_CACHE_ROOT, "rtma"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "archive"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "radar"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "satellite"), exist_ok=True)
-os.makedirs(os.path.join(_CACHE_ROOT, "satellite_v2"), exist_ok=True)
 app.mount("/cache", StaticFiles(directory=_CACHE_ROOT), name="cache")
 
 app.mount("/css", StaticFiles(directory=os.path.join(BASE_DIR, "css")), name="css")
@@ -613,104 +448,6 @@ RADAR_SITE_ALIASES = {
 def normalize_radar_site_id(site: str) -> str:
     site_id = str(site or "").strip().upper()
     return RADAR_SITE_ALIASES.get(site_id, site_id)
-
-
-def find_nearest_radar_sites(
-    center_lat: float, center_lon: float, limit: int = 8
-) -> list[str]:
-    """Return nearest WSR-88D radar sites ordered by distance to a lat/lon."""
-    from pyart.io.nexrad_common import NEXRAD_LOCATIONS
-    import math
-
-    # Only consider actual WSR-88D NEXRAD sites, not TDWR or overseas military
-    # K-prefix = CONUS, P-prefix = Alaska/Pacific, TJUA = Puerto Rico
-    VALID_PREFIXES = ("K", "P")
-    VALID_EXTRAS = {"TJUA"}
-
-    candidates = []
-    for site_id, info in NEXRAD_LOCATIONS.items():
-        if not (site_id.startswith(VALID_PREFIXES) or site_id in VALID_EXTRAS):
-            continue
-        dlat = info["lat"] - center_lat
-        dlon = info["lon"] - center_lon
-        dist = math.sqrt(dlat * dlat + dlon * dlon)
-        normalized_id = normalize_radar_site_id(site_id)
-        candidates.append((dist, normalized_id))
-
-    if not candidates:
-        return ["KMHX"]
-
-    candidates.sort(key=lambda pair: pair[0])
-    deduped_sites = []
-    seen = set()
-    for _, site_id in candidates:
-        if site_id in seen:
-            continue
-        seen.add(site_id)
-        deduped_sites.append(site_id)
-        if len(deduped_sites) >= max(1, int(limit)):
-            break
-
-    return deduped_sites or ["KMHX"]
-
-
-def find_closest_radar_site(center_lat: float, center_lon: float) -> str:
-    """Find the NEXRAD WSR-88D radar site closest to a given lat/lon using pyart."""
-    return find_nearest_radar_sites(center_lat, center_lon, limit=1)[0]
-
-
-def build_radar_product_attempts(
-    level: str, product: str, lookback: float, latest_only: bool = False
-):
-    level_name = str(level or "").strip()
-    product_id = str(product or "").strip().upper()
-    base_lookback = max(0.5, float(lookback or 0.5))
-
-    product_candidates = [product_id]
-    if level_name == "Level 3":
-        product_aliases = {
-            "NVW": ["N0G", "NVW"],
-            "N0G": ["N0G", "NVW"],
-            "N0M": ["N0M", "NCR"],
-            "N0H": ["N0H", "HHC", "NAH", "NBH"],
-            "DHR": ["DHR", "DPR", "N1P"],
-            "N1P": ["N1P", "DPR", "DHR"],
-            "DPA": ["DPA", "DAA"],
-            "DTA": ["DTA", "NRR", "NTP"],
-            "NTP": ["NTP", "DTA", "NRR"],
-            "NRR": ["NRR", "DTA", "NTP"],
-        }
-        product_candidates = product_aliases.get(product_id, [product_id])
-
-    lookback_candidates = [base_lookback]
-    if level_name == "Level 3" and not latest_only:
-        if product_id in {"N1P", "DHR", "DPA"}:
-            lookback_candidates.extend([3, 6, 12])
-        elif product_id in {"NTP", "DTA", "NRR"}:
-            lookback_candidates.extend([6, 12, 24])
-        else:
-            lookback_candidates.extend([2, 4])
-
-    seen_products = set()
-    unique_products = []
-    for candidate in product_candidates:
-        if candidate not in seen_products:
-            seen_products.add(candidate)
-            unique_products.append(candidate)
-
-    seen_lookbacks = set()
-    unique_lookbacks = []
-    for candidate in lookback_candidates:
-        candidate = max(0.5, float(candidate))
-        if candidate not in seen_lookbacks:
-            seen_lookbacks.add(candidate)
-            unique_lookbacks.append(candidate)
-
-    attempts = []
-    for candidate_product in unique_products:
-        for candidate_lookback in unique_lookbacks:
-            attempts.append((candidate_product, candidate_lookback))
-    return attempts
 
 
 def build_mrms_recent_windows(
@@ -1066,7 +803,7 @@ def _enrich_alert_features_geometry(features: list[dict]) -> None:
         if needs_counties:
             CensusCounties.load()
 
-        def _enrich_single_feature(feat: dict) -> tuple[dict, dict | None, str]:
+        def _enrich_single_feature(feat: dict) -> tuple[dict, Any, str]:
             """Enrich one feature's geometry. Returns (feat, enriched_geom, cache_key)."""
             if not isinstance(feat, dict):
                 return feat, None, ""
@@ -1160,7 +897,7 @@ def _iter_line_geometries(geom):
         yield geom
         return
     if geom.geom_type == "GeometryCollection":
-        for part in geom.geoms:
+        for part in cast(Any, geom).geoms:
             yield from _iter_line_geometries(part)
 
 
@@ -1194,9 +931,12 @@ def _build_world_borders_geojson() -> dict:
             if geom is None or geom.is_empty:
                 continue
             # geom may be Polygon or MultiPolygon
-            polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
+            polys = cast(Any, geom).geoms if geom.geom_type == "MultiPolygon" else [geom]
             for poly in polys:
-                ext = list(poly.exterior.coords)
+                poly_obj = cast(Any, poly)
+                if not hasattr(poly_obj, "exterior"):
+                    continue
+                ext = list(poly_obj.exterior.coords)
                 if len(ext) >= 2:
                     features.append(
                         {
@@ -1259,6 +999,7 @@ def _get_world_borders_geojson() -> dict:
                 with open(_WORLD_BORDERS_CACHE_PATH, "r", encoding="utf-8") as fh:
                     data = json.load(fh)
                 props = data.get("properties") if isinstance(data, dict) else {}
+                props = props if isinstance(props, dict) else {}
                 if props.get("cache_version") == _WORLD_BORDERS_CACHE_VERSION:
                     return data
             except Exception:
@@ -1301,7 +1042,7 @@ def _build_us_boundaries_geojson() -> dict:
     from shapely.geometry import mapping
     from shapely.ops import unary_union
 
-    from geo_utils import CensusCounties, load_state_geometries
+    from lib.geo_utils import CensusCounties, load_state_geometries
 
     features = []
     lake_geometry = None
@@ -1376,6 +1117,7 @@ def _get_us_boundaries_geojson() -> dict:
                 with open(_US_BOUNDARIES_CACHE_PATH, "r", encoding="utf-8") as fh:
                     data = json.load(fh)
                 props = data.get("properties") if isinstance(data, dict) else {}
+                props = props if isinstance(props, dict) else {}
                 if props.get("cache_version") == _US_BOUNDARIES_CACHE_VERSION:
                     return data
             except Exception:
@@ -1493,8 +1235,7 @@ def get_data_alerts(
         features = [f for f in features if _matches(f)]
 
     # Optional viewport-aware bbox filtering (fast feature-bounds overlap).
-    bbox_params = (west, east, south, north)
-    if all(v is not None for v in bbox_params):
+    if west is not None and east is not None and south is not None and north is not None:
         try:
             w = float(west)
             e = float(east)
@@ -1686,7 +1427,7 @@ def get_data_spc_active(
     watch_types: str = "all",
 ):
     """Return active SPC Watches/MDs as GeoJSON with rich popup properties."""
-    from geo_utils import CensusCounties
+    from lib.geo_utils import CensusCounties
     from spc.spc_utils import fetch_active_watch_items, fetch_active_md_items
 
     product_key = (product or "watches").strip().lower()
@@ -2611,6 +2352,7 @@ def _render_mrms_png(
     from PIL import Image
     import numpy as _np_render
 
+    data = _np_render.ma.asarray(data)
     data, actual_bounds = warp_array_to_mercator(data, _lat, _lon)
 
     # Render the warped Mercator array directly to PNG using PIL, bypassing
@@ -2653,7 +2395,7 @@ def get_data_rtma_points(
     east: float | None = None,
     stride: int = 30,
 ):
-    from rtma_utils import (
+    from rtma.rtma_utils import (
         build_rtma_legend,
         ensure_rtma_city_geojson,
         get_product_config,
@@ -2672,12 +2414,12 @@ def get_data_rtma_points(
             detail="RTMA 24-hour temperature change is only available on rtma_hourly.",
         )
 
-    has_bounds = (
-        south is not None
-        and west is not None
-        and north is not None
-        and east is not None
-    )
+    # Narrow types for the static type checker: explicitly check variables
+    # before calling float() so we never pass None to float().
+    if south is not None and west is not None and north is not None and east is not None:
+        bounds_values = (float(south), float(west), float(north), float(east))
+    else:
+        bounds_values = None
 
     def _read_points_from_cache(path: str) -> list[dict]:
         try:
@@ -2696,10 +2438,15 @@ def get_data_rtma_points(
                     continue
                 lat, lon, val = float(row[0]), float(row[1]), float(row[2])
                 rank = row[3] if len(row) > 3 else None
-                if has_bounds and (
-                    lat < south or lat > north or lon < west or lon > east
-                ):
-                    continue
+                if bounds_values is not None:
+                    bound_s, bound_w, bound_n, bound_e = bounds_values
+                    if (
+                        lat < bound_s
+                        or lat > bound_n
+                        or lon < bound_w
+                        or lon > bound_e
+                    ):
+                        continue
                 points.append({"lat": lat, "lon": lon, "value": val, "rank": rank})
             return points
 
@@ -2713,8 +2460,10 @@ def get_data_rtma_points(
                 continue
             lon = float(coords[0])
             lat = float(coords[1])
-            if has_bounds and (lat < south or lat > north or lon < west or lon > east):
-                continue
+            if bounds_values is not None:
+                bound_s, bound_w, bound_n, bound_e = bounds_values
+                if lat < bound_s or lat > bound_n or lon < bound_w or lon > bound_e:
+                    continue
             props = feat.get("properties") or {}
             val = props.get("value")
             if val is None:
@@ -2872,7 +2621,7 @@ def get_data_rtma_grid(
     source_data_key: str | None = None,
     stride: int = 2,
 ):
-    from rtma_utils import (
+    from rtma.rtma_utils import (
         build_rtma_legend,
         ensure_rtma_grid_json,
         get_product_config,
@@ -2978,7 +2727,7 @@ def get_data_rtma(
     north: float = 52.0,
     east: float = -60.0,
 ):
-    from rtma_utils import (
+    from rtma.rtma_utils import (
         ensure_rtma_grib,
         get_product_config,
         iter_rtma_sources,
@@ -3427,7 +3176,7 @@ def get_data_rtma_frames(
     product: str = "temperature",
     max_hours: int | None = None,
 ):
-    from rtma_utils import get_product_config, iter_rtma_sources_within_hours
+    from rtma.rtma_utils import get_product_config, iter_rtma_sources_within_hours
 
     region_key = region.upper()
     if region_key not in STATE_BOUNDS:
@@ -3653,7 +3402,7 @@ def archive_mrms(
 
     def _worker():
         try:
-            from s3_utils import get_s3_client
+            from lib.s3_utils import get_s3_client
             from config.mrms_config import MRMS_BUCKET
             from mrms.mrms_nodd_utils import list_mrms_files
 
@@ -3947,8 +3696,8 @@ def _fetch_iem_alerts_range(
                     "geometry": geom_json,
                     "properties": {
                         "event": event,
-                        "onset": _iem_to_iso(attrs.get("ISSUED", "")),
-                        "expires": _iem_to_iso(attrs.get("EXPIRED", "")),
+                        "onset": _iem_to_iso(str(attrs.get("ISSUED", ""))),
+                        "expires": _iem_to_iso(str(attrs.get("EXPIRED", ""))),
                         "areaDesc": str(attrs.get("AREA_DESC", "")),
                         "_source": "iem_archive",
                     },
@@ -4793,485 +4542,6 @@ def get_radar_live_frames(site: str = "KMHX", product: str = "L3_N0B", hours: in
         "frames": filtered,
     }
 
-
-def get_radar_latest(
-    request_id: str,
-    site: str = "KMHX",
-    product: str = "N0B",
-    level: str = "Level 3",
-    frames: int = 1,
-    fps: int = 4,
-    lookback: float = 0.5,
-    sm_speed: int = 30,
-    sm_dir: int = 225,
-    show_places: bool = False,
-    n: Optional[float] = None,
-    s: Optional[float] = None,
-    e: Optional[float] = None,
-    w: Optional[float] = None,
-    source: str = "auto",
-    style_config: Optional[str] = None,
-    latest_only: bool = False,
-    view_mode: str = "image",
-    render_mode: str = "full",
-):
-    try:
-        site = normalize_radar_site_id(site)
-        requested_product = str(product or "N0B").strip().upper()
-        requested_source = str(source or "auto").strip().lower()
-        view_render_mode = str(view_mode or "image").strip().lower()
-        data_only_mode = str(render_mode or "full").strip().lower() == "data_only"
-
-        if view_render_mode not in {"image", "layers"}:
-            view_render_mode = "image"
-        if requested_source not in {"auto", "aws", "gcp", "thredds"}:
-            return {
-                "status": "error",
-                "message": "Invalid source. Use auto, aws, gcp, or thredds.",
-                "data_source": "UNKNOWN",
-            }
-
-        if view_render_mode == "layers":
-            now_utc = datetime.now(timezone.utc)
-            lookback_hours = max(0.25, float(lookback or 0.5))
-            from_utc = now_utc - timedelta(hours=lookback_hours)
-            archive_source = requested_source
-            if archive_source == "auto":
-                archive_source = "aws" if USING_NODD else "thredds"
-
-            return get_radar_archive(
-                request_id=request_id,
-                site=site,
-                product=product,
-                level=level,
-                date_from=from_utc.strftime("%Y-%m-%d %H:%M"),
-                date_to=now_utc.strftime("%Y-%m-%d %H:%M"),
-                user_tz="America/New_York",
-                frames=1,
-                fps=fps,
-                sm_speed=sm_speed,
-                sm_dir=sm_dir,
-                show_places=show_places,
-                n=n,
-                s=s,
-                e=e,
-                w=w,
-                source=archive_source,
-                style_config=style_config,
-                latest_only=True,
-                view_mode="layers",
-            )
-
-        # === DATA-ONLY TRANSPARENT RENDERING MODE ===
-        if data_only_mode:
-            try:
-                import importlib
-
-                try:
-                    radar_data_only_utils = importlib.import_module(
-                        "radar.radar_data_only_utils"
-                    )
-                    render_radar_data_only_transparent = getattr(
-                        radar_data_only_utils, "render_radar_data_only_transparent"
-                    )
-                except (ImportError, AttributeError) as exc:
-                    return {
-                        "status": "error",
-                        "message": f"Radar data-only renderer unavailable: {exc}",
-                        "data_source": "ERROR",
-                    }
-
-                # Download latest radar file
-                radar_module = radar_utils
-                data_source = "THREDDS"
-                provider = "aws"
-
-                if requested_source == "thredds":
-                    radar_module = radar_thredds_utils
-                    data_source = "THREDDS"
-                elif requested_source in {"aws", "gcp"}:
-                    if not USING_NODD:
-                        return {
-                            "status": "error",
-                            "message": "NODD module unavailable.",
-                            "data_source": "THREDDS",
-                        }
-                    provider = requested_source
-                    data_source = f"NODD-{provider.upper()}"
-                else:
-                    if USING_NODD:
-                        provider = "aws"
-                        data_source = "NODD-AWS"
-
-                def download_progress(curr, total):
-                    active_tasks[request_id] = {
-                        "percent": int((curr / total) * 100),
-                        "message": f"Downloading {curr}/{total}",
-                        "stage": "download",
-                        "source": data_source,
-                    }
-
-                # Download data
-                data_dir, total_files, _ = radar_module.download_radar_data(
-                    level,
-                    site,
-                    requested_product,
-                    0.5,
-                    os.path.join(BASE_DIR, "radar"),
-                    download_progress,
-                    provider=provider
-                    if radar_module is not radar_thredds_utils
-                    else None,
-                    latest_only=True,
-                )
-
-                if not data_dir or total_files == 0:
-                    return {
-                        "status": "error",
-                        "message": f"No radar data found for {site}",
-                        "data_source": data_source,
-                    }
-
-                # Find latest file
-                radar_files = sorted(
-                    glob.glob(os.path.join(data_dir, "*.nexrad"))
-                    + glob.glob(os.path.join(data_dir, "*.nc"))
-                )
-                if not radar_files:
-                    return {
-                        "status": "error",
-                        "message": f"No radar files in {data_dir}",
-                        "data_source": data_source,
-                    }
-
-                radar_file = radar_files[-1]
-
-                # Render data-only transparent PNG
-                output_dir = os.path.join(
-                    DIRS["radar"],
-                    f"radar_level{level.replace(' ', '')}_images",
-                    requested_product,
-                    site,
-                )
-                output_path = os.path.join(output_dir, "latest_data_only.png")
-
-                rendered_path = render_radar_data_only_transparent(
-                    radar_file, requested_product, output_path, dpi=150
-                )
-
-                if request_id in active_tasks:
-                    del active_tasks[request_id]
-
-                if not rendered_path:
-                    return {
-                        "status": "error",
-                        "message": "Failed to render radar data",
-                        "data_source": data_source,
-                    }
-
-                # Build URL path - the mount is /img/radar_level{3|2}_images → radar/radar_level{3|2}_images/
-                level_str = level.replace(" ", "")
-                rel_path = os.path.relpath(
-                    rendered_path,
-                    os.path.join(DIRS["radar"], f"radar_level{level_str}_images"),
-                ).replace("\\", "/")
-                image_url = f"/img/radar_level{level_str}_images/{rel_path}"
-
-                return {
-                    "status": "success",
-                    "image_url": image_url,
-                    "data_source": data_source,
-                    "site_used": site,
-                    "product_requested": requested_product,
-                }
-            except Exception as e:
-                if request_id in active_tasks:
-                    del active_tasks[request_id]
-                return {
-                    "status": "error",
-                    "message": f"Data-only render failed: {str(e)}",
-                    "data_source": "ERROR",
-                }
-
-        radar_module = radar_utils
-        provider = "aws"
-        if requested_source == "thredds":
-            radar_module = radar_thredds_utils
-            data_source = "THREDDS"
-        elif requested_source in {"aws", "gcp"}:
-            if not USING_NODD:
-                return {
-                    "status": "error",
-                    "message": "NODD module unavailable. AWS/GCP sources are not available.",
-                    "data_source": "THREDDS",
-                }
-            provider = requested_source
-            data_source = f"NODD-{provider.upper()}"
-        else:
-            # Auto mode: use AWS for both Level 2 and Level 3.
-            # Fallback chain: AWS → GCP → THREDDS (handled below).
-            if USING_NODD:
-                provider = "aws"
-                data_source = "NODD-AWS"
-            else:
-                data_source = "THREDDS"
-        parsed_styles = {}
-        if style_config:
-            raw_styles = json.loads(style_config)
-            for k, v in raw_styles.items():
-                try:
-                    float_v = float(v)
-                    parsed_styles[k] = int(float_v) if float_v.is_integer() else float_v
-                except (ValueError, TypeError):
-                    parsed_styles[k] = v
-
-        def download_progress(curr, total):
-            active_tasks[request_id] = {
-                "percent": int((curr / total) * 100),
-                "message": f"Downloading {curr}/{total}",
-                "stage": "download",
-                "source": data_source,
-            }
-
-        def render_progress(curr, total):
-            active_tasks[request_id] = {
-                "percent": int((curr / total) * 100),
-                "message": f"Rendering {curr}/{total}",
-                "stage": "render",
-                "source": data_source,
-            }
-
-        custom_extent = (
-            (s, n, w, e) if all(v is not None for v in [n, s, e, w]) else None
-        )
-        site_candidates = [site]
-        if custom_extent:
-            center_lat = (custom_extent[0] + custom_extent[1]) / 2  # (s + n) / 2
-            center_lon = (custom_extent[2] + custom_extent[3]) / 2  # (w + e) / 2
-            site_candidates = find_nearest_radar_sites(center_lat, center_lon, limit=8)
-            site = site_candidates[0]
-            print(
-                f"[INFO] Custom extent active — auto-selected closest radar: {site} "
-                f"(fallback pool: {', '.join(site_candidates[:4])}{'...' if len(site_candidates) > 4 else ''})"
-            )
-        frames = 1 if latest_only else max(1, int(frames))
-
-        attempts = build_radar_product_attempts(
-            level, requested_product, lookback, latest_only=latest_only
-        )
-
-        def attempt_download(module_to_use, site_id: str, provider_name=None):
-            attempted = []
-            last_error = None
-
-            for candidate_product, candidate_lookback in attempts:
-                attempted.append(f"{candidate_product}@{candidate_lookback}h")
-                try:
-                    if module_to_use is radar_thredds_utils:
-                        data_dir_local, total_files_local, _ = (
-                            module_to_use.download_radar_data(
-                                level,
-                                site_id,
-                                candidate_product,
-                                candidate_lookback,
-                                os.path.join(BASE_DIR, "radar"),
-                                download_progress,
-                                latest_only=latest_only,
-                            )
-                        )
-                    else:
-                        data_dir_local, total_files_local, _ = (
-                            module_to_use.download_radar_data(
-                                level,
-                                site_id,
-                                candidate_product,
-                                candidate_lookback,
-                                os.path.join(BASE_DIR, "radar"),
-                                download_progress,
-                                provider=provider_name,
-                                latest_only=latest_only,
-                            )
-                        )
-                except Exception as attempt_error:
-                    last_error = attempt_error
-                    continue
-
-                if data_dir_local and total_files_local > 0:
-                    return (
-                        data_dir_local,
-                        candidate_product,
-                        candidate_lookback,
-                        attempted,
-                    )
-
-            if last_error is not None:
-                raise RuntimeError(
-                    f"No radar data found for {site_id} using attempts: {', '.join(attempted)}"
-                ) from last_error
-
-            raise RuntimeError(
-                f"No radar data found for {site_id} using attempts: {', '.join(attempted)}"
-            )
-
-        def download_with_source_fallback(site_id: str):
-            module_in_use = radar_module
-            source_in_use = data_source
-
-            try:
-                _t_dl_total = _time.perf_counter()
-                dl_result = attempt_download(
-                    module_in_use, site_id=site_id, provider_name=provider
-                )
-                print(
-                    f"[TIMER] attempt_download TOTAL {_time.perf_counter() - _t_dl_total:.2f}s "
-                    f"for site {site_id}"
-                )
-                return (*dl_result, module_in_use, source_in_use)
-            except Exception:
-                if requested_source == "auto" and USING_NODD:
-                    # GCP Level 3 buckets are not publicly accessible for
-                    # individual product files (realtime bucket returns 403;
-                    # archive bucket only has daily tar.gz bundles).  Skip GCP
-                    # as an alternate provider for Level 3 to avoid wasting
-                    # time on requests that will always fail.
-                    level_lower = str(level).lower().replace(" ", "")
-                    skip_gcp_alt = level_lower == "level3"
-
-                    alt_provider = "aws" if provider == "gcp" else "gcp"
-                    if skip_gcp_alt and alt_provider == "gcp":
-                        print(
-                            f"[WARN] NODD-{provider.upper()} failed, skipping GCP (Level 3 not publicly listable), falling back to THREDDS"
-                        )
-                        alt_provider = None  # skip straight to THREDDS
-
-                    if alt_provider:
-                        try:
-                            print(
-                                f"[WARN] NODD-{provider.upper()} failed, trying NODD-{alt_provider.upper()}..."
-                            )
-                            source_in_use = f"NODD-{alt_provider.upper()}"
-                            dl_result = attempt_download(
-                                module_in_use,
-                                site_id=site_id,
-                                provider_name=alt_provider,
-                            )
-                            return (*dl_result, module_in_use, source_in_use)
-                        except Exception:
-                            print(
-                                f"[WARN] NODD-{alt_provider.upper()} also failed, falling back to THREDDS"
-                            )
-                            module_in_use = radar_thredds_utils
-                            source_in_use = "THREDDS"
-                            dl_result = attempt_download(
-                                module_in_use,
-                                site_id=site_id,
-                                provider_name=None,
-                            )
-                            return (*dl_result, module_in_use, source_in_use)
-
-                    # No alt provider (GCP skipped for Level 3), go straight to THREDDS
-                    module_in_use = radar_thredds_utils
-                    source_in_use = "THREDDS"
-                    dl_result = attempt_download(
-                        module_in_use,
-                        site_id=site_id,
-                        provider_name=None,
-                    )
-                    return (*dl_result, module_in_use, source_in_use)
-                raise
-
-        site_attempt_errors = []
-        for idx, candidate_site in enumerate(site_candidates, start=1):
-            try:
-                (
-                    data_dir,
-                    resolved_product,
-                    resolved_lookback,
-                    attempted_variants,
-                    radar_module,
-                    data_source,
-                ) = download_with_source_fallback(candidate_site)
-                if custom_extent and idx > 1:
-                    print(
-                        f"[INFO] Closest radar lacked usable data. Using fallback site {candidate_site}"
-                    )
-                site = candidate_site
-                break
-            except Exception as site_error:
-                site_attempt_errors.append(f"{candidate_site}: {site_error}")
-                if len(site_candidates) > 1:
-                    print(
-                        f"[WARN] Radar site {candidate_site} unavailable: {site_error}"
-                    )
-        else:
-            attempted_sites = ", ".join(site_candidates)
-            details = (
-                " | ".join(site_attempt_errors[-3:]) if site_attempt_errors else ""
-            )
-            raise RuntimeError(
-                f"No radar data found for requested extent after trying sites: {attempted_sites}"
-                + (f" ({details})" if details else "")
-            )
-
-        # Use custom logo path from style config, or fall back to default
-        logo_path_to_use = resolve_logo_path(parsed_styles, BASE_DIR, LOGO_PATH)
-
-        _t_render = _time.perf_counter()
-        result_path = radar_module.generate_radar_image(
-            level=level,
-            data_dir=data_dir,
-            product_label=resolved_product,
-            logo_file=logo_path_to_use,
-            station_id=site,
-            sm_speed=sm_speed,
-            sm_dir=sm_dir,
-            custom_extent=custom_extent,
-            progress_callback=render_progress,
-            show_places=show_places,
-            max_frames=frames,
-            fps=fps,
-            style_config=parsed_styles,
-        )
-        print(
-            f"[TIMER] generate_radar_image took {_time.perf_counter() - _t_render:.2f}s"
-        )
-        if request_id in active_tasks:
-            del active_tasks[request_id]
-
-        if result_path is None:
-            return {
-                "status": "error",
-                "message": "Failed to generate radar image. Check server logs for details.",
-                "data_source": data_source,
-            }
-
-        # Extract the level-specific path (radar_level2_images or radar_level3_images)
-        rel_path = os.path.relpath(result_path, DIRS["radar"]).replace("\\", "/")
-        return {
-            "status": "success",
-            "image_url": f"/img/{rel_path}",
-            "data_source": data_source,
-            "site_used": site,
-            "product_requested": requested_product,
-            "product_used": resolved_product,
-            "lookback_used": resolved_lookback,
-            "attempts": attempted_variants,
-        }
-    except Exception as e:
-        if request_id:
-            active_tasks[request_id] = {
-                "percent": 0,
-                "message": f"Error: {str(e)}",
-                "stage": "error",
-                "source": data_source if "data_source" in locals() else None,
-            }
-        return {
-            "status": "error",
-            "message": str(e),
-            "data_source": data_source if "data_source" in locals() else None,
-        }
-
-
 @app.get("/api/satellite-v2/catalog")
 def get_satellite_v2_catalog(
     sat_id: str = SATELLITE_V2_DEFAULT_SAT_ID,
@@ -5418,556 +4688,6 @@ def get_satellite_v2_tile(
     )
     response.headers["Vary"] = "Accept-Encoding"
     return response
-@app.post("/api/purge")
-def purge_old_files(hours: float = 168, categories: str = ""):
-    """Purge downloaded data and generated images older than N hours. 0 = purge all."""
-    if hours < 0:
-        raise HTTPException(status_code=400, detail="hours must be >= 0")
-
-    days = hours / 24.0  # for modules that expect days
-    results = {}
-    valid_categories = {
-        "radar",
-        "satellite",
-        "surface",
-        "alerts",
-        "mrms",
-        "spc",
-    }
-    if categories and categories.strip():
-        requested = {
-            c.strip().lower() for c in categories.split(",") if c and c.strip()
-        }
-        selected_categories = requested & valid_categories
-        if not selected_categories:
-            raise HTTPException(
-                status_code=400,
-                detail=f"No valid categories selected. Valid categories: {sorted(valid_categories)}",
-            )
-    else:
-        selected_categories = valid_categories
-
-    # Directories that must never be purged (pre-rendered basemap caches).
-    _PURGE_SKIP_DIRS = {"basemap_cache"}
-
-    def _purge_targets(cutoff_ts: float, targets: list[str]):
-        purged = 0
-        errors = 0
-        deduped_targets = []
-        for t in targets:
-            if t and t not in deduped_targets:
-                deduped_targets.append(t)
-
-        for target in deduped_targets:
-            if not os.path.exists(target):
-                continue
-            for root, dirs, files in os.walk(target, topdown=False):
-                # Never touch files inside protected cache directories
-                if _PURGE_SKIP_DIRS & set(root.replace("\\", "/").split("/")):
-                    continue
-                for name in files:
-                    fp = os.path.join(root, name)
-                    try:
-                        if os.path.getmtime(fp) < cutoff_ts:
-                            os.remove(fp)
-                            purged += 1
-                    except Exception:
-                        errors += 1
-                if not os.listdir(root) and root != target:
-                    try:
-                        os.rmdir(root)
-                    except Exception:
-                        pass
-        return purged, errors
-
-    # Radar purge
-    if "radar" in selected_categories:
-        try:
-            count, errs = radar_utils.purge_old_files(days, DIRS["radar"])
-            cutoff = _time.time() - (hours * 3600)
-            archive_count, archive_errs = _purge_targets(
-                cutoff,
-                [
-                    os.path.join(
-                        _CACHE_ROOT, "radar", "archive", "radar_level2_downloads"
-                    ),
-                    os.path.join(
-                        _CACHE_ROOT, "radar", "archive", "radar_level2_images"
-                    ),
-                    os.path.join(
-                        _CACHE_ROOT, "radar", "archive", "radar_level3_downloads"
-                    ),
-                    os.path.join(
-                        _CACHE_ROOT, "radar", "archive", "radar_level3_images"
-                    ),
-                ],
-            )
-            results["radar"] = {
-                "purged": count + archive_count,
-                "errors": errs + archive_errs,
-            }
-        except Exception as e:
-            results["radar"] = {"purged": 0, "errors": 0, "message": str(e)}
-    else:
-        results["radar"] = {"purged": 0, "errors": 0, "skipped": True}
-
-    # Satellite purge (downloads and images)
-    if "satellite" in selected_categories:
-        try:
-            sat_base = os.path.join(BASE_DIR, "satellite")
-            cutoff = _time.time() - (hours * 3600)
-            # Include downloads, images, and archive folders
-            targets = [
-                os.path.join(sat_base, "satellite_downloads"),
-                os.path.join(sat_base, "satellite_images"),
-                os.path.join(sat_base, "satellite_archive_images"),
-                os.path.join(sat_base, "satellite_archive", "satellite_downloads"),
-                DIRS.get("satellite_archive"),
-            ]
-            sat_purged, sat_errors = _purge_targets(cutoff, targets)
-            results["satellite"] = {"purged": sat_purged, "errors": sat_errors}
-        except Exception as e:
-            results["satellite"] = {"purged": 0, "errors": 0, "message": str(e)}
-    else:
-        results["satellite"] = {"purged": 0, "errors": 0, "skipped": True}
-
-    # Surface purge (images and raw data)
-    if "surface" in selected_categories:
-        try:
-            cutoff = _time.time() - (hours * 3600)
-            surf_purged = 0
-            surf_errors = 0
-            # Target both images and raw data folders
-            targets = [
-                DIRS["surface"],
-                DIRS["surface_archive"],
-                os.path.join(BASE_DIR, "surface", "surface_data"),
-                os.path.join(BASE_DIR, "surface", "surface_archive", "surface_data"),
-            ]
-            for target in targets:
-                if not os.path.exists(target):
-                    continue
-                for root, dirs, files in os.walk(target, topdown=False):
-                    for name in files:
-                        fp = os.path.join(root, name)
-                        try:
-                            if os.path.getmtime(fp) < cutoff:
-                                os.remove(fp)
-                                surf_purged += 1
-                        except Exception:
-                            surf_errors += 1
-                    if not os.listdir(root) and root != target:
-                        try:
-                            os.rmdir(root)
-                        except Exception:
-                            pass
-            results["surface"] = {"purged": surf_purged, "errors": surf_errors}
-        except Exception as e:
-            results["surface"] = {"purged": 0, "errors": 0, "message": str(e)}
-    else:
-        results["surface"] = {"purged": 0, "errors": 0, "skipped": True}
-
-    # Alerts purge (images and raw data)
-    if "alerts" in selected_categories:
-        try:
-            cutoff = _time.time() - (hours * 3600)
-            alert_purged = 0
-            alert_errors = 0
-            # Target images, raw data, and archives
-            targets = [
-                DIRS["alerts"],
-                DIRS["alerts_archive"],
-                os.path.join(BASE_DIR, "alerts", "alert_data"),
-                os.path.join(BASE_DIR, "alerts", "alerts_archive", "alert_data"),
-                os.path.join(
-                    BASE_DIR, "alerts", "alert_archive"
-                ),  # Legacy/Structure variation
-            ]
-            for target in targets:
-                if not os.path.exists(target):
-                    continue
-                for root, dirs, files in os.walk(target, topdown=False):
-                    for name in files:
-                        fp = os.path.join(root, name)
-                        try:
-                            if os.path.getmtime(fp) < cutoff:
-                                os.remove(fp)
-                                alert_purged += 1
-                        except Exception:
-                            alert_errors += 1
-                    if not os.listdir(root) and root != target:
-                        try:
-                            os.rmdir(root)
-                        except Exception:
-                            pass
-            results["alerts"] = {"purged": alert_purged, "errors": alert_errors}
-        except Exception as e:
-            results["alerts"] = {"purged": 0, "errors": 0, "message": str(e)}
-    else:
-        results["alerts"] = {"purged": 0, "errors": 0, "skipped": True}
-
-    # SPC purge (images and archive images)
-    if "spc" in selected_categories:
-        try:
-            cutoff = _time.time() - (hours * 3600)
-            spc_purged = 0
-            spc_errors = 0
-            targets = [DIRS["spc"], DIRS["spc_archive"]]
-            for target in targets:
-                if not os.path.exists(target):
-                    continue
-                for root, dirs, files in os.walk(target, topdown=False):
-                    for name in files:
-                        fp = os.path.join(root, name)
-                        try:
-                            if os.path.getmtime(fp) < cutoff:
-                                os.remove(fp)
-                                spc_purged += 1
-                        except Exception:
-                            spc_errors += 1
-                    if not os.listdir(root) and root != target:
-                        try:
-                            os.rmdir(root)
-                        except Exception:
-                            pass
-            results["spc"] = {"purged": spc_purged, "errors": spc_errors}
-        except Exception as e:
-            results["spc"] = {"purged": 0, "errors": 0, "message": str(e)}
-    else:
-        results["spc"] = {"purged": 0, "errors": 0, "skipped": True}
-
-    # MRMS purge (downloads and generated images)
-    if "mrms" in selected_categories:
-        try:
-            cutoff = _time.time() - (hours * 3600)
-            mrms_purged = 0
-            mrms_errors = 0
-            targets = [
-                os.path.join(BASE_DIR, "mrms", "mrms_downloads"),
-                DIRS["mrms"],
-            ]
-            for target in targets:
-                if not os.path.exists(target):
-                    continue
-                for root, dirs, files in os.walk(target, topdown=False):
-                    for name in files:
-                        fp = os.path.join(root, name)
-                        try:
-                            if os.path.getmtime(fp) < cutoff:
-                                os.remove(fp)
-                                mrms_purged += 1
-                        except Exception:
-                            mrms_errors += 1
-                    if not os.listdir(root) and root != target:
-                        try:
-                            os.rmdir(root)
-                        except Exception:
-                            pass
-            results["mrms"] = {"purged": mrms_purged, "errors": mrms_errors}
-        except Exception as e:
-            results["mrms"] = {"purged": 0, "errors": 0, "message": str(e)}
-    else:
-        results["mrms"] = {"purged": 0, "errors": 0, "skipped": True}
-
-    total_purged = sum(r["purged"] for r in results.values())
-    total_errors = sum(r["errors"] for r in results.values())
-    return {
-        "status": "success",
-        "hours": hours,
-        "total_purged": total_purged,
-        "total_errors": total_errors,
-        "details": results,
-    }
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# UNIFIED WEATHER ENDPOINTS
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-@app.get("/api/weather/spc-items")
-def api_weather_spc_items(product: str = "watches"):
-    """Return active watches or mesoscale discussions for dropdown population."""
-    from spc.spc_utils import fetch_active_watch_items, fetch_active_md_items
-
-    product = (product or "").lower()
-    if product == "watches":
-        items, _ = fetch_active_watch_items()
-        result = []
-        for w in items or []:
-            polygon = w.get("polygon") or []
-            bounds = None
-            if len(polygon) >= 3:
-                lons = [pt[0] for pt in polygon]
-                lats = [pt[1] for pt in polygon]
-                bounds = {
-                    "w": min(lons),
-                    "e": max(lons),
-                    "s": min(lats),
-                    "n": max(lats),
-                }
-            result.append(
-                {
-                    "id": w.get("id"),
-                    "label": w.get("title") or w.get("label", ""),
-                    "bounds": bounds,
-                }
-            )
-        return {"status": "ok", "items": result, "product": "watches"}
-
-    elif product == "mds":
-        items, _ = fetch_active_md_items()
-        result = []
-        for md in items or []:
-            polygon = md.get("polygon") or []
-            bounds = None
-            if len(polygon) >= 3:
-                lons = [pt[0] for pt in polygon]
-                lats = [pt[1] for pt in polygon]
-                bounds = {
-                    "w": min(lons),
-                    "e": max(lons),
-                    "s": min(lats),
-                    "n": max(lats),
-                }
-            result.append(
-                {
-                    "id": md.get("id"),
-                    "label": md.get("short_label") or md.get("label", ""),
-                    "bounds": bounds,
-                }
-            )
-        return {"status": "ok", "items": result, "product": "mds"}
-
-    return {"status": "error", "message": f"Unknown product: {product}"}
-
-
-@app.get("/api/weather")
-def api_weather(
-    request_id: str = "",
-    product_group: str = "surface",
-    product: str = "Station Plot",
-    region: str = "CONUS",
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    latest_only: Optional[bool] = False,
-    frames: Optional[int] = 12,
-    fps: Optional[int] = 4,
-    user_tz: Optional[str] = None,
-    day: Optional[int] = 1,
-    report_day: Optional[str] = "today",
-    item_id: Optional[str] = None,
-    n: Optional[float] = None,
-    s: Optional[float] = None,
-    e: Optional[float] = None,
-    w: Optional[float] = None,
-    style_config: Optional[str] = None,
-    view_mode: Optional[str] = "layers",
-):
-    """Unified weather endpoint for current + archive mode inference."""
-    if not weather_utils:
-        raise HTTPException(
-            status_code=503,
-            detail=error_payload(
-                "Weather module unavailable", code="module_unavailable"
-            ),
-        )
-
-    # Validate product group and product
-    valid, err_msg = weather_utils.validate_product_group(product_group, product)
-    if not valid:
-        raise HTTPException(status_code=400, detail=error_payload(err_msg))
-
-    # Mode inference
-    data_mode = infer_data_mode(date_from, date_to)
-
-    # Parse styles
-    parsed_styles = _parse_and_validate_styles(style_config)
-    logo_path_to_use = resolve_logo_path(parsed_styles, BASE_DIR, LOGO_PATH)
-
-    # Custom extent
-    custom_extent = _resolve_extent(n, s, e, w)
-    if custom_extent:
-        region = "CONUS"
-
-    # Archive validation
-    if data_mode == "archive":
-        start_utc = parse_utc_datetime(date_from)
-        end_utc = parse_utc_datetime(date_to)
-        max_days = float(weather_utils.MAX_ARCHIVE_SPAN.get(product_group.lower(), 7))
-        if (end_utc - start_utc) > timedelta(days=max_days):
-            raise HTTPException(
-                status_code=400,
-                detail=error_payload(
-                    f"Archive range too large for {product_group}.",
-                    code="date_range_too_large",
-                    details=f"Maximum allowed span is {max_days} day(s).",
-                ),
-            )
-        if end_utc < start_utc:
-            raise HTTPException(
-                status_code=400,
-                detail=error_payload(
-                    "date_to must be >= date_from.", code="invalid_date_range"
-                ),
-            )
-
-    # Progress setup
-    if request_id:
-        active_tasks[request_id] = {
-            "percent": 0,
-            "message": "Starting...",
-            "stage": "init",
-            "source": product_group.upper(),
-        }
-
-    def progress_cb(pct, msg, stage):
-        if request_id:
-            active_tasks[request_id] = {
-                "percent": pct,
-                "message": msg,
-                "stage": stage,
-                "source": product_group.upper(),
-            }
-
-    try:
-        result = weather_utils.generate_weather_layers(
-            product_group=product_group,
-            product=product,
-            region=region,
-            custom_extent=custom_extent,
-            date_from=date_from if data_mode == "archive" else None,
-            date_to=date_to if data_mode == "archive" else None,
-            frames_count=max(1, min(int(frames or 12), 100)),
-            fps=max(1, min(int(fps or 4), 30)),
-            user_tz=user_tz,
-            style_config=parsed_styles,
-            logo_file=logo_path_to_use,
-            progress_callback=progress_cb,
-            day=max(1, min(int(day or 1), 8)),
-            report_day="yesterday"
-            if (report_day or "").lower() == "yesterday"
-            else "today",
-            item_id=item_id or None,
-        )
-
-        if not result or not result.get("frames"):
-            return success_payload(
-                status="warning",
-                message="No output generated for the selected parameters.",
-                image_url=None,
-                source=product_group.upper(),
-                data_mode=data_mode,
-                request_id=request_id,
-            )
-
-        # Build layered response URLs
-        from urllib.parse import quote
-
-        archive_layers_dir = weather_utils.WEATHER_ARCHIVE_LAYERS
-
-        def _layer_url(path_value):
-            if not path_value:
-                return None
-            rel = os.path.relpath(path_value, archive_layers_dir).replace("\\", "/")
-            rel = quote(rel, safe="/")
-            return f"/img/weather_archive_layers/{rel}"
-
-        basemap_url = _layer_url(result["basemap_path"])
-        session_id = result["session_id"]
-
-        frames_payload = []
-        has_legend = False
-        for entry in result["frames"]:
-            product_url = _layer_url(entry.get("product_path"))
-            static_overlay_url = _layer_url(entry.get("static_overlay_path"))
-            hud_right_url = _layer_url(entry.get("hud_right_path"))
-            legend_url = _layer_url(entry.get("legend_path"))
-            if legend_url:
-                has_legend = True
-            frames_payload.append(
-                {
-                    "index": entry["index"],
-                    "timestamp_utc": entry["timestamp_utc"],
-                    "timestamp_local": entry["timestamp_local"],
-                    "url": product_url,
-                    "image_url": product_url,
-                    "product_url": product_url,
-                    "static_overlay_url": static_overlay_url,
-                    "hud_right_url": hud_right_url,
-                    "legend_url": legend_url,
-                }
-            )
-
-        layer_defs = [
-            {
-                "id": "product",
-                "label": f"{product_group.title()} Layer",
-                "default_visible": True,
-                "default_opacity": 1,
-                "sort": 10,
-            },
-            {
-                "id": "static_overlay",
-                "label": "HUD and Logo Layer",
-                "default_visible": True,
-                "default_opacity": 1,
-                "sort": 20,
-            },
-        ]
-        if has_legend:
-            layer_defs.append(
-                {
-                    "id": "legend",
-                    "label": "Legend",
-                    "default_visible": True,
-                    "default_opacity": 1,
-                    "sort": 30,
-                },
-            )
-        layer_defs.append(
-            {
-                "id": "hud_right",
-                "label": "Timestamp Layer",
-                "default_visible": True,
-                "default_opacity": 1,
-                "sort": 50,
-            },
-        )
-
-        payload = success_payload(
-            message=f"{product_group}/{product} generated with {len(frames_payload)} frame(s)",
-            image_url=basemap_url,
-            source=product_group.upper(),
-            data_mode=data_mode,
-            request_id=request_id,
-        )
-        payload.update(
-            {
-                "output_mode": "layers",
-                "basemap_url": basemap_url,
-                "frames": frames_payload,
-                "layers_path": session_id,
-                "session_expires_utc": result["manifest"].get("expires_utc", ""),
-                "layer_defs": layer_defs,
-            }
-        )
-        return payload
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        import traceback
-
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=error_payload(str(exc), code="internal_error"),
-        )
-    finally:
-        if request_id:
-            active_tasks.pop(request_id, None)
-
 
 if __name__ == "__main__":
     # On Windows, Uvicorn's reload subprocess can intermittently emit

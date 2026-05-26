@@ -78,7 +78,7 @@ def _render_overlay(
         flat_overlay_write_processed_keys,
         frame_key_from_datetime,
     )
-    from rtma_utils import ensure_rtma_grib, _render_rtma_png_standalone
+    from rtma.rtma_utils import ensure_rtma_grib, _render_rtma_png_standalone
 
     path_parts = (region.upper(), stream, product)
     frame_key = frame_key_from_datetime(source.valid_time)
@@ -153,7 +153,7 @@ def run_preload(
     verbose: bool = False,
 ) -> None:
     try:
-        from rtma_utils import (
+        from rtma.rtma_utils import (
             PRODUCTS,
             ensure_rtma_city_geojson,
             ensure_rtma_grib,

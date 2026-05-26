@@ -236,14 +236,6 @@
         }
     }
 
-    async function purgeOldFiles(endpoint) {
-        const response = await fetch(apiUrl(endpoint || '/api/purge'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        return response.json();
-    }
-
     function getLabelForInput(inputId) {
         if (!inputId) {
             return null;
@@ -697,7 +689,6 @@
     window.displayImage = displayImage;
     window.displayVideo = displayVideo;
     window.pollProgress = pollProgress;
-    window.purgeOldFiles = purgeOldFiles;
     window.setStatus = setStatus;
     window.apiUrl = apiUrl;
     window.setOutputMeta = setOutputMeta;

@@ -1,36 +1,15 @@
-from config.style_config import (
-    resolve_surface_style_config,
-)
 from config.geo_config import STATES_FULL, STATE_BOUNDS
-from config.surface_config import (
-    build_temperature_gradient_levels_colors,
-    TEMPERATURE_COLORMAP,
-    TEMPERATURE_MIN_F,
-    TEMPERATURE_MAX_F,
-    FEELS_LIKE_COLORMAP,
-    FEELS_LIKE_MIN_F,
-    FEELS_LIKE_MAX_F,
-)
-from scipy.ndimage import gaussian_filter
 from metpy.units import units
-from metpy.calc import reduce_point_density, wind_components
-from metpy.plots import StationPlot, USCOUNTIES, sky_cover, current_weather
-from dateutil import tz
+from metpy.calc import wind_components
 from datetime import datetime, timezone, timedelta
 from io import StringIO
 from urllib.parse import urlencode
-import cartopy.feature as cfeature
 import cartopy.crs as ccrs
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.offsetbox import AnnotationBbox, OffsetImage
-import matplotlib.image as mpimg
 import matplotlib.patheffects as PathEffects
-import matplotlib.pyplot as plt
-from font_utils import register_montserrat_fonts
-from geo_utils import (
+from lib.font_utils import register_montserrat_fonts
+from lib.geo_utils import (
     load_state_geometries as _load_state_geometries_impl,
     build_conus_geometry as _build_conus_geometry_impl,
-    get_us_country_geometry as _get_us_country_geometry_impl,
 )
 import os
 import json
@@ -41,7 +20,6 @@ import requests
 import pandas as pd
 import numpy as np
 import matplotlib
-import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 matplotlib.use("Agg")
@@ -58,36 +36,16 @@ register_montserrat_fonts()
 # --- STATE GEOMETRY CACHE (for region masking) ---
 _STATE_GEOM_CACHE = None
 _CONUS_GEOM_CACHE = None
-_US_COUNTRY_GEOM_CACHE = None
 _CITIES_CACHE = {}
 # Cache for pre-computed viewport mask geometries keyed by (state_code, lon0, lon1, lat0, lat1)
 _REGION_MASK_CACHE = {}
 # Cache for pre-projected matplotlib Path objects keyed by the same mask_key + optional suffix
 _MASK_PATH_CACHE = {}
 
-# --- BASEMAP CACHE PATHS ---
-BASEMAP_CACHE_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "basemap_cache"
-)
-os.makedirs(BASEMAP_CACHE_DIR, exist_ok=True)
-BASEMAP_CACHE_VERSION = "nomask_v1"
 SURFACE_NETWORK_TYPES = ("ASOS", "COOP", "DCP", "RWIS")
 _WORLD_STATION_NAME_CACHE = {}
 _WORLD_STATION_NAME_CACHE_TS = 0.0
 _WORLD_STATION_NAME_CACHE_TTL_SECONDS = 12 * 3600
-
-
-def get_basemap_path(state_code: str, style_config: dict = None) -> str:
-    """Return the expected path for a pre-rendered basemap PNG."""
-    return os.path.join(
-        BASEMAP_CACHE_DIR,
-        f"{state_code.upper()}_{BASEMAP_CACHE_VERSION}.png",
-    )
-
-
-def basemap_exists(state_code: str, style_config: dict = None) -> bool:
-    """Return True if a pre-rendered basemap PNG exists for this state."""
-    return os.path.exists(get_basemap_path(state_code))
 
 
 def _add_geometry_patch(
@@ -245,14 +203,18 @@ def calc_heat_index(t_f, rh):
 
 def get_cache_path(state_code, reference_dt=None):
     base_path = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(base_path)
+
     if reference_dt is None:
         reference_dt = datetime.now(timezone.utc)
     if reference_dt.tzinfo is None:
         reference_dt = reference_dt.replace(tzinfo=timezone.utc)
 
     cache_dir = os.path.join(
-        base_path,
-        "surface_data",
+        repo_root,
+        "cache",
+        "surface",
+        "raw",
         state_code.upper(),
         reference_dt.strftime("%Y"),
         reference_dt.strftime("%m"),
@@ -424,33 +386,43 @@ def _fetch_world_current_observations():
     if df is None or df.empty:
         return pd.DataFrame()
 
-    station_ids = df.get("station_id", "").astype(str).str.strip()
+    def _column_or_default(column_name: str, default: object = np.nan) -> pd.Series:
+        if column_name in df.columns:
+            return df[column_name]
+        return pd.Series(default, index=df.index)
+
+    station_ids = _column_or_default("station_id", "").astype(str).str.strip()
     station_name_map = _get_world_station_name_map()
 
     out = pd.DataFrame()
     out["station_id"] = station_ids
     out["name"] = station_ids.str.upper().map(
         station_name_map).fillna(station_ids)
-    out["valid"] = df.get("observation_time")
-    out["latitude"] = pd.to_numeric(df.get("latitude"), errors="coerce")
-    out["longitude"] = pd.to_numeric(df.get("longitude"), errors="coerce")
+    out["valid"] = _column_or_default("observation_time")
+    out["latitude"] = pd.to_numeric(_column_or_default("latitude"), errors="coerce")
+    out["longitude"] = pd.to_numeric(_column_or_default("longitude"), errors="coerce")
 
-    temp_c = pd.to_numeric(df.get("temp_c"), errors="coerce")
-    dew_c = pd.to_numeric(df.get("dewpoint_c"), errors="coerce")
+    temp_c = pd.to_numeric(_column_or_default("temp_c"), errors="coerce")
+    dew_c = pd.to_numeric(_column_or_default("dewpoint_c"), errors="coerce")
     out["air_temperature"] = (temp_c * 9.0 / 5.0) + 32.0
     out["dew_point_temperature"] = (dew_c * 9.0 / 5.0) + 32.0
 
-    out["wind_speed"] = pd.to_numeric(df.get("wind_speed_kt"), errors="coerce")
-    out["wind_dir"] = pd.to_numeric(
-        df.get("wind_dir_degrees"), errors="coerce")
-    out["wind_gust"] = pd.to_numeric(df.get("wind_gust_kt"), errors="coerce")
-    out["altimeter"] = pd.to_numeric(df.get("altim_in_hg"), errors="coerce")
-    out["mean_sea_level_pressure"] = pd.to_numeric(
-        df.get("sea_level_pressure_mb"), errors="coerce"
+    out["wind_speed"] = pd.to_numeric(
+        _column_or_default("wind_speed_kt"), errors="coerce"
     )
-    out["visibility"] = df.get(
-        "visibility_statute_mi", np.nan).apply(_to_float_mi)
-    out["wxcodes"] = df.get("wx_string", np.nan)
+    out["wind_dir"] = pd.to_numeric(
+        _column_or_default("wind_dir_degrees"), errors="coerce")
+    out["wind_gust"] = pd.to_numeric(
+        _column_or_default("wind_gust_kt"), errors="coerce"
+    )
+    out["altimeter"] = pd.to_numeric(
+        _column_or_default("altim_in_hg"), errors="coerce"
+    )
+    out["mean_sea_level_pressure"] = pd.to_numeric(
+        _column_or_default("sea_level_pressure_mb"), errors="coerce"
+    )
+    out["visibility"] = _column_or_default("visibility_statute_mi").apply(_to_float_mi)
+    out["wxcodes"] = _column_or_default("wx_string")
 
     # Keep network taxonomy aligned with the existing frontend filters.
     out["network"] = "ASOS"
@@ -684,7 +656,8 @@ def fetch_metar_data(state_code, use_nws_first=False):
     cache_dir, cache_file = get_cache_path(state_upper)
     base_path = os.path.dirname(os.path.abspath(__file__))
     legacy_cache_file = os.path.join(
-        base_path, "surface_data", state_upper, "data.csv")
+        base_path, "surface_data", state_upper, "data.csv"
+    )
 
     for candidate in (cache_file, legacy_cache_file):
         if is_cache_valid(candidate, minutes=30):
@@ -1405,327 +1378,7 @@ def generate_surface_map(
         "surface.generate_surface_map is disabled in Phase 0. "
         "Rendering was removed from surface_utils; use unified weather/export pipeline."
     )
-
-    style_config = resolve_surface_style_config(style_config)
-
-    perf = _perf_enabled(style_config)
-    t_total = time.time()
-
-    try:
-        # Z-order defaults (overridden by style_config zorder_* keys)
-        zo = {
-            "land": 0,
-            "counties": 1,
-            "water": 1,
-            "gradient": 1,
-            "contour_lines": 2,
-            "highways": 2,
-            "country_mask": 3,
-            "borders": 4,
-            "contour_labels": 10,
-            "scatter": 505,
-            "scatter_text": 510,
-            "gradient_values": 1500,
-            "region_mask": 500,
-            "state_border": 501,
-            "cities": 502,
-            "hud": 2000,
-            "logos": 2000,
-        }
-        for k in zo:
-            v = style_config.get(f"zorder_{k}")
-            if v is not None:
-                zo[k] = int(v)
-        zo["state_border"] = max(zo["state_border"], zo["borders"] + 1)
-
-        # Style Unpacking
-        font_size = int(style_config.get("font_size", 12))
-        dot_size = int(style_config.get("dot_size", 500))
-        density_km = float(
-            style_config.get(
-                "density_km", 330 -
-                (int(style_config.get("station_density", 5)) * 30)
-            )
-        )
-        city_text_size = int(style_config.get("city_text_size", 10))
-        city_collision_w = float(style_config.get("city_collision_w", 0.05))
-        city_collision_h = float(style_config.get("city_collision_h", 0.02))
-        show_counties = style_config.get("show_counties", False)
-        county_width = float(style_config.get("county_width", 0.5))
-        county_color = style_config.get("county_color", "#585858")
-
-        # Base Map Styling
-        land_color = style_config.get("land_color", "#585858")
-        ocean_color = style_config.get("ocean_color", "#A0C8F0")
-        coastline_width = float(style_config.get("coastline_width", 0.8))
-        coastline_color = style_config.get("coastline_color", "#000000")
-
-        # Country Styling
-        show_country = style_config.get("show_country", True)
-        if isinstance(show_country, str):
-            show_country = show_country.lower() not in ("false", "0", "no")
-        country_border_width = float(
-            style_config.get("country_border_width", 0.8))
-        country_border_color = style_config.get(
-            "country_border_color", "black")
-
-        # State Styling
-        show_states = style_config.get("show_states", True)
-        if isinstance(show_states, str):
-            show_states = show_states.lower() not in ("false", "0", "no")
-        state_border_width = float(style_config.get("state_border_width", 0.5))
-        state_border_color = style_config.get("state_border_color", "black")
-
-        # City text styling
-        city_text_color = style_config.get("city_text_color", "white")
-        city_text_bg_color = style_config.get("city_text_bg_color", "black")
-        city_text_bg_alpha = float(style_config.get("city_text_bg_alpha", 0.5))
-
-        # Highways
-        show_highways = style_config.get("show_highways", False)
-        if isinstance(show_highways, str):
-            show_highways = show_highways.lower() not in ("false", "0", "no")
-        highway_color = style_config.get("highway_color", "#888888")
-        highway_width = float(style_config.get("highway_width", 0.8))
-        highway_opacity = float(style_config.get("highway_opacity", 0.6))
-
-        # Lakes
-        show_lakes = style_config.get("show_lakes", True)
-        if isinstance(show_lakes, str):
-            show_lakes = show_lakes.lower() not in ("false", "0", "no")
-        lake_color = style_config.get("lake_color", "#A0C8F0")
-        lake_outline_color = style_config.get("lake_outline_color", "#333333")
-        lake_outline_width = float(style_config.get("lake_outline_width", 0.5))
-
-        # Rivers
-        show_rivers = style_config.get("show_rivers", False)
-        if isinstance(show_rivers, str):
-            show_rivers = show_rivers.lower() not in ("false", "0", "no")
-        river_color = style_config.get("river_color", "#A0C8F0")
-        river_width = float(style_config.get("river_width", 0.5))
-
-        # Selection border styling
-        sel_border_width = float(style_config.get("sel_border_width", 0.5))
-        sel_border_color = style_config.get("sel_border_color", "white")
-
-        # Smoothing
-        smooth_sigma = int(style_config.get("smooth_sigma", 5))
-
-        # HUD Colors
-        hud_left_text_color = style_config.get("hud_left_text_color", "white")
-        hud_left_bg_color = style_config.get("hud_left_bg_color", "black")
-        hud_left_edge_color = style_config.get(
-            "hud_left_edge_color", "#555555")
-        hud_left_opacity = float(style_config.get("hud_left_opacity", 0.7))
-        hud_right_text_color = style_config.get("hud_right_text_color", "gold")
-        hud_right_bg_color = style_config.get("hud_right_bg_color", "black")
-        hud_right_edge_color = style_config.get(
-            "hud_right_edge_color", "#555555")
-        hud_right_opacity = float(style_config.get("hud_right_opacity", 0.7))
-
-        output_time_utc = datetime.now(timezone.utc)
-        image_dir = os.path.join(
-            output_dir,
-            state_code.upper(),
-            output_time_utc.strftime("%Y"),
-            output_time_utc.strftime("%m"),
-            output_time_utc.strftime("%d"),
-        )
-        os.makedirs(image_dir, exist_ok=True)
-
-        t_fetch = time.time()
-        df = fetch_metar_data(state_code, use_nws_first=use_nws_current)
-        _perf_log(perf, "fetch_metar_data", t_fetch)
-        if df.empty:
-            return None, "No Surface Data Available."
-
-        # Determine map extent from STATE_BOUNDS (avoids outlier stations)
-        sc = state_code.upper()
-
-        # Custom extent overrides state bounds
-        valid_custom_extent = None
-        if custom_extent is not None:
-            try:
-                s_in, n_in, w_in, e_in = [float(v) for v in custom_extent]
-                if n_in > s_in and e_in > w_in:
-                    valid_custom_extent = (s_in, n_in, w_in, e_in)
-            except Exception:
-                valid_custom_extent = None
-
-        if valid_custom_extent is not None:
-            ext_lon0, ext_lon1, ext_lat0, ext_lat1 = (
-                valid_custom_extent[2],
-                valid_custom_extent[3],
-                valid_custom_extent[0],
-                valid_custom_extent[1],
-            )
-        elif sc in STATE_BOUNDS:
-            sb = STATE_BOUNDS[sc]
-            ext_lon0, ext_lon1, ext_lat0, ext_lat1 = sb
-        else:
-            b = 1.5
-            ext_lon0 = df["longitude"].min() - b
-            ext_lon1 = df["longitude"].max() + b
-            ext_lat0 = df["latitude"].min() - b
-            ext_lat1 = df["latitude"].max() + b
-
-        # Filter data to within the map bounds (drop far-flung outlier stations)
-        if sc != "CONUS" or valid_custom_extent is not None:
-            buf = 1.5
-            in_bounds = (
-                (df["longitude"] >= ext_lon0 - buf)
-                & (df["longitude"] <= ext_lon1 + buf)
-                & (df["latitude"] >= ext_lat0 - buf)
-                & (df["latitude"] <= ext_lat1 + buf)
-            )
-            df = df[in_bounds].reset_index(drop=True)
-            if df.empty:
-                return None, "No Surface Data Available."
-
-        center_lon = (ext_lon0 + ext_lon1) / 2
-        center_lat = (ext_lat0 + ext_lat1) / 2
-
-        # Create projection early so we can compute the true projected aspect
-        proj = ccrs.LambertConformal(
-            central_longitude=center_lon,
-            central_latitude=center_lat,
-        )
-
-        # Compute aspect ratio from projected extent (not raw lat/lon)
-        ext_corners = np.array(
-            [
-                [ext_lon0, ext_lat0],
-                [ext_lon1, ext_lat0],
-                [ext_lon1, ext_lat1],
-                [ext_lon0, ext_lat1],
-            ]
-        )
-        proj_corners = proj.transform_points(
-            ccrs.PlateCarree(), ext_corners[:, 0], ext_corners[:, 1]
-        )
-        proj_w = proj_corners[:, 0].max() - proj_corners[:, 0].min()
-        proj_h = proj_corners[:, 1].max() - proj_corners[:, 1].min()
-        data_aspect = proj_w / proj_h
-
-        font_family = style_config.get("font_family", "Montserrat")
-
-        fig_height = 7.2
-        # Precompute margins so we can size the figure for the axes area
-        left_margin = float(style_config.get("figure_left_margin", 0.02))
-        bottom_margin = float(
-            style_config.get(
-                "figure_bottom_margin_station"
-                if parameter == "Station Plot"
-                else "figure_bottom_margin_other",
-                0.20 if parameter == "Station Plot" else 0.12,
-            )
-        )
-        right_margin = float(style_config.get("figure_right_margin", 0.02))
-        top_margin = float(style_config.get("figure_top_margin", 0.02))
-        ax_width = 1.0 - left_margin - right_margin
-        ax_height = 1.0 - bottom_margin - top_margin
-
-        # Size figure so axes area aspect matches projected map aspect
-        fig_width = data_aspect * (ax_height / ax_width) * fig_height
-
-        # Scale HUD/logo sizes relative to the widest figure (12.8")
-        # Floor at 0.55 so text stays readable on narrow figures
-        scale_factor = max(fig_width / 12.8, 0.55)
-        city_text_size = int(city_text_size * scale_factor)
-        font_size = int(font_size * scale_factor)
-        # Smaller for station plots (many fields per station)
-        station_font_scale = float(
-            style_config.get("station_font_scale", 0.55))
-        station_font_size = max(7, int(font_size * station_font_scale))
-        dot_size = int(dot_size * scale_factor)
-
-        fig = plt.figure(figsize=(fig_width, fig_height), dpi=150)
-        ax = fig.add_axes(
-            [left_margin, bottom_margin, ax_width, ax_height], projection=proj
-        )
-
-        # Use a pre-rendered basemap for known state extents.
-        # The basemap contains all static cartographic layers: land, ocean, coastline,
-        # borders, states, counties, lakes, rivers, highways, and selected-state border.
-        # Custom extents and Station Plot always draw from scratch.
-        _use_basemap = (
-            valid_custom_extent is None
-            and parameter != "Station Plot"
-            and sc in STATE_BOUNDS
-            and basemap_exists(sc, style_config)
-        )
-
-        t_base = time.time()
-        if _use_basemap:
-            _bm = plt.imread(get_basemap_path(sc, style_config))
-            _bg_ax = fig.add_axes([0, 0, 1, 1], label="basemap_bg", zorder=0)
-            _bg_ax.imshow(_bm, aspect="auto", interpolation="nearest")
-            _bg_ax.axis("off")
-            _bg_ax.set_zorder(0)
-            ax.set_zorder(1)
-            ax.patch.set_alpha(0)  # Let basemap show through axes background
-            _perf_log(perf, "load_basemap", t_base)
-        else:
-            ax.add_feature(cfeature.LAND, facecolor=land_color,
-                           zorder=zo["land"])
-            ax.add_feature(cfeature.OCEAN, facecolor=ocean_color,
-                           zorder=zo["land"])
-            ax.add_feature(
-                cfeature.COASTLINE.with_scale("10m"),
-                linewidth=coastline_width,
-                edgecolor=coastline_color,
-                zorder=zo["borders"],
-            )
-            if show_country:
-                ax.add_feature(
-                    cfeature.BORDERS.with_scale("10m"),
-                    linewidth=country_border_width,
-                    edgecolor=country_border_color,
-                    zorder=zo["borders"],
-                )
-            if show_states:
-                ax.add_feature(
-                    cfeature.STATES.with_scale("10m"),
-                    linewidth=state_border_width,
-                    edgecolor=state_border_color,
-                    zorder=zo["borders"],
-                )
-            if show_counties:
-                ax.add_feature(
-                    USCOUNTIES.with_scale("5m"),
-                    linewidth=county_width,
-                    edgecolor=county_color,
-                    zorder=zo["counties"],
-                )
-
-            # Lakes
-            if show_lakes:
-                ax.add_feature(
-                    cfeature.LAKES.with_scale("50m"),
-                    facecolor=lake_color,
-                    edgecolor=lake_outline_color,
-                    linewidth=lake_outline_width,
-                    zorder=zo["water"],
-                )
-
-            # Rivers
-            if show_rivers:
-                ax.add_feature(
-                    cfeature.RIVERS.with_scale("50m"),
-                    edgecolor=river_color,
-                    linewidth=river_width,
-                    zorder=zo["water"],
-                )
-
-            # Highways
-            if show_highways:
-                try:
-                    roads = cfeature.NaturalEarthFeature(
-                        "cultural",
-                        "roads_north_america",
-                        "10m",
-                        facecolor="none",
-                    )
+    """
                     ax.add_feature(
                         roads,
                         edgecolor=highway_color,
@@ -2392,4 +2045,4 @@ def generate_surface_map(
     except Exception as e:
         traceback.print_exc()
         return None, str(e)
-
+    """

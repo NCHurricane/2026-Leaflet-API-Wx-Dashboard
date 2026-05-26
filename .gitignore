@@ -67,38 +67,31 @@ img/BlackMarble_2016_3km_geo.tif
 shapefiles/states/
 shapefiles/counties/
 
-# Local debug dumps
-debug_*.txt
-
 # Local planning notes
 WebGL Migration.md
 docs/RTMA_GPU_Alternative.md
 
-#Powershell Scripts
+# Powershell Scripts
 *.ps1
-tools/install_tasks.ps1
 
 # Downloaded data files
 *.nc
-tools/install_tasks.ps1
-*.md
-tools/install_tasks.ps1
+
+# Debug/diagnostic files
+debug_*.txt
+diag.py
+false
+
+# AI/LLM tool caches and metadata
+.ai-index/
+.aider.tags.cache.v4/
 .aider.conf.yml
-.gitignore
 .aider.input.history
 .aider.model.metadata.json
 
-#AIDER
-.ai-index/
-.aider.tags.cache.v4/
-.ai-index
+# Claude Code local settings (keep launch.json for dev server config)
+.claude/settings.local.json
 
-#TOOLs
-tools/
-.aider*
-.claude*
-dashboard_2026.svg
-docs/llm_context/01_file_tree.txt
-docs/llm_context/03_fastapi_openapi.json
-docs/llm_context/07_recent_logs.txt
-tools/install_tasks.ps1
+# AI-generated documentation and context
+**/README.ai.md
+docs/llm_context/

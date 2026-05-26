@@ -5323,6 +5323,16 @@
         regionSelect.value = '__RADAR_SITE_SELECTED__';
     }
 
+    function _clearRadarSiteRegionState() {
+        const regionSelect = byId('weather-region');
+        if (!regionSelect) return;
+        const sentinelOpt = regionSelect.querySelector('option[value="__RADAR_SITE_SELECTED__"]');
+        if (sentinelOpt) sentinelOpt.remove();
+        if (regionSelect.value === '__RADAR_SITE_SELECTED__' || !regionSelect.value) {
+            regionSelect.value = 'CONUS';
+        }
+    }
+
     function _setActiveWeatherType(type) {
         const target = byId(`weather-type-${type}`);
         if (!target) return;
@@ -5567,6 +5577,7 @@
                 _syncRadarSiteLayerVisibility();
                 setLegend(null);
                 _showRadarLookbackSlider(false);
+                _clearRadarSiteRegionState();
                 break;
 
             case 'mrms':
@@ -6586,8 +6597,8 @@
             _setRadarStatus(`${site} ${product} radar animation loaded.`);
             _showRadarAutoUpdateRow(true);
             _updateRadarNextUpdateCountdown();
-            // Start Animate at the first frame so scrubber position and image align.
-            await _renderRadarScrubFrame(0);
+            // Start Animate at the latest frame (most recent data).
+            await _renderRadarScrubFrame(_radarScrubFrames.length - 1);
             _startRadarScrubWarmPoll(site, product);
         } catch (err) {
             if (loadSeq !== _radarScrubLoadSeq || !_isTypeEnabled('radar')) return;
@@ -10833,6 +10844,8 @@
             }
 
             _setArchiveProgress(false);
+            _setArchiveScrubber(true);
+            _showRtmaLookbackSlider(true);
             _setScrubberControlsEnabled(true);
             const sourceLabel = usedCache ? 'pre-rendered cache' : 'S3';
             _setRtmaScrubberStatus(`${_rtmaScrubFrames.length} frames from ${sourceLabel} (${maxHours}h window).`);

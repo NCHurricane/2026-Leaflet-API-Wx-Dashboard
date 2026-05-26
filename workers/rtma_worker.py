@@ -100,7 +100,7 @@ def _render_overlay_for_source(
         flat_overlay_read_processed_keys,
         frame_key_from_datetime,
     )
-    from rtma_utils import ensure_rtma_grib, _render_rtma_png_standalone
+    from rtma.rtma_utils import ensure_rtma_grib, _render_rtma_png_standalone
 
     path_parts = (region.upper(), stream, product)
     frame_key = frame_key_from_datetime(source.valid_time)
@@ -180,7 +180,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
         return
 
     try:
-        from rtma_utils import (
+        from rtma.rtma_utils import (
             PRODUCTS,
             ensure_rtma_city_geojson,
             ensure_rtma_grib,
@@ -285,7 +285,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                     lat_1d_cache, lon_1d_cache = None, None
                     try:
                         import numpy as np
-                        from rtma_utils import (
+                        from rtma.rtma_utils import (
                             ensure_rtma_grib,
                             _extract_dataset,
                             _crop_grid,

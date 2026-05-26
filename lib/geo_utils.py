@@ -166,7 +166,7 @@ def build_world_land_geometry():
 # ═════════════════════════════════════════════════════════════════════════════
 
 # All modules share the project-root ``shapefiles/`` directory.
-_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SHARED_SHAPEFILE_DIR = os.path.join(_PROJECT_ROOT, "shapefiles")
 
 

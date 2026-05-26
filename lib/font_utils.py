@@ -12,7 +12,7 @@ def register_montserrat_fonts(fonts_dir=None):
         return
 
     if fonts_dir is None:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         fonts_dir = os.path.join(base_dir, "fonts")
 
     if not os.path.isdir(fonts_dir):

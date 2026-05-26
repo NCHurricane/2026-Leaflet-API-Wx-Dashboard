@@ -24,9 +24,9 @@ from matplotlib.colors import to_rgba
 from dateutil import tz
 from datetime import datetime, timezone
 import matplotlib.pyplot as plt
-from font_utils import register_montserrat_fonts
-from geo_utils import CensusCounties  # Consolidated county shapefile class
-from geo_utils import load_state_geometries as _load_state_geometries
+from lib.font_utils import register_montserrat_fonts
+from lib.geo_utils import CensusCounties  # Consolidated county shapefile class
+from lib.geo_utils import load_state_geometries as _load_state_geometries
 import os
 import json
 import hashlib
@@ -60,7 +60,7 @@ MARINE_ALERT_EVENTS = {
     "Special Marine Warning",
 }
 
-# CensusCounties is imported at the top of this file from geo_utils.
+# CensusCounties is imported at the top of this file from lib.geo_utils.
 # Consumers that import `from alerts.alerts_utils import CensusCounties`
 # will continue to work via the re-export.
 
@@ -350,26 +350,6 @@ def normalize_alerts_custom_extent(custom_extent, target_aspect=4.0 / 3.0):
     return (south, north, west, east)
 
 
-def get_cache_path(state_code, source="nws"):
-    base_path = os.path.dirname(os.path.abspath(__file__))
-    region_key = state_code.upper() if state_code else "NATIONAL"
-    cache_dir = os.path.join(base_path, "alert_data", region_key)
-    os.makedirs(cache_dir, exist_ok=True)
-    source_key = str(source or "nws").lower()
-    if source_key not in {"nws", "iem"}:
-        source_key = "nws"
-    return cache_dir, os.path.join(cache_dir, f"alerts_{source_key}.json")
-
-
-def is_cache_valid(file_path, minutes=5):
-    if not os.path.exists(file_path):
-        return False
-    mtime = os.path.getmtime(file_path)
-    if (time.time() - mtime) < (minutes * 60):
-        return True
-    return False
-
-
 def fetch_active_alerts(state=None, source="nws"):
     features, _source = fetch_active_alerts_with_source(state, source=source)
     return features
@@ -620,33 +600,6 @@ def fetch_active_alerts_with_source(state=None, source="nws"):
     if source_key not in {"nws", "iem"}:
         source_key = "nws"
 
-    cache_dir, cache_file = get_cache_path(state, source=source_key)
-    if is_cache_valid(cache_file, minutes=ACTIVE_ALERTS_CACHE_SECONDS / 60.0):
-        print(f"Loading cached alerts from {cache_file}...")
-        try:
-            with open(cache_file, "r") as f:
-                data = json.load(f)
-                features = data.get("features", [])
-                cached_source = data.get("_source", "NWS API")
-                if state and source_key == "nws":
-                    headers = {
-                        "User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"
-                    }
-                    features = _supplement_state_intersecting_alerts(
-                        features, state, headers
-                    )
-                    if len(features) != len(data.get("features", [])):
-                        data["features"] = features
-                        try:
-                            with open(cache_file, "w") as cache_handle:
-                                json.dump(data, cache_handle)
-                        except Exception as cache_error:
-                            print(
-                                f"[WARN] Error refreshing alert cache: {cache_error}")
-                return features, cached_source
-        except Exception as e:
-            print(f"[WARN] Error reading alert cache: {e}")
-
     if source_key == "iem":
         try:
             iem_features = alerts_iem_utils.fetch_active_alerts_iem(state)
@@ -657,13 +610,6 @@ def fetch_active_alerts_with_source(state=None, source="nws"):
                     "User-Agent": "(NCHurricane.com Weather Suite, contact@nchurricane.com)"
                 },
             )
-
-            wrapper = {"_source": "IEM", "features": iem_features}
-            try:
-                with open(cache_file, "w") as f:
-                    json.dump(wrapper, f)
-            except Exception as e:
-                print(f"[WARN] Error writing alert cache (IEM): {e}")
             return iem_features, "IEM"
         except Exception as e:
             print(f"[WARN] IEM live alert download failed: {e}")
@@ -688,23 +634,12 @@ def fetch_active_alerts_with_source(state=None, source="nws"):
             headers,
         )
         data["_source"] = "NWS API"
-        try:
-            with open(cache_file, "w") as f:
-                json.dump(data, f)
-        except Exception as e:
-            print(f"[WARN] Error writing alert cache: {e}")
         return data.get("features", []), "NWS API"
     except Exception as e:
         print(f"[WARN] NWS alerts API failed, trying IEM fallback: {e}")
 
     try:
         iem_features = alerts_iem_utils.fetch_active_alerts_iem(state)
-        wrapper = {"_source": "IEM", "features": iem_features}
-        try:
-            with open(cache_file, "w") as f:
-                json.dump(wrapper, f)
-        except Exception as e:
-            print(f"[WARN] Error writing alert cache (IEM): {e}")
         return iem_features, "IEM"
     except Exception as e:
         print(f"[WARN] IEM live fallback failed: {e}")

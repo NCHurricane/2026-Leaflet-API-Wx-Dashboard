@@ -1,4 +1,4 @@
-from font_utils import register_montserrat_fonts
+from lib.font_utils import register_montserrat_fonts
 from datetime import datetime, timedelta, timezone
 import importlib
 import os
@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
 import time as _time
-from listing_cache import cached_call
+from lib.listing_cache import cached_call
 
 try:
     from . import radar_utils as thredds_radar_utils
@@ -62,7 +62,7 @@ LEVEL3_DAY_PREFIX_PATTERNS = [
 
 
 # Consolidated S3 client — shared across all NODD modules
-from s3_utils import get_s3_client  # noqa: E402
+from lib.s3_utils import get_s3_client  # noqa: E402
 
 
 def _parse_radar_time_from_key(key):
@@ -714,10 +714,3 @@ def download_radar_data(
     _log(f"[TIMER] download_radar_data TOTAL {_time.perf_counter() - _t_total:.2f}s")
     return save_dir, total_files, downloaded
 
-
-def generate_radar_image(*args, **kwargs):
-    return thredds_radar_utils.generate_radar_image(*args, **kwargs)
-
-
-def purge_old_files(*args, **kwargs):
-    return thredds_radar_utils.purge_old_files(*args, **kwargs)

@@ -21,8 +21,8 @@ from rasterio.transform import from_bounds as _from_bounds
 from shapely.ops import transform as _shapely_transform
 
 from config.geo_config import STATE_BOUNDS
-from geo_utils import build_conus_geometry as _build_conus_geometry
-from geo_utils import build_world_land_geometry as _build_world_land_geometry
+from lib.geo_utils import build_conus_geometry as _build_conus_geometry
+from lib.geo_utils import build_world_land_geometry as _build_world_land_geometry
 
 from workers._freshness import is_cache_fresh, mark_run_complete
 
