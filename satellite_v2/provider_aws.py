@@ -182,49 +182,6 @@ def list_recent_frames(
     return ordered[-max(1, int(max_frames)) :]
 
 
-def download_source_frame(
-    cache_root: str | Path,
-    sat_id: str,
-    sector: str,
-    channel_key: str,
-    frame: SourceFrame | dict,
-) -> Path:
-    sat_key = normalize_sat_id(sat_id)
-    sector_key = normalize_sector(sector)
-    channel = normalize_channel(channel_key)
-    source_key = str(
-        frame.source_key if isinstance(frame, SourceFrame) else frame.get("source_key")
-    )
-    if not source_key:
-        raise ValueError("Satellite v2 frame is missing source_key.")
-    frame_key = str(
-        frame.frame_key if isinstance(frame, SourceFrame) else frame.get("frame_key")
-    )
-    if not frame_key:
-        raise ValueError("Satellite v2 frame is missing frame_key.")
-
-    filename = source_key.rsplit("/", 1)[-1]
-    target = source_path(cache_root, sat_key, sector_key, channel, frame_key, filename)
-    if target.exists() and target.stat().st_size > 0:
-        return target
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(
-        prefix=f".{filename}.", suffix=".tmp", dir=str(target.parent)
-    )
-    os.close(fd)
-    try:
-        _s3_client().download_file(_bucket_name(sat_key), source_key, tmp_name)
-        os.replace(tmp_name, target)
-    except Exception:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
-    return target
-
-
 def download_product_source_frames(
     cache_root: str | Path,
     sat_id: str,

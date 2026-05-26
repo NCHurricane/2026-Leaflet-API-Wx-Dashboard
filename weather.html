@@ -1379,6 +1379,12 @@
                 text-align: center;
             }
 
+            .leaflet-image-layer {
+                image-rendering: pixelated !important;
+                image-rendering: -moz-crisp-edges !important;
+                image-rendering: crisp-edges !important;
+}
+
             .leaflet-top.leaflet-left {
                 display: flex;
                 flex-direction: row;
@@ -2512,6 +2518,10 @@
                     opacity: 0;
                     transform: translateY(-16px);
                 }
+            }
+
+            .radar-overlay-sharp {
+                image-rendering: crisp-edges !important;
             }
 
             .wx-new-alert-banner-header {
@@ -3855,9 +3865,9 @@
                             <div class="wx-animate-slider-container">
                                 <div class="wx-animate-slider-header">
                                     <span style="color:#94a3b8;">LOOKBACK HOURS</span>
-                                    <span id="rtma-animate-slider-value" class="wx-animate-slider-value">3H</span>
+                                    <span id="rtma-animate-slider-value" class="wx-animate-slider-value">1H</span>
                                 </div>
-                                <input id="rtma-animate-slider" type="range" min="1" max="12" step="0.5" value="3" class="wx-animate-slider">
+                                <input id="rtma-animate-slider" type="range" min="1" max="12" step="0.5" value="1" class="wx-animate-slider">
                                 <div class="wx-animate-slider-labels">
                                     <span>1H</span>
                                     <span>12H</span>
@@ -3935,7 +3945,7 @@
                                 style="display:none;">Radar
                                 Opacity</label>
                             <input id="weather-alerts-radar-opacity" type="range" min="0" max="1" step="0.05"
-                                value="0.6" style="display:none;">
+                                value="0.3" style="display:none;">
                         </div>
                         <div id="wx-side-groups-empty" class="wx-block wx-small" style="display:none;">
                             Enable a product group to see style controls.

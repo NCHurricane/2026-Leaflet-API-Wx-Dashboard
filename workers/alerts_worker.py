@@ -3,6 +3,7 @@
 Produces:
   - cache/alerts/national_full.geojson (canonical full geometry, used for all interactions)
   - cache/alerts/national_display_low.geojson (simplified variant for low-zoom rendering)
+  - cache/alerts/enriched_geom_cache.json (cached enriched geometries to skip re-enrichment)
 """
 
 import json
@@ -18,6 +19,9 @@ CACHE_FILE_DISPLAY_LOW = CACHE_DIR / "national_display_low.geojson"
 
 # Legacy cache path for backward compatibility (symlink or copy of full)
 CACHE_FILE = CACHE_DIR / "national.geojson"
+
+# Cache for enriched geometries (keyed by feature properties hash)
+CACHE_FILE_ENRICHED_GEOM = CACHE_DIR / "enriched_geom_cache.json"
 
 # Skip the run if a sentinel touch indicates a recent successful refresh.
 # Threshold = 75% of the 60s scheduler interval, so an external Task Scheduler

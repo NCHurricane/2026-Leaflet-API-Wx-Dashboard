@@ -77,16 +77,16 @@ LIVE_RADAR_PRODUCTS = {
 }
 
 # Worker cadence and retention.
-LIVE_RADAR_LOOKBACK_HOURS = 3
+LIVE_RADAR_LOOKBACK_HOURS = 1
 LIVE_RADAR_WORKER_INTERVAL_MIN = 5
 LIVE_RADAR_TILE_WORKER_INTERVAL_MIN = 5
 LIVE_RADAR_KEEP_FRAMES = 45
 
 # Rendering performance settings (easily tunable without code changes)
-# Figure size in inches. At DPI=150: 10 → 1500×1500px, 8 → 1200×1200px, 6 → 900×900px
-# Testing shows 10 inches renders snappily with parallel workers enabled
-LIVE_RADAR_FIGURE_SIZE_INCHES = 10
-# DPI for rendering. Higher = more detail but slower. 150 is standard.
-LIVE_RADAR_RENDER_DPI = 150
+# Figure size in inches. At DPI=200: 12 → 2400×2400px (native L3 Super-Res 0.25km grid)
+# Increased to 12 inches for full native resolution at 250nm (460km) coverage.
+LIVE_RADAR_FIGURE_SIZE_INCHES = 18
+# DPI for rendering. 200 DPI achieves native 0.25km grid resolution for Level 3 Super-Res.
+LIVE_RADAR_RENDER_DPI = 200
 # Number of parallel worker processes for rendering frames. 0=auto (CPU count), 1=sequential
 LIVE_RADAR_PARALLEL_WORKERS = 0

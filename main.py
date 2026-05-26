@@ -24,7 +24,6 @@ import threading
 from pathlib import Path
 from config.geo_config import STATE_BOUNDS
 from font_utils import resolve_logo_path
-from satellite import satellite_utils as satellite_thredds_utils
 from satellite_v2 import service as satellite_v2_service
 import sys
 from io import StringIO as _StringIO
@@ -51,9 +50,6 @@ del _stderr_cap, _real_stderr, _StringIO
 # Module state — initialized at startup
 USING_NODD = False
 radar_utils = None
-satellite_utils = None
-satellite_archive_utils = None
-satellite_tile_utils = None
 weather_utils = None
 _SCHEDULER_AVAILABLE = False
 start_scheduler = None
@@ -92,10 +88,8 @@ app.include_router(health_router)
 
 def _initialize_modules() -> None:
     """Load all optional modules at startup (NODD, Archive, Weather, Scheduler) with timing."""
-    global USING_NODD, radar_utils, satellite_utils
+    global USING_NODD, radar_utils
     global \
-        satellite_archive_utils, \
-        satellite_tile_utils, \
         weather_utils, \
         _SCHEDULER_AVAILABLE
     global start_scheduler, stop_scheduler
@@ -110,40 +104,22 @@ def _initialize_modules() -> None:
         sys.stderr = StringIO()
 
         from radar import radar_nodd_utils as radar_nodd
-        from satellite import satellite_nodd_utils as satellite_nodd
 
         sys.stderr = old_stderr
 
         radar_utils = radar_nodd
-        satellite_utils = satellite_nodd
         USING_NODD = True
         startup_events.append(("[OK] NODD modules", _time.time() - _t0))
     except Exception as import_error:
         sys.stderr = old_stderr
         radar_utils = radar_thredds_utils
-        satellite_utils = satellite_thredds_utils
         startup_events.append(
             (f"[WARN] NODD fallback to THREDDS: {import_error}", _time.time() - _t0)
         )
 
     # 2. Initialize Radar Archive module
     _t0 = _time.time()
-    # 3. Initialize Satellite Archive module
-    _t0 = _time.time()
-    try:
-        from satellite import satellite_archive_utils as sat_archive
-
-        satellite_archive_utils = sat_archive
-        startup_events.append(("[OK] Satellite archive module", _time.time() - _t0))
-    except Exception as sat_archive_err:
-        startup_events.append(
-            (
-                f"[WARN] Satellite archive unavailable: {sat_archive_err}",
-                _time.time() - _t0,
-            )
-        )
-
-    # 4. Initialize Weather unified module
+    # 3. Initialize Weather unified module
     _t0 = _time.time()
     try:
         from weather import weather_utils as wx_utils
@@ -155,22 +131,7 @@ def _initialize_modules() -> None:
             (f"[WARN] Weather module unavailable: {weather_err}", _time.time() - _t0)
         )
 
-    # 4b. Initialize Satellite tile workflow module
-    _t0 = _time.time()
-    try:
-        from satellite import satellite_tile_utils as sat_tiles
-
-        satellite_tile_utils = sat_tiles
-        startup_events.append(("[OK] Satellite tile module", _time.time() - _t0))
-    except Exception as sat_tiles_err:
-        startup_events.append(
-            (
-                f"[WARN] Satellite tile module unavailable: {sat_tiles_err}",
-                _time.time() - _t0,
-            )
-        )
-
-    # 5. Initialize Background Scheduler
+    # 4. Initialize Background Scheduler
     _t0 = _time.time()
     try:
         from workers.scheduler import start_scheduler as _start, stop_scheduler as _stop
@@ -217,9 +178,8 @@ def _initialize_modules() -> None:
     def _warm_cartopy_async():
         try:
             if hasattr(radar_thredds_utils, "warm_radar_cartopy_cache"):
-                _w0 = _time.time()
+                # Inner function already prints its own timing line.
                 radar_thredds_utils.warm_radar_cartopy_cache()
-                print(f"[Perf] Radar Cartopy warmup {_time.time() - _w0:.2f}s (bg)")
         except Exception as e:
             print(f"[WARN] Radar warmup failed (bg): {e}")
 
@@ -357,13 +317,6 @@ app.mount(
         )
     ),
     name="radar_archive_level3_images",
-)
-app.mount("/img/satellite", StaticFiles(directory=DIRS["satellite"]), name="sat_images")
-os.makedirs(DIRS["satellite_archive"], exist_ok=True)
-app.mount(
-    "/img/satellite_archive",
-    StaticFiles(directory=DIRS["satellite_archive"]),
-    name="sat_archive_images",
 )
 app.mount("/img/mrms", StaticFiles(directory=DIRS["mrms"]), name="mrms_images")
 app.mount("/img/spc", StaticFiles(directory=DIRS["spc"]), name="spc_images")
@@ -1058,13 +1011,21 @@ def _surface_source_timestamp_iso(df) -> str | None:
 
 
 def _enrich_alert_features_geometry(features: list[dict]) -> None:
-    """Fill missing alert geometries.
+    """Fill missing alert geometries using parallel enrichment with geometry caching.
 
     Priority order:
-      1. NWS forecast-zone geometry (terrain-accurate, e.g. mountain ridgelines)
-      2. SAME/county FIPS fallback (entire county polygons) when zone fetch fails
+      1. Cached geometry (from previous run, keyed by alert properties)
+      2. NWS forecast-zone geometry (terrain-accurate, e.g. mountain ridgelines)
+      3. SAME/county FIPS fallback (entire county polygons) when zone fetch fails
+
+    Zone geometries are prefetched concurrently, feature enrichment is parallelized
+    across available CPU cores, and enriched geometries are cached to disk to skip
+    re-enrichment for repeat alerts.
     """
+    import hashlib
     try:
+        from concurrent.futures import ThreadPoolExecutor
+        from pathlib import Path
         from shapely.geometry import mapping, shape
         from alerts.alerts_utils import (
             CensusCounties,
@@ -1072,15 +1033,51 @@ def _enrich_alert_features_geometry(features: list[dict]) -> None:
             _resolve_zone_geometry,
         )
 
-        # Bulk-prefetch all zone geometries for features missing inline geometry.
-        # This is one concurrent pass and avoids per-alert serial HTTP calls.
+        # Load enriched geometry cache to skip re-enrichment
+        geom_cache = {}
+        try:
+            cache_path = Path(__file__).resolve().parent / "cache" / "alerts" / "enriched_geom_cache.json"
+            if cache_path.exists():
+                geom_cache = json.load(cache_path.open())
+        except Exception:
+            pass
+
+        def _feature_cache_key(feat: dict) -> str:
+            """Generate cache key from alert properties that affect enrichment."""
+            if not isinstance(feat, dict):
+                return ""
+            props = feat.get("properties") or {}
+            key_data = json.dumps({
+                "zones": sorted(props.get("affectedZones") or []),
+                "same": sorted((props.get("geocode") or {}).get("SAME") or []),
+            }, sort_keys=True)
+            return hashlib.md5(key_data.encode()).hexdigest()
+
+        # Bulk-prefetch all zone geometries upfront (concurrent pass).
+        # This ensures all zones are in cache before parallelization.
         _prefetch_zone_geometries(features)
 
-        counties_loaded = False
+        # Load county data upfront (thread-safe, just loads into memory).
+        # This avoids race conditions during parallel enrichment.
+        needs_counties = any(
+            not feat.get("geometry") and (feat.get("properties") or {}).get("geocode", {}).get("SAME")
+            for feat in features if isinstance(feat, dict)
+        )
+        if needs_counties:
+            CensusCounties.load()
 
-        for feat in features:
+        def _enrich_single_feature(feat: dict) -> tuple[dict, dict | None, str]:
+            """Enrich one feature's geometry. Returns (feat, enriched_geom, cache_key)."""
             if not isinstance(feat, dict):
-                continue
+                return feat, None, ""
+
+            cache_key = _feature_cache_key(feat)
+
+            # Check cache first
+            if cache_key and cache_key in geom_cache:
+                cached_geom = geom_cache[cache_key]
+                if cached_geom:
+                    return feat, cached_geom, cache_key
 
             raw_geom = feat.get("geometry")
             has_valid_geom = False
@@ -1091,7 +1088,7 @@ def _enrich_alert_features_geometry(features: list[dict]) -> None:
                 except Exception:
                     has_valid_geom = False
             if has_valid_geom:
-                continue
+                return feat, None, cache_key
 
             props = feat.get("properties") or {}
             final_geom = None
@@ -1102,23 +1099,47 @@ def _enrich_alert_features_geometry(features: list[dict]) -> None:
                 final_geom = _resolve_zone_geometry(zone_urls)
 
             # 2. Fall back to SAME county polygons if zone geometry unavailable
-            if final_geom is None or final_geom.is_empty:
+            if (final_geom is None or final_geom.is_empty) and needs_counties:
                 same_codes = (props.get("geocode") or {}).get("SAME") or []
                 if same_codes:
-                    if not counties_loaded:
-                        CensusCounties.load()
-                        counties_loaded = True
                     fips_codes = [
                         c[1:] for c in same_codes if isinstance(c, str) and len(c) == 6
                     ]
                     if fips_codes:
                         final_geom = CensusCounties.get_geometry_for_fips(fips_codes)
 
-            if final_geom is not None and not final_geom.is_empty:
+            return feat, final_geom, cache_key
+
+        # Parallelize feature enrichment across available cores
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            results = list(executor.map(_enrich_single_feature, features))
+
+        # Apply enriched geometries back to features and update cache
+        for feat, final_geom, cache_key in results:
+            if final_geom is not None:
                 try:
-                    feat["geometry"] = mapping(final_geom)
+                    if isinstance(final_geom, dict):
+                        # Cached GeoJSON dict from previous run - apply directly
+                        feat["geometry"] = final_geom
+                    else:
+                        # Freshly enriched Shapely geometry - check validity and cache
+                        if not final_geom.is_empty:
+                            geom_dict = mapping(final_geom)
+                            feat["geometry"] = geom_dict
+                            # Cache the enriched geometry for future runs
+                            if cache_key:
+                                geom_cache[cache_key] = geom_dict
                 except Exception:
                     pass
+
+        # Persist enriched geometry cache (non-fatal if fails)
+        try:
+            cache_path = Path(__file__).resolve().parent / "cache" / "alerts" / "enriched_geom_cache.json"
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps(geom_cache), encoding="utf-8")
+        except Exception:
+            pass
+
     except Exception as exc:
         print(f"[WARN] Alert geometry enrichment skipped: {exc}")
 
@@ -2582,30 +2603,29 @@ def _render_mrms_png(
         cmap = plt.get_cmap("viridis")
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
 
-    # Reproject to Web Mercator so pixels align with Leaflet imageOverlay at any zoom.
+    # Reproject to Web Mercator so pixels align with Leaflet imageOverlay
+    # (Leaflet's default map CRS is EPSG:3857). The returned bounds are WGS84
+    # lat/lon corners of the warped image — Leaflet expects geographic corner
+    # coordinates for imageOverlay.
     from mrms.mrms_utils import warp_array_to_mercator
+    from PIL import Image
+    import numpy as _np_render
 
     data, actual_bounds = warp_array_to_mercator(data, _lat, _lon)
 
-    h, w = data.shape
-    dpi = 100
-    fig_w = w / dpi
-    fig_h = h / dpi
-    fig, ax = plt.subplots(1, 1, figsize=(fig_w, fig_h), dpi=dpi)
-    ax.set_position([0, 0, 1, 1])
-    ax.set_axis_off()
-    ax.imshow(
-        data,
-        origin="upper",
-        cmap=cmap,
-        norm=norm,
-        aspect="auto",
-        interpolation="nearest",
-    )
-    fig.patch.set_alpha(0)
-    ax.patch.set_alpha(0)
-    fig.savefig(out_path, dpi=dpi, bbox_inches=None, transparent=True, format="png")
-    plt.close(fig)
+    # Render the warped Mercator array directly to PNG using PIL, bypassing
+    # matplotlib's figure system. This avoids matplotlib's silent downscaling
+    # of large figures and ensures the saved PNG dimensions exactly match the
+    # warped data shape (which is required for Leaflet to align the overlay).
+    masked = _np_render.ma.getmaskarray(data)
+    filled = _np_render.ma.filled(data, _np_render.nan)
+    normalized = norm(filled)
+    rgb = cmap(normalized)
+    rgba = (rgb * 255).astype(_np_render.uint8)
+    invalid = masked | _np_render.isnan(filled)
+    if _np_render.any(invalid):
+        rgba[invalid, 3] = 0
+    Image.fromarray(rgba, mode="RGBA").save(out_path, format="PNG", optimize=False)
 
     # Write bounds sidecar
     sidecar = out_path.replace(".png", "_bounds.json")
@@ -3324,8 +3344,12 @@ def get_overlay_frames(
     region: str = "CONUS",
     stream: str = "rtma_hourly",
     product: str = "temperature",
+    hours: int = 1,
 ):
-    """Return all pre-rendered frames available on disk for a product.
+    """Return pre-rendered frames for a product within a lookback window.
+
+    Frames are filtered to only those within the specified lookback window (hours).
+    If no frames exist (or only stale ones), on-demand rendering is triggered.
 
     Response is an array of frame objects sorted oldest-first, each with
     ``frame_key``, ``timestamp``, ``source_data_key``, ``image_url``,
@@ -3341,13 +3365,51 @@ def get_overlay_frames(
         )
 
     region_key = region.upper()
+    hours_back = max(1, int(hours or 1))
+    path_parts = (
+        (region_key, stream, product) if family == "rtma" else ("CONUS", "default", product)
+    )
 
-    if family == "rtma":
-        path_parts = (region_key, stream, product)
-    else:
-        path_parts = ("CONUS", "default", product)
+    def _filter_by_lookback(frame_list):
+        cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=hours_back)
+        out = []
+        for frame in frame_list:
+            ts = frame.get("timestamp")
+            dt = None
+            if ts:
+                try:
+                    dt = parse_utc_datetime(ts)
+                except Exception:
+                    dt = None
+            if dt and dt < cutoff_dt:
+                continue
+            out.append(frame)
+        return out
 
-    frames = flat_overlay_list_frames(_CACHE_ROOT, family, path_parts)
+    def _render_on_demand():
+        try:
+            if family == "mrms":
+                from workers.mrms_live_worker import run_mrms_live_product
+                return run_mrms_live_product(product, force=True, max_hours=hours_back)
+            else:
+                from workers.rtma_live_worker import run_rtma_live_product
+                return run_rtma_live_product(
+                    region_key, stream, product, force=True, max_hours=hours_back
+                )
+        except Exception as exc:
+            label = product if family == "mrms" else f"{region_key}/{stream}/{product}"
+            print(f"[overlay_frames] {family.upper()} on-demand render failed for {label}: {exc}")
+            return 0
+
+    raw_frames = flat_overlay_list_frames(_CACHE_ROOT, family, path_parts)
+    frames = _filter_by_lookback(raw_frames) if raw_frames else []
+
+    # Trigger on-demand rendering if cache is empty OR contains only stale frames.
+    if not frames:
+        if _render_on_demand() > 0:
+            raw_frames = flat_overlay_list_frames(_CACHE_ROOT, family, path_parts)
+            frames = _filter_by_lookback(raw_frames)
+
     return {
         "family": family,
         "region": region_key,
@@ -4127,16 +4189,6 @@ def read_radar_page():
     return _serve_page("radar.html")
 
 
-@app.get("/satellite.html")
-def read_satellite_page():
-    return _serve_page("satellite.html")
-
-
-@app.get("/satellite-archive.html")
-def read_satellite_archive_page():
-    return _serve_page("satellite.html")
-
-
 @app.get("/weather.html")
 def read_weather_page():
     return _serve_page("weather.html")
@@ -4422,59 +4474,6 @@ def _radar_live_filter_stale_latest_meta(
         hours=max(0.25, float(max_age_hours or 0.25))
     )
     return meta if dt >= cutoff_dt else None
-
-
-@app.get("/api/radar/tile/{z}/{x}/{y}")
-def get_radar_tile(z: int, x: int, y: int):
-    """Serve a cached NEXRAD backdrop tile proxied from mesonet.agron.iastate.edu (IEM).
-
-    Tiles are pre-fetched by radar_tiles_worker every ~5 minutes.
-    On a cache miss the tile is fetched on-demand, cached, and returned so the
-    browser never sees a gap during the first worker cycle.
-
-    Tiles are stored as cache/radar/tiles/{z}/{x}/{y}.png (standard Leaflet order).
-    """
-    # Input validation — prevent path traversal and nonsensical coords.
-    if z < 0 or z > 18:
-        raise HTTPException(status_code=400, detail="z out of range (0–18)")
-    max_coord = (1 << z) - 1
-    if x < 0 or x > max_coord or y < 0 or y > max_coord:
-        raise HTTPException(status_code=400, detail="x/y out of range for given zoom")
-
-    tile_path = os.path.join(_CACHE_ROOT, "radar", "tiles", str(z), str(x), f"{y}.png")
-
-    if not os.path.exists(tile_path):
-        # On-demand fallback: fetch from IEM and cache atomically.
-        import urllib.request as _ur
-
-        _TILE_SOURCE = (
-            "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913"
-        )
-        url = f"{_TILE_SOURCE}/{z}/{x}/{y}"  # IEM: standard z/x/y
-        try:
-            req = _ur.Request(
-                url,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (compatible; WxDashboard/1.0)",
-                },
-            )
-            with _ur.urlopen(req, timeout=10) as resp:
-                data = resp.read()
-            os.makedirs(os.path.dirname(tile_path), exist_ok=True)
-            tmp = tile_path + ".tmp"
-            with open(tmp, "wb") as fh:
-                fh.write(data)
-            os.replace(tmp, tile_path)
-        except Exception as exc:
-            raise HTTPException(
-                status_code=502, detail=f"Upstream tile fetch failed: {exc}"
-            ) from exc
-
-    return FileResponse(
-        tile_path,
-        media_type="image/png",
-        headers={"Cache-Control": "public, max-age=300"},
-    )
 
 
 _RADAR_COLORTABLE_PRODUCTS: dict[str, tuple[float, float]] = {
@@ -5273,235 +5272,6 @@ def get_radar_latest(
         }
 
 
-
-def get_satellite_latest(
-    request_id: str,
-    sat_id: str = "goes19",
-    sector: str = "CONUS",
-    channel: str = "Channel13",
-    lookback: int = 2,
-    frames: int = 1,
-    fps: int = 4,
-    show_places: bool = False,
-    style_config: Optional[str] = None,
-    n: Optional[float] = None,
-    s: Optional[float] = None,
-    e: Optional[float] = None,
-    w: Optional[float] = None,
-    source: str = "auto",
-    latest_only: bool = False,
-):
-    try:
-        requested_source = str(source or "auto").strip().lower()
-        if requested_source not in {"auto", "aws", "gcp", "thredds"}:
-            return {
-                "status": "error",
-                "message": "Invalid source. Use auto, aws, gcp, or thredds.",
-                "data_source": "UNKNOWN",
-            }
-
-        sat_module = satellite_utils
-        provider = "aws"
-        if requested_source == "thredds":
-            sat_module = satellite_thredds_utils
-            data_source = "THREDDS"
-        elif requested_source in {"aws", "gcp"}:
-            if not USING_NODD:
-                return {
-                    "status": "error",
-                    "message": "NODD module unavailable. AWS/GCP sources are not available.",
-                    "data_source": "THREDDS",
-                }
-            provider = requested_source
-            data_source = f"NODD-{provider.upper()}"
-        else:
-            data_source = "NODD-AWS" if USING_NODD else "THREDDS"
-        parsed_styles = parse_styles(style_config)
-        active_tasks[request_id] = {
-            "percent": 0,
-            "message": "Initializing...",
-            "stage": "init",
-        }
-
-        def download_progress(curr, total):
-            active_tasks[request_id] = {
-                "percent": int((curr / total) * 100),
-                "message": f"Downloading {curr}/{total}",
-                "stage": "download",
-                "source": data_source,
-            }
-
-        def render_progress(curr, total):
-            active_tasks[request_id] = {
-                "percent": int((curr / total) * 100),
-                "message": f"Rendering {curr}/{total}",
-                "stage": "render",
-                "source": data_source,
-            }
-
-        custom_extent = (
-            (s, n, w, e) if all(v is not None for v in [n, s, e, w]) else None
-        )
-        if custom_extent:
-            sector = "CONUS"  # Force CONUS when custom extent is active
-        frames = 1 if latest_only else max(1, int(frames))
-        try:
-            if sat_module is satellite_thredds_utils:
-                data_dir, _, _ = sat_module.download_goes_data(
-                    sat_id,
-                    sector,
-                    channel,
-                    lookback,
-                    os.path.join(BASE_DIR, "satellite"),
-                    download_progress,
-                    latest_only=latest_only,
-                )
-            else:
-                data_dir, _, _ = sat_module.download_goes_data(
-                    sat_id,
-                    sector,
-                    channel,
-                    lookback,
-                    os.path.join(BASE_DIR, "satellite"),
-                    download_progress,
-                    provider=provider,
-                    latest_only=latest_only,
-                )
-        except Exception as nodd_error:
-            if requested_source == "auto" and USING_NODD:
-                print(
-                    f"[WARN] NODD satellite failed, falling back to THREDDS: {nodd_error}"
-                )
-                sat_module = satellite_thredds_utils
-                data_source = "THREDDS"
-                data_dir, _, _ = sat_module.download_goes_data(
-                    sat_id,
-                    sector,
-                    channel,
-                    lookback,
-                    os.path.join(BASE_DIR, "satellite"),
-                    download_progress,
-                    latest_only=latest_only,
-                )
-            else:
-                raise
-
-        if data_dir is None and requested_source == "auto" and USING_NODD:
-            print("[WARN] NODD satellite returned no data, trying THREDDS fallback")
-            sat_module = satellite_thredds_utils
-            data_source = "THREDDS"
-            data_dir, _, _ = sat_module.download_goes_data(
-                sat_id,
-                sector,
-                channel,
-                lookback,
-                os.path.join(BASE_DIR, "satellite"),
-                download_progress,
-            )
-
-        # Check if data was found
-        if data_dir is None:
-            if request_id in active_tasks:
-                del active_tasks[request_id]
-            return {
-                "status": "error",
-                "message": f"No satellite data found for {sat_id} {sector} {channel}. Data may not be available from THREDDS yet. Try GOES-19 for CONUS or GOES-18 for West Coast.",
-                "data_source": data_source,
-            }
-
-        # Use custom logo path from style config, or fall back to default
-        logo_path_to_use = resolve_logo_path(parsed_styles, BASE_DIR, LOGO_PATH)
-
-        movie_path, image_path = sat_module.generate_satellite_animation(
-            sat_id=sat_id,
-            region_name=sector,
-            data_dir=data_dir,
-            channel_key=channel,
-            max_frames=frames,
-            fps=fps,
-            logo_file=logo_path_to_use,
-            custom_extent=custom_extent,
-            progress_callback=render_progress,
-            show_places=show_places,
-            style_config=parsed_styles,
-        )
-
-        # Check if animation generation succeeded
-        if movie_path is None and image_path is None:
-            if request_id in active_tasks:
-                del active_tasks[request_id]
-            return {
-                "status": "error",
-                "message": "Failed to generate satellite animation. Check server logs for details.",
-                "data_source": data_source,
-            }
-
-        result_path = movie_path if frames > 1 else image_path
-        if request_id in active_tasks:
-            del active_tasks[request_id]
-        return {
-            "status": "success",
-            "image_url": f"/img/satellite/{os.path.relpath(result_path, DIRS['satellite']).replace('\\', '/')}",
-            "data_source": data_source,
-        }
-    except Exception as e:
-        import traceback
-
-        error_detail = f"{type(e).__name__}: {str(e)}"
-        print(f"[ERROR] Satellite endpoint error: {error_detail}")
-        traceback.print_exc()
-        if request_id:
-            active_tasks[request_id] = {
-                "percent": 0,
-                "message": f"Error: {error_detail}",
-                "stage": "error",
-                "source": data_source if "data_source" in locals() else None,
-            }
-        return {
-            "status": "error",
-            "message": error_detail,
-            "data_source": data_source if "data_source" in locals() else None,
-        }
-
-
-@app.get("/api/satellite/current")
-def get_satellite_current(
-    request_id: str = "",
-    sat_id: str = "goes16",
-    sector: str = "CONUS",
-    channel: str = "Channel13",
-    lookback: int = 2,
-    frames: int = 1,
-    fps: int = 4,
-    show_places: bool = False,
-    style_config: Optional[str] = None,
-    n: Optional[float] = None,
-    s: Optional[float] = None,
-    e: Optional[float] = None,
-    w: Optional[float] = None,
-    source: str = "auto",
-    latest_only: bool = False,
-):
-    response = get_satellite_latest(
-        request_id=request_id,
-        sat_id=sat_id,
-        sector=sector,
-        channel=channel,
-        lookback=lookback,
-        fps=fps,
-        frames=frames,
-        show_places=show_places,
-        style_config=style_config,
-        n=n,
-        s=s,
-        e=e,
-        w=w,
-        source=source,
-        latest_only=latest_only,
-    )
-    return attach_mode_and_source(response, "recent")
-
-
 @app.get("/api/satellite-v2/catalog")
 def get_satellite_v2_catalog(
     sat_id: str = SATELLITE_V2_DEFAULT_SAT_ID,
@@ -5648,317 +5418,6 @@ def get_satellite_v2_tile(
     )
     response.headers["Vary"] = "Accept-Encoding"
     return response
-
-
-@app.get("/api/satellite/archive")
-def get_satellite_archive_endpoint(
-    request_id: str = "",
-    sat_id: str = "goes16",
-    sector: str = "CONUS",
-    channel: str = "Channel13",
-    date_from: str = "",
-    date_to: str = "",
-    frames: int = 240,
-    fps: int = 4,
-    show_places: bool = False,
-    user_tz: str = "America/New_York",
-    style_config: Optional[str] = None,
-    n: Optional[float] = None,
-    s: Optional[float] = None,
-    e: Optional[float] = None,
-    w: Optional[float] = None,
-    source: str = "auto",
-    latest_only: bool = False,
-    view_mode: str = "video",
-):
-    archive_source = str(source or "auto").strip().lower()
-    if archive_source == "auto":
-        archive_source = "aws"
-
-    response = get_satellite_archive(
-        request_id=request_id,
-        sat_id=sat_id,
-        sector=sector,
-        channel=channel,
-        date_from=date_from,
-        date_to=date_to,
-        frames=frames,
-        fps=fps,
-        show_places=show_places,
-        user_tz=user_tz,
-        style_config=style_config,
-        n=n,
-        s=s,
-        e=e,
-        w=w,
-        source=archive_source,
-        latest_only=latest_only,
-        view_mode=view_mode,
-    )
-    return attach_mode_and_source(response, "archive")
-
-
-@app.get("/api/satellite")
-def get_satellite(
-    request_id: str = "",
-    sat_id: str = "goes16",
-    sector: str = "CONUS",
-    channel: str = "Channel13",
-    lookback: int = 2,
-    frames: int = 1,
-    fps: int = 4,
-    show_places: bool = False,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    user_tz: str = "America/New_York",
-    style_config: Optional[str] = None,
-    n: Optional[float] = None,
-    s: Optional[float] = None,
-    e: Optional[float] = None,
-    w: Optional[float] = None,
-    source: str = "auto",
-    latest_only: bool = False,
-):
-    """Deprecated: Use /api/satellite/current or /api/satellite/archive."""
-    data_mode = infer_data_mode(date_from, date_to)
-    if data_mode == "recent":
-        return get_satellite_current(
-            request_id=request_id,
-            sat_id=sat_id,
-            sector=sector,
-            channel=channel,
-            lookback=lookback,
-            frames=frames,
-            fps=fps,
-            show_places=show_places,
-            style_config=style_config,
-            n=n,
-            s=s,
-            e=e,
-            w=w,
-            source=source,
-            latest_only=latest_only,
-        )
-
-    return get_satellite_archive_endpoint(
-        request_id=request_id,
-        sat_id=sat_id,
-        sector=sector,
-        channel=channel,
-        date_from=date_from or "",
-        date_to=date_to or "",
-        frames=frames,
-        fps=fps,
-        show_places=show_places,
-        user_tz=user_tz,
-        style_config=style_config,
-        n=n,
-        s=s,
-        e=e,
-        w=w,
-        source=source,
-        latest_only=latest_only,
-    )
-
-
-def get_satellite_archive(
-    request_id: str = "",
-    sat_id: str = "goes19",
-    sector: str = "CONUS",
-    channel: str = "Channel13",
-    date_from: str = "",
-    date_to: str = "",
-    fps: int = 4,
-    frames: int = 240,
-    show_places: bool = False,
-    user_tz: str = "America/New_York",
-    style_config: Optional[str] = None,
-    n: Optional[float] = None,
-    s: Optional[float] = None,
-    e: Optional[float] = None,
-    w: Optional[float] = None,
-    source: str = "aws",
-    latest_only: bool = False,
-    view_mode: str = "video",
-):
-    data_source = "UNKNOWN"
-    if satellite_archive_utils is None:
-        return {
-            "status": "error",
-            "message": "Satellite archive module is not available.",
-            "data_source": data_source,
-        }
-
-    try:
-        requested_source = str(source or "aws").strip().lower()
-        if requested_source not in {"aws", "gcp"}:
-            return {
-                "status": "error",
-                "message": "Invalid source. Use aws or gcp.",
-                "data_source": data_source,
-            }
-
-        if not date_from or not date_to:
-            return {
-                "status": "error",
-                "message": "Both date_from and date_to are required.",
-                "data_source": data_source,
-            }
-
-        parsed_styles = parse_styles(style_config)
-        if request_id:
-            active_tasks[request_id] = {
-                "percent": 0,
-                "message": "Initializing...",
-                "stage": "init",
-            }
-
-        def download_progress(curr, total):
-            percent = int((curr / total) * 100) if total else 0
-            if request_id:
-                active_tasks[request_id] = {
-                    "percent": percent,
-                    "message": f"Downloading {curr}/{total}",
-                    "stage": "download",
-                    "source": data_source,
-                }
-
-        def render_progress(curr, total):
-            percent = int((curr / total) * 100) if total else 0
-            if request_id:
-                active_tasks[request_id] = {
-                    "percent": percent,
-                    "message": f"Rendering {curr}/{total}",
-                    "stage": "render",
-                    "source": data_source,
-                }
-
-        custom_extent = (
-            (s, n, w, e) if all(v is not None for v in [n, s, e, w]) else None
-        )
-        if custom_extent:
-            sector = "CONUS"  # Force CONUS when custom extent is active
-
-        logo_path_to_use = resolve_logo_path(parsed_styles, BASE_DIR, LOGO_PATH)
-
-        provider_candidates = [requested_source]
-
-        last_error = None
-        for provider in provider_candidates:
-            data_source = f"NODD-{provider.upper()}"
-            try:
-                movie_path, preview_path, message = (
-                    satellite_archive_utils.generate_satellite_archive_animation(
-                        sat_id=sat_id,
-                        sector=sector,
-                        channel_key=channel,
-                        date_from=date_from,
-                        date_to=date_to,
-                        fps=fps,
-                        frames=frames,
-                        logo_file=logo_path_to_use,
-                        style_config=parsed_styles,
-                        progress_callback=render_progress,
-                        download_progress=download_progress,
-                        custom_extent=custom_extent,
-                        show_places=show_places,
-                        provider=provider,
-                        user_tz=user_tz,
-                        latest_only=latest_only,
-                        view_mode=view_mode,
-                    )
-                )
-
-                # ── Scrubber mode: movie_path is a dict manifest ──
-                if (
-                    isinstance(movie_path, dict)
-                    and movie_path.get("mode") == "scrubber"
-                ):
-                    manifest = movie_path
-                    sat_archive_dir = DIRS["satellite_archive"]
-                    frame_items = []
-                    for entry in manifest["frames"]:
-                        rel = os.path.relpath(entry["path"], sat_archive_dir).replace(
-                            "\\", "/"
-                        )
-                        frame_item = {
-                            "url": f"/img/satellite_archive/{rel}",
-                            "timestamp_utc": entry["timestamp_utc"],
-                            "timestamp_local": entry["timestamp_local"],
-                        }
-                        # Add layer URLs if available
-                        if "layers" in entry and entry["layers"]:
-                            frame_item["layers"] = {}
-                            for layer_name, layer_filename in entry["layers"].items():
-                                # Construct relative path from satellite_archive to layer file
-                                layer_rel = os.path.relpath(
-                                    os.path.join(
-                                        os.path.dirname(entry["path"]), layer_filename
-                                    ),
-                                    sat_archive_dir,
-                                ).replace("\\", "/")
-                                frame_item["layers"][layer_name] = (
-                                    f"/img/satellite_archive/{layer_rel}"
-                                )
-                        frame_items.append(frame_item)
-                    frames_ref = manifest.get("frames_ref") or manifest.get("frame_dir")
-                    frames_dir_rel = os.path.relpath(
-                        frames_ref, sat_archive_dir
-                    ).replace("\\", "/")
-                    if request_id and request_id in active_tasks:
-                        del active_tasks[request_id]
-                    return {
-                        "status": "success",
-                        "view_mode": "scrubber",
-                        "frames": frame_items,
-                        "frames_path": frames_dir_rel,
-                        "total": manifest["total"],
-                        "fps": manifest["fps"],
-                        "message": message,
-                        "data_source": data_source,
-                    }
-
-                if movie_path is None and preview_path is None:
-                    last_error = message or "No archive output generated."
-                    continue
-
-                result_path = movie_path or preview_path
-                if request_id and request_id in active_tasks:
-                    del active_tasks[request_id]
-                rel_path = os.path.relpath(
-                    result_path, DIRS["satellite_archive"]
-                ).replace("\\", "/")
-                return {
-                    "status": "success",
-                    "image_url": f"/img/satellite_archive/{rel_path}",
-                    "message": message,
-                    "data_source": data_source,
-                }
-            except Exception as provider_error:
-                last_error = f"{type(provider_error).__name__}: {provider_error}"
-                continue
-
-        if request_id and request_id in active_tasks:
-            del active_tasks[request_id]
-        return {
-            "status": "error",
-            "message": last_error or "No archive data found from selected provider(s).",
-            "data_source": data_source,
-        }
-
-    except Exception as e:
-        import traceback
-
-        traceback.print_exc()
-        if request_id and request_id in active_tasks:
-            del active_tasks[request_id]
-        return {
-            "status": "error",
-            "message": f"{type(e).__name__}: {e}",
-            "data_source": data_source,
-        }
-
-
 @app.post("/api/purge")
 def purge_old_files(hours: float = 168, categories: str = ""):
     """Purge downloaded data and generated images older than N hours. 0 = purge all."""

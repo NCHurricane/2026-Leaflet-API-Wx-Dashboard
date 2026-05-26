@@ -1,7 +1,45 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m py_compile satellite_v2/service.py satellite_v2/cache.py main.py)"
+      "Bash(python -m py_compile satellite_v2/service.py satellite_v2/cache.py main.py)",
+      "Bash(awk 'NR > 170 && NR <= 200')",
+      "Bash(python -m py_compile \"F:\\\\Python\\\\dashboard_2026\\\\surface\\\\surface_utils.py\")",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:www.roc.noaa.gov)",
+      "WebSearch",
+      "Bash(findstr /i cache)",
+      "Bash(fc workers/mrms_preload.py \"workers/mrms_preload copy.py\")",
+      "Bash(fc workers/mrms_worker.py \"workers/mrms_worker copy.py\")",
+      "Bash(findstr archive *)",
+      "Bash(git -C F:/Python/dashboard_2026 log --all --diff-filter=D --summary)",
+      "Bash(findstr /i \"surface_archive overlay_cache\")",
+      "Bash(git -C F:/Python/dashboard_2026 log --all --oneline -- \"**/surface_archive_utils.py\")",
+      "Bash(git -C F:/Python/dashboard_2026 log --all --oneline -S \"_render_surface_frame\")",
+      "Bash(git -C F:/Python/dashboard_2026 log --all --oneline -- \"surface/surface_archive_utils.py\" \"satellite/satellite_archive_utils.py\")",
+      "Bash(git -C F:/Python/dashboard_2026 diff --cached --name-only --diff-filter=D)",
+      "Bash(python tools/generate_llm_context.py)",
+      "Bash(python -c ' *)",
+      "Bash(schtasks /Query /FO LIST)",
+      "Bash(findstr /i \"Wx-Dashboard\")",
+      "Bash(schtasks /Query /FO LIST /V)",
+      "Bash(schtasks /Query /TN \"\\\\Wx-Dashboard-Satellite_v2\")",
+      "Bash(schtasks /Query /TN \"\\\\Wx-Dashboard-Satellite_v2_meso\")",
+      "Bash(schtasks /Query /TN \"\\\\Wx-Dashboard-Satellite_v2_geocolor\")",
+      "Bash(python -c \"from workers.rtma_worker import run_rtma_worker; print\\('rtma_worker imports OK'\\)\")",
+      "Bash(python -c \"from cache.overlay_cache_utils import flat_overlay_batch_update_index_and_keys; print\\('batch update function imports OK'\\)\")",
+      "Bash(timeout 30 python workers/rtma_worker.py --force --stream rtma_hourly)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); from workers.rtma_worker import run_rtma_worker; print\\('OK'\\)\")",
+      "Bash(python -m py_compile workers/rtma_worker.py cache/overlay_cache_utils.py)",
+      "Bash(python -m py_compile workers/rtma_worker.py)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); from workers.rtma_worker import run_rtma_worker; print\\('rtma_worker imports OK'\\)\")",
+      "Bash(python -m py_compile workers/mrms_worker.py)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); from workers.mrms_worker import run_mrms_worker; print\\('mrms_worker imports OK'\\)\")",
+      "Bash(python -m py_compile workers/mrms_live_worker.py)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); from workers.mrms_live_worker import run_mrms_live_product; print\\('mrms_live_worker imports OK'\\)\")",
+      "Bash(python -m py_compile main.py)",
+      "Bash(powershell -Command \"Select-String -Path 'F:\\\\Python\\\\dashboard_2026\\\\main.py' -Pattern '/api/radar/live/frames' -Context 5,15 | head -50\")",
+      "Bash(xargs grep -l \"get_catalog_payload\")"
     ]
   }
 }

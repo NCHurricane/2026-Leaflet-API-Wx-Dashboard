@@ -170,10 +170,10 @@ SATELLITE_V2_WORKER_PROFILES = {
         ),
     },
     "goes19-freshness": {
-        "description": "Single-worker GOES-19 freshness profile (CONUS + FULLDISK only). MESO is handled by goes19-meso.",
+        "description": "Single-worker GOES-19 freshness profile (CONUS only). FULLDISK is on-demand; MESO is handled by goes19-meso.",
         "products": SATELLITE_V2_WORKER_PRODUCTS,
         "satellites": ("goes19",),
-        "sectors": ("CONUS", "FULLDISK"),
+        "sectors": ("CONUS",),
         "mode": "rolling-lookback",
         "recency_hours": 1,
         "deadline_minutes": 115,
@@ -219,17 +219,26 @@ SATELLITE_V2_WORKER_PROFILES = {
     },
 }
 SATELLITE_V2_WORKER_BASELINE_FRAMES = 2
-SATELLITE_V2_WORKER_PREWARM_FRAMES = 36
+SATELLITE_V2_WORKER_PREWARM_FRAMES = 18         # CONUS/FULLDISK (~1.5hr at 5-min intervals)
+SATELLITE_V2_WORKER_MESO_PREWARM_FRAMES = 72    # MESO (~1.2hr at 1-min intervals)
 SATELLITE_V2_WORKER_CURRENT_DEEP_JOBS_PER_RUN = 8
 SATELLITE_V2_WORKER_MESO_DEEP_JOBS_PER_RUN = 4
 SATELLITE_V2_WORKER_FULLDISK_BASELINE_ZOOMS = (1, 2)
 SATELLITE_V2_WORKER_CONUS_BASELINE_ZOOMS = (5, 6)
 SATELLITE_V2_WORKER_MESO_BASELINE_ZOOMS = (7, 8)
 SATELLITE_V2_WORKER_FULLDISK_PREWARM_ZOOMS = (1, 2, 3)
-SATELLITE_V2_WORKER_CONUS_HIGH_RES_PREWARM_ZOOMS = (6, 7, 8)
+SATELLITE_V2_WORKER_CONUS_HIGH_RES_PREWARM_ZOOMS = (5, 6)
+SATELLITE_V2_WORKER_CONUS_CHANNEL2_PREWARM_ZOOMS = (5, 6)
 SATELLITE_V2_WORKER_CONUS_STANDARD_PREWARM_ZOOMS = (5, 6)
-SATELLITE_V2_WORKER_MESO_HIGH_RES_PREWARM_ZOOMS = (7, 8, 9)
+SATELLITE_V2_WORKER_MESO_HIGH_RES_PREWARM_ZOOMS = (7, 8)
+SATELLITE_V2_WORKER_MESO_CHANNEL2_PREWARM_ZOOMS = (7, 8)
 SATELLITE_V2_WORKER_MESO_STANDARD_PREWARM_ZOOMS = (7, 8)
+
+# Max zoom levels the frontend is allowed to request.
+# Prewarm covers default + 1 zoom-in; deeper zooms render on-demand.
+SATELLITE_V2_MAX_NATIVE_ZOOM_CONUS = 8
+SATELLITE_V2_MAX_NATIVE_ZOOM_FULLDISK = 5
+SATELLITE_V2_MAX_NATIVE_ZOOM_MESO = 10
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -311,16 +320,27 @@ def worker_zooms_for_product(sector: str, channel_key: str) -> tuple[int, ...]:
     if sector_key == "FULLDISK":
         return SATELLITE_V2_WORKER_FULLDISK_PREWARM_ZOOMS
     if sector_key in {"MESO1", "MESO2"}:
+        if product_key == "Channel02":
+            return SATELLITE_V2_WORKER_MESO_CHANNEL2_PREWARM_ZOOMS
         if product_key in SATELLITE_V2_HIGH_RES_PRODUCTS:
             return SATELLITE_V2_WORKER_MESO_HIGH_RES_PREWARM_ZOOMS
         return SATELLITE_V2_WORKER_MESO_STANDARD_PREWARM_ZOOMS
+    if product_key == "Channel02":
+        return SATELLITE_V2_WORKER_CONUS_CHANNEL2_PREWARM_ZOOMS
     if product_key in SATELLITE_V2_HIGH_RES_PRODUCTS:
         return SATELLITE_V2_WORKER_CONUS_HIGH_RES_PREWARM_ZOOMS
     return SATELLITE_V2_WORKER_CONUS_STANDARD_PREWARM_ZOOMS
 
 
 def max_native_zoom_for_product(sector: str, channel_key: str) -> int:
-    return max(worker_zooms_for_product(sector, channel_key))
+    # Max zoom is decoupled from prewarm — worker pre-renders shallow zooms,
+    # on-demand renderer fills deeper zoom requests up to these limits.
+    sector_key = normalize_sector(sector)
+    if sector_key == "FULLDISK":
+        return SATELLITE_V2_MAX_NATIVE_ZOOM_FULLDISK
+    if sector_key in {"MESO1", "MESO2"}:
+        return SATELLITE_V2_MAX_NATIVE_ZOOM_MESO
+    return SATELLITE_V2_MAX_NATIVE_ZOOM_CONUS
 
 
 def worker_baseline_zooms_for_sector(sector: str) -> tuple[int, ...]:

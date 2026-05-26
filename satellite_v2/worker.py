@@ -22,6 +22,7 @@ from config.satellite_v2_config import (
     SATELLITE_V2_WORKER_CURRENT_DEEP_JOBS_PER_RUN,
     SATELLITE_V2_WORKER_CURRENT_SECTORS,
     SATELLITE_V2_WORKER_MESO_DEEP_JOBS_PER_RUN,
+    SATELLITE_V2_WORKER_MESO_PREWARM_FRAMES,
     SATELLITE_V2_WORKER_MESO_SECTORS,
     SATELLITE_V2_WORKER_PREWARM_FRAMES,
     SATELLITE_V2_WORKER_PRIORITY_PRODUCTS,
@@ -111,7 +112,8 @@ def _ordered_sectors(meso: bool, profile: str | None = None) -> tuple[str, ...]:
         return _ordered_unique(configured)
     if meso:
         return _ordered_unique(SATELLITE_V2_WORKER_MESO_SECTORS)
-    return _ordered_unique(("CONUS", "FULLDISK", *SATELLITE_V2_WORKER_CURRENT_SECTORS))
+    # FULLDISK intentionally excluded — handled on-demand by live tile renderer.
+    return _ordered_unique(("CONUS", *SATELLITE_V2_WORKER_CURRENT_SECTORS))
 
 
 def _worker_jobs(meso: bool, profile: str | None = None) -> list[tuple[str, str, str]]:
@@ -729,13 +731,18 @@ def run_satellite_v2_worker(
             if meso
             else SATELLITE_V2_WORKER_CURRENT_DEEP_JOBS_PER_RUN
         )
+        prewarm_frames = (
+            SATELLITE_V2_WORKER_MESO_PREWARM_FRAMES
+            if meso
+            else SATELLITE_V2_WORKER_PREWARM_FRAMES
+        )
         start_index = _load_deep_index(state_name, len(jobs))
         deep_jobs, next_index = _rotating_jobs(jobs, start_index, deep_jobs_per_run)
         deep_start = time.perf_counter()
         deep_totals = _run_warm_jobs(
             worker_name,
             deep_jobs,
-            frame_count=SATELLITE_V2_WORKER_PREWARM_FRAMES,
+            frame_count=prewarm_frames,
             phase="deep",
             baseline=False,
             tile_workers=render_workers,

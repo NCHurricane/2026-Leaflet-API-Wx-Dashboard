@@ -6,6 +6,7 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 
 import cfgrib
 import numpy as np
@@ -636,8 +637,18 @@ def ensure_rtma_grib(
     return local_path
 
 
+@lru_cache(maxsize=8)
+def _get_grib_datasets_cached(grib_path: str):
+    """Cache parsed GRIB datasets by path to avoid repeated cfgrib.open_datasets() calls.
+
+    Keeps up to 8 GRIB files parsed in memory to speed up extraction of multiple
+    variables from the same file within a worker run.
+    """
+    return cfgrib.open_datasets(grib_path, backend_kwargs={"indexpath": ""})
+
+
 def _extract_dataset(grib_path: str, var_name: str):
-    datasets = cfgrib.open_datasets(grib_path, backend_kwargs={"indexpath": ""})
+    datasets = _get_grib_datasets_cached(grib_path)
     for dataset in datasets:
         if var_name in dataset.data_vars:
             data_array = dataset[var_name].squeeze(drop=True)
@@ -1117,6 +1128,8 @@ def _render_rtma_png_standalone(
     source: RtmaSource | None = None,
     region: str | None = None,
     stream: str | None = None,
+    lat_1d: np.ndarray | None = None,
+    lon_1d: np.ndarray | None = None,
 ) -> tuple[str, list[float], dict]:
     """Standalone RTMA PNG renderer using PIL for ~3-5x faster rendering."""
     import json
@@ -1170,16 +1183,18 @@ def _render_rtma_png_standalone(
 
     from mrms.mrms_utils import warp_array_to_mercator
 
-    if lat_arr.ndim == 2:
-        lat_1d = np.linspace(
-            float(np.nanmin(lat_arr)), float(np.nanmax(lat_arr)), data.shape[0]
-        )
-        lon_1d = np.linspace(
-            float(np.nanmin(lon_arr)), float(np.nanmax(lon_arr)), data.shape[1]
-        )
-    else:
-        lat_1d = lat_arr
-        lon_1d = lon_arr
+    # Use pre-computed lat/lon if provided (for batch rendering optimization).
+    if lat_1d is None or lon_1d is None:
+        if lat_arr.ndim == 2:
+            lat_1d = np.linspace(
+                float(np.nanmin(lat_arr)), float(np.nanmax(lat_arr)), data.shape[0]
+            )
+            lon_1d = np.linspace(
+                float(np.nanmin(lon_arr)), float(np.nanmax(lon_arr)), data.shape[1]
+            )
+        else:
+            lat_1d = lat_arr
+            lon_1d = lon_arr
 
     data, actual_bounds = warp_array_to_mercator(data, lat_1d, lon_1d)
 

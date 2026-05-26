@@ -49,6 +49,11 @@ _PRELOAD_REGIONS = list(RTMA_WORKER_REGIONS)
 _PRELOAD_STREAMS = list(RTMA_STREAMS)
 _PRELOAD_PRODUCTS = list(RTMA_UI_PRODUCTS)
 
+# Preload region bounds to avoid repeated lookups during overlay rendering.
+_REGION_BOUNDS_CACHE = {
+    region: STATE_BOUNDS.get(region, [-125, -70, 21, 52]) for region in _PRELOAD_REGIONS
+}
+
 # Representative product used for frame discovery.
 _ANALYSIS_PROBE_PRODUCT = "temperature"
 
@@ -78,17 +83,21 @@ def _render_overlay_for_source(
     stream: str,
     product: str,
     keep_n: int = 30,
-) -> bool:
+    lat_1d=None,
+    lon_1d=None,
+) -> dict | None:
     """Render a full-extent PNG overlay for *source* and write into flat cache.
 
-    Returns True on success, False on failure.
+    Returns metadata dict on success (for batch index update), None on failure.
+    Does NOT update the index or processed_keys directly — those are batched per-source.
+
+    lat_1d, lon_1d: Optional pre-computed 1D latitude/longitude arrays for Mercator warp
+                    optimization (reused across products for the same source).
     """
     from cache.overlay_cache_utils import (
         flat_overlay_image_path,
         flat_overlay_prune_frames,
         flat_overlay_read_processed_keys,
-        flat_overlay_update_index,
-        flat_overlay_write_processed_keys,
         frame_key_from_datetime,
     )
     from rtma_utils import ensure_rtma_grib, _render_rtma_png_standalone
@@ -101,9 +110,9 @@ def _render_overlay_for_source(
     if source.data_key in processed_keys:
         img_path = flat_overlay_image_path(cache_root, "rtma", path_parts, frame_key)
         if os.path.exists(img_path) and os.path.getsize(img_path) > 0:
-            return True  # already fresh
+            return None  # already fresh, no update needed
 
-    bounds = STATE_BOUNDS.get(region, [-125, -70, 21, 52])
+    bounds = _REGION_BOUNDS_CACHE.get(region, [-125, -70, 21, 52])
     crop_extent = [float(b) for b in bounds]
 
     try:
@@ -118,41 +127,38 @@ def _render_overlay_for_source(
             source=source,
             region=region,
             stream=stream,
+            lat_1d=lat_1d,
+            lon_1d=lon_1d,
         )
     except Exception as exc:
         print(
             f"[rtma_worker] Overlay render ERROR {region}/{stream}/{product}/{frame_key}: {exc}"
         )
-        return False
+        return None
 
     try:
-        flat_overlay_update_index(
-            cache_root,
-            "rtma",
-            path_parts,
-            frame_key,
-            bounds=actual_bounds,
-            full_name=render_meta.get("full_name", ""),
-            units=render_meta.get("units", ""),
-            legend=render_meta.get("legend"),
-            vmin=render_meta.get("vmin"),
-            vmax=render_meta.get("vmax"),
-            timestamp=render_meta.get("timestamp") or source.valid_time.isoformat(),
-        )
-
-        processed_keys.add(source.data_key)
-        flat_overlay_write_processed_keys(
-            cache_root, "rtma", path_parts, processed_keys, keep_n
-        )
+        # Prune old frames (lightweight, per-product is fine).
         flat_overlay_prune_frames(cache_root, "rtma", path_parts, keep_n)
 
+        # Return metadata for batch index/processed_keys update.
         print(f"[rtma_worker] Overlay OK {region}/{stream}/{product}/{frame_key}")
-        return True
+        return {
+            "path_parts": path_parts,
+            "frame_key": frame_key,
+            "data_key": source.data_key,
+            "bounds": actual_bounds,
+            "full_name": render_meta.get("full_name", ""),
+            "units": render_meta.get("units", ""),
+            "legend": render_meta.get("legend"),
+            "vmin": render_meta.get("vmin"),
+            "vmax": render_meta.get("vmax"),
+            "timestamp": render_meta.get("timestamp") or source.valid_time.isoformat(),
+        }
     except Exception as exc:
         print(
-            f"[rtma_worker] Overlay meta/index ERROR {region}/{stream}/{product}/{frame_key}: {exc}"
+            f"[rtma_worker] Overlay prune ERROR {region}/{stream}/{product}/{frame_key}: {exc}"
         )
-        return False
+        return None
 
 
 def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> None:
@@ -275,20 +281,83 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                     # Runs immediately after GeoJSON so the latest frame's overlay
                     # is available as early as possible (not after all frames complete).
                     # Wind direction has no useful scalar gradient; skip its overlay.
+                    # Compute lat_1d/lon_1d once per source to reuse across all products (efficiency).
+                    lat_1d_cache, lon_1d_cache = None, None
+                    try:
+                        import numpy as np
+                        from rtma_utils import (
+                            ensure_rtma_grib,
+                            _extract_dataset,
+                            _crop_grid,
+                        )
+
+                        grib_path = ensure_rtma_grib(cache_root, source)
+                        bounds = _REGION_BOUNDS_CACHE.get(region, [-125, -70, 21, 52])
+                        crop_extent = [float(b) for b in bounds]
+
+                        # Extract lat/lon from a representative product (temp).
+                        _, latitude, longitude, _ = _extract_dataset(grib_path, "t2m")
+                        _, lat_cropped, lon_cropped = _crop_grid(
+                            np.zeros_like(latitude), latitude, longitude, crop_extent
+                        )
+
+                        # Compute 1D grids from cropped coordinates.
+                        lat_arr = np.asarray(lat_cropped, dtype=float)
+                        lon_arr = np.asarray(lon_cropped, dtype=float)
+                        if lat_arr.ndim == 2:
+                            lat_1d_cache = np.linspace(
+                                float(np.nanmin(lat_arr)),
+                                float(np.nanmax(lat_arr)),
+                                lat_arr.shape[0],
+                            )
+                            lon_1d_cache = np.linspace(
+                                float(np.nanmin(lon_arr)),
+                                float(np.nanmax(lon_arr)),
+                                lon_arr.shape[1],
+                            )
+                        else:
+                            lat_1d_cache = lat_arr
+                            lon_1d_cache = lon_arr
+                    except Exception as exc:
+                        print(f"[rtma_worker] Failed to precompute lat/lon: {exc}")
+
+                    # Collect metadata for batch index/processed_keys update (one write per source).
+                    overlay_metadata = []
                     for product in overlay_products:
-                        rendered = _render_overlay_for_source(
+                        metadata = _render_overlay_for_source(
                             cache_root,
                             source,
                             region,
                             stream,
                             product,
                             keep_n=keep_n,
+                            lat_1d=lat_1d_cache,
+                            lon_1d=lon_1d_cache,
                         )
-                        if rendered:
+                        if metadata:
+                            overlay_metadata.append(metadata)
                             ok += 1
                             stream_ok[stream] += 1
                         else:
                             failed += 1
+
+                    # Batch-update index and processed_keys for all products of this source.
+                    if overlay_metadata:
+                        try:
+                            from cache.overlay_cache_utils import (
+                                flat_overlay_batch_update_index_and_keys,
+                            )
+
+                            flat_overlay_batch_update_index_and_keys(
+                                cache_root,
+                                "rtma",
+                                overlay_metadata,
+                            )
+                        except Exception as exc:
+                            print(
+                                f"[rtma_worker] Batch index update ERROR "
+                                f"{region}/{stream}/{source.data_key}: {exc}"
+                            )
 
     elapsed = _time.perf_counter() - t0
     print(

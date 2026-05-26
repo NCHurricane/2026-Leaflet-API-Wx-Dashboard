@@ -1,0 +1,480 @@
+//############################################################################
+//       product_viewer.js
+//       by Brian T Kaney, 2019
+//############################################################################
+
+document.addEventListener("DOMContentLoaded",function() { InitAll() },false);
+
+function InitAll() {
+  BaseSelect.initialize();
+  BaseMap.setLeafMap(zoom,clat,clon);
+  BaseMap.initialize();
+
+  OverlaySelect.initialize();
+  OverlayLayer.web_service_url = "shared/fetch_overlay_image_from_geo_data-conus.php";
+  OverlayLayer.map_data_dir = qvs_map_overlay_data_dir;
+  OverlayLayer.setMap(zoom,clat,clon);
+  OverlayLayer.setDimensions(920,630);
+  OverlayLayer.updateOverlayLayer();
+
+  Calendar.setCanvas('calendar_panel',0,0,'calendar',224,140,'#FFFFFF');
+  Calendar.initialize();
+
+  TimeJumps.setCanvas('calendar_panel',224+0,0,'time_jumps',76,7*20,'#E0F5E0');
+  TimeJumps.setLayout(18,20,40,1,0);
+  TimeJumps.initialize();
+
+  CurrentTime.setDiv('left_panel',60,162);
+  CurrentTime.initialize();
+
+  AutoUpdate.initialize('left_panel',270,164);
+
+  ProdLayer.initialize();
+  ProdSelect.initialize("shared/fetch_menu_json_from_config.php?menu=" + web_resources_dir + menu);
+  UpdateTitle(product);
+  UpdateLegend(product);
+
+  if(!product.includes('Q3'))  document.getElementById('qpe_palette_select').style.visibility = "hidden";
+  else                         document.getElementById('qpe_palette_select').style.visibility = "visible";
+  QPERatePalSelect.setCanvas('qpe_palette_select',102,4,50+5*35+1,21,'');
+  QPERatePalSelect.initialize(qperate_pal_option);
+  QPERatePalSelect.draw();
+  QPEPalSelect.setCanvas('qpe_palette_select',102,30,50+3*17+9*21+1,21,'');
+  QPEPalSelect.initialize(qpe_pal_option);
+  QPEPalSelect.draw();
+
+  createImageDiv('left_panel','slider_back',100,650,172,45,'url(shared/Background-OpacitySlider-172x45.svg)');
+  OpacitySlider.allowed_step = 10;
+  OpacitySlider.setCanvas('left_panel',130,673);
+  OpacitySlider.initialize(opacity*100);
+  document.getElementById('product_layer').style.opacity = opacity.toFixed(1);
+  OpacitySlider.updateRestOfPage = function() {
+    opacity= this.current_pixel/100;
+    document.getElementById('product_layer').style.opacity = opacity.toFixed(1);
+    };
+
+  LoopPlayer.initializeActivate("footer_div",100,12);
+  LoopPlayer.initializePause("loop_controls_div",190,2);
+  LoopPlayer.initializeNumFrames("loop_controls_div",0,32);
+  LoopPlayer.initializeSecondsStep("loop_controls_div",86,32);
+  LoopPlayer.initializeFrameHover("loop_controls_div",182,30);
+  LoopPlayer.initialize();
+  if(looping_active=="off")  document.getElementById('loop_controls_div').style.visibility = "hidden";
+  if(looping_active=="on")   document.getElementById('loop_controls_div').style.visibility = "visible";
+
+  ZoomPan.initialize();
+  ResetRegion.setDiv('footer_div',500,16);
+  ResetRegion.initialize();
+  WheelEnable.setDiv('footer_div',760,17);
+  WheelEnable.initialize();
+  Permalink.setDiv('left_panel',320,662);
+  Permalink.initialize();
+
+  MpingSelect.setDiv('footer_div',650,78);
+  MpingSelect.initialize();
+  if(mping_mode>0)  UpdateMPing();
+
+  ReadoutLayer.initialize(readout);
+  if(readout=="on")  document.getElementById('readout_check').checked = true;
+  document.getElementById('readout_check').addEventListener('change',readout_select_handler,false);
+
+  divWin.initialize();
+
+  return;
+  }
+
+//----------------------------------------------------------------------------
+
+//var ProdLabel = new productLabel("product_label");
+
+//----------------------------------------------------------------------------
+
+var ProdSelect = new productSelect("product_select",product_type,product);
+
+ProdSelect.updateRestOfPage = function() {
+  product_type = this.product_type;
+  product = this.product;
+//  this.setTimeRes();
+  var new_minute_resolution = this.menu.sub_menu_min_res[this.PS.selected_index][this.OPT[this.PS.selected_index].selected_index];
+  if(new_minute_resolution != minute_resolution)  UpdateMinuteResolutionFromProduct(new_minute_resolution);
+
+  ProdLayer.product = product;
+  ProdLayer.setTime(img_time);
+  ProdLayer.updateProductLayer();
+
+  ReadoutLayer.product = product;
+
+  UpdateTitle(product);
+  UpdateLegend(product);
+
+  ReadoutLayer.prod_time.equateToTime(img_time);
+
+  if(!product.includes('Q3'))  document.getElementById('qpe_palette_select').style.visibility = "hidden";
+  else                         document.getElementById('qpe_palette_select').style.visibility = "visible";
+  }
+
+function UpdateMinuteResolutionFromProduct(new_minute_resolution) {
+//ProdSelect.setTimeRes = function() {
+//  var last_minute_resolution = minute_resolution;
+//  minute_resolution = this.menu.sub_menu_min_res[this.PS.selected_index][this.OPT[this.PS.selected_index].selected_index];
+
+//  if(new_minute_resolution != minute_resolution) {
+//  if(minute_resolution != last_minute_resolution) {
+  minute_resolution = new_minute_resolution;
+  img_time.truncateToMinRes(minute_resolution);
+
+  TimeJumps.selected_time.equateToTime(img_time);
+  TimeJumps.min_res = minute_resolution;
+  if(minute_resolution==60) {
+    TimeJumps.jump_min= [60,120,180,240,360,720,1440];
+    TimeJumps.jump_txt = ['1 hr','2 hr','3 hr','4 hr','6 hr','12 hr','1 dy'];
+    }
+  if(minute_resolution==30) {
+    TimeJumps.jump_min= [30,60,120,240,360,720,1440];
+    TimeJumps.jump_txt = ['30 min','1 hr','2 hr','4 hr','6 hr','12 hr','1 dy'];
+    }
+  if(minute_resolution==15) {
+    TimeJumps.jump_min= [15,30,45,60,180,720,1440];
+    TimeJumps.jump_txt = ['15 min','30 min','45 min','1 hr','3 hr','12 hr','1 dy'];
+    }
+  if(minute_resolution==10) {
+    TimeJumps.jump_min= [10,20,30,60,180,720,1440];
+    TimeJumps.jump_txt = ['10 min','20 min','30 min','1 hr','3 hr','12 hr','1 dy'];
+    }
+  if(minute_resolution==5) {
+    TimeJumps.jump_min= [5,10,20,60,180,720,1440];
+    TimeJumps.jump_txt = ['5 min','10 min','20 min','1 hr','3 hr','12 hr','1 dy'];
+    }
+  if(minute_resolution==2) {
+    TimeJumps.jump_min= [2,4,10,30,60,360,1440];
+    TimeJumps.jump_txt = ['2 min','4 min','10 min','30 min','1 hr','6 hr','1 dy'];
+    }
+  TimeJumps.drawButtons();
+
+  Calendar.selected_time.equateToTime(img_time);
+  Calendar.setMinuteField(minute_resolution);
+  Calendar.drawCalendar();
+
+  if(mping_mode>0)  UpdateMPing();
+  };
+
+//----------------------------------------------------------------------------
+
+  var QPERatePalSelect = new radioButtons('qperate_palette_canvas',6);
+
+  QPERatePalSelect.rect.setConstTop(0);
+  QPERatePalSelect.rect.setConstHeight(20);
+  QPERatePalSelect.rect.width = [50,35,35,35,35,35];
+  QPERatePalSelect.rect.packLeftFromWidths();
+
+  QPERatePalSelect.options = [0,1,2,3,5,8];
+  QPERatePalSelect.display_txt = ['Default','1"/hr','2"/hr','3"/hr','5"/hr','8"/hr'];
+
+  QPERatePalSelect.updateRestOfPage = function() {
+    qperate_pal_option = this.options[this.selected_index];
+    ProdLayer.updateProductLayer();
+    UpdateLegend(product);
+    }
+
+//----------------------------------------------------------------------------
+
+  var QPEPalSelect = new radioButtons('qpe_palette_canvas',13);
+
+  QPEPalSelect.rect.setConstTop(0);
+  QPEPalSelect.rect.setConstHeight(20);
+  QPEPalSelect.rect.width = [50,17,17,17,21,21,21,21,21,21,21,21,21];
+  QPEPalSelect.rect.packLeftFromWidths();
+
+  QPEPalSelect.options = [0,3,5,8,12,16,24,32,40,50,60,75,90];
+  QPEPalSelect.display_txt = ['Default','3"','5"','8"','12"','16"','24"','32"','40"','50"','60"','75"','90"'];
+
+  QPEPalSelect.updateRestOfPage = function() {
+    qpe_pal_option = this.options[this.selected_index];
+    ProdLayer.updateProductLayer();
+    UpdateLegend(product);
+    }
+
+//----------------------------------------------------------------------------
+
+ProductTitle = new getDataPacket('text');
+ProductTitle.updateRestOfPage = function() {
+  document.getElementById('product_label').innerHTML = this.data;
+  };
+
+function UpdateTitle(prod) {
+  ProductTitle.url = "shared/fetch_product_title_via_config.php?config_file=" + web_resources_dir + 
+                     title_legend_config + "&product=" + prod;
+  ProductTitle.load();
+  }
+
+function UpdateLegend(prod) {
+  var url_str = "url('shared/fetch_svg_legend_via_config.php?web_resources_dir=" + web_resources_dir + 
+                "&config_name=" + title_legend_config + "&product=" + product + "')";
+
+  if(product.includes('Q3') && !product.includes('RATE') && qpe_pal_option>0) {
+    if(qpe_pal_option<10)  var qpe_pal_option_str = "0" + qpe_pal_option;
+    else                   var qpe_pal_option_str = qpe_pal_option;
+    var legend_name = "QPE_24Color_StepRainbow_0-0" + qpe_pal_option_str + ".0in_80x600.svg";
+    url_str = "url('" + base_legend_url + legend_name + "')";
+    }
+  if(product.includes('Q3') && product.includes('RATE') && qperate_pal_option>0) {
+    var legend_name = "QPE_Rate_24Color_0_to_" + qperate_pal_option + "_inch_per_hour_80x600.svg";
+    url_str = "url('" + base_legend_url + legend_name + "')";
+    }
+
+  document.getElementById('side_legend').style.backgroundImage = url_str;
+  }
+
+//----------------------------------------------------------------------------
+
+var minute_resolution = 2;
+
+var img_time = new time(img_year,img_month,img_day,img_hour,img_minute,0);
+var end_time = new time(0,60*minute_resolution);
+//var start_time = end_time.spawnTime(-168,'hours');
+var start_time = new time(2020,10,1,0,0,0);//NI- Hardcoded, no data before 2020
+
+var Calendar = new calendarSelect();
+Calendar.setTimes(start_time,img_time,end_time,minute_resolution);
+//Calendar.time_window_range = 168*3600;
+
+Calendar.updateRestOfPage = function() {
+  img_time.equateToTime(this.selected_time);
+
+  TimeJumps.selected_time.equateToTime(img_time);
+  TimeJumps.drawButtons();
+  document.getElementById('map_timestamp').innerHTML = timeString(img_time,'MM/DD/YYYY3HH:MM Z','UTC');
+
+  ProdLayer.setTime(img_time);
+  ProdLayer.updateProductLayer();
+  ReadoutLayer.prod_time.equateToTime(img_time);
+
+  if(mping_mode>0)  UpdateMPing();
+  }
+
+//----------------------------------------------------------------------------
+
+var TimeJumps = new timeJumpButtons(7);
+TimeJumps.setTimes(start_time,img_time,end_time,minute_resolution);
+//TimeJumps.time_window_range = 168*3600;
+
+TimeJumps.jump_min= [2,4,10,30,60,360,1440];
+TimeJumps.jump_txt = ['2 min','4 min','10 min','30 min','1 hr','6 hr','1 dy'];
+
+TimeJumps.updateRestOfPage = function() {
+  img_time.equateToTime(this.selected_time);
+
+  Calendar.selected_time.equateToTime(img_time);
+  Calendar.drawCalendar();
+  document.getElementById('map_timestamp').innerHTML = timeString(img_time,'MM/DD/YYYY3HH:MM Z','UTC');
+
+  ProdLayer.setTime(img_time);
+  ProdLayer.updateProductLayer();
+  ReadoutLayer.prod_time.equateToTime(img_time);
+
+  if(mping_mode>0)  UpdateMPing();
+  }
+
+//----------------------------------------------------------------------------
+
+var CurrentTime = new textDivButton('current_time','Current Time');
+CurrentTime.updateRestOfPage = function() {
+  img_time = new time(-120,60*minute_resolution);
+
+  Calendar.selected_time.equateToTime(img_time);
+  Calendar.drawCalendar();
+  TimeJumps.selected_time.equateToTime(img_time);
+  TimeJumps.drawButtons();
+  document.getElementById('map_timestamp').innerHTML = timeString(img_time,'MM/DD/YYYY3HH:MM Z','UTC');
+
+  ProdLayer.setTime(img_time);
+  ProdLayer.updateProductLayer();
+  ReadoutLayer.prod_time.equateToTime(img_time);
+
+  if(mping_mode>0)  UpdateMPing();
+  }
+
+//----------------------------------------------------------------------------
+
+var AutoUpdate = new autoUpdate(time_mode,2);
+
+AutoUpdate.updateRestOfPage = function() {
+  img_time = new time(-120,60*minute_resolution);  //--basically same as above - just call it!! - apart from minute res issues
+
+  Calendar.selected_time.equateToTime(img_time);
+  Calendar.drawCalendar();
+
+  TimeJumps.selected_time.equateToTime(img_time);
+  TimeJumps.drawButtons();
+  document.getElementById('map_timestamp').innerHTML = timeString(img_time,'MM/DD/YYYY3HH:MM Z','UTC');
+
+  ProdLayer.setTime(img_time);
+  ProdLayer.updateProductLayer();
+  ReadoutLayer.prod_time.equateToTime(img_time);
+
+  if(mping_mode>0)  UpdateMPing();
+  }
+
+//----------------------------------------------------------------------------
+
+//----------------------------------------------------------------------------
+
+var OpacitySlider = new singleSlider('opacity_select','horiz',100);
+
+var ProdLayer = new productLayer('product_layer','CREF',looping_active,num_frames,36);
+ProdLayer.setTime(img_time);
+ProdLayer.timestamp_id = "map_timestamp";
+
+var LoopPlayer = new loopPlayer("loop_controls_div","product_layer",looping_active,num_frames,frame_step,seconds_step);
+
+//----------------------------------------------------------------------------
+
+var ZoomPan = new zoomPanOneMap("zoom");
+ZoomPan.zi_map.setMap(zoom,clon,clat);
+ZoomPan.setZoomPanLimits(3,15,-180,180,-85.05,85.05);
+
+ZoomPan.updateRestOfPage = function() {
+  if(BaseMap.leaf_map._animatingZoom === true)  return;  //--don't even change zoom internally until css animation done
+
+  this.bar.selected_index = findIndex(this.bar.options,this.next_zoom);
+  this.bar.draw(-1);
+  this.zi_map.setMap(this.next_zoom,this.next_clon,this.applyLatLimits(this.next_clat));
+
+  zoom = this.zi_map.zoom_level;
+  clat = this.zi_map.center_lat;
+  clon = this.zi_map.center_lon;
+
+  document.getElementById('overlay_layer').style.backgroundImage = "none";
+  canvasClear('product_layer');
+  BaseMap.setLeafMap(clat,clon,zoom);
+  BaseMap.leaf_map.setView([clat,clon],zoom);
+  OverlayLayer.setMap(zoom,clat,clon);
+  OverlayLayer.updateOverlayLayer();
+  ProdLayer.updateProductLayer();
+  ReadoutLayer.ro_map.setMap(zoom,clon,clat);
+  if(mping_mode>0)  DrawMPingIcons('mping_layer',zoom,clon,clat,MPing.data);
+  }
+
+var ResetRegion = new textDivButton('reset_region','Reset Region');
+ResetRegion.updateRestOfPage = function() {
+  zoom = 4;    clon = -98;    clat = 38;
+  ZoomPan.bar.current_index = 15 - zoom;
+  ZoomPan.bar.draw(-1);
+  ZoomPan.zi_map.setMap(zoom,clon,clat);
+  ZoomPan.drawReadoutText(-999,-999);
+  BaseMap.setLeafMap(clat,clon,zoom);
+  BaseMap.leaf_map.setView([clat,clon],zoom);
+  OverlayLayer.setMap(zoom,clat,clon);
+  OverlayLayer.updateOverlayLayer();
+  ProdLayer.updateProductLayer();
+  ReadoutLayer.ro_map.setMap(zoom,clon,clat);
+
+  if(mping_mode>0)  DrawMPingIcons('mping_layer',zoom,clon,clat,MPing.data);
+  }
+
+var WheelEnable = new checkBox('wheel_enbale','off');
+WheelEnable.updateRestOfPage = function() {
+  if(this.state == 'on')   {  ZoomPan.wheel_enable = "on";   }
+  if(this.state == 'off')  {  ZoomPan.wheel_enable = "off";  }
+  };
+
+var Permalink = new textDivButton('permalink','Permalink');
+Permalink.updateRestOfPage = function() {
+  if (time_mode == 'update') {
+    var url = "index.php?web_exec_mode=" + web_exec_mode + "&menu=" + menu +
+              "&time_mode=" + time_mode + "&zoom=" + zoom + "&clon=" + clon +"&clat=" + clat + "&base=" + base +
+              "&overlays=" + overlays + "&mping_mode=" + mping_mode + "&product_type=" + product_type + "&product=" +
+              product + "&qpe_pal_option=" + qpe_pal_option + "&opacity=" + opacity + "&looping_active=" +
+              looping_active +"&num_frames=" + num_frames + "&frame_step=" + frame_step +
+              "&seconds_step=" + seconds_step;
+  } else {
+  var url = "index.php?web_exec_mode=" + web_exec_mode + "&menu=" + menu + "&year=" + img_time.year + "&month=" + 
+            img_time.month + "&day=" + img_time.day + "&hour=" + img_time.hour + "&minute=" + img_time.minute + 
+            "&time_mode=" + time_mode + "&zoom=" + zoom + "&clon=" + clon +"&clat=" + clat + "&base=" + base + 
+            "&overlays=" + overlays + "&mping_mode=" + mping_mode + "&product_type=" + product_type + "&product=" + 
+            product + "&qpe_pal_option=" + qpe_pal_option + "&opacity=" + opacity + "&looping_active=" + 
+            looping_active +"&num_frames=" + num_frames + "&frame_step=" + frame_step + 
+            "&seconds_step=" + seconds_step;
+  }
+
+  window.location.href = url;
+  };
+
+//----------------------------------------------------------------------------
+
+var MpingSelect = new ddMenu('mping_dd',mping_mode);
+MpingSelect.options = [0,2,4,6,10,20,30,40,60,120,180,240,360,720,1080,1440,2160];
+MpingSelect.display_strs = ["None","2 minutes","4 minutes","6 minutes","10 minutes","20 minutes","30 minutes","40 minutes",
+                            "1 hour","2 hours","3 hours","4 hours","6 hours","12 hour","18 hours","24 hours","36 hours"];
+
+MpingSelect.updateRestOfPage = function() {
+  mping_mode = this.selected_option;
+  UpdateMPing();
+  };
+
+MPing = new getDataPacket('json');
+MPing.updateRestOfPage = function() {
+  DrawMPingIcons('mping_layer',zoom,clon,clat,this.data);
+  };
+
+function UpdateMPing() {
+  MPing.url = "shared/fetch_mping_json_on_demand.php?mode=" + web_exec_mode + "&root_mping_dir=" + root_mping_dir + "&end_year=" + 
+              img_time.year + "&end_month=" + img_time.month + "&end_day=" + img_time.day + "&end_hour=" + img_time.hour + 
+              "&end_minute=" + img_time.minute + "&num_minutes=" + mping_mode;
+  MPing.load();
+  }
+
+//----------------------------------------------------------------------------
+
+var BaseSelect = new baseSelect('base_select',base);
+BaseSelect.updateRestOfPage = function() {
+  base = this.base_index;
+  BaseMap.base_index = base;
+  BaseMap.drawBaseLayer();
+  }
+
+var BaseMap = new baseMap('base_map',base);
+
+var OverlaySelect = new standardCONUSOverlays('overlays_window',overlays);
+OverlaySelect.updateRestOfPage = function() {
+  overlays = this.overlay_index;
+  OverlayLayer.overlay_index = overlays;
+  OverlayLayer.updateOverlayLayer();
+  };
+
+var OverlayLayer = new overlayLayer('overlay_layer',overlays);
+//----------------------------------------------------------------------------
+
+var ReadoutLayer = new readoutLayer('readout_layer','readout_output');
+ReadoutLayer.prod_time.equateToTime(img_time);
+ReadoutLayer.product = product;
+ReadoutLayer.ro_map.setDimensions(920,630);
+ReadoutLayer.ro_map.setMap(zoom,clon,clat);
+
+function readout_select_handler(e) {        //---this code seems to be a duplicate of what is already in ../../../js/qvs/binary_  product_  look  up  2.js
+  if(document.getElementById('readout_check').checked == true) {
+    document.getElementById('readout_layer').style.visibility = "visible";
+    document.getElementById('readout_output').style.visibility = "visible";
+    } 
+  if(document.getElementById('readout_check').checked == false) {
+    document.getElementById('readout_layer').style.visibility = "hidden";
+    document.getElementById('readout_output').style.visibility = "hidden";
+    }
+  }
+
+//----------------------------------------------------------------------------
+
+var divWin = new divWindowSet(3);
+divWin.window_id = ["overlays","base","mping_legend"];
+divWin.window_width = [300,300,300];
+divWin.window_status = ["closed","closed","closed"];
+
+divWin.park_container_id = "footer_div";
+divWin.park_win_label = ["Overlays","Base Map Layer","mPING Legend"];
+divWin.park_win_width = [120,120,120];
+divWin.park_win_top = [16,46,76];
+divWin.park_win_left = [860,860,860];
+divWin.park_win_color = ["#DDE6DD","#DDE6DD","#DDE6DD"];
+
+//----------------------------------------------------------------------------
+

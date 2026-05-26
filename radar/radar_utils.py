@@ -722,7 +722,7 @@ def generate_radar_animation(
             [0.0, 0.0, 1.0, 1.0], projection=ccrs.PlateCarree())
         ax_base.set_extent(
             [min_lon, max_lon, min_lat, max_lat], crs=ccrs.PlateCarree())
-        ax_base.set_aspect("equal", adjustable="box")
+        ax_base.set_aspect("auto")
         ax_base.set_facecolor(map_bg_color)
         ax_base.set_xticks([])
         ax_base.set_yticks([])
@@ -1094,7 +1094,7 @@ def generate_radar_animation(
                 linewidths=0,
             )
             ax.set_position(map_axes_rect)
-            ax.set_aspect("equal", adjustable="box")
+            ax.set_aspect("auto")
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_axis_off()

@@ -691,7 +691,7 @@
     map.attributionControl.addAttribution('©2026 ChuckCopeland.com/NCHurricane.com');
     if (!map.getPane('radar-overlays')) {
         const radarOverlayPane = map.createPane('radar-overlays');
-        radarOverlayPane.style.zIndex = '360';
+        radarOverlayPane.style.zIndex = '210';
         radarOverlayPane.style.pointerEvents = 'none';
     }
     if (!map.getPane('radar-sites')) {
@@ -992,7 +992,7 @@
     const RTMA_SCRUB_PLAY_INTERVAL_MS = 300;
     const RTMA_SCRUB_LOOP_HOLD_MS = 2000;
     const RTMA_SCRUB_SWAP_FADE_MS = 90;
-    const RADAR_CROSSFADE_MS = 10;
+    const RADAR_CROSSFADE_MS = 5;
     const SATELLITE_CROSSFADE_MS = RADAR_CROSSFADE_MS;
     const SATELLITE_LOOKBACK_HOURS_MAX = 12;
     const SATELLITE_FRAME_REQUEST_MAX = 360;
@@ -1001,7 +1001,7 @@
     const SATELLITE_TILE_READY_TIMEOUT_MS = 15000;
     const SATELLITE_INITIAL_TILE_READY_TIMEOUT_MS = 45000;
     const SATELLITE_HOT_FRAME_RADIUS = 3;
-    const SATELLITE_PROGRESSIVE_REDRAW_DELAYS_MS = [2500, 6000, 12000, 20000];
+    const SATELLITE_PROGRESSIVE_REDRAW_DELAYS_MS = [2500];
     const SATELLITE_ANIMATION_RETAIN_LAYER_LIMIT = 72;
     const SATELLITE_PREFETCH_AHEAD_FRAMES = 8;
     const SATELLITE_PREFETCH_BEHIND_FRAMES = 2;
@@ -5620,7 +5620,11 @@
             const resp = await fetch(apiUrl('/api/data/mrms?product=Refl_BaseQC'));
             if (!resp.ok) return null;
             const data = await resp.json();
-            return data?.image_url ? apiUrl(data.image_url) : null;
+            if (!data?.image_url) return null;
+            return {
+                url: apiUrl(data.image_url),
+                bounds: Array.isArray(data.bounds) ? data.bounds : null, // [west, east, south, north]
+            };
         } catch (_) {
             return null;
         }
@@ -5647,8 +5651,14 @@
             _mrmsRadarOverlayStop();
             return;
         }
-        const newUrl = await _mrmsRadarOverlayFetchImageUrl();
-        if (newUrl) s.layer.setUrl(newUrl);
+        const result = await _mrmsRadarOverlayFetchImageUrl();
+        if (result && result.url) {
+            s.layer.setUrl(result.url);
+            if (result.bounds) {
+                const b = result.bounds;
+                s.layer.setBounds([[b[2], b[0]], [b[3], b[1]]]);
+            }
+        }
     }
 
     function _mrmsRadarOverlaySetOpacity(value) {
@@ -5667,15 +5677,20 @@
 
         try {
             const opacity = Number.isFinite(initialOpacity) ? initialOpacity : 0.6;
-            const bounds = [[21.0, -130.0], [52.0, -60.0]]; // [[south, west], [north, east]]
 
-            const imageUrl = await _mrmsRadarOverlayFetchImageUrl();
-            if (!imageUrl) {
+            const result = await _mrmsRadarOverlayFetchImageUrl();
+            if (!result || !result.url) {
                 console.warn('[MRMS Overlay] Failed to fetch initial image URL');
                 return;
             }
 
-            const layer = L.imageOverlay(imageUrl, bounds, {
+            // Use the actual bounds from the API response (NOT hardcoded) so the
+            // image is placed at the exact lat/lng extent it was rendered for.
+            // API returns [west, east, south, north]; Leaflet wants [[south, west], [north, east]].
+            const b = result.bounds || [-130.0, -60.0, 21.0, 52.0];
+            const bounds = [[b[2], b[0]], [b[3], b[1]]];
+
+            const layer = L.imageOverlay(result.url, bounds, {
                 opacity,
                 zIndex: 300,
                 alt: 'MRMS Refl_BaseQC',
@@ -6251,6 +6266,7 @@
                     opacity: oldOverlay ? 0 : 0.9,
                     pane: 'radar-overlays',
                     zIndex: _radarMultiSiteZIndex(site, siteOrder),
+                    className: 'radar-overlay-sharp',
                 });
                 if (_isTypeEnabled('radar')) {
                     newOverlay.addTo(map);
@@ -7023,6 +7039,242 @@
             stillBtn.title = '';
             _radarAnimateNewFrameTimer = null;
         }, 3000);
+    }
+
+    let _mrmsHistoryFillTimer = null;
+    let _rtmaHistoryFillTimer = null;
+
+    function _startMrmsHistoryPoll(product, maxHours) {
+        if (_mrmsHistoryFillTimer) clearTimeout(_mrmsHistoryFillTimer);
+        const deadline = Date.now() + 90_000;
+        let lastCount = 0;
+        _setAnimateButtonFilling(true, 1, null);
+
+        async function poll() {
+            if (_activeRtmaProduct() !== product || !_mrmsScrubMode || !_isTypeEnabled('mrms')) {
+                _setAnimateButtonFilling(false);
+                return;
+            }
+            try {
+                const params = new URLSearchParams({ family: 'mrms', product, hours: String(maxHours) });
+                const resp = await fetch(apiUrl(`/api/overlay/frames?${params.toString()}`), { cache: 'no-store' });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const count = data.frame_count || 0;
+                    _setAnimateButtonFilling(true, count, null);
+                    // Fallback for sparse streams: stop when count is stable across polls.
+                    if (count > 1 && count === lastCount) {
+                        _setAnimateButtonFilling(false);
+                        return;
+                    }
+                    lastCount = count;
+                }
+            } catch (_) { }
+            if (Date.now() < deadline) {
+                _mrmsHistoryFillTimer = setTimeout(poll, 3000);
+            } else {
+                _setAnimateButtonFilling(false);
+            }
+        }
+
+        _mrmsHistoryFillTimer = setTimeout(poll, 3000);
+    }
+
+    function _startRtmaHistoryPoll(region, stream, product, maxHours) {
+        if (_rtmaHistoryFillTimer) clearTimeout(_rtmaHistoryFillTimer);
+        const deadline = Date.now() + 90_000;
+        let lastCount = 0;
+        _setAnimateButtonFilling(true, 1, null);
+
+        async function poll() {
+            if (_activeRtmaRegion() !== region || _activeRtmaStream() !== stream || _activeRtmaProduct() !== product || !_rtmaScrubMode || !_isTypeEnabled('rtma')) {
+                _setAnimateButtonFilling(false);
+                return;
+            }
+            try {
+                const params = new URLSearchParams({ family: 'rtma', region, stream, product, hours: String(maxHours) });
+                const resp = await fetch(apiUrl(`/api/overlay/frames?${params.toString()}`), { cache: 'no-store' });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const count = data.frame_count || 0;
+                    _setAnimateButtonFilling(true, count, null);
+                    // Fallback for sparse streams: stop when count is stable across polls.
+                    if (count > 1 && count === lastCount) {
+                        _setAnimateButtonFilling(false);
+                        return;
+                    }
+                    lastCount = count;
+                }
+            } catch (_) { }
+            if (Date.now() < deadline) {
+                _rtmaHistoryFillTimer = setTimeout(poll, 3000);
+            } else {
+                _setAnimateButtonFilling(false);
+            }
+        }
+
+        _rtmaHistoryFillTimer = setTimeout(poll, 3000);
+    }
+
+    async function _tryAppendNewMrmsFrames() {
+        if (!_mrmsScrubMode || !_isTypeEnabled('mrms')) return 0;
+        const product = composeMrmsProductKey();
+        if (!product) return 0;
+
+        try {
+            const mrmsSlider = document.querySelector('#mrms-animate-slider');
+            const maxHours = Math.max(1, mrmsSlider ? Number(mrmsSlider.value) : 1);
+
+            const existingKeys = new Set();
+            _mrmsScrubFrames.forEach((frame) => {
+                existingKeys.add(`${frame.frame_key || ''}|${frame.timestamp || ''}`);
+            });
+
+            const params = new URLSearchParams({ family: 'mrms', product, hours: String(maxHours) });
+            const resp = await fetch(apiUrl(`/api/overlay/frames?${params.toString()}`), { cache: 'no-store' });
+            if (!resp.ok) return 0;
+
+            const data = await resp.json();
+            const rawFrames = Array.isArray(data.frames) ? data.frames : [];
+            let appendedCount = 0;
+
+            rawFrames.forEach((f) => {
+                const key = `${f.frame_key || ''}|${f.timestamp || ''}`;
+                if (!existingKeys.has(key)) {
+                    _mrmsScrubFrames.push({
+                        frame_key: f.frame_key,
+                        source_data_key: f.source_data_key || '',
+                        image_url: f.image_url || '',
+                        bounds: f.bounds || null,
+                        timestamp: f.timestamp || '',
+                        legend: f.legend || null,
+                        full_name: f.full_name || product,
+                        units: f.units || '',
+                        vmin: f.vmin ?? null,
+                        vmax: f.vmax ?? null,
+                        product,
+                    });
+                    appendedCount += 1;
+                }
+            });
+
+            if (appendedCount > 0) {
+                _flashAnimateNewFrame();
+            }
+            return appendedCount;
+        } catch (_) {
+            return 0;
+        }
+    }
+
+    async function _tryAppendNewRtmaFrames() {
+        if (!_rtmaScrubMode || !_isTypeEnabled('rtma')) return 0;
+        const region = _activeRtmaRegion();
+        const stream = _activeRtmaStream();
+        const product = _activeRtmaProduct();
+        if (!region || !stream || !product) return 0;
+
+        try {
+            const rtmaSlider = document.querySelector('#rtma-animate-slider');
+            const streamMax = RTMA_STREAM_MAX_HOURS[stream] || 24;
+            const maxHours = Math.min(rtmaSlider ? Number(rtmaSlider.value) : streamMax, streamMax);
+
+            const existingKeys = new Set();
+            _rtmaScrubFrames.forEach((frame) => {
+                existingKeys.add(`${frame.frame_key || ''}|${frame.timestamp || ''}`);
+            });
+
+            const params = new URLSearchParams({ family: 'rtma', region, stream, product, hours: String(maxHours) });
+            const resp = await fetch(apiUrl(`/api/overlay/frames?${params.toString()}`), { cache: 'no-store' });
+            if (!resp.ok) return 0;
+
+            const data = await resp.json();
+            const rawFrames = Array.isArray(data.frames) ? data.frames : [];
+            let appendedCount = 0;
+
+            rawFrames.forEach((f) => {
+                const key = `${f.frame_key || ''}|${f.timestamp || ''}`;
+                if (!existingKeys.has(key)) {
+                    _rtmaScrubFrames.push({
+                        frame_key: f.frame_key,
+                        source_data_key: f.source_data_key || '',
+                        timestamp: f.timestamp || '',
+                        region,
+                        stream,
+                        product,
+                        _image_url: f.image_url || null,
+                        _bounds: f.bounds || null,
+                    });
+                    appendedCount += 1;
+                }
+            });
+
+            if (appendedCount > 0) {
+                _flashAnimateNewFrame();
+            }
+            return appendedCount;
+        } catch (_) {
+            return 0;
+        }
+    }
+
+    let _mrmsScrubWarmPollTimer = null;
+    let _rtmaScrubWarmPollTimer = null;
+
+    function _stopMrmsScrubWarmPoll() {
+        if (_mrmsScrubWarmPollTimer) {
+            clearTimeout(_mrmsScrubWarmPollTimer);
+            _mrmsScrubWarmPollTimer = null;
+        }
+    }
+
+    function _stopRtmaScrubWarmPoll() {
+        if (_rtmaScrubWarmPollTimer) {
+            clearTimeout(_rtmaScrubWarmPollTimer);
+            _rtmaScrubWarmPollTimer = null;
+        }
+    }
+
+    function _startMrmsScrubWarmPoll() {
+        _stopMrmsScrubWarmPoll();
+        const product = composeMrmsProductKey();
+        if (!product || !_mrmsScrubMode || !_isTypeEnabled('mrms')) return;
+
+        const tick = async () => {
+            _mrmsScrubWarmPollTimer = null;
+            if (!_mrmsScrubMode || !_isTypeEnabled('mrms')) return;
+            if (composeMrmsProductKey() !== product) return;
+
+            await _tryAppendNewMrmsFrames();
+
+            if (_mrmsScrubMode && _isTypeEnabled('mrms')) {
+                _mrmsScrubWarmPollTimer = setTimeout(tick, 3000);
+            }
+        };
+
+        _mrmsScrubWarmPollTimer = setTimeout(tick, 3000);
+    }
+
+    function _startRtmaScrubWarmPoll() {
+        _stopRtmaScrubWarmPoll();
+        const region = _activeRtmaRegion();
+        const stream = _activeRtmaStream();
+        const product = _activeRtmaProduct();
+        if (!region || !stream || !product || !_rtmaScrubMode || !_isTypeEnabled('rtma')) return;
+
+        const tick = async () => {
+            _rtmaScrubWarmPollTimer = null;
+            if (!_rtmaScrubMode || !_isTypeEnabled('rtma')) return;
+            if (_activeRtmaRegion() !== region || _activeRtmaStream() !== stream || _activeRtmaProduct() !== product) return;
+
+            await _tryAppendNewRtmaFrames();
+
+            if (_rtmaScrubMode && _isTypeEnabled('rtma')) {
+                _rtmaScrubWarmPollTimer = setTimeout(tick, 3000);
+            }
+        };
+
+        _rtmaScrubWarmPollTimer = setTimeout(tick, 3000);
     }
 
     async function _tryAppendNewRadarFrames() {
@@ -10458,6 +10710,7 @@
             clearInterval(_rtmaScrubPlayTimer);
             _rtmaScrubPlayTimer = null;
         }
+        _stopRtmaScrubWarmPoll();
         const btn = byId('scrubber-play');
         if (btn) btn.textContent = '▶';
     }
@@ -10466,6 +10719,8 @@
         if (!_rtmaScrubFrames.length || _rtmaScrubPlayTimer) return;
         const btn = byId('scrubber-play');
         if (btn) btn.textContent = '⏸';
+
+        _startRtmaScrubWarmPoll();
 
         const tick = async () => {
             if (!_rtmaScrubPlayTimer || !_rtmaScrubFrames.length) return;
@@ -10528,6 +10783,7 @@
             clearInterval(_mrmsScrubPlayTimer);
             _mrmsScrubPlayTimer = null;
         }
+        _stopMrmsScrubWarmPoll();
         const btn = byId('scrubber-play');
         if (btn) btn.textContent = '▶';
     }
@@ -10536,6 +10792,8 @@
         if (!_mrmsScrubFrames.length || _mrmsScrubPlayTimer) return;
         const btn = byId('scrubber-play');
         if (btn) btn.textContent = '⏸';
+
+        _startMrmsScrubWarmPoll();
 
         const tick = async () => {
             if (!_mrmsScrubPlayTimer || !_mrmsScrubFrames.length) return;
@@ -10820,31 +11078,25 @@
         const maxHours = Math.min(rtmaSlider ? Number(rtmaSlider.value) : streamMax, streamMax);
         const cutoffMs = Date.now() - maxHours * 60 * 60 * 1000;
 
+        // Start polling for frames in background
+        _startRtmaHistoryPoll(region, stream, product, maxHours);
+
         try {
             // ── Try pre-render cache first (disk read, instant) ───────────────
             let usedCache = false;
             try {
-                const cacheUrl = apiUrl(
-                    `/api/overlay/frames?family=rtma&region=${encodeURIComponent(region)}` +
-                    `&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
-                );
-                const cacheResp = await fetch(cacheUrl);
+                const cacheParams = new URLSearchParams({ family: 'rtma', region, stream, product, hours: String(maxHours) });
+                const cacheUrl = apiUrl(`/api/overlay/frames?${cacheParams.toString()}`);
+                const cacheResp = await fetch(cacheUrl, { cache: 'no-store' });
                 if (loadSeq !== _rtmaScrubLoadSeq || !_rtmaScrubMode || !_isTypeEnabled('rtma')) return;
                 if (cacheResp.ok) {
                     const cacheData = await cacheResp.json();
                     const rawFrames = Array.isArray(cacheData.frames) ? cacheData.frames : [];
 
-                    // Filter to the selected time window and normalise shape.
-                    const filtered = rawFrames.filter((f) => {
-                        if (!f.timestamp) return true; // keep if no timestamp to filter on
-                        const tsMs = _asDate(f.timestamp)?.getTime();
-                        return !tsMs || tsMs >= cutoffMs;
-                    });
-
-                    if (filtered.length > 0) {
+                    if (rawFrames.length > 0) {
                         // Normalise: add region/stream/product so _fetchRtmaFramePayload
                         // doesn't need to fall back to the live UI selectors.
-                        _rtmaScrubFrames = filtered.map((f) => ({
+                        _rtmaScrubFrames = rawFrames.map((f) => ({
                             frame_key: f.frame_key,
                             source_data_key: f.source_data_key || '',
                             timestamp: f.timestamp || '',
@@ -11013,9 +11265,13 @@
         const maxHours = Math.max(1, mrmsSlider ? Number(mrmsSlider.value) : 1);
         const cutoffMs = Date.now() - maxHours * 60 * 60 * 1000;
 
+        // Start polling for frames in background
+        _startMrmsHistoryPoll(product, maxHours);
+
         try {
-            const url = apiUrl(`/api/overlay/frames?family=mrms&region=CONUS&stream=default&product=${encodeURIComponent(product)}`);
-            const resp = await fetch(url);
+            const params = new URLSearchParams({ family: 'mrms', product, hours: String(maxHours) });
+            const url = apiUrl(`/api/overlay/frames?${params.toString()}`);
+            const resp = await fetch(url, { cache: 'no-store' });
             if (loadSeq !== _mrmsScrubLoadSeq || !_mrmsScrubMode || !_isTypeEnabled('mrms')) return;
             if (!resp.ok) {
                 const err = await resp.json().catch(() => ({ detail: resp.statusText }));
@@ -11025,11 +11281,6 @@
             const data = await resp.json();
             const rawFrames = Array.isArray(data.frames) ? data.frames : [];
             _mrmsScrubFrames = rawFrames
-                .filter((f) => {
-                    if (!f.timestamp) return true;
-                    const tsMs = _asDate(f.timestamp)?.getTime();
-                    return !tsMs || tsMs >= cutoffMs;
-                })
                 .map((f) => ({
                     frame_key: f.frame_key,
                     source_data_key: f.source_data_key || '',
@@ -12986,6 +13237,10 @@
             _updateTypeSections();
             _syncRadarSiteSelectionHighlight();
             return;
+        }
+        // Exit scrub mode if switching sites while animating to avoid state corruption
+        if (_radarScrubMode) {
+            _exitRadarScrubMode(false);
         }
         // Zoom to selected site location
         const siteId = _activeRadarSite();

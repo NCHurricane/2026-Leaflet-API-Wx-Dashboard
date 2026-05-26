@@ -10,6 +10,8 @@ Only ONE product is refreshed at a time (active product pivots on user request).
 import json
 import os
 import shutil
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timezone
 
 from workers._freshness import is_cache_fresh, mark_run_complete
@@ -74,14 +76,40 @@ def get_active_product() -> str:
     return _active_product
 
 
+def _prune_old_frames(product_cache_dir: str, max_age_hours: int = 12) -> None:
+    """Delete timestamped GRIB files older than max_age_hours."""
+    if not os.path.isdir(product_cache_dir):
+        return
+
+    now = time.time()
+    max_age_sec = max_age_hours * 3600
+
+    for filename in os.listdir(product_cache_dir):
+        if filename == "conus.grib2.gz" or not filename.endswith(".grib2.gz"):
+            continue
+
+        filepath = os.path.join(product_cache_dir, filename)
+        try:
+            mtime = os.path.getmtime(filepath)
+            if now - mtime > max_age_sec:
+                os.remove(filepath)
+                print(f"[mrms_worker] Pruned old frame: {filename}")
+        except OSError:
+            pass
+
+
 def _fetch_latest_product_grib(
     product: str, get_latest_mrms_file
-) -> tuple[str, object] | None:
-    """Fetch latest GRIB for a product, with adaptive lookback and atomic replace."""
+) -> tuple[str, object, int] | None:
+    """Fetch latest GRIB for a product, with adaptive lookback and atomic replace.
+
+    Returns (grib_path, file_dt, successful_lookback_minutes) on success, None on failure.
+    """
     product_cache_dir = os.path.join(_MRMS_CACHE, product)
     os.makedirs(product_cache_dir, exist_ok=True)
 
     result = None
+    successful_lookback = None
     for lookback_minutes in _candidate_lookbacks_minutes(product):
         result = get_latest_mrms_file(
             product,
@@ -89,6 +117,7 @@ def _fetch_latest_product_grib(
             local_dir=product_cache_dir,
         )
         if result is not None:
+            successful_lookback = lookback_minutes
             if lookback_minutes > 30:
                 print(
                     f"[mrms_worker] {product} found using extended "
@@ -100,44 +129,84 @@ def _fetch_latest_product_grib(
         return None
 
     local_path, file_dt = result
-    dest = os.path.join(product_cache_dir, "conus.grib2.gz")
 
-    if local_path != dest:
-        tmp = dest + ".tmp"
+    # Store as both latest (conus.grib2.gz) and timestamped (for scrubber frames).
+    dest_latest = os.path.join(product_cache_dir, "conus.grib2.gz")
+    dest_timestamped = os.path.join(
+        product_cache_dir, file_dt.strftime("%Y-%m-%d_%H-%M-%S.grib2.gz")
+    )
+
+    # Write latest version
+    if local_path != dest_latest:
+        tmp = dest_latest + ".tmp"
         shutil.move(local_path, tmp)
-        if os.path.exists(dest):
-            os.remove(dest)
-        os.rename(tmp, dest)
+        try:
+            os.replace(tmp, dest_latest)
+        except OSError as exc:
+            print(f"[mrms_worker] Failed to replace {dest_latest}: {exc}")
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
 
-    return dest, file_dt
+    # Write timestamped version if it doesn't already exist.
+    if not os.path.exists(dest_timestamped):
+        try:
+            shutil.copy2(dest_latest, dest_timestamped)
+        except OSError as exc:
+            print(
+                f"[mrms_worker] Failed to create timestamped copy {dest_timestamped}: {exc}"
+            )
+
+    # Prune old timestamped files (keep max 12 hours).
+    _prune_old_frames(product_cache_dir, max_age_hours=12)
+
+    return dest_latest, file_dt, successful_lookback
+
+
+def _prewarm_single_product(product: str, get_latest_mrms_file) -> None:
+    """Helper to prewarm a single product. Runs in parallel via ThreadPoolExecutor."""
+    sentinel_name = f"mrms_{product}"
+    if is_cache_fresh(sentinel_name, _FRESH_WINDOW_SEC):
+        return
+
+    try:
+        fetched = _fetch_latest_product_grib(product, get_latest_mrms_file)
+        if fetched is None:
+            print(f"[mrms_worker] No files found for prewarm product {product}")
+            return
+
+        grib_path, file_dt, lookback_minutes = fetched
+        product_cache_dir = os.path.join(_MRMS_CACHE, product)
+        print(
+            f"[mrms_worker] {product} cached at "
+            f"{file_dt.strftime('%Y-%m-%d %H:%M UTC')} (prewarm set)"
+        )
+        mark_run_complete(sentinel_name)
+        _prewarm_conus_png(product, grib_path, product_cache_dir, file_dt=file_dt)
+    except Exception as exc:
+        print(f"[mrms_worker] Prewarm set fetch/render failed for {product}: {exc}")
 
 
 def _run_prewarm_product_set(skip_product: str, get_latest_mrms_file) -> None:
-    """Fetch and prewarm the configured MRMS products after active product refresh."""
-    for product in _PREWARM_PRODUCTS:
-        if product == skip_product:
-            continue
+    """Fetch and prewarm the configured MRMS products in parallel."""
+    products_to_warm = [p for p in _PREWARM_PRODUCTS if p != skip_product]
+    if not products_to_warm:
+        return
 
-        sentinel_name = f"mrms_{product}"
-        if is_cache_fresh(sentinel_name, _FRESH_WINDOW_SEC):
-            continue
-
-        try:
-            fetched = _fetch_latest_product_grib(product, get_latest_mrms_file)
-            if fetched is None:
-                print(f"[mrms_worker] No files found for prewarm product {product}")
-                continue
-
-            grib_path, file_dt = fetched
-            product_cache_dir = os.path.join(_MRMS_CACHE, product)
-            print(
-                f"[mrms_worker] {product} cached at "
-                f"{file_dt.strftime('%Y-%m-%d %H:%M UTC')} (prewarm set)"
-            )
-            mark_run_complete(sentinel_name)
-            _prewarm_conus_png(product, grib_path, product_cache_dir, file_dt=file_dt)
-        except Exception as exc:
-            print(f"[mrms_worker] Prewarm set fetch/render failed for {product}: {exc}")
+    # Use ThreadPoolExecutor to fetch/render multiple products in parallel (4 workers).
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {
+            executor.submit(_prewarm_single_product, product, get_latest_mrms_file): product
+            for product in products_to_warm
+        }
+        for future in as_completed(futures):
+            product = futures[future]
+            try:
+                future.result()
+            except Exception as exc:
+                print(f"[mrms_worker] Prewarm product {product} thread failed: {exc}")
 
 
 def run_mrms_worker(force: bool = False) -> None:
@@ -163,7 +232,7 @@ def run_mrms_worker(force: bool = False) -> None:
             print(f"[mrms_worker] No files found for {product}")
             return
 
-        dest, file_dt = fetched
+        dest, file_dt, lookback_minutes = fetched
         product_cache_dir = os.path.join(_MRMS_CACHE, product)
 
         print(

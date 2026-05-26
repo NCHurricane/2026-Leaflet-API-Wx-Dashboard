@@ -411,22 +411,30 @@
     const SELECTOR_RADAR_WMS_URL = 'https://nowcoast.noaa.gov/geoserver/observations/weather_radar/wms';
     const SELECTOR_RADAR_WMS_LAYER = 'base_reflectivity_mosaic';
 
-    function createSelectorRadarLayer(radarOpacity) {
-        if (!L?.tileLayer?.wms) {
+    async function createSelectorRadarLayer(radarOpacity) {
+        try {
+            const response = await fetch(apiUrl('/api/data/mrms?product=Refl_BaseQC'));
+            if (!response.ok) {
+                console.warn('[Selector Radar] MRMS API unavailable');
+                return null;
+            }
+            const data = await response.json();
+            if (!data.image_url || !data.bounds) {
+                console.warn('[Selector Radar] Missing image_url or bounds in MRMS response');
+                return null;
+            }
+            // Leaflet imageOverlay: [[south, west], [north, east]]
+            // Use default overlayPane (no custom pane) so positioning matches the
+            // MRMS tab exactly. Layer ordering is handled by bringToBack() after add.
+            const b = data.bounds; // [west, east, south, north]
+            const leafletBounds = [[b[2], b[0]], [b[3], b[1]]];
+            return L.imageOverlay(apiUrl(data.image_url), leafletBounds, {
+                opacity: radarOpacity
+            });
+        } catch (error) {
+            console.warn('[Selector Radar] Failed to fetch MRMS data:', error);
             return null;
         }
-        return L.tileLayer.wms(
-            SELECTOR_RADAR_WMS_URL,
-            {
-                layers: SELECTOR_RADAR_WMS_LAYER,
-                format: 'image/png',
-                transparent: true,
-                opacity: radarOpacity,
-                attribution: 'NOAA nowCOAST',
-                maxZoom: 19,
-                pane: 'selectorRadarPane'
-            }
-        );
     }
 
     async function refreshExtentSelectorOverlays(map, options = {}) {
@@ -434,10 +442,9 @@
             return;
         }
 
-        if (!map.getPane('selectorRadarPane')) {
-            map.createPane('selectorRadarPane');
-            map.getPane('selectorRadarPane').style.zIndex = '450';
-        }
+        // Note: Radar Overlay uses the default overlayPane (no custom pane).
+        // Custom panes can cause subtle positioning offsets vs. the MRMS tab;
+        // layer ordering is now handled via bringToBack() after addTo().
 
         if (!map.__selectorLayerState) {
             map.__selectorLayerState = { radar: true, alerts: true };
@@ -481,7 +488,7 @@
             : 0.6;
 
         if (!map.__selectorRadarLayer) {
-            map.__selectorRadarLayer = createSelectorRadarLayer(radarOpacity);
+            map.__selectorRadarLayer = await createSelectorRadarLayer(radarOpacity);
             if (!map.__selectorRadarLayer) {
                 console.warn('Extent selector radar disabled: no compatible radar tile layer available.');
                 map.__selectorLayerState.radar = false;
@@ -494,6 +501,10 @@
 
         if (map.__selectorRadarLayer && map.__selectorLayerState.radar && !map.hasLayer(map.__selectorRadarLayer)) {
             map.__selectorRadarLayer.addTo(map);
+            // Send to the back of overlayPane so live radar / alert polygons / etc. stay on top
+            if (typeof map.__selectorRadarLayer.bringToBack === 'function') {
+                map.__selectorRadarLayer.bringToBack();
+            }
         }
         if (map.__selectorRadarLayer && !map.__selectorLayerState.radar && map.hasLayer(map.__selectorRadarLayer)) {
             map.removeLayer(map.__selectorRadarLayer);

@@ -157,7 +157,20 @@ def warp_array_to_mercator(
         (dst_data >= fill_val * 0.9) | ~np.isfinite(dst_data), dst_data
     )
 
-    actual_bounds = [lon_min, lon_max, lat_min, lat_max]
+    # Compute the EXACT WGS84 bounds of the destination (Mercator) image.
+    # calculate_default_transform may round dst_width/dst_height, so we derive
+    # bounds from the actual dst_transform that produced the pixels we just
+    # rendered. This ensures Leaflet's imageOverlay places the image at the
+    # precise lat/lng corners that match the warped pixel content.
+    dst_left = dst_transform.c                                 # Mercator x of left edge
+    dst_top = dst_transform.f                                  # Mercator y of top edge
+    dst_right = dst_left + dst_transform.a * dst_width         # Mercator x of right edge
+    dst_bottom = dst_top + dst_transform.e * dst_height        # Mercator y of bottom edge (e is negative)
+
+    wgs_west, wgs_south, wgs_east, wgs_north = rasterio.warp.transform_bounds(
+        dst_crs, src_crs, dst_left, dst_bottom, dst_right, dst_top
+    )
+    actual_bounds = [wgs_west, wgs_east, wgs_south, wgs_north]
     return warped_masked, actual_bounds
 
 

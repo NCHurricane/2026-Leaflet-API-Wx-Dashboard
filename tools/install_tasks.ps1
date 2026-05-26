@@ -98,6 +98,33 @@ $tasks = @(
         Description = 'Weekly preseed of NWS zone-geometry disk cache.'
         Script      = 'tools\preseed_zone_cache.py'
         Trigger     = 'weekly-sunday-0300'
+    },
+    @{
+        Name        = 'Wx-Dashboard-Satellite_v2'
+        Description = 'Refresh Satellite v2 base catalog (cache/satellite_v2/).'
+        Module      = 'workers.satellite_v2_worker'
+        Trigger     = 'minutes-15'
+    },
+    @{
+        Name        = 'Wx-Dashboard-Satellite_v2_meso'
+        Description = 'Refresh Satellite v2 mesoscale catalogs (GOES-19 meso sectors).'
+        Module      = 'workers.satellite_v2_meso_worker'
+        ExtraArgs   = '--profile goes19-meso'
+        Trigger     = 'minutes-5'
+    },
+    @{
+        Name        = 'Wx-Dashboard-Satellite_v2_light_composites'
+        Description = 'Refresh Satellite v2 light composite catalogs (GOES-19).'
+        Module      = 'workers.satellite_v2_light_composites_worker'
+        ExtraArgs   = '--profile goes19-light-composites --tile-workers 2'
+        Trigger     = 'minutes-5'
+    },
+    @{
+        Name        = 'Wx-Dashboard-Satellite_v2_geocolor'
+        Description = 'Refresh Satellite v2 GEOColor catalogs (GOES-19).'
+        Module      = 'workers.satellite_v2_geocolor_worker'
+        ExtraArgs   = '--profile goes19-geocolor --tile-workers 1'
+        Trigger     = 'minutes-10'
     }
 )
 
@@ -141,6 +168,9 @@ foreach ($t in $tasks) {
     else {
         $scriptPath = Join-Path $RepoRoot $t.Script
         $pyArgs = "-u `"$scriptPath`" --log-to-file"
+    }
+    if ($t.ExtraArgs) {
+        $pyArgs = "$pyArgs $($t.ExtraArgs)"
     }
 
     $action = New-ScheduledTaskAction `

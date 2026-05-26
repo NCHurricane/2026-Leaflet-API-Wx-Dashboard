@@ -7,6 +7,7 @@ overlay cache schema.
 
 from __future__ import annotations
 
+import json
 import math
 import multiprocessing
 import os
@@ -48,8 +49,9 @@ _TMP_RENDER_ROOT = _CACHE_ROOT / "tmp" / "radar_live"
 # Skip if a successful run happened within 75% of configured interval.
 _FRESH_WINDOW_SEC = max(60, int(LIVE_RADAR_WORKER_INTERVAL_MIN * 60 * 0.75))
 
-# Radar map bounds use 100 nm range rings with 20% padding.
-_MAX_RANGE_NM = 100.0
+# Radar map bounds use 250 nm range rings with 20% padding.
+# Covers full Level 3 Super-Res extent (460 km).
+_MAX_RANGE_NM = 250.0
 _NM_TO_KM = 1.852
 _KM_PER_DEG_LAT = 111.32
 _PADDING_FACTOR = 1.20
@@ -241,9 +243,52 @@ def _best_sweep(radar, field_name: str) -> int:
         return 0
 
 
+def _discovery_index_path(site: str, level_code: str, product_key: str) -> Path:
+    """Return path to the radar file discovery index for a site/level/product."""
+    return (
+        _CACHE_ROOT
+        / "radar"
+        / site.upper()
+        / level_code.upper()
+        / product_key.upper()
+        / ".discovery_index.json"
+    )
+
+
+def _read_discovery_index(
+    site: str, level_code: str, product_key: str
+) -> dict:
+    """Load the discovery index, or return empty dict if not found."""
+    try:
+        path = _discovery_index_path(site, level_code, product_key)
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {"dir_mtime": None, "files": {}}
+
+
+def _write_discovery_index(
+    site: str, level_code: str, product_key: str, index: dict
+) -> None:
+    """Write the discovery index atomically."""
+    try:
+        path = _discovery_index_path(site, level_code, product_key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = str(path) + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(index, fh, separators=(",", ":"))
+        os.replace(tmp, str(path))
+    except Exception:
+        pass
+
+
 def _discover_radar_files(data_path: Path) -> list[Path]:
     files: list[Path] = []
     ignored_suffixes = (".tmp", ".part", ".json", ".txt", ".md", ".idx", ".lock")
+    if not data_path.exists():
+        return files
     for entry in data_path.iterdir():
         if not entry.is_file():
             continue
@@ -261,6 +306,60 @@ def _discover_radar_files(data_path: Path) -> list[Path]:
     return sorted(files, key=lambda p: p.name)
 
 
+def _compute_extent_ratio(bounds: list[float], projection=None) -> float:
+    """Return map width/height ratio in projection coordinates.
+
+    bounds: [min_lon, max_lon, min_lat, max_lat]
+    projection: cartopy CRS to transform corners into. Defaults to a simple
+        cosine-corrected PlateCarree ratio when not provided.
+    """
+    min_lon, max_lon, min_lat, max_lat = bounds
+
+    if projection is not None:
+        corners_ll = np.array(
+            [
+                [min_lon, min_lat],
+                [max_lon, min_lat],
+                [max_lon, max_lat],
+                [min_lon, max_lat],
+            ]
+        )
+        try:
+            corners_proj = projection.transform_points(
+                ccrs.PlateCarree(), corners_ll[:, 0], corners_ll[:, 1]
+            )
+            xs = corners_proj[:, 0]
+            ys = corners_proj[:, 1]
+            if np.isfinite(xs).all() and np.isfinite(ys).all():
+                width = float(xs.max() - xs.min())
+                height = float(ys.max() - ys.min())
+                if width > 0 and height > 0:
+                    return width / height
+        except Exception:
+            pass
+
+    lat_span = max(max_lat - min_lat, 1e-6)
+    lon_span = max(max_lon - min_lon, 1e-6)
+    lat_mid = (min_lat + max_lat) * 0.5
+    lon_meters = lon_span * max(math.cos(math.radians(lat_mid)), 1e-3)
+    return max(lon_meters / lat_span, 1e-3)
+
+
+def _figure_size_for_extent(
+    bounds: list[float], base_height: float = 7.2, projection=None
+) -> tuple[float, float]:
+    """Compute figure size from bounds. Returns (width, height) in inches.
+
+    bounds: [min_lon, max_lon, min_lat, max_lat]
+    base_height: height in inches (default 7.2 matches radar_utils)
+    projection: cartopy CRS used for aspect ratio in projection coordinates.
+    """
+    ratio = _compute_extent_ratio(bounds, projection=projection)
+    fig_height = base_height
+    fig_width = max(fig_height * ratio, 4.0)
+    return fig_width, fig_height
+
+
 def _render_overlay_png(
     radar,
     field_name: str,
@@ -276,12 +375,19 @@ def _render_overlay_png(
 
         t_start = time.time() if profile else None
 
-        fig_size = float(LIVE_RADAR_FIGURE_SIZE_INCHES or 10)
-        dpi = int(LIVE_RADAR_RENDER_DPI or 150)
-        fig = plt.figure(figsize=(fig_size, fig_size), dpi=dpi)
+        base_size = float(LIVE_RADAR_FIGURE_SIZE_INCHES or 20)
+        dpi = int(LIVE_RADAR_RENDER_DPI or 200)
+        # Render in Web Mercator (EPSG:3857) so Leaflet (which also uses
+        # Web Mercator) can composite the overlay without reprojection
+        # distortion that compresses latitude bands.
+        map_projection = ccrs.epsg(3857)
+        fig_width, fig_height = _figure_size_for_extent(
+            bounds, base_height=base_size, projection=map_projection
+        )
+        fig = plt.figure(figsize=(fig_width, fig_height), dpi=dpi)
         t_fig = time.time() if profile else None
 
-        ax = fig.add_axes([0.0, 0.0, 1.0, 1.0], projection=ccrs.PlateCarree())
+        ax = fig.add_axes([0.0, 0.0, 1.0, 1.0], projection=map_projection)
         fig.patch.set_alpha(0.0)
         ax.patch.set_alpha(0.0)
         ax.set_axis_off()
@@ -322,7 +428,7 @@ def _render_overlay_png(
             field_name,
             sweep=sweep,
             ax=ax,
-            projection=ccrs.PlateCarree(),
+            projection=map_projection,
             min_lon=bounds[0],
             max_lon=bounds[1],
             min_lat=bounds[2],
@@ -463,7 +569,25 @@ def _render_site_product(
         return 0
 
     data_path = Path(data_dir)
-    radar_files = _discover_radar_files(data_path)
+
+    # Track discovery via index to avoid repeated I/O on unchanged directories
+    level_code = _level_code(level)
+    index = _read_discovery_index(site, level_code, product_key)
+    cached_dir_mtime = index.get("dir_mtime")
+    try:
+        current_dir_mtime = data_path.stat().st_mtime if data_path.exists() else None
+    except OSError:
+        current_dir_mtime = None
+
+    # Re-scan only if directory changed
+    if current_dir_mtime != cached_dir_mtime:
+        radar_files = _discover_radar_files(data_path)
+        if current_dir_mtime is not None:
+            index["dir_mtime"] = current_dir_mtime
+            _write_discovery_index(site, level_code, product_key, index)
+    else:
+        radar_files = _discover_radar_files(data_path)
+
     if not radar_files:
         return 0
 

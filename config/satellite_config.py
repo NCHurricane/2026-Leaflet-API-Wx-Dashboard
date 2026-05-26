@@ -448,50 +448,7 @@ SATELLITE_LIVE_DEFAULTS = {
 # User-editable lookback options for Satellite animate mode.
 SATELLITE_ANIMATE_LOOKBACK_HOURS = (1, 3, 6, 12)
 
-# Worker-side prewarm: non-mesoscale sectors (15 min cadence).
-SATELLITE_PREWARM_CURRENT = {
-    "cadence_minutes": 15,
-    "sat_id": "goes19",
-    "sectors": ("CONUS",),
-    "products": ("Channel02", "Channel13", "GeoColor"),
-    "lookback_hours": 1,
-    "max_frames": 60,
-}
-
-# Worker-side prewarm: mesoscale sectors (5 min cadence).
-SATELLITE_PREWARM_MESO = {
-    "cadence_minutes": 5,
-    "sat_id": "goes19",
-    "sectors": ("Meso1", "Meso2"),
-    "products": ("Channel02", "Channel13", "GeoColor"),
-    "lookback_hours": 1,
-    "max_frames": 60,
-    # Meso cadence can yield ~60 frames in a 1h window, so prewarm the
-    # newest hour to avoid cold misses when Animate is opened.
-    "prewarm_newest_frames": 60,
-}
-
-# Tile zoom levels to pre-render per frame during worker warming.
-# Capped at zoom 8 for CONUS (Band 13 native res ~2 km ≈ zoom 9 wall).
-SATELLITE_PREWARM_ZOOMS = (2, 3, 4, 5, 6, 7, 8)
-
-# Meso sectors have a smaller footprint so zoom 9 adds meaningful detail.
-SATELLITE_PREWARM_ZOOMS_MESO = (2, 3, 4, 5, 6, 7, 8, 9)
-
-# Number of newest frames to prewarm per product/sector each run.
-# Keeping this bounded prevents warm cycles from growing unbounded while still
-# making scrubber playback responsive for the most recent timeline.
-SATELLITE_PREWARM_NEWEST_FRAMES = 12
-
-# Prewarm neighborhood radius by zoom level (radius 2 => 5x5 tile grid).
-# Used only for FULLDISK / unknown sectors; CONUS and MESO use bounding-box
-# and fixed-radius helpers in the worker respectively.
-SATELLITE_PREWARM_TILE_RADIUS_BY_ZOOM = {
-    3: 1,
-    4: 2,
-    5: 2,
-    6: 2,
-    7: 2,
-    8: 2,
-    9: 1,
-}
+# NOTE: SATELLITE_PREWARM_* constants were removed along with the legacy
+# satellite_worker / satellite_meso_worker. The satellite_v2 pipeline owns
+# tile prewarming via its own profile system (see SATELLITE_V2_WORKER_PROFILES
+# in config/satellite_v2_config.py).

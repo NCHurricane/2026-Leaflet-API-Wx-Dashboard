@@ -39,46 +39,56 @@ def _write_cache(name: str, payload: dict, source: str) -> None:
 
 
 def run_spc_worker(force: bool = False) -> None:
-    """Fetch all SPC convective + fire weather GeoJSON and write to cache/spc/."""
+    """Fetch all SPC convective + fire weather GeoJSON in parallel and write to cache/spc/."""
     if not force and is_cache_fresh("spc", _FRESH_WINDOW_SEC):
         print("[spc_worker] Cache fresh — skipping run")
         return
+    from concurrent.futures import ThreadPoolExecutor
     from spc.spc_utils import (
         fetch_outlook_geojson,
         fetch_fire_wx_geojson,
     )
 
     start = time.time()
-    errors = 0
 
+    # Build list of all fetch tasks (cache_name, fetch_func, day, hazard)
+    tasks = []
+
+    # Convective outlooks
     for day, hazards in _CONVECTIVE_HAZARDS.items():
         for hazard in hazards:
-            try:
-                payload, source = fetch_outlook_geojson(day, hazard)
-                _write_cache(f"{day}_{hazard}", payload, source)
-            except Exception as exc:
-                errors += 1
-                print(f"[spc_worker] {day}_{hazard}: {exc}")
+            tasks.append((f"{day}_{hazard}", fetch_outlook_geojson, day, hazard))
 
     # Fire weather Days 1-2
     for day in range(1, 3):
         for hazard in _FIRE_WX_HAZARDS_12:
-            try:
-                payload, source = fetch_fire_wx_geojson(day, hazard)
-                _write_cache(f"fire_{day}_{hazard}", payload, source)
-            except Exception as exc:
-                errors += 1
-                print(f"[spc_worker] fire_{day}_{hazard}: {exc}")
+            tasks.append((f"fire_{day}_{hazard}", fetch_fire_wx_geojson, day, hazard))
 
     # Fire weather Days 3-8
     for day in range(3, 9):
         for hazard in _FIRE_WX_HAZARDS_38:
-            try:
-                payload, source = fetch_fire_wx_geojson(day, hazard)
-                _write_cache(f"fire_{day}_{hazard}", payload, source)
-            except Exception as exc:
-                errors += 1
-                print(f"[spc_worker] fire_{day}_{hazard}: {exc}")
+            tasks.append((f"fire_{day}_{hazard}", fetch_fire_wx_geojson, day, hazard))
+
+    def _fetch_and_cache(task):
+        """Fetch one outlook and write to cache. Returns (cache_name, success, error_msg)."""
+        cache_name, fetch_func, day, hazard = task
+        try:
+            payload, source = fetch_func(day, hazard)
+            _write_cache(cache_name, payload, source)
+            return cache_name, True, None
+        except Exception as exc:
+            return cache_name, False, str(exc)
+
+    # Parallelize fetches across available cores (6 workers for network I/O)
+    errors = 0
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        results = list(executor.map(_fetch_and_cache, tasks))
+
+    # Collect errors for reporting
+    for cache_name, success, error_msg in results:
+        if not success:
+            errors += 1
+            print(f"[spc_worker] {cache_name}: {error_msg}")
 
     print(
         f"[spc_worker] SPC cache refresh complete in {time.time() - start:.2f}s "
