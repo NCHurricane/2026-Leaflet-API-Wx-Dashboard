@@ -1,9 +1,21 @@
 (function () {
     'use strict';
 
-    const API_ORIGIN = window.location.protocol === 'file:'
-        ? 'http://127.0.0.1:8000'
-        : '';
+    const API_DEV_ORIGIN = 'http://127.0.0.1:8000';
+
+    function resolveApiOrigin() {
+        if (window.location.protocol === 'file:') {
+            return API_DEV_ORIGIN;
+        }
+
+        const localHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
+        const isLocalHost = localHosts.has(window.location.hostname);
+        const isApiPort = window.location.port === '8000';
+
+        return isLocalHost && !isApiPort ? API_DEV_ORIGIN : '';
+    }
+
+    const API_ORIGIN = resolveApiOrigin();
 
     const NAV_ITEMS = [
         { id: 'weather', label: 'Weather', href: 'weather.html' },

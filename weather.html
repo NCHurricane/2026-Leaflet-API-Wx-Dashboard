@@ -1992,44 +1992,6 @@
                 border-color: var(--wx-cyan);
             }
 
-            #weather-rtma-load-scrubber.radar-animate-filling {
-                color: #ffffff;
-                border-color: #f59e0b;
-                animation: radar-fill-pulse 1.5s ease-in-out infinite;
-            }
-
-            #weather-rtma-load-scrubber.radar-animate-newframe {
-                color: #000000;
-                border-color: #22c55e;
-                animation: radar-new-frame-pulse 0.85s ease-in-out infinite;
-            }
-
-            @keyframes radar-fill-pulse {
-
-                0%,
-                100% {
-                    opacity: 1;
-                }
-
-                50% {
-                    opacity: 0.55;
-                }
-            }
-
-            @keyframes radar-new-frame-pulse {
-
-                0%,
-                100% {
-                    opacity: 1;
-                    transform: scale(1);
-                }
-
-                50% {
-                    opacity: 0.72;
-                    transform: scale(1.03);
-                }
-            }
-
             .wx-drought-date-btn {
                 background: #1e293b;
                 border: 1px solid #475569;
@@ -2174,6 +2136,11 @@
                 border-color: #22c55e;
                 color: #052e16;
                 animation: radar-new-frame-pulse 0.85s ease-in-out infinite;
+            }
+
+            @keyframes radar-new-frame-pulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.72; transform: scale(1.03); }
             }
 
             #scrubber-speed-label {
@@ -3460,6 +3427,19 @@
                                 <button id="weather-refresh-radar" type="button">Refresh</button>
                                 <button id="weather-clear-radar" type="button">Clear</button>
                             </div>
+                            <div id="radar-animate-window" class="wx-animate-window" style="display:none;">
+                                <div class="wx-animate-slider-container">
+                                    <div class="wx-animate-slider-header">
+                                        <span style="color:#94a3b8;">LOOKBACK HOURS</span>
+                                        <span id="radar-animate-slider-value" class="wx-animate-slider-value">1H</span>
+                                    </div>
+                                    <input id="radar-animate-slider" type="range" min="1" max="12" step="0.5" value="1" class="wx-animate-slider">
+                                    <div class="wx-animate-slider-labels">
+                                        <span>1H</span>
+                                        <span>12H</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <span id="weather-radar-status" class="wx-small"></span>
 
@@ -3595,6 +3575,11 @@
                                         <input class="weather-rtma-product" type="checkbox" value="total_cloud_cover">
                                     </div>
                                 </div>
+                            </div>
+
+                            <div class="wx-check-row" style="margin-top:8px;">
+                                <span>Auto-Update</span>
+                                <input id="wx-rtma-auto-update" type="checkbox" checked>
                             </div>
 
                         </div>
@@ -3807,6 +3792,10 @@
                             <span>Radar Quality Index</span>
                             <input class="mrms-product-check" type="checkbox" value="RadarQualityIndex">
                         </div>
+                        <div class="wx-check-row" style="margin-top:8px;">
+                            <span>Auto-Update</span>
+                            <input id="wx-mrms-auto-update" type="checkbox" checked>
+                        </div>
                         <div id="mrms-animate-window" class="wx-animate-window" style="display:none;">
                             <div class="wx-animate-slider-container">
                                 <div class="wx-animate-slider-header">
@@ -3937,13 +3926,6 @@
                                     type="checkbox" checked></div>
                             <div class="wx-check-row"><span>County Borders</span><input id="weather-toggle-counties"
                                     type="checkbox"></div>
-                            <div class="wx-check-row"><span>Radar Overlay</span><input id="weather-alerts-radar"
-                                    type="checkbox"></div>
-                            <label for="weather-alerts-radar-opacity" id="weather-alerts-radar-opacity-label"
-                                style="display:none;">Radar
-                                Opacity</label>
-                            <input id="weather-alerts-radar-opacity" type="range" min="0" max="1" step="0.05"
-                                value="0.3" style="display:none;">
                         </div>
                         <div id="wx-side-groups-empty" class="wx-block wx-small" style="display:none;">
                             Enable a product group to see style controls.
@@ -4110,7 +4092,7 @@
         <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
         <script src="js/shared.js?v=20260504c"></script>
         <script src="js/radar-site-locations.js?v=20260504c"></script>
-        <script src="js/weather.js?v=20260511m"></script>
+        <script src="js/weather.js?v=20260526g"></script>
         <script>initNav('weather');</script>
     </body>
 
