@@ -39,7 +39,9 @@
       "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); from workers.mrms_live_worker import run_mrms_live_product; print\\('mrms_live_worker imports OK'\\)\")",
       "Bash(python -m py_compile main.py)",
       "Bash(powershell -Command \"Select-String -Path 'F:\\\\Python\\\\dashboard_2026\\\\main.py' -Pattern '/api/radar/live/frames' -Context 5,15 | head -50\")",
-      "Bash(xargs grep -l \"get_catalog_payload\")"
+      "Bash(xargs grep -l \"get_catalog_payload\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
