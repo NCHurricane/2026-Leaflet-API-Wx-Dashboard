@@ -21,8 +21,9 @@ from rasterio.crs import CRS as RioCRS
 from rasterio.transform import from_bounds as rio_from_bounds
 from rasterio.warp import Resampling, reproject as rio_reproject
 
-from config.satellite_config import ABI_CHANNELS, RGB_COMPOSITE_KEYS
 from config.satellite_v2_config import (
+    ABI_CHANNELS,
+    RGB_COMPOSITE_KEYS,
     SATELLITE_V2_TILE_SIZE,
     normalize_channel,
     source_channels_for_product,

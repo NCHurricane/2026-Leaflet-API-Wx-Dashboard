@@ -11,8 +11,8 @@ from typing import Any
 import matplotlib.colors as mcolors
 import numpy as np
 
-from config.satellite_config import ABI_CHANNELS
 from config.satellite_v2_config import (
+    ABI_CHANNELS,
     SATELLITE_V2_PRODUCTS,
     normalize_channel,
     normalize_sat_id,
