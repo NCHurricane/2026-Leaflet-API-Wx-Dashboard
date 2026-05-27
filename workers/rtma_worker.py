@@ -352,6 +352,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                                 cache_root,
                                 "rtma",
                                 overlay_metadata,
+                                keep_n=keep_n,
                             )
                         except Exception as exc:
                             print(

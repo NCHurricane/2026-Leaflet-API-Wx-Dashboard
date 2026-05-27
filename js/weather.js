@@ -71,7 +71,7 @@
     function _setViewerTimestamp(value) {
         const el = byId('wx-global-timestamp');
         if (!el) return;
-        el.innerHTML = `Last Updated:<br>${_formatViewerTimestamp(value)}`;
+        el.innerHTML = `Last Updated: ${_formatViewerTimestamp(value)}`;
     }
 
     // Wire up event handlers for SPC controls (Fire Weather UI parity)
@@ -716,13 +716,21 @@
             img.src = 'img/nchurricane_logo.png';
             img.alt = 'NCHurricane.com';
             img.loading = 'lazy';
-            const ts = L.DomUtil.create('div', 'wx-global-timestamp', div);
-            ts.id = 'wx-global-timestamp';
-            ts.innerHTML = `Last Updated:<br>${_formatViewerTimestamp(null)}`;
             return div;
         },
     });
     new LogoControl().addTo(map);
+
+    // Top-center "Last Updated" badge, anchored to the map wrap.
+    (() => {
+        const wrap = document.querySelector('.weather-map-wrap');
+        if (!wrap || document.getElementById('wx-global-timestamp')) return;
+        const ts = document.createElement('div');
+        ts.id = 'wx-global-timestamp';
+        ts.className = 'wx-global-timestamp wx-global-timestamp-top';
+        ts.innerHTML = `Last Updated: ${_formatViewerTimestamp(null)}`;
+        wrap.appendChild(ts);
+    })();
 
     // ── Layer state ──────────────────────────────────────────────────────────
     let alertsLayer = null;
@@ -1135,6 +1143,152 @@
             lng: (bounds.minLng + bounds.maxLng) / 2,
         };
     }
+
+    const _ALERT_RADAR_FRAME_COUNT = 5;
+    const _ALERT_RADAR_FRAME_MS = 600;
+    const _ALERT_RADAR_REFRESH_MS = 300000; // 5 min
+    const _ALERT_RADAR_RETRY_MS = 60000;    // 60 sec
+    const _ALERT_RADAR_MAX_RETRIES = 5;
+    let _alertRadarTileLayer = null;
+    let _alertRadarFrameLayers = [];
+    let _alertRadarFrameIndex = 0;
+    let _alertRadarPlayTimer = null;
+    let _alertRadarRefreshTimer = null;
+    let _alertRadarLastModified = '';
+    let _alertRadarRetryCount = 0;
+
+    function _alertRadarOpacity() {
+        const slider = byId('weather-opacity-alert-radar');
+        const v = slider ? parseFloat(slider.value) : 0.65;
+        return Number.isFinite(v) ? v : 0.65;
+    }
+
+    function _alertRadarEnabled() {
+        const cb = byId('weather-alert-radar-enable');
+        return cb ? !!cb.checked : true;
+    }
+
+    function _clearAlertRadarTiles() {
+        if (_alertRadarPlayTimer) {
+            clearInterval(_alertRadarPlayTimer);
+            _alertRadarPlayTimer = null;
+        }
+        if (_alertRadarRefreshTimer) {
+            clearTimeout(_alertRadarRefreshTimer);
+            _alertRadarRefreshTimer = null;
+        }
+        _alertRadarFrameLayers.forEach((layer) => {
+            try { map.removeLayer(layer); } catch (_) { }
+        });
+        _alertRadarFrameLayers = [];
+        _alertRadarTileLayer = null;
+        _alertRadarFrameIndex = 0;
+        _alertRadarRetryCount = 0;
+    }
+
+    async function _checkAlertRadarFreshness() {
+        try {
+            const resp = await fetch('/api/radar/tiles/freshness', { cache: 'no-store' });
+            if (!resp.ok) return '';
+            const data = await resp.json();
+            return data?.last_modified || '';
+        } catch (_) {
+            return '';
+        }
+    }
+
+    async function _refreshAlertRadarTiles() {
+        if (!_alertRadarFrameLayers.length) return;
+        const latest = await _checkAlertRadarFreshness();
+        const isNewer = latest && latest !== _alertRadarLastModified;
+        if (isNewer) {
+            _alertRadarLastModified = latest;
+            _alertRadarRetryCount = 0;
+            _rebuildAlertRadarLayers();
+            _alertRadarRefreshTimer = setTimeout(_refreshAlertRadarTiles, _ALERT_RADAR_REFRESH_MS);
+        } else if (_alertRadarRetryCount < _ALERT_RADAR_MAX_RETRIES) {
+            _alertRadarRetryCount += 1;
+            _alertRadarRefreshTimer = setTimeout(_refreshAlertRadarTiles, _ALERT_RADAR_RETRY_MS);
+        } else {
+            // Give up retrying; fall back to next normal interval.
+            _alertRadarRetryCount = 0;
+            _alertRadarRefreshTimer = setTimeout(_refreshAlertRadarTiles, _ALERT_RADAR_REFRESH_MS);
+        }
+    }
+
+    function _rebuildAlertRadarLayers() {
+        // Cache-bust the tile URLs by appending the last-modified token,
+        // so Leaflet re-fetches fresh tiles for the current viewport.
+        const bust = encodeURIComponent(_alertRadarLastModified || Date.now().toString());
+        const oldLayers = _alertRadarFrameLayers;
+        _alertRadarFrameLayers = [];
+        const targetOpacity = _alertRadarOpacity();
+        for (let i = 0; i < _ALERT_RADAR_FRAME_COUNT; i += 1) {
+            const layer = L.tileLayer(`/api/radar/tiles/{z}/{x}/{y}?frame=${i}&v=${bust}`, {
+                minZoom: 0,
+                maxZoom: 18,
+                opacity: 0,
+                pane: 'radar-overlays',
+                attribution: 'IEM NEXRAD',
+            });
+            layer.addTo(map);
+            _alertRadarFrameLayers.push(layer);
+        }
+        _alertRadarFrameIndex = _ALERT_RADAR_FRAME_COUNT - 1;
+        _alertRadarFrameLayers[_alertRadarFrameIndex].setOpacity(targetOpacity);
+        _alertRadarTileLayer = _alertRadarFrameLayers[_alertRadarFrameIndex];
+        oldLayers.forEach((layer) => {
+            try { map.removeLayer(layer); } catch (_) { }
+        });
+    }
+
+    function _addAlertRadarTiles() {
+        _clearAlertRadarTiles();
+        if (!_alertRadarEnabled()) return;
+        const targetOpacity = _alertRadarOpacity();
+        const bust = encodeURIComponent(_alertRadarLastModified || Date.now().toString());
+        for (let i = 0; i < _ALERT_RADAR_FRAME_COUNT; i += 1) {
+            const layer = L.tileLayer(`/api/radar/tiles/{z}/{x}/{y}?frame=${i}&v=${bust}`, {
+                minZoom: 0,
+                maxZoom: 18,
+                opacity: 0,
+                pane: 'radar-overlays',
+                attribution: 'IEM NEXRAD',
+            });
+            layer.addTo(map);
+            _alertRadarFrameLayers.push(layer);
+        }
+        _alertRadarFrameIndex = _ALERT_RADAR_FRAME_COUNT - 1;
+        _alertRadarFrameLayers[_alertRadarFrameIndex].setOpacity(targetOpacity);
+        _alertRadarTileLayer = _alertRadarFrameLayers[_alertRadarFrameIndex];
+
+        // Seed last-modified and schedule first refresh.
+        _checkAlertRadarFreshness().then((lm) => { _alertRadarLastModified = lm || ''; });
+        _alertRadarRefreshTimer = setTimeout(_refreshAlertRadarTiles, _ALERT_RADAR_REFRESH_MS);
+
+        _alertRadarPlayTimer = setInterval(() => {
+            const prev = _alertRadarFrameIndex;
+            _alertRadarFrameIndex = (_alertRadarFrameIndex + 1) % _ALERT_RADAR_FRAME_COUNT;
+            _alertRadarFrameLayers[prev]?.setOpacity(0);
+            _alertRadarFrameLayers[_alertRadarFrameIndex]?.setOpacity(_alertRadarOpacity());
+            _alertRadarTileLayer = _alertRadarFrameLayers[_alertRadarFrameIndex];
+        }, _ALERT_RADAR_FRAME_MS);
+    }
+
+    byId('weather-opacity-alert-radar')?.addEventListener('input', () => {
+        if (_alertRadarFrameLayers.length) {
+            const op = _alertRadarOpacity();
+            _alertRadarFrameLayers[_alertRadarFrameIndex]?.setOpacity(op);
+        }
+    });
+
+    byId('weather-alert-radar-enable')?.addEventListener('change', () => {
+        if (_alertRadarEnabled()) {
+            if (_isTypeEnabled('alerts')) _addAlertRadarTiles();
+        } else {
+            _clearAlertRadarTiles();
+        }
+    });
 
     function _alertForecastUrl(feat, preferredLatLng = null) {
         const p = feat?.properties || {};
@@ -8590,6 +8744,8 @@
         setLegend(null);
 
         if (!alertsEnabled && alertsLayer && map.hasLayer(alertsLayer)) map.removeLayer(alertsLayer);
+        if (!alertsEnabled) _clearAlertRadarTiles();
+        else if (!_alertRadarTileLayer) _addAlertRadarTiles();
         if (!spcEnabled && spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
         if (!surfaceEnabled && surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
         if (!radarEnabled && radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);

@@ -4250,6 +4250,55 @@ def get_radar_colortable(product: str = "BR"):
     return {"product": product, "vmin": vmin, "vmax": vmax, "entries": entries}
 
 
+_RADAR_FRAME_LAYERS = {
+    0: "nexrad-n0q-m20m",
+    1: "nexrad-n0q-m15m",
+    2: "nexrad-n0q-m10m",
+    3: "nexrad-n0q-m05m",
+    4: "nexrad-n0q",
+}
+
+
+@app.get("/api/radar/tiles/{z}/{x}/{y}")
+def get_radar_alert_tiles(z: str, x: str, y: str, frame: int = 4):
+    """Proxy IEM NEXRAD reflectivity tiles. frame 0=oldest (-20m), 4=current."""
+    try:
+        import urllib.request as ur
+        layer = _RADAR_FRAME_LAYERS.get(frame, "nexrad-n0q")
+        url = f"https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/{layer}/{z}/{x}/{y}.png"
+        req = ur.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with ur.urlopen(req, timeout=10) as resp:
+            data = resp.read()
+            return Response(
+                content=data,
+                media_type="image/png",
+                headers={"Cache-Control": "public, max-age=120"},
+            )
+    except Exception as e:
+        print(f"[radar tiles] Tile fetch error: {e}")
+        raise HTTPException(status_code=404, detail="Tile not found")
+
+
+@app.head("/api/radar/tiles/{z}/{x}/{y}")
+def head_radar_alert_tiles(z: str, x: str, y: str):
+    """HEAD request for IEM NEXRAD radar tiles."""
+    return Response(media_type="image/png")
+
+
+@app.get("/api/radar/tiles/freshness")
+def get_radar_tiles_freshness():
+    """Return Last-Modified header for current IEM nexrad-n0q tile (CONUS sample)."""
+    try:
+        import urllib.request as ur
+        url = "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q/4/4/6.png"
+        req = ur.Request(url, headers={"User-Agent": "Mozilla/5.0"}, method="HEAD")
+        with ur.urlopen(req, timeout=8) as resp:
+            return {"last_modified": resp.headers.get("Last-Modified", "")}
+    except Exception as e:
+        print(f"[radar tiles] Freshness check error: {e}")
+        return {"last_modified": ""}
+
+
 @app.get("/api/radar/status")
 def get_radar_status():
     """Return NWS radar station operational status for all sites, cached 5 minutes."""

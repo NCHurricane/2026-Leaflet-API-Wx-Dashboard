@@ -30,7 +30,7 @@ from config.geo_config import STATES_FULL
 
 _STATE_GEOM_CACHE = None
 _CONUS_GEOM_CACHE = None
-_US_COUNTRY_GEOM_CACHE = None
+_INTL_BOUNDARY_GEOM_CACHE = None
 _WORLD_LAND_GEOM_CACHE = None
 
 
@@ -47,7 +47,10 @@ def _configure_pyshp_logging() -> None:
 
 
 def load_state_geometries():
-    """Load and cache US state polygon geometries from Natural Earth.
+    """Load and cache US state polygon geometries from Census Cartographic Boundaries.
+
+    Attempts Census Cartographic Boundaries (2025, 500k simplified) for clean map
+    visualization, then falls back to TIGER/Line (full resolution), then Natural Earth.
 
     Returns:
         dict[str, shapely.geometry.base.BaseGeometry]:
@@ -58,11 +61,47 @@ def load_state_geometries():
     if _STATE_GEOM_CACHE is not None:
         return _STATE_GEOM_CACHE
 
+    states = {}
+
+    # Try Census Cartographic Boundaries 2025 (500k, simplified for maps)
+    cb_path = os.path.join(_SHARED_SHAPEFILE_DIR, "cb_2025_us_state_500k.shp")
+    if os.path.exists(cb_path):
+        try:
+            _configure_pyshp_logging()
+            reader = shpreader.Reader(cb_path)
+            for record in reader.records():
+                stusps = record.attributes.get("STUSPS", "").upper()
+                if stusps and len(stusps) == 2:
+                    states[stusps] = record.geometry
+            if states:
+                print(f"Loaded {len(states)} states from Census Cartographic Boundaries 2025")
+                _STATE_GEOM_CACHE = states
+                return states
+        except Exception as e:
+            print(f"[WARN] Error loading Cartographic Boundary state shapefile: {e}")
+
+    # Fallback to TIGER/Line 2025 state boundaries (full resolution, Census Bureau)
+    tiger_path = os.path.join(_SHARED_SHAPEFILE_DIR, "tl_2025_us_state.shp")
+    if os.path.exists(tiger_path):
+        try:
+            _configure_pyshp_logging()
+            reader = shpreader.Reader(tiger_path)
+            for record in reader.records():
+                stusps = record.attributes.get("STUSPS", "").upper()
+                if stusps and len(stusps) == 2:
+                    states[stusps] = record.geometry
+            if states:
+                print(f"Loaded {len(states)} states from TIGER/Line 2025")
+                _STATE_GEOM_CACHE = states
+                return states
+        except Exception as e:
+            print(f"[WARN] Error loading TIGER state shapefile: {e}")
+
+    # Fallback to Natural Earth 10m
     shpfile = shpreader.natural_earth(
         resolution="10m", category="cultural", name="admin_1_states_provinces"
     )
     reader = shpreader.Reader(shpfile)
-    states = {}
     for record in reader.records():
         if record.attributes.get("admin") == "United States of America":
             postal = record.attributes.get("postal", "").upper()
@@ -107,26 +146,35 @@ def build_conus_geometry():
     return _CONUS_GEOM_CACHE
 
 
-def get_us_country_geometry():
-    """Load and cache the USA country polygon from Natural Earth.
+def get_international_boundaries():
+    """Load and cache US international boundary lines from TIGER/Line.
+
+    Returns international boundaries (US-Canada, US-Mexico, maritime) from
+    TIGER/Line 2025 for high-detail border visualization.
 
     Returns:
         shapely.geometry.base.BaseGeometry or None
     """
-    global _US_COUNTRY_GEOM_CACHE
-    if _US_COUNTRY_GEOM_CACHE is not None:
-        return _US_COUNTRY_GEOM_CACHE
+    global _INTL_BOUNDARY_GEOM_CACHE
+    if _INTL_BOUNDARY_GEOM_CACHE is not None:
+        return _INTL_BOUNDARY_GEOM_CACHE
 
-    shp_path = shpreader.natural_earth(
-        resolution="10m", category="cultural", name="admin_0_countries"
-    )
-    reader = shpreader.Reader(shp_path)
-    for rec in reader.records():
-        if rec.attributes.get("NAME") == "United States of America":
-            _US_COUNTRY_GEOM_CACHE = rec.geometry
-            break
+    tiger_path = os.path.join(_SHARED_SHAPEFILE_DIR, "tl_2025_us_internationalboundary.shp")
+    if not os.path.exists(tiger_path):
+        return None
 
-    return _US_COUNTRY_GEOM_CACHE
+    try:
+        _configure_pyshp_logging()
+        reader = shpreader.Reader(tiger_path)
+        geoms = [geom for geom in reader.geometries() if geom is not None]
+        if geoms:
+            _INTL_BOUNDARY_GEOM_CACHE = unary_union(geoms)
+            print(f"Loaded international boundaries from TIGER/Line 2025")
+            return _INTL_BOUNDARY_GEOM_CACHE
+    except Exception as e:
+        print(f"[WARN] Error loading TIGER international boundaries: {e}")
+
+    return None
 
 
 def build_world_land_geometry():
@@ -185,9 +233,9 @@ class CensusCounties:
     _state_multi_feature_map = {}
 
     SHAPEFILE_URL = (
-        "https://www2.census.gov/geo/tiger/GENZ2021/shp/cb_2021_us_county_5m.zip"
+        "https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_county_500k.zip"
     )
-    FILENAME = "cb_2021_us_county_5m"
+    FILENAME = "cb_2025_us_county_500k"
 
     @classmethod
     def _state_county_shapefile_path(cls, state_abbr):
@@ -309,7 +357,7 @@ class CensusCounties:
         shp_path = os.path.join(cache_dir, f"{cls.FILENAME}.shp")
 
         if not os.path.exists(shp_path):
-            print("⬇️  Downloading High-Res Census Counties (5m)...")
+            print("⬇️  Downloading High-Res Census Counties (500k)...")
             try:
                 r = requests.get(cls.SHAPEFILE_URL)
                 r.raise_for_status()
@@ -363,111 +411,3 @@ class CensusCounties:
         """Return the full shapefile record for a single FIPS code."""
         cls.load()
         return cls._records_map.get(fips)
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# CENSUS STATES SHAPEFILE (dissolved outlines)
-# ═════════════════════════════════════════════════════════════════════════════
-
-
-class CensusStates:
-    """Manages per-state dissolved outline shapefiles generated by
-    ``tools/build_state_shapefiles.py``.
-
-    Each file at ``shapefiles/states/{STATE}/state_{STATE}.shp`` contains a
-    single polygon representing the outer boundary of that state (counties
-    dissolved).  Use :meth:`get_feature` for a national all-states overlay and
-    :meth:`get_feature_for_state` for a single-state outline.
-    """
-
-    _feature = None
-    _state_feature_map = {}
-
-    @classmethod
-    def _state_outline_shapefile_path(cls, state_abbr):
-        state = str(state_abbr or "").strip().upper()
-        if not state:
-            return ""
-        return os.path.join(
-            _SHARED_SHAPEFILE_DIR,
-            "states",
-            state,
-            f"state_{state}.shp",
-        )
-
-    @classmethod
-    def _load_feature_from_shp(cls, shp_path):
-        if not shp_path or not os.path.exists(shp_path):
-            return None
-        try:
-            _configure_pyshp_logging()
-            reader = shpreader.Reader(shp_path)
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore", message=".*Possible issue encountered.*"
-                )
-                warnings.filterwarnings(
-                    "ignore", message=".*polygon interior holes.*"
-                )
-                geometries = list(reader.geometries())
-            if not geometries:
-                return None
-            return ShapelyFeature(geometries, ccrs.PlateCarree())
-        except Exception as exc:
-            print(
-                f"[WARN] Error loading state outline shapefile {shp_path}: {exc}")
-            return None
-
-    @classmethod
-    def get_feature(cls):
-        """Return a Cartopy ``ShapelyFeature`` of all state outlines, or ``None``."""
-        if cls._feature is not None:
-            return cls._feature
-
-        states_dir = os.path.join(_SHARED_SHAPEFILE_DIR, "states")
-        if not os.path.isdir(states_dir):
-            return None
-
-        geoms = []
-        for state_subdir in sorted(os.listdir(states_dir)):
-            shp_path = os.path.join(
-                states_dir, state_subdir, f"state_{state_subdir}.shp"
-            )
-            if not os.path.exists(shp_path):
-                continue
-            try:
-                _configure_pyshp_logging()
-                reader = shpreader.Reader(shp_path)
-                with warnings.catch_warnings():
-                    warnings.filterwarnings(
-                        "ignore", message=".*Possible issue encountered.*"
-                    )
-                    warnings.filterwarnings(
-                        "ignore", message=".*polygon interior holes.*"
-                    )
-                    geoms.extend(list(reader.geometries()))
-            except Exception as exc:
-                print(f"[WARN] Skipping state outline {state_subdir}: {exc}")
-
-        if not geoms:
-            return None
-
-        cls._feature = ShapelyFeature(geoms, ccrs.PlateCarree())
-        return cls._feature
-
-    @classmethod
-    def get_feature_for_state(cls, state_abbr):
-        """Return a Cartopy ``ShapelyFeature`` for a single state outline, or ``None``."""
-        state = str(state_abbr or "").strip().upper()
-        if not state:
-            return None
-
-        cached = cls._state_feature_map.get(state)
-        if cached is not None:
-            return cached
-
-        shp_path = cls._state_outline_shapefile_path(state)
-        feature = cls._load_feature_from_shp(shp_path)
-        if feature is not None:
-            cls._state_feature_map[state] = feature
-        return feature

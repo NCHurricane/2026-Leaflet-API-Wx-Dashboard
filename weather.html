@@ -1516,18 +1516,28 @@
                 margin-left: auto;
             }
 
-            .leaflet-control-logo .wx-global-timestamp {
-                margin-left: auto;
+            .wx-global-timestamp {
+                margin: auto 0;
                 padding: 5px 10px;
                 border: 1px solid rgba(218, 227, 7, 0.85);
                 border-radius: 5px;
                 background: rgba(10, 26, 74, 0.84);
-                color: #dae307;
-                font-weight: 900;
+                color: var(--wx-cyan);
+                font-weight: 700;
                 letter-spacing: 0.2em;
                 line-height: 1.2;
                 text-align: right;
                 white-space: nowrap;
+            }
+
+            .wx-global-timestamp-top {
+                position: absolute;
+                top: 10px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 500;
+                text-align: center;
+                pointer-events: none;
             }
 
             .leaflet-control-attribution {
@@ -3953,7 +3963,16 @@
                             <div class="wx-block">
                                 <label for="weather-opacity-alerts">Polygon Opacity</label>
                                 <input id="weather-opacity-alerts" type="range" min="0.1" max="1" step="0.05"
-                                    value="0.75">
+                                    value="0.75"></div>
+                            <h4>Radar Styling</h4>
+                            <div class="wx-block">
+                                <label class="wx-check-row" style="margin-top:8px;">
+                                    <span>Show Radar Loop</span>
+                                    <input id="weather-alert-radar-enable" type="checkbox" checked>
+                                </label>
+                                <label for="weather-opacity-alert-radar">Radar Opacity</label>
+                                <input id="weather-opacity-alert-radar" type="range" min="0.1" max="1" step="0.05"
+                                    value="0.45">
                             </div>
                             <div class="wx-block">
                                 <h3>PROJECTED ARRIVAL TOOL</h3>
