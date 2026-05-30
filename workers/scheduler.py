@@ -54,6 +54,7 @@ def start_scheduler() -> None:
 
     from workers.alerts_worker import run_alerts_worker
     from workers.spc_worker import run_spc_worker
+    from workers.tropical_worker import run_tropical_worker
     from workers.mrms_worker import run_mrms_worker
     from workers.radar_live_worker import run_radar_live_worker
     from workers.rtma_worker import run_rtma_hourly_worker, run_rtma_rapid_worker
@@ -79,6 +80,15 @@ def start_scheduler() -> None:
         max_instances=1,
         misfire_grace_time=300,
         next_run_time=now,
+    )
+    _scheduler.add_job(
+        run_tropical_worker,
+        "interval",
+        minutes=30,
+        id="tropical_worker",
+        max_instances=1,
+        misfire_grace_time=300,
+        next_run_time=now + timedelta(seconds=10),
     )
     # MRMS first tick deferred 30s so heavy S3 download doesn't compete with
     # the alerts/surface initial fetches for network bandwidth.
@@ -176,7 +186,7 @@ def start_scheduler() -> None:
 
     print(
         "[scheduler] In-process fallback ENABLED — alerts (1 min), spc (30 min), "
-        "mrms (15 min, +30s delay), radar_live (5 min, +20s delay), "
+        "tropical (30 min, +10s delay), mrms (15 min, +30s delay), radar_live (5 min, +20s delay), "
         "rtma_hourly (60 min, +45s delay), rtma_rapid (15 min, +50s delay), "
         "surface (30 min), satellite_v2 (15 min, +55s delay), "
         "satellite_v2_meso (5 min, +65s delay), "

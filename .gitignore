@@ -95,3 +95,7 @@ false
 # AI-generated documentation and context
 **/README.ai.md
 docs/llm_context/
+tropical_tab_handoff.txt
+tropical_tab_plan.md
+tropical_tab_redesign_plan.md
+tools/install_tasks.ps1

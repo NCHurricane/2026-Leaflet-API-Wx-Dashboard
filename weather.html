@@ -2878,6 +2878,131 @@
                 font-style: normal;
             }
 
+            .wx-tropical-summary {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+                margin-top: 10px;
+            }
+
+            .wx-tropical-metric {
+                border: 1px solid rgba(148, 163, 184, 0.28);
+                border-radius: 6px;
+                background: rgba(15, 23, 42, 0.48);
+                padding: 6px 8px;
+                min-width: 0;
+            }
+
+            .wx-tropical-metric span {
+                display: block;
+                color: #94a3b8;
+                font-size: 0.62rem;
+                font-weight: 800;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+            }
+
+            .wx-tropical-metric strong {
+                display: block;
+                margin-top: 2px;
+                color: #f8fafc;
+                font-size: 0.86rem;
+                line-height: 1.2;
+                overflow-wrap: anywhere;
+            }
+
+            .wx-tropical-actions {
+                display: flex;
+                gap: 6px;
+                margin-top: 10px;
+            }
+
+            .wx-tropical-actions button {
+                flex: 1;
+            }
+
+            .wx-tropical-status {
+                margin-top: 8px;
+            }
+
+            .wx-tropical-outlook {
+                margin-top: 8px;
+                border-top: 1px solid rgba(148, 163, 184, 0.28);
+                padding-top: 8px;
+                color: #cbd5e1;
+                font-size: 0.72rem;
+                line-height: 1.35;
+            }
+
+            .wx-tropical-outlook h4 {
+                margin: 0 0 4px;
+                color: #fbbf24;
+                font-size: 0.7rem;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+            }
+
+            .wx-tropical-outlook p {
+                margin: 0 0 6px;
+            }
+
+            .wx-tropical-product-list {
+                display: grid;
+                gap: 5px;
+                margin-top: 8px;
+            }
+
+            .wx-tropical-product-list button {
+                width: 100%;
+                text-align: left;
+                font-size: 0.72rem;
+                line-height: 1.2;
+            }
+
+            .wx-tropical-track-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 8px;
+                font-size: 0.7rem;
+            }
+
+            .wx-tropical-track-table th,
+            .wx-tropical-track-table td {
+                border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+                padding: 4px 3px;
+                text-align: left;
+            }
+
+            .wx-tropical-track-table th {
+                color: #94a3b8;
+                font-size: 0.62rem;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+            }
+
+            .wx-tropical-detail-body {
+                overflow: auto;
+                padding: 10px 12px 12px;
+                white-space: pre-wrap;
+                font-family: Consolas, "Liberation Mono", monospace;
+                font-size: 0.72rem;
+            }
+
+            .wx-tropical-category-icon span {
+                display: grid;
+                place-items: center;
+                width: var(--tc-size);
+                height: var(--tc-size);
+                border: var(--tc-border) solid var(--tc-stroke);
+                border-radius: 999px;
+                background: var(--tc-fill);
+                color: var(--tc-text);
+                box-shadow: 0 1px 4px rgba(2, 6, 23, 0.85);
+                font-size: calc(var(--tc-size) * 0.58);
+                font-weight: 900;
+                line-height: 1;
+            }
+
             .wx-nad-scroll {
                 flex: 1 1 auto;
                 overflow-y: auto;
@@ -3843,6 +3968,34 @@
                                     class="drought-cat-check" type="checkbox" value="4" checked></div>
 
                             <button id="weather-refresh-drought" type="button" style="margin-top:10px;">Refresh</button>
+                        </div>
+                    </div>
+
+                    <div id="wx-section-tropical" class="wx-block" data-type="tropical" style="display:none;">
+                        <div id="weather-tropical-opts">
+                            <label for="weather-tropical-basin">Region / Basin</label>
+                            <select id="weather-tropical-basin" class="wx-sidebar-select">
+                                <option value="WORLD" selected>World</option>
+                                <option value="AL">Atlantic</option>
+                                <option value="EP">Eastern Pacific</option>
+                                <option value="CP">Central Pacific</option>
+                            </select>
+
+                            <label for="weather-tropical-system">System</label>
+                            <select id="weather-tropical-system" class="wx-sidebar-select">
+                                <option value="">Loading active systems...</option>
+                            </select>
+
+                            <div class="wx-tropical-actions">
+                                <button id="weather-refresh-tropical" type="button">Refresh</button>
+                                <button id="weather-tropical-detail" type="button">Advisory</button>
+                            </div>
+
+                            <div id="weather-tropical-status" class="wx-small wx-tropical-status"></div>
+                            <div id="weather-tropical-outlook" class="wx-tropical-outlook"></div>
+                            <div id="weather-tropical-summary" class="wx-tropical-summary"></div>
+                            <div id="weather-tropical-products" class="wx-tropical-product-list"></div>
+                            <div id="weather-tropical-track"></div>
                         </div>
                     </div>
 

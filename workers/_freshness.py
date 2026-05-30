@@ -94,6 +94,7 @@ def redirect_stdio_to_log(log_name: str) -> None:
 _HEALTH_THRESHOLDS = {
     "alerts": 5 * 60,  # task fires every 1 min
     "spc": 60 * 60,  # task fires every 30 min
+    "tropical": 75 * 60,  # task fires every 30 min
     "surface": 60 * 60,  # task fires every 30 min
     "rtma_hourly": 2 * 60 * 60,  # task fires hourly at :05
     "rtma_rapid_update": 30 * 60,  # task fires every 15 min starting :20
