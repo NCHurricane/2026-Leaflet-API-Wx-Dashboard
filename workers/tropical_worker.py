@@ -7,6 +7,7 @@ cache/tropical so the browser and FastAPI routes never poll NHC directly.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import html
 import io
@@ -47,6 +48,7 @@ _BASINS = {
         "rss_suffix": "at",
         "xml_code": "AT",
         "graphics_code": "AT",
+        "gtwo_url": "https://www.nhc.noaa.gov/xgtwo/gtwo_atl.kmz",
     },
     "EP": {
         "name": "Eastern Pacific",
@@ -55,6 +57,7 @@ _BASINS = {
         "rss_suffix": "ep",
         "xml_code": "EP",
         "graphics_code": "EP",
+        "gtwo_url": "https://www.nhc.noaa.gov/xgtwo/gtwo_pac.kmz",
     },
     "CP": {
         "name": "Central Pacific",
@@ -63,6 +66,7 @@ _BASINS = {
         "rss_suffix": "cp",
         "xml_code": "CP",
         "graphics_code": "CP",
+        "gtwo_url": "https://www.nhc.noaa.gov/xgtwo/gtwo_cpac.kmz",
     },
 }
 
@@ -79,7 +83,41 @@ _FIVE_DAY_LAYER_KINDS = {
     "cone": "_5day_pgn.shp",
     "forecast_track": "_5day_lin.shp",
     "forecast_points": "_5day_pts.shp",
+    "watches_warnings": "_ww_wwlin.shp",
 }
+
+# Best-track (observed history) archive zip — separate download from the 5-day forecast zip.
+_BEST_TRACK_LAYER_KINDS = {
+    "best_track_line": "_lin.shp",
+    "best_track_points": "_pts.shp",
+}
+
+# Forecast wind radii (34/50/64 kt) — separate download from the 5-day forecast zip.
+# The shapefile names include timestamps, so we use a wildcard suffix.
+_FORECAST_WIND_RADII_LAYER_KINDS = {
+    "wind_radii": "*_forecastradii.shp",
+}
+
+# Graphical Tropical Weather Outlook (GTWO) KMZ style ids → formation category.
+_GTWO_STYLE_CATEGORY = {
+    "0": "none",
+    "1": "low",
+    "2": "medium",
+    "3": "high",
+    "zerox": "none",
+    "lowx": "low",
+    "medx": "medium",
+    "higx": "high",
+}
+_GTWO_CATEGORY_COLOR = {
+    "none": "#9ca3af",
+    "low": "#ffd400",
+    "medium": "#ff8c00",
+    "high": "#e60000",
+}
+# Point styleUrls that mark a genuine disturbance "X" (vs. off-season text labels,
+# which are Points with an invisible inline style and no styleUrl).
+_GTWO_MARKER_STYLES = {"zerox", "lowx", "medx", "higx"}
 
 
 def _utc_now_iso() -> str:
@@ -328,7 +366,9 @@ def _shapefile_feature_collection_from_zip(zip_path: Path, shp_suffix: str) -> d
         return None
     try:
         with zipfile.ZipFile(zip_path) as zf:
-            shp_name = next((name for name in zf.namelist() if name.lower().endswith(shp_suffix)), "")
+            # Support both literal suffixes (_5day_pgn.shp) and wildcard patterns (*_forecastradii.shp)
+            pattern = f"*{shp_suffix}" if not shp_suffix.startswith("*") else shp_suffix
+            shp_name = next((name for name in zf.namelist() if fnmatch.fnmatch(name.lower(), pattern.lower())), "")
             if not shp_name:
                 return None
             stem = shp_name[:-4]
@@ -353,6 +393,365 @@ def _shapefile_feature_collection_from_zip(zip_path: Path, shp_suffix: str) -> d
             return _feature_collection(features)
     except (OSError, KeyError, StopIteration, zipfile.BadZipFile, shapefile.ShapefileException):
         return None
+
+
+def _kml_local(tag: str) -> str:
+    """Strip the XML namespace from a KML element tag."""
+    return tag.split("}")[-1]
+
+
+def _kml_find(elem: ET.Element | None, name: str) -> ET.Element | None:
+    if elem is None:
+        return None
+    for child in elem:
+        if _kml_local(child.tag) == name:
+            return child
+    return None
+
+
+def _kml_findtext(elem: ET.Element | None, name: str) -> str:
+    child = _kml_find(elem, name)
+    return (child.text or "").strip() if child is not None and child.text else ""
+
+
+def _kml_first_descendant(elem: ET.Element, name: str) -> ET.Element | None:
+    for node in elem.iter():
+        if _kml_local(node.tag) == name:
+            return node
+    return None
+
+
+def _parse_kml_coords(text: str) -> list[list[float]]:
+    coords: list[list[float]] = []
+    for token in (text or "").split():
+        parts = token.split(",")
+        if len(parts) >= 2:
+            try:
+                coords.append([float(parts[0]), float(parts[1])])
+            except ValueError:
+                continue
+    return coords
+
+
+def _kml_geometry(placemark: ET.Element) -> dict[str, Any] | None:
+    polygon = _kml_first_descendant(placemark, "Polygon")
+    if polygon is not None:
+        ring_el = _kml_first_descendant(polygon, "coordinates")
+        ring = _parse_kml_coords(ring_el.text if ring_el is not None else "")
+        if len(ring) >= 3:
+            if ring[0] != ring[-1]:
+                ring.append(ring[0])
+            return {"type": "Polygon", "coordinates": [ring]}
+    line = _kml_first_descendant(placemark, "LineString")
+    if line is not None:
+        line_el = _kml_first_descendant(line, "coordinates")
+        pts = _parse_kml_coords(line_el.text if line_el is not None else "")
+        if len(pts) >= 2:
+            return {"type": "LineString", "coordinates": pts}
+    point = _kml_first_descendant(placemark, "Point")
+    if point is not None:
+        pt_el = _kml_first_descendant(point, "coordinates")
+        pts = _parse_kml_coords(pt_el.text if pt_el is not None else "")
+        if pts:
+            return {"type": "Point", "coordinates": pts[0]}
+    return None
+
+
+def _gtwo_formation_chances(text: str) -> tuple[int | None, int | None]:
+    """Best-effort extraction of 2-day and 7-day formation percentages."""
+    two = re.search(
+        r"(?:48\s*hour|2\s*[- ]?day|two[- ]?day)[^%\d]{0,40}(\d{1,3})\s*(?:percent|%)",
+        text,
+        re.I,
+    )
+    seven = re.search(
+        r"(?:7\s*day|seven[- ]?day|168\s*hour)[^%\d]{0,40}(\d{1,3})\s*(?:percent|%)",
+        text,
+        re.I,
+    )
+    two_pct = int(two.group(1)) if two else None
+    seven_pct = int(seven.group(1)) if seven else None
+    return two_pct, seven_pct
+
+
+def _placemark_description(placemark: ET.Element) -> str:
+    desc_el = _kml_find(placemark, "description")
+    if desc_el is None:
+        return ""
+    return _strip_html("".join(desc_el.itertext()))
+
+
+def _kml_extended_data(placemark: ET.Element) -> dict[str, str]:
+    """Return ExtendedData <Data name=...><value>...</value> pairs as a dict."""
+    ext = _kml_first_descendant(placemark, "ExtendedData")
+    if ext is None:
+        return {}
+    data: dict[str, str] = {}
+    for node in ext.iter():
+        if _kml_local(node.tag) != "Data":
+            continue
+        key = node.get("name") or ""
+        value_el = _kml_find(node, "value")
+        if key and value_el is not None:
+            data[key] = (value_el.text or "").strip()
+    return data
+
+
+def _gtwo_pct(value: str | None) -> int | None:
+    if not value:
+        return None
+    match = re.search(r"(\d{1,3})", str(value))
+    return int(match.group(1)) if match else None
+
+
+def _parse_gtwo_kml(kml_text: str) -> dict[str, Any]:
+    try:
+        root = _xml_root(kml_text)
+    except ET.ParseError as exc:
+        return {
+            "notExpected": False,
+            "issued": "",
+            "error": str(exc),
+            "geojson": _feature_collection([]),
+            "areas": [],
+        }
+
+    document = _kml_first_descendant(root, "Document")
+    issued = _kml_findtext(document, "name")
+    doc_desc_el = _kml_find(document, "description")
+    doc_desc = _strip_html("".join(doc_desc_el.itertext())) if doc_desc_el is not None else ""
+
+    features: list[dict[str, Any]] = []
+    for placemark in (n for n in root.iter() if _kml_local(n.tag) == "Placemark"):
+        geometry = _kml_geometry(placemark)
+        if geometry is None:
+            continue
+        style_url = _kml_findtext(placemark, "styleUrl").lstrip("#")
+        category = _GTWO_STYLE_CATEGORY.get(style_url, "")
+        # Drop off-season text-label points (no marker styleUrl); keep genuine
+        # disturbance "X" markers so point-only disturbances still render.
+        if geometry["type"] == "Point" and style_url not in _GTWO_MARKER_STYLES:
+            continue
+        name = _kml_findtext(placemark, "name")
+        description = _placemark_description(placemark)
+        ext = _kml_extended_data(placemark)
+        discussion = ext.get("Discussion", "").strip() or description
+        two_pct = _gtwo_pct(ext.get("2day_percentage"))
+        seven_pct = _gtwo_pct(ext.get("7day_percentage"))
+        if two_pct is None and seven_pct is None:
+            two_pct, seven_pct = _gtwo_formation_chances(f"{discussion} {name}")
+        seven_cat = (ext.get("7day_category") or "").strip().lower()
+        if category not in ("low", "medium", "high") and seven_cat in ("low", "medium", "high"):
+            category = seven_cat
+        disturbance = ext.get("Disturbance", "").strip()
+        if not name:
+            label = re.match(r"\s*\d+\.\s*(.+?):", discussion)
+            if label:
+                name = label.group(1).strip()[:90]
+            elif disturbance:
+                name = f"Disturbance {disturbance}"
+        features.append(
+            {
+                "type": "Feature",
+                "properties": {
+                    "name": name,
+                    "disturbance": disturbance,
+                    "category": category,
+                    "color": _GTWO_CATEGORY_COLOR.get(category, "#9ca3af"),
+                    "twoDayPct": two_pct,
+                    "twoDayCategory": (ext.get("2day_category") or "").strip(),
+                    "sevenDayPct": seven_pct,
+                    "sevenDayCategory": (ext.get("7day_category") or "").strip(),
+                    "discussion": discussion,
+                    "styleUrl": style_url,
+                },
+                "geometry": geometry,
+            }
+        )
+
+    def _area(feature: dict[str, Any]) -> dict[str, Any]:
+        props = feature["properties"]
+        return {
+            "name": props["name"],
+            "disturbance": props.get("disturbance", ""),
+            "category": props["category"],
+            "color": props["color"],
+            "twoDayPct": props["twoDayPct"],
+            "twoDayCategory": props.get("twoDayCategory", ""),
+            "sevenDayPct": props["sevenDayPct"],
+            "sevenDayCategory": props.get("sevenDayCategory", ""),
+            "discussion": props["discussion"],
+        }
+
+    markers = [f for f in features if f["geometry"]["type"] == "Point"]
+    polygons = [f for f in features if f["geometry"]["type"] == "Polygon"]
+    areas = [_area(f) for f in (polygons or markers)]
+    not_expected = "formation is not expected" in f"{doc_desc} {issued}".lower()
+
+    return {
+        "notExpected": not_expected and not areas,
+        "issued": issued,
+        "geojson": _feature_collection(features),
+        "areas": areas,
+    }
+
+
+def _parse_gtwo_kmz(kmz_path: Path) -> dict[str, Any] | None:
+    try:
+        with zipfile.ZipFile(kmz_path) as zf:
+            kml_name = next(
+                (n for n in zf.namelist() if n.lower().endswith(".kml")), ""
+            )
+            if not kml_name:
+                return None
+            kml_bytes = zf.read(kml_name)
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return None
+    return _parse_gtwo_kml(kml_bytes.decode("utf-8", errors="replace"))
+
+
+def _parse_storm_surge_kml(kml_text: str) -> dict[str, Any] | None:
+    """Parse storm surge watch/warning KML: extract all placemarks as GeoJSON polygons."""
+    try:
+        root = _xml_root(kml_text)
+    except ET.ParseError:
+        return None
+
+    features: list[dict[str, Any]] = []
+    for placemark in (n for n in root.iter() if _kml_local(n.tag) == "Placemark"):
+        geometry = _kml_geometry(placemark)
+        if geometry is None or geometry.get("type") != "Polygon":
+            continue
+        name = _kml_findtext(placemark, "name")
+        features.append(
+            {
+                "type": "Feature",
+                "properties": {"name": name or "Storm Surge Watch/Warning"},
+                "geometry": geometry,
+            }
+        )
+    return _feature_collection(features) if features else None
+
+
+def _parse_peak_surge_kml(kml_text: str) -> dict[str, Any] | None:
+    """Parse peak storm surge KML: extract all geometry (polygons, lines, points) with peak_surge_range + color."""
+    try:
+        root = _xml_root(kml_text)
+    except ET.ParseError:
+        return None
+
+    features: list[dict[str, Any]] = []
+    for placemark in (n for n in root.iter() if _kml_local(n.tag) == "Placemark"):
+        geometry = _kml_geometry(placemark)
+        if geometry is None:
+            continue
+        geom_type = geometry.get("type", "")
+        # Keep Polygons (surge zones), LineStrings (boundaries), and Points (breakpoints)
+        if geom_type not in ("Polygon", "LineString", "Point"):
+            continue
+
+        name = _kml_findtext(placemark, "name")
+        desc = _kml_findtext(placemark, "description")
+
+        # Parse JSON description to extract peak_surge_range and color (for polygons/lines)
+        peak_range = ""
+        color = "#9ca3af"  # default gray
+        feature_type = "breakpoint" if geom_type == "Point" else geom_type.lower()
+
+        if desc:
+            try:
+                desc_json = json.loads(desc)
+                peak_range = desc_json.get("peak_surge_range", "")
+                color = desc_json.get("color", "#9ca3af")
+            except (json.JSONDecodeError, ValueError):
+                # For points, description is just the location name
+                pass
+
+        features.append(
+            {
+                "type": "Feature",
+                "properties": {
+                    "name": name or "Peak Storm Surge",
+                    "peak_surge_range": peak_range,
+                    "color": color,
+                    "feature_type": feature_type,
+                },
+                "geometry": geometry,
+            }
+        )
+    return _feature_collection(features) if features else None
+
+
+# Initial wind extent (T0) KMZ: one Polygon per wind threshold (34/50/64 kt), named in
+# the Placemark <name>. Colored to match the forecast wind-radii palette.
+_INITIAL_WIND_COLORS = {
+    "34": "#facc15",  # 34 kt (gale)
+    "50": "#fb923c",  # 50 kt (storm)
+    "64": "#ef4444",  # 64 kt (hurricane)
+}
+
+
+def _parse_initial_wind_extent_kml(kml_text: str) -> dict[str, Any] | None:
+    try:
+        root = _xml_root(kml_text)
+    except ET.ParseError:
+        return None
+    features: list[dict[str, Any]] = []
+    for placemark in (n for n in root.iter() if _kml_local(n.tag) == "Placemark"):
+        geometry = _kml_geometry(placemark)
+        if geometry is None or geometry.get("type") != "Polygon":
+            continue
+        name = (_kml_findtext(placemark, "name") or "").strip()
+        if name not in _INITIAL_WIND_COLORS:
+            continue
+        features.append(
+            {
+                "type": "Feature",
+                "properties": {
+                    "windField": name,
+                    "label": f"{name} kt wind extent",
+                    "color": _INITIAL_WIND_COLORS[name],
+                },
+                "geometry": geometry,
+            }
+        )
+    return _feature_collection(features) if features else None
+
+
+def _parse_initial_wind_extent_kmz(kmz_path: Path) -> dict[str, Any] | None:
+    try:
+        with zipfile.ZipFile(kmz_path) as zf:
+            kml_name = next((n for n in zf.namelist() if n.lower().endswith(".kml")), "")
+            if not kml_name:
+                return None
+            kml_bytes = zf.read(kml_name)
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return None
+    return _parse_initial_wind_extent_kml(kml_bytes.decode("utf-8", errors="replace"))
+
+
+def _initial_wind_extent_kmz_url(storm: dict[str, Any]) -> str:
+    value = storm.get("initialWindExtent")
+    return str(value.get("kmzFile") or "").strip() if isinstance(value, dict) else ""
+
+
+def _cache_live_initial_wind_extent_kmz(storm: dict[str, Any], storm_dir: Path, force: bool) -> Path | None:
+    url = _initial_wind_extent_kmz_url(storm)
+    if not url:
+        return None
+    path = storm_dir / "gis_assets" / _safe_asset_name(url)
+    try:
+        return path if _fetch_binary(url, path, force) else None
+    except (OSError, urllib.error.URLError, ValueError):
+        return None
+
+
+def _raw_initial_wind_extent_kmz(raw_dir: Path, storm_id: str) -> Path | None:
+    asset_dir = raw_dir / "gis_assets" / storm_id.upper()
+    if not asset_dir.is_dir():
+        return None
+    candidates = sorted(asset_dir.glob("*initialradii*.kmz"))
+    return candidates[0] if candidates else None
 
 
 def _raw_five_day_zip(raw_dir: Path, storm_id: str) -> Path | None:
@@ -384,20 +783,110 @@ def _cache_live_five_day_zip(storm: dict[str, Any], storm_dir: Path, force: bool
         return None
 
 
-def _build_storm_gis_layers(
-    storm: dict[str, Any],
-    storm_dir: Path,
-    force: bool,
-    raw_dir: Path | None,
-) -> dict[str, Any]:
-    storm_id = str(storm["id"]).upper()
-    zip_path = _raw_five_day_zip(raw_dir, storm_id) if raw_dir else _cache_live_five_day_zip(storm, storm_dir, force)
-    layers: dict[str, Any] = {}
-    if not zip_path:
-        return layers
+def _best_track_zip_url(storm: dict[str, Any]) -> str:
+    value = storm.get("bestTrackGIS")
+    return str(value.get("zipFile") or "").strip() if isinstance(value, dict) else ""
 
-    layer_dir = storm_dir / "gis"
-    for layer_id, shp_suffix in _FIVE_DAY_LAYER_KINDS.items():
+
+def _cache_live_best_track_zip(storm: dict[str, Any], storm_dir: Path, force: bool) -> Path | None:
+    url = _best_track_zip_url(storm)
+    if not url:
+        return None
+    path = storm_dir / "gis_assets" / _safe_asset_name(url)
+    try:
+        return path if _fetch_binary(url, path, force) else None
+    except (OSError, urllib.error.URLError, ValueError):
+        return None
+
+
+def _raw_best_track_zip(raw_dir: Path, storm_id: str) -> Path | None:
+    asset_dir = raw_dir / "gis_assets" / storm_id.upper()
+    if not asset_dir.is_dir():
+        return None
+    candidates = sorted(asset_dir.glob("*best_track*.zip"))
+    return candidates[0] if candidates else None
+
+
+def _forecast_wind_radii_zip_url(storm: dict[str, Any]) -> str:
+    value = storm.get("forecastWindRadiiGIS")
+    return str(value.get("zipFile") or "").strip() if isinstance(value, dict) else ""
+
+
+def _cache_live_forecast_wind_radii_zip(storm: dict[str, Any], storm_dir: Path, force: bool) -> Path | None:
+    url = _forecast_wind_radii_zip_url(storm)
+    if not url:
+        return None
+    path = storm_dir / "gis_assets" / _safe_asset_name(url)
+    try:
+        return path if _fetch_binary(url, path, force) else None
+    except (OSError, urllib.error.URLError, ValueError):
+        return None
+
+
+def _raw_forecast_wind_radii_zip(raw_dir: Path, storm_id: str) -> Path | None:
+    asset_dir = raw_dir / "gis_assets" / storm_id.upper()
+    if not asset_dir.is_dir():
+        return None
+    candidates = sorted(asset_dir.glob("*fcst*.zip"))
+    return candidates[0] if candidates else None
+
+
+def _storm_surge_kml_url(storm: dict[str, Any]) -> str:
+    value = storm.get("stormSurgeWatchWarningGIS")
+    return str(value.get("kmlFile") or "").strip() if isinstance(value, dict) else ""
+
+
+def _cache_live_storm_surge_kml(storm: dict[str, Any], storm_dir: Path, force: bool) -> Path | None:
+    url = _storm_surge_kml_url(storm)
+    if not url:
+        return None
+    path = storm_dir / "gis_assets" / _safe_asset_name(url)
+    try:
+        return path if _fetch_binary(url, path, force) else None
+    except (OSError, urllib.error.URLError, ValueError):
+        return None
+
+
+def _raw_storm_surge_kml(raw_dir: Path, storm_id: str) -> Path | None:
+    asset_dir = raw_dir / "gis_assets" / storm_id.upper()
+    if not asset_dir.is_dir():
+        return None
+    candidates = sorted(asset_dir.glob("*SS*.kml"))
+    return candidates[0] if candidates else None
+
+
+def _peak_surge_kml_url(storm: dict[str, Any]) -> str:
+    value = storm.get("peakSurgeKML")
+    return str(value.get("peakSurgeKMLFile") or "").strip() if isinstance(value, dict) else ""
+
+
+def _cache_live_peak_surge_kml(storm: dict[str, Any], storm_dir: Path, force: bool) -> Path | None:
+    url = _peak_surge_kml_url(storm)
+    if not url:
+        return None
+    path = storm_dir / "gis_assets" / _safe_asset_name(url)
+    try:
+        return path if _fetch_binary(url, path, force) else None
+    except (OSError, urllib.error.URLError, ValueError):
+        return None
+
+
+def _raw_peak_surge_kml(raw_dir: Path, storm_id: str) -> Path | None:
+    asset_dir = raw_dir / "gis_assets" / storm_id.upper()
+    if not asset_dir.is_dir():
+        return None
+    candidates = sorted(asset_dir.glob("*PeakStormSurge*.kml"))
+    return candidates[0] if candidates else None
+
+
+def _extract_gis_layers_from_zip(
+    zip_path: Path,
+    kinds: dict[str, str],
+    storm_id: str,
+    layer_dir: Path,
+) -> dict[str, Any]:
+    layers: dict[str, Any] = {}
+    for layer_id, shp_suffix in kinds.items():
         collection = _shapefile_feature_collection_from_zip(zip_path, shp_suffix)
         if not collection:
             continue
@@ -416,6 +905,106 @@ def _build_storm_gis_layers(
             "source_path": str(zip_path),
             "geojson": collection,
         }
+    return layers
+
+
+def _build_storm_gis_layers(
+    storm: dict[str, Any],
+    storm_dir: Path,
+    force: bool,
+    raw_dir: Path | None,
+) -> dict[str, Any]:
+    storm_id = str(storm["id"]).upper()
+    layer_dir = storm_dir / "gis"
+    layers: dict[str, Any] = {}
+
+    five_day = _raw_five_day_zip(raw_dir, storm_id) if raw_dir else _cache_live_five_day_zip(storm, storm_dir, force)
+    if five_day:
+        layers.update(_extract_gis_layers_from_zip(five_day, _FIVE_DAY_LAYER_KINDS, storm_id, layer_dir))
+
+    best_track = _raw_best_track_zip(raw_dir, storm_id) if raw_dir else _cache_live_best_track_zip(storm, storm_dir, force)
+    if best_track:
+        layers.update(_extract_gis_layers_from_zip(best_track, _BEST_TRACK_LAYER_KINDS, storm_id, layer_dir))
+
+    wind_radii = _raw_forecast_wind_radii_zip(raw_dir, storm_id) if raw_dir else _cache_live_forecast_wind_radii_zip(storm, storm_dir, force)
+    if wind_radii:
+        layers.update(_extract_gis_layers_from_zip(wind_radii, _FORECAST_WIND_RADII_LAYER_KINDS, storm_id, layer_dir))
+
+    storm_surge_kml = _raw_storm_surge_kml(raw_dir, storm_id) if raw_dir else _cache_live_storm_surge_kml(storm, storm_dir, force)
+    if storm_surge_kml:
+        try:
+            kml_text = storm_surge_kml.read_text(encoding="utf-8", errors="replace")
+            collection = _parse_storm_surge_kml(kml_text)
+            if collection:
+                out_path = layer_dir / "storm_surge.geojson"
+                payload = {
+                    "updated": _utc_now_iso(),
+                    "stormId": storm_id,
+                    "layer": "storm_surge",
+                    "source_path": str(storm_surge_kml),
+                    "geojson": collection,
+                }
+                _write_json_atomic(out_path, payload)
+                layers["storm_surge"] = {
+                    "cache_path": str(out_path.relative_to(CACHE_DIR.parent)),
+                    "feature_count": len(collection.get("features", [])),
+                    "source_path": str(storm_surge_kml),
+                    "geojson": collection,
+                }
+        except (OSError, ValueError):
+            pass
+
+    peak_surge_kml = _raw_peak_surge_kml(raw_dir, storm_id) if raw_dir else _cache_live_peak_surge_kml(storm, storm_dir, force)
+    if peak_surge_kml:
+        try:
+            kml_text = peak_surge_kml.read_text(encoding="utf-8", errors="replace")
+            collection = _parse_peak_surge_kml(kml_text)
+            if collection:
+                out_path = layer_dir / "peak_surge.geojson"
+                payload = {
+                    "updated": _utc_now_iso(),
+                    "stormId": storm_id,
+                    "layer": "peak_surge",
+                    "source_path": str(peak_surge_kml),
+                    "geojson": collection,
+                }
+                _write_json_atomic(out_path, payload)
+                layers["peak_surge"] = {
+                    "cache_path": str(out_path.relative_to(CACHE_DIR.parent)),
+                    "feature_count": len(collection.get("features", [])),
+                    "source_path": str(peak_surge_kml),
+                    "geojson": collection,
+                }
+        except (OSError, ValueError):
+            pass
+
+    initial_wind = (
+        _raw_initial_wind_extent_kmz(raw_dir, storm_id)
+        if raw_dir
+        else _cache_live_initial_wind_extent_kmz(storm, storm_dir, force)
+    )
+    if initial_wind:
+        try:
+            collection = _parse_initial_wind_extent_kmz(initial_wind)
+            if collection:
+                out_path = layer_dir / "initial_wind_extent.geojson"
+                payload = {
+                    "updated": _utc_now_iso(),
+                    "stormId": storm_id,
+                    "layer": "initial_wind_extent",
+                    "source_path": str(initial_wind),
+                    "geojson": collection,
+                }
+                _write_json_atomic(out_path, payload)
+                layers["initial_wind_extent"] = {
+                    "cache_path": str(out_path.relative_to(CACHE_DIR.parent)),
+                    "feature_count": len(collection.get("features", [])),
+                    "source_path": str(initial_wind),
+                    "geojson": collection,
+                }
+        except (OSError, ValueError):
+            pass
+
     return layers
 
 
@@ -477,19 +1066,39 @@ def _storm_product_url(storm_id: str, product: str) -> str:
 
 
 def _storm_graphics(storm_id: str) -> list[dict[str, str]]:
-    basin = _BASINS[storm_id[:2]]
-    graphics_id = f"{basin['graphics_code']}{storm_id[2:4]}"
-    base = f"https://www.nhc.noaa.gov/storm_graphics/{graphics_id.lower()}"
-    file_prefix = f"{graphics_id}{storm_id[4:8]}"
+    # NHC storm_graphics URL scheme (mirrors nchurricane.com/active):
+    #   folder   = {AT|EP}{NN}   (uppercase; AL/AT -> AT, all else -> EP)
+    #   filename = {full ATCF id}_{product}.png   e.g. AL052025_5day_cone...
+    #   rainfall = {basin}{NN}{YY}{PRODUCT}.gif    e.g. AL0525WPCQPF.gif (same folder)
+    # Availability is verified client-side (image probe), so unissued products
+    # (surge, rainfall, Spanish key messages, etc.) auto-hide.
+    basin_code = storm_id[:2]
+    basin_folder = "AT" if basin_code in ("AL", "AT") else "EP"
+    storm_num = storm_id[2:4]
+    year2 = storm_id[6:8]
+    folder = f"{basin_folder}{storm_num}"
+    base = f"https://www.nhc.noaa.gov/storm_graphics/{folder}"
+    rain_prefix = f"{basin_code}{storm_num}{year2}"
+    # Cumulative wind-speed-probability period used for the single-button view.
+    wsp_hour = "F120"
     candidates = [
-        ("5-day Cone", f"{file_prefix}_5day_cone_no_line.png"),
-        ("5-day Cone + Wind", f"{file_prefix}_5day_cone_no_line_and_wind.png"),
-        ("Current Wind Field", f"{file_prefix}_current_wind.png"),
-        ("Wind History", f"{file_prefix}_wind_history.png"),
-        ("Most Likely Arrival Time", f"{file_prefix}_most_likely_toa_34.png"),
-        ("Earliest Reasonable Arrival Time", f"{file_prefix}_earliest_reasonable_toa_34.png"),
+        ("Track", "3-Day Cone", f"{base}/{storm_id}_3day_cone_no_line_and_wind.png"),
+        ("Track", "5-Day Cone", f"{base}/{storm_id}_5day_cone_no_line_and_wind.png"),
+        ("Track", "Key Messages", f"{base}/{storm_id}_key_messages.png"),
+        ("Track", "Key Messages (Espanol)", f"{base}/{storm_id}_spanish_key_messages.png"),
+        ("Wind", "Wind Field", f"{base}/{storm_id}_current_wind.png"),
+        ("Wind", "Wind History", f"{base}/{storm_id}_wind_history.png"),
+        ("Wind", "Earliest Arrival", f"{base}/{storm_id}_3day_earliest_reasonable_toa_34.png"),
+        ("Wind", "Most Likely Arrival", f"{base}/{storm_id}_3day_most_likely_toa_34.png"),
+        ("Wind Prob", "Wind Prob 34 kt", f"{base}/{storm_id}_wind_probs_34_{wsp_hour}_sm2.png"),
+        ("Wind Prob", "Wind Prob 50 kt", f"{base}/{storm_id}_wind_probs_50_{wsp_hour}_sm2.png"),
+        ("Wind Prob", "Wind Prob 64 kt", f"{base}/{storm_id}_wind_probs_64_{wsp_hour}_sm2.png"),
+        ("Surge / Rain", "Peak Storm Surge", f"{base}/{storm_id}_peak_surge.png"),
+        ("Surge / Rain", "Rainfall (WPC)", f"{base}/{rain_prefix}WPCQPF.gif"),
+        ("Surge / Rain", "Rainfall (Int'l)", f"{base}/{rain_prefix}INTQPF.gif"),
+        ("Surge / Rain", "Excessive Rainfall", f"{base}/{rain_prefix}WPCERO.gif"),
     ]
-    return [{"label": label, "url": f"{base}/{filename}"} for label, filename in candidates]
+    return [{"group": group, "label": label, "url": url} for group, label, url in candidates]
 
 
 def _extract_xml_item_text(xml_text: str) -> tuple[str, dict[str, str]]:
@@ -530,13 +1139,20 @@ def _parse_advisory(text: str) -> dict[str, Any]:
         re.I | re.S,
     )
     block = summary.group(1) if summary else text
-    loc = re.search(r"LOCATION\.*\s*([0-9.]+)([NS])\s+([0-9.]+)([EW])", block, re.I)
+    loc = re.search(r"LOCATION\.*\s*([0-9.]+)([NS])\s+([0-9.]+)([EW])(.*?)(?=\n[A-Z\s]+\.\.\.|$)", block, re.I | re.S)
     if loc:
+        # Extract coordinate and description text
+        coord_lat = _coord(loc.group(1), loc.group(2))
+        coord_lon = _coord(loc.group(3), loc.group(4))
+        desc_text = loc.group(5).strip() if loc.group(5) else ""
+        # Clean up description text (remove extra whitespace, join lines)
+        desc_text = " ".join(desc_text.split())
         parsed["location"] = {
-            "lat": _coord(loc.group(1), loc.group(2)),
-            "lon": _coord(loc.group(3), loc.group(4)),
+            "lat": coord_lat,
+            "lon": coord_lon,
             "latText": f"{loc.group(1)}{loc.group(2).upper()}",
             "lonText": f"{loc.group(3)}{loc.group(4).upper()}",
+            "text": desc_text,
         }
     wind = re.search(r"MAXIMUM SUSTAINED WINDS\.*\s*([0-9]+)\s*MPH.*?([0-9]+)\s*KM/H", block, re.I)
     if wind:
@@ -650,12 +1266,34 @@ def _fetch_basin_feeds(force: bool, raw_dir: Path | None = None) -> dict[str, di
                 "assets": gis_assets,
             },
         )
+        gtwo_payload: dict[str, Any] | None = None
+        if raw_dir is None:
+            gtwo_kmz = basin_dir / "gtwo.kmz"
+            if _fetch_binary(str(basin["gtwo_url"]), gtwo_kmz, force):
+                gtwo_payload = _parse_gtwo_kmz(gtwo_kmz)
+        else:
+            raw_kmz = raw_dir / "basins" / basin_id / f"gtwo-{basin['rss_suffix']}.kmz"
+            if raw_kmz.exists():
+                gtwo_payload = _parse_gtwo_kmz(raw_kmz)
+        if gtwo_payload is None:
+            gtwo_payload = {
+                "notExpected": False,
+                "issued": "",
+                "geojson": _feature_collection([]),
+                "areas": [],
+                "unavailable": True,
+            }
+        gtwo_payload["updated"] = _utc_now_iso()
+        gtwo_payload["basin"] = basin_id
+        _write_json_atomic(basin_dir / "gtwo.json", gtwo_payload)
         feeds[basin_id] = {
             "index_xml": str((basin_dir / "index.xml").relative_to(CACHE_DIR.parent)),
             "index_json": str((basin_dir / "index.json").relative_to(CACHE_DIR.parent)),
             "gis_xml": str((basin_dir / "gis.xml").relative_to(CACHE_DIR.parent)),
             "gis_json": str((basin_dir / "gis.json").relative_to(CACHE_DIR.parent)),
             "assets_json": str((basin_dir / "assets.json").relative_to(CACHE_DIR.parent)),
+            "gtwo_json": str((basin_dir / "gtwo.json").relative_to(CACHE_DIR.parent)),
+            "gtwo_area_count": len(gtwo_payload.get("areas", [])),
             "index_title": str(index_feed.get("channel", {}).get("title") or ""),
             "gis_title": str(gis_feed.get("channel", {}).get("title") or ""),
             "index_item_count": len(index_feed.get("items", [])),
@@ -717,10 +1355,21 @@ def _fetch_storm(storm: dict[str, Any], force: bool, raw_dir: Path | None = None
     return payload
 
 
-def run_tropical_worker(force: bool = False, raw_dir: Path | str | None = None) -> None:
-    """Refresh NHC tropical cyclone cache artifacts."""
+def run_tropical_worker(
+    force: bool = False,
+    raw_dir: Path | str | None = None,
+    storms_file: Path | str | None = None,
+) -> None:
+    """Refresh NHC tropical cyclone cache artifacts.
+
+    ``storms_file`` seeds the active-storm list from a local JSON file while still
+    fetching each storm's text products, GIS, and basin feeds live from NHC -- useful
+    for replaying a past season's storms against the live archive endpoints.
+    """
     raw_path = Path(raw_dir).resolve() if raw_dir else None
-    if raw_path is None and not force and is_cache_fresh("tropical", _FRESH_WINDOW_SEC):
+    storms_path = Path(storms_file).resolve() if storms_file else None
+    if (raw_path is None and storms_path is None and not force
+            and is_cache_fresh("tropical", _FRESH_WINDOW_SEC)):
         print("[tropical_worker] Cache fresh - skipping run")
         return
 
@@ -729,12 +1378,16 @@ def run_tropical_worker(force: bool = False, raw_dir: Path | str | None = None) 
     errors: list[str] = []
 
     try:
-        if raw_path is None:
-            current_payload = _fetch_json(_CURRENT_STORMS_URL, CURRENT_STORMS_FILE, force)
-        else:
+        if raw_path is not None:
             current_payload = _read_json(raw_path / "CurrentStorms.json")
             if current_payload is not None:
                 _write_json_atomic(CURRENT_STORMS_FILE, current_payload)
+        elif storms_path is not None:
+            current_payload = _read_json(storms_path)
+            if current_payload is not None:
+                _write_json_atomic(CURRENT_STORMS_FILE, current_payload)
+        else:
+            current_payload = _fetch_json(_CURRENT_STORMS_URL, CURRENT_STORMS_FILE, force)
         if current_payload is None:
             current_payload = {"activeStorms": []}
     except (OSError, urllib.error.URLError, ValueError, json.JSONDecodeError) as exc:
@@ -794,6 +1447,14 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--storms-file",
+        type=Path,
+        help=(
+            "Seed the active-storm list from a local CurrentStorms.json while still "
+            "fetching products/GIS/basin feeds live from NHC. Pair with --force."
+        ),
+    )
+    parser.add_argument(
         "--log-to-file",
         action="store_true",
         help="Redirect stdout/stderr to logs/scheduled/tropical.log.",
@@ -803,4 +1464,4 @@ if __name__ == "__main__":
         from workers._freshness import redirect_stdio_to_log
 
         redirect_stdio_to_log("tropical")
-    run_tropical_worker(force=args.force, raw_dir=args.raw_dir)
+    run_tropical_worker(force=args.force, raw_dir=args.raw_dir, storms_file=args.storms_file)

@@ -4243,11 +4243,34 @@ _TROPICAL_STORMS_CACHE = _TROPICAL_CACHE_DIR / "current_storms.json"
 _TROPICAL_SUMMARY_CACHE = _TROPICAL_CACHE_DIR / "summary.json"
 _TROPICAL_CACHE_TTL_SECONDS = 2 * 60 * 60
 
+# Archive (HURDAT2) — immutable data, so cache-forever (no TTL).
+_TROPICAL_ARCHIVE_DIR = _TROPICAL_CACHE_DIR / "archive"
+_TROPICAL_ARCHIVE_CATALOG = _TROPICAL_ARCHIVE_DIR / "catalog" / "seasons.json"
+_TROPICAL_ARCHIVE_STORMS_DIR = _TROPICAL_ARCHIVE_DIR / "storms"
+
 
 def _run_tropical_worker_once(force: bool = False) -> None:
     from workers.tropical_worker import run_tropical_worker
 
     run_tropical_worker(force=force)
+
+
+def _run_tropical_archive_worker_once(force: bool = False) -> None:
+    from workers.tropical_archive_worker import run_archive_worker
+
+    run_archive_worker(force=force)
+
+
+def _read_tropical_archive_cache(path: Path) -> dict[str, Any] | None:
+    """Read an archive cache file ignoring age — archive data never goes stale."""
+    try:
+        if not path.is_file():
+            return None
+        with path.open("r", encoding="utf-8") as fp:
+            payload = json.load(fp)
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
 
 
 def _read_tropical_cache(path: Path, max_age_seconds: int) -> dict[str, Any] | None:
@@ -4558,6 +4581,7 @@ def get_tropical_basin_feeds(basin_id: str):
     index_payload = _read_tropical_cache(basin_dir / "index.json", _TROPICAL_CACHE_TTL_SECONDS)
     gis_payload = _read_tropical_cache(basin_dir / "gis.json", _TROPICAL_CACHE_TTL_SECONDS)
     assets_payload = _read_tropical_cache(basin_dir / "assets.json", _TROPICAL_CACHE_TTL_SECONDS)
+    gtwo_payload = _read_tropical_cache(basin_dir / "gtwo.json", _TROPICAL_CACHE_TTL_SECONDS)
     if index_payload is None or gis_payload is None or assets_payload is None:
         try:
             _run_tropical_worker_once(force=False)
@@ -4569,6 +4593,7 @@ def get_tropical_basin_feeds(basin_id: str):
         index_payload = _read_tropical_cache(basin_dir / "index.json", 7 * 24 * 60 * 60)
         gis_payload = _read_tropical_cache(basin_dir / "gis.json", 7 * 24 * 60 * 60)
         assets_payload = _read_tropical_cache(basin_dir / "assets.json", 7 * 24 * 60 * 60)
+        gtwo_payload = _read_tropical_cache(basin_dir / "gtwo.json", 7 * 24 * 60 * 60)
 
     if index_payload is None or gis_payload is None or assets_payload is None:
         raise HTTPException(status_code=404, detail=f"No cached tropical feeds for {basin_key}.")
@@ -4578,6 +4603,7 @@ def get_tropical_basin_feeds(basin_id: str):
         "index": index_payload,
         "gis": gis_payload,
         "assets": assets_payload,
+        "gtwo": gtwo_payload,
     }
 
 
@@ -4608,6 +4634,85 @@ def get_tropical_storm(storm_id: str):
 
     if payload is None:
         raise HTTPException(status_code=404, detail=f"No cached tropical storm: {sid}")
+    return payload
+
+
+@app.get("/api/tropical/archive/catalog")
+def get_tropical_archive_catalog():
+    """Return the HURDAT2 season catalog, lazily building it on first request."""
+    payload = _read_tropical_archive_cache(_TROPICAL_ARCHIVE_CATALOG)
+    if payload is None:
+        try:
+            _run_tropical_archive_worker_once(force=False)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Tropical archive build failed: {exc}"
+            )
+        payload = _read_tropical_archive_cache(_TROPICAL_ARCHIVE_CATALOG)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Tropical archive catalog unavailable.")
+    return payload
+
+
+@app.get("/api/tropical/archive/storm/{atcf_id}")
+def get_tropical_archive_storm(atcf_id: str):
+    """Return one archived storm's best-track payload (build-on-demand, cache-forever)."""
+    import re
+
+    sid = atcf_id.strip().upper()
+    if not re.fullmatch(r"(AL|EP|CP)[0-9]{2}[0-9]{4}", sid):
+        raise HTTPException(status_code=400, detail="Invalid archive storm id.")
+
+    storm_cache = _TROPICAL_ARCHIVE_STORMS_DIR / sid / "storm.json"
+    payload = _read_tropical_archive_cache(storm_cache)
+    if payload is None:
+        try:
+            _run_tropical_archive_worker_once(force=False)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Tropical archive build failed: {exc}"
+            )
+        payload = _read_tropical_archive_cache(storm_cache)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"No archived storm: {sid}")
+
+    # Phase B: lazily attach archived forecast GIS (cone/radii/WW from the peak
+    # advisory) on first open. Best-effort — never fail the request over it.
+    # Also re-enrich storms cached before the advisory index existed (no
+    # "advisories" key) so the scrubber/mode-toggle gets its data.
+    if not payload.get("gis_enriched") or "advisories" not in payload:
+        try:
+            from workers.tropical_archive_worker import enrich_storm_gis
+
+            if enrich_storm_gis(sid):
+                fresh = _read_tropical_archive_cache(storm_cache)
+                if fresh is not None:
+                    payload = fresh
+        except Exception as exc:
+            print(f"[tropical-archive] GIS enrichment failed for {sid}: {exc}")
+    return payload
+
+
+@app.get("/api/tropical/archive/storm/{atcf_id}/advisory/{step}")
+def get_tropical_archive_advisory(atcf_id: str, step: str):
+    """Return one archived advisory's payload (summary + products + GIS), cached forever."""
+    import re
+
+    sid = atcf_id.strip().upper()
+    stp = step.strip().upper()
+    if not re.fullmatch(r"(AL|EP|CP)[0-9]{2}[0-9]{4}", sid):
+        raise HTTPException(status_code=400, detail="Invalid archive storm id.")
+    if not re.fullmatch(r"[0-9]{1,3}[A-Z]?", stp):
+        raise HTTPException(status_code=400, detail="Invalid advisory step.")
+
+    try:
+        from workers.tropical_archive_worker import get_advisory_payload
+
+        payload = get_advisory_payload(sid, stp)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Advisory build failed: {exc}")
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"No archived advisory: {sid} #{stp}")
     return payload
 
 

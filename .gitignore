@@ -99,3 +99,6 @@ tropical_tab_handoff.txt
 tropical_tab_plan.md
 tropical_tab_redesign_plan.md
 tools/install_tasks.ps1
+.claude/launch.json
+.gitignore
+docs/tropical-next-session-plan.md
