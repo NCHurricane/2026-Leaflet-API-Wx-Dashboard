@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alerts UI Test - Mobile Sheet</title>
+    <link rel="icon" href="../favicon.ico">
+    <link rel="stylesheet" href="../css/shared.css">
+    <style>
+        :root {
+            --bg: #06101c;
+            --panel: #0f172a;
+            --panel-2: #172033;
+            --line: rgba(148, 163, 184, 0.28);
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --accent: #2dd4bf;
+            --warn: #fb7185;
+            --yellow: #facc15;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--text);
+            background: var(--bg);
+            font-family: Arial, Helvetica, sans-serif;
+            overflow: hidden;
+        }
+
+        button,
+        input,
+        select {
+            font: inherit;
+        }
+
+        .weather-shell {
+            position: relative;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #weather-map {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 30% 30%, rgba(251, 113, 133, 0.28), transparent 0 15%, transparent 16%),
+                radial-gradient(circle at 66% 46%, rgba(250, 204, 21, 0.24), transparent 0 18%, transparent 19%),
+                radial-gradient(circle at 48% 70%, rgba(45, 212, 191, 0.22), transparent 0 14%, transparent 15%),
+                linear-gradient(30deg, transparent 0 42%, rgba(148, 163, 184, 0.18) 43%, transparent 44%),
+                #101820;
+        }
+
+        #weather-map::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+            background-size: 44px 44px;
+        }
+
+        .weather-header {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            z-index: 5;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: rgba(15, 23, 42, 0.88);
+            padding: 9px 10px;
+            backdrop-filter: blur(12px);
+        }
+
+        .weather-header h1 {
+            margin: 0;
+            font-size: 0.86rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .weather-top-types {
+            display: flex;
+            gap: 8px;
+        }
+
+        .weather-type-pill,
+        .weather-top-test-btn,
+        .sheet-tab,
+        #weather-refresh-alerts,
+        .wx-alert-action-link,
+        .wx-alert-action-zoom,
+        #archive-scrubber-row button {
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--text);
+            padding: 8px 10px;
+            text-decoration: none;
+        }
+
+        .weather-type-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+        }
+
+        .weather-top-test-btn {
+            display: none;
+        }
+
+        input[type="checkbox"] {
+            accent-color: var(--accent);
+        }
+
+        .fab-stack {
+            position: absolute;
+            right: 12px;
+            top: 82px;
+            z-index: 4;
+            display: grid;
+            gap: 9px;
+        }
+
+        .fab {
+            width: 44px;
+            height: 44px;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--text);
+            font-weight: 800;
+        }
+
+        #wx-new-alert-stack {
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            top: 70px;
+            z-index: 4;
+        }
+
+        .wx-new-alert-banner {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            border: 1px solid rgba(251, 113, 133, 0.72);
+            border-radius: 8px;
+            background: rgba(15, 23, 42, 0.92);
+            padding: 10px;
+            box-shadow: 0 16px 32px rgba(0, 0, 0, 0.36);
+        }
+
+        .wx-new-alert-pill-label {
+            color: var(--yellow);
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+        }
+
+        .wx-new-alert-pill-event {
+            display: block;
+            color: var(--warn);
+            font-size: 0.95rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .wx-new-alert-pill-text {
+            color: var(--muted);
+            font-size: 0.72rem;
+        }
+
+        .wx-new-alert-close {
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+        }
+
+        .bottom-sheet {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 5;
+            max-height: 58vh;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            border-top: 1px solid var(--line);
+            border-radius: 14px 14px 0 0;
+            background: rgba(15, 23, 42, 0.96);
+            box-shadow: 0 -18px 38px rgba(0, 0, 0, 0.38);
+        }
+
+        .sheet-handle {
+            width: 46px;
+            height: 4px;
+            margin: 10px auto 8px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.62);
+        }
+
+        .sheet-tabs {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 6px;
+            padding: 0 10px 10px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .sheet-tab {
+            padding: 8px 4px;
+            color: var(--muted);
+            font-size: 0.68rem;
+            text-transform: uppercase;
+        }
+
+        .sheet-tab.is-active {
+            color: var(--text);
+            border-color: rgba(45, 212, 191, 0.7);
+        }
+
+        .sheet-body {
+            min-height: 0;
+            overflow: auto;
+            padding: 10px;
+        }
+
+        .wx-block,
+        .wx-reliability-bar,
+        .wx-alert-page {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: rgba(23, 32, 51, 0.74);
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        h3,
+        h4 {
+            margin: 0 0 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        h3 {
+            font-size: 0.86rem;
+        }
+
+        h4,
+        label,
+        .wx-small,
+        .wx-alert-meta,
+        .wx-alert-page small {
+            color: var(--muted);
+            font-size: 0.75rem;
+        }
+
+        select,
+        input[type="number"] {
+            width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: var(--panel-2);
+            color: var(--text);
+            padding: 8px;
+            margin-top: 6px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+        }
+
+        .wx-check-row,
+        .wx-reliability-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+        }
+
+        .wx-warn-filter-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 7px;
+            margin: 8px 0;
+        }
+
+        .wx-warn-filter-row .wx-check-row {
+            display: block;
+            text-align: center;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 8px;
+        }
+
+        .wx-warn-filter-count {
+            display: block;
+            color: var(--accent);
+            font-size: 1rem;
+            font-weight: 800;
+        }
+
+        .wx-alert-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        #weather-archive-bar {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 8px;
+            background: rgba(23, 32, 51, 0.74);
+        }
+
+        #archive-scrubber-row {
+            display: grid;
+            grid-template-columns: auto auto auto minmax(90px, 1fr) auto;
+            gap: 7px;
+            align-items: center;
+        }
+
+        .scrubber-speed-controls,
+        #scrubber-frame-count {
+            display: none;
+        }
+
+        #scrubber-slider {
+            width: 100%;
+        }
+
+        @media (min-width: 820px) {
+            .weather-header {
+                left: 18px;
+                right: 18px;
+            }
+
+            .bottom-sheet {
+                left: 18px;
+                right: auto;
+                bottom: 18px;
+                width: 430px;
+                max-height: calc(100vh - 120px);
+                border: 1px solid var(--line);
+                border-radius: 10px;
+            }
+
+            #wx-new-alert-stack {
+                left: auto;
+                right: 18px;
+                width: min(430px, calc(100vw - 490px));
+            }
+
+            .weather-top-test-btn {
+                display: inline-flex;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="weather-shell">
+        <main id="weather-map">
+            <div id="wx-new-alert-border-flash" class="is-active" aria-hidden="true"></div>
+        </main>
+
+        <header class="weather-header">
+            <h1>Alerts Mobile Sheet</h1>
+            <div class="weather-top-types">
+                <label class="weather-type-pill"><span>Alerts</span><input id="weather-type-alerts" type="checkbox"
+                        checked></label>
+                <button id="weather-test-new-alert" class="weather-top-test-btn" type="button">Test New Alert</button>
+            </div>
+        </header>
+
+        <div class="fab-stack" aria-label="Map actions">
+            <button class="fab" type="button">A</button>
+            <button class="fab" type="button">S</button>
+            <button class="fab" type="button">T</button>
+        </div>
+
+        <div id="wx-new-alert-stack">
+            <div class="wx-new-alert-banner">
+                <div class="wx-new-alert-item">
+                    <span class="wx-new-alert-pill-label">New Alert:</span>
+                    <span class="wx-new-alert-pill-event">Tornado Warning</span>
+                    <div class="wx-new-alert-pill-text">
+                        <div class="wx-alert-pill-location">Wake County, NC until 1:15 PM EDT</div>
+                    </div>
+                </div>
+                <button class="wx-new-alert-close" type="button" aria-label="Dismiss alert">x</button>
+            </div>
+        </div>
+
+        <section class="bottom-sheet">
+            <div>
+                <div class="sheet-handle"></div>
+                <div class="sheet-tabs">
+                    <button class="sheet-tab is-active" type="button">Alerts</button>
+                    <button class="sheet-tab" type="button">Style</button>
+                    <button class="sheet-tab" type="button">Detail</button>
+                    <button class="sheet-tab" type="button">Time</button>
+                    <button class="sheet-tab" type="button">Tools</button>
+                </div>
+            </div>
+            <div class="sheet-body">
+                <h3 id="wx-active-tab-name">Alerts</h3>
+                <div id="wx-reliability-bar" class="wx-reliability-bar" aria-live="polite">
+                    <div class="wx-reliability-row">
+                        <span class="wx-reliability-label">Last Update:</span>
+                        <span class="wx-reliability-value" id="wx-reliability-updated">12:42 PM EDT</span>
+                    </div>
+                    <div class="wx-reliability-row">
+                        <span class="wx-reliability-label">Data Age:</span>
+                        <span class="wx-reliability-value" id="wx-reliability-age">4 min</span>
+                    </div>
+                </div>
+
+                <div id="wx-region-block" class="wx-block">
+                    <label for="weather-region">Region</label>
+                    <select id="weather-region">
+                        <option value="CONUS" selected>CONUS</option>
+                        <option value="NC">North Carolina</option>
+                        <option value="SC">South Carolina</option>
+                        <option value="VA">Virginia</option>
+                    </select>
+                </div>
+
+                <div id="wx-section-alerts" class="wx-block" data-type="alerts">
+                    <div id="weather-alerts-opts">
+                        <div class="wx-check-row"><span>All Alerts</span><input class="weather-alerts-category"
+                                id="weather-alerts-all" type="checkbox" value="All Alerts" checked></div>
+                        <div id="weather-alerts-filter-options">
+                            <div class="wx-check-row"><span>Severe Weather Warnings</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Severe Weather Warnings"
+                                    checked></div>
+                            <div id="wx-warn-filter-row" class="wx-warn-filter-row">
+                                <div class="wx-check-row"><label><input type="checkbox" class="wx-warn-filter-ck"
+                                            data-warn-filter="tor" checked>
+                                        <span>TOR<span class="wx-warn-filter-count"
+                                                data-warn-filter-count="tor">3</span></span></label></div>
+                                <div class="wx-check-row"><label><input type="checkbox" class="wx-warn-filter-ck"
+                                            data-warn-filter="svr" checked>
+                                        <span>SVR<span class="wx-warn-filter-count"
+                                                data-warn-filter-count="svr">7</span></span></label></div>
+                                <div class="wx-check-row"><label><input type="checkbox" class="wx-warn-filter-ck"
+                                            data-warn-filter="ffw" checked>
+                                        <span>FFW<span class="wx-warn-filter-count"
+                                                data-warn-filter-count="ffw">2</span></span></label></div>
+                            </div>
+                            <div class="wx-check-row"><span>Severe Weather Alerts</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Severe Weather Alerts"
+                                    checked></div>
+                            <div class="wx-check-row"><span>Severe Weather Watches</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Severe Weather Watches"
+                                    checked></div>
+                            <div class="wx-check-row"><span>Hydrology Alerts</span><input
+                                    class="weather-alerts-category" type="checkbox" value="Hydrology Alerts" checked>
+                            </div>
+                        </div>
+                        <div class="wx-block wx-small">Alert Count:
+                            <span id="weather-alerts-count">42 active alert(s)</span>
+                        </div>
+                        <div class="wx-block">
+                            <button id="weather-refresh-alerts" type="button">Refresh</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="wx-side-group-alerts" class="wx-block wx-side-group" data-type="alerts">
+                    <h3>Styling</h3>
+                    <label for="weather-opacity-alerts">Polygon Opacity</label>
+                    <input id="weather-opacity-alerts" type="range" min="0.1" max="1" step="0.05" value="0.75">
+                    <label class="wx-check-row">
+                        <span>Show Radar Loop</span>
+                        <input id="weather-alert-radar-enable" type="checkbox" checked>
+                    </label>
+                    <label for="weather-opacity-alert-radar">Radar Opacity</label>
+                    <input id="weather-opacity-alert-radar" type="range" min="0.1" max="1" step="0.05" value="0.45">
+                </div>
+
+                <div class="wx-alert-pager" data-alert-pager="1">
+                    <div class="wx-alert-page">
+                        <strong>Tornado Warning</strong>
+                        <div class="wx-alert-meta">Observed | Immediate | Radar indicated rotation</div>
+                        <small>At 12:42 PM EDT, a severe thunderstorm capable of producing a tornado was located near
+                            Raleigh.</small>
+                        <div class="wx-alert-actions">
+                            <a class="wx-alert-action-link" href="#">View Full Alert Text</a>
+                            <button type="button" class="wx-alert-action-zoom" data-alert-zoom="1">Zoom To
+                                Alert</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="weather-archive-bar">
+                    <div id="archive-scrubber-row">
+                        <button id="scrubber-step-back" type="button" title="Previous frame">&#9664;</button>
+                        <button id="scrubber-play" type="button" title="Play/Pause">&#9654;</button>
+                        <button id="scrubber-step-fwd" type="button" title="Next frame">&#9654;&#9654;</button>
+                        <input type="range" id="scrubber-slider" min="0" max="12" value="8" step="1">
+                        <span id="scrubber-timestamp">12:40 PM EDT</span>
+                        <div class="scrubber-speed-controls" aria-label="Playback speed controls">
+                            <button id="scrubber-speed-down" type="button" title="Slower playback">&minus;</button>
+                            <span id="scrubber-speed-label" title="Playback speed">1x</span>
+                            <button id="scrubber-speed-up" type="button" title="Faster playback">+</button>
+                        </div>
+                        <span id="scrubber-frame-count">9 / 13</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</body>
+
+</html>

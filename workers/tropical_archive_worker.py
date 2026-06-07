@@ -659,6 +659,16 @@ def _fetch_archive_text(url: str) -> str | None:
     return text or None
 
 
+def _fetch_url_text(url: str) -> str | None:
+    """Fetch a URL's raw text (e.g. a KML), or None on 404/error."""
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=40) as resp:  # noqa: S310 (trusted NHC)
+            return resp.read().decode("utf-8", errors="replace")
+    except (urllib.error.URLError, OSError):
+        return None
+
+
 def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
     """Build the live-detail payload for one archived advisory (text + GIS).
 
@@ -671,6 +681,8 @@ def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
         _FORECAST_WIND_RADII_LAYER_KINDS,
         _extract_gis_layers_from_zip,
         _parse_advisory,
+        _parse_peak_surge_kml,
+        _parse_storm_surge_kml,
         _parse_track,
     )
 
@@ -719,6 +731,19 @@ def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
     fcst = gis_dir / f"{bid}_fcst_{step}.zip"
     if _download_zip(f"{_GIS_ARCHIVE_BASE}{bid}_fcst_{step}.zip", fcst):
         layers.update(_extract_gis_layers_from_zip(fcst, _FORECAST_WIND_RADII_LAYER_KINDS, sid, gis_dir))
+
+    # Storm Surge Watch/Warning + Peak Storm Surge are separate KML products (only
+    # issued for U.S.-coast-threatening advisories), not part of the 5-day zip.
+    ssww = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/wsurge/forecasts/{sid}_WatchWarningSS_{step}adv.kml")
+    if ssww:
+        coll = _parse_storm_surge_kml(ssww)
+        if coll and coll.get("features"):
+            layers["storm_surge"] = {"cache_path": "", "feature_count": len(coll["features"]), "source_path": "NHC wsurge", "geojson": coll}
+    peak = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/peakSurge/{sid}_PeakStormSurge_{step}adv.kml")
+    if peak:
+        coll = _parse_peak_surge_kml(peak)
+        if coll and coll.get("features"):
+            layers["peak_surge"] = {"cache_path": "", "feature_count": len(coll["features"]), "source_path": "NHC peakSurge", "geojson": coll}
 
     return {
         "status": "success",
