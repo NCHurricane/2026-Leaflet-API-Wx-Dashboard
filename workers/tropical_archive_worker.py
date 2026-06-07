@@ -735,19 +735,30 @@ def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
 
     # Storm Surge Watch/Warning + Peak Storm Surge are separate KML products (only
     # issued for U.S.-coast-threatening advisories), not part of the 5-day zip.
+    # For intermediate advisories (10A, 11A), try intermediate first, then fall back to parent.
     ssww = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/wsurge/forecasts/{sid}_WatchWarningSS_{step}adv.kml")
+    peak = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/peakSurge/{sid}_PeakStormSurge_{step}adv.kml")
+
+    # If intermediate advisory doesn't have surge files, use parent full advisory's
+    if not ssww and not peak and step.endswith('A'):
+        parent_step = step[:-1]
+        ssww = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/wsurge/forecasts/{sid}_WatchWarningSS_{parent_step}adv.kml")
+        peak = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/peakSurge/{sid}_PeakStormSurge_{parent_step}adv.kml")
+
     if ssww:
         coll = _parse_storm_surge_kml(ssww)
         if coll and coll.get("features"):
             layers["storm_surge"] = {"cache_path": "", "feature_count": len(coll["features"]), "source_path": "NHC wsurge", "geojson": coll}
-    peak = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/peakSurge/{sid}_PeakStormSurge_{step}adv.kml")
     if peak:
         coll = _parse_peak_surge_kml(peak)
         if coll and coll.get("features"):
             layers["peak_surge"] = {"cache_path": "", "feature_count": len(coll["features"]), "source_path": "NHC peakSurge", "geojson": coll}
 
-    # Initial Wind Extent (cone outline) — issued with most advisories
+    # Initial Wind Extent (cone outline) — try intermediate first, fall back to parent
     iwe = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/forecast/{sid}_initialwindextent_{step}adv.kml")
+    if not iwe and step.endswith('A'):
+        parent_step = step[:-1]
+        iwe = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/forecast/{sid}_initialwindextent_{parent_step}adv.kml")
     if iwe:
         coll = _parse_initial_wind_extent_kml(iwe)
         if coll and coll.get("features"):
