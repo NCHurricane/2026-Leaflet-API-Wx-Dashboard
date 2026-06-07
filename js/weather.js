@@ -10754,24 +10754,6 @@
                 + (isHtml ? value : `<strong>${value}</strong>`) + `</div>`
             )).join('');
             summary.innerHTML = grid;
-            const select = summary.querySelector('.wx-adv-select');
-            console.log('[_renderTropicalAdvisorySummaryHead] found select:', !!select);
-            if (select) {
-                console.log('[_renderTropicalAdvisorySummaryHead] attaching listener');
-                const listener = (e) => {
-                    console.log('[advisory-select] listener called with value:', e.target.value);
-                    try {
-                        const idx = Number(e.target.value);
-                        console.log('[advisory-select] calling _jumpArchiveScrub with:', idx);
-                        _jumpArchiveScrub(idx);
-                        console.log('[advisory-select] _jumpArchiveScrub returned');
-                    } catch (err) {
-                        console.error('[advisory-select] error:', err.message, err.stack);
-                    }
-                };
-                select.addEventListener('change', listener);
-                console.log('[_renderTropicalAdvisorySummaryHead] listener attached');
-            }
         }
     }
 
@@ -11217,17 +11199,6 @@
                 + (isHtml ? value : `<strong>${value}</strong>`) + `</div>`
             )).join('');
             summary.innerHTML = grid;
-            const select = summary.querySelector('.wx-adv-select');
-            if (select) {
-                select.addEventListener('change', (e) => {
-                    try {
-                        const idx = Number(e.target.value);
-                        _jumpArchiveScrub(idx);
-                    } catch (err) {
-                        console.error('[fix-select] error:', err.message);
-                    }
-                });
-            }
         }
     }
 
@@ -14793,6 +14764,14 @@
     byId('wx-floater-pills')?.addEventListener('click', (e) => {
         const product = e.target?.getAttribute?.('data-floater-product');
         if (product) _openFloaterModal(product);
+    });
+
+    // Advisory and fix dropdown selectors (event delegation for dynamically created selects)
+    document.addEventListener('change', (e) => {
+        if (e.target.classList.contains('wx-adv-select')) {
+            const idx = Number(e.target.value);
+            _jumpArchiveScrub(idx);
+        }
     });
 
     byId('adv-scrub-first')?.addEventListener('click', () => _jumpArchiveScrub(0));
