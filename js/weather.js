@@ -693,7 +693,6 @@
                     _clearTropicalLayer();
                     _closeTropicalDetail();
                     _closeOutlookDetail();
-                    _disableTropSatLayer();
                     _renderTropicalSummary(null);
                     const sysSelect = byId('weather-tropical-system');
                     if (sysSelect) sysSelect.value = '';
@@ -730,11 +729,6 @@
         const satelliteOverlayPane = map.createPane('satellite-overlays');
         satelliteOverlayPane.style.zIndex = '330';
         satelliteOverlayPane.style.pointerEvents = 'none';
-    }
-    if (!map.getPane('tropical-satellite')) {
-        const tropicalSatellitePane = map.createPane('tropical-satellite');
-        tropicalSatellitePane.style.zIndex = '320';
-        tropicalSatellitePane.style.pointerEvents = 'none';
     }
     const LogoControl = L.Control.extend({
         options: { position: 'topright' },
@@ -851,29 +845,6 @@
     let graticuleLayer = null;
     let _tropicalStorms = [];
 
-    // ── Tropical satellite scrubber (isolated GOES FULLDISK controller) ──
-    // Reuses the satellite-v2 backend but keeps its OWN state + map layer so it
-    // never collides with the Satellite tab (both weather types can be on at once).
-    const TROPSAT_LOOKBACK_HOURS = 1;
-    const TROPSAT_MAX_FRAMES = 12;
-    let _tropSatActiveKey = '';            // '' = off, else 'goes19|Channel13'
-    let _tropSatSatId = 'goes19';
-    let _tropSatChannel = 'Channel13';
-    let _tropSatFrames = [];
-    let _tropSatFrameIndex = 0;
-    let _tropSatScrubMode = false;
-    let _tropSatOverlay = null;            // isolated mirror of satelliteOverlay
-    const _tropSatLayerPool = new Map();
-    let _tropSatLayerZCounter = 0;
-    let _tropSatPlayTimer = null;
-    let _tropSatManualTimer = null;
-    let _tropSatRenderSeq = 0;             // guards _setTropSatFrame applies
-    let _tropSatLoadSeq = 0;               // guards async frame loads
-    let _tropSatPendingSwapToken = 0;
-    let _tropSatFrameAdvanceInFlight = false;
-    let _tropSatFetchController = null;
-    let _tropSatCatalog = null;            // holds render_version for tile URLs
-    let _tropSatTileRefreshToken = 0;
     let _activeTropicalStorm = null;
     let _tropicalRequestSeq = 0;
     let _activeTropicalDetail = null;
@@ -5729,7 +5700,7 @@
     }
 
     function _updateRightSidebarGroups() {
-        const groups = ['current', 'alerts', 'spc', 'mrms', 'rtma', 'drought', 'tropical'];
+        const groups = ['current', 'alerts', 'spc', 'mrms', 'rtma', 'drought'];
         let anyVisible = false;
         groups.forEach((type) => {
             const panel = byId(`wx-side-group-${type}`);
@@ -5739,7 +5710,9 @@
             if (show) anyVisible = true;
         });
         const empty = byId('wx-side-groups-empty');
-        if (empty) empty.style.display = anyVisible ? 'none' : '';
+        // Tropical has no per-type product group, but the always-present map-layers
+        // controls apply, so don't show the "enable a product group" hint for it.
+        if (empty) empty.style.display = (anyVisible || _isTypeEnabled('tropical')) ? 'none' : '';
         _updateRightTabsAvailability();
     }
 
@@ -5796,6 +5769,7 @@
         _archiveScrubMode = 'advisory';
         _tropicalArchiveStormBase = null;
         _hideArchiveScrubberBar();
+        _hideTropicalFloater();
         _setTropicalDetailSectionsVisible(true);
         _exitTropicalArchiveContext();
         _closeTropicalDetail();
@@ -5967,9 +5941,9 @@
                 _archiveScrubMode = 'advisory';
                 _tropicalArchiveStormBase = null;
                 _hideArchiveScrubberBar();
+                _hideTropicalFloater();
                 _setTropicalDetailSectionsVisible(true);
                 _exitTropicalArchiveContext();
-                _disableTropSatLayer();
                 break;
         }
     }
@@ -8811,7 +8785,6 @@
 
     async function loadSatelliteScrubberFrames() {
         if (!_isTypeEnabled('satellite')) return;
-        if (_tropSatScrubMode) _exitTropSatScrubMode();  // release scrubber from tropical owner
         const previousFrameKey = _satelliteFrames[_satelliteFrameIndex]?.frame_key || '';
         if (_satelliteLookbackReloadTimer) {
             clearTimeout(_satelliteLookbackReloadTimer);
@@ -8917,495 +8890,6 @@
         }
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Tropical satellite scrubber — isolated GOES FULLDISK controller.
-    // Adapted from the Satellite-tab scrubber but namespaced (_tropSat*) so it
-    // never reads/writes any _satellite* global. Reuses the satellite-v2 backend
-    // (sector=FULLDISK) and the shared bottom scrubber bar via arbitration.
-    // ──────────────────────────────────────────────────────────────────────
-
-    function _tropSatLayerPoolKey(frameKey) {
-        return ['troposat', _tropSatSatId, 'FULLDISK', _tropSatChannel, String(frameKey || '')].join('|');
-    }
-
-    function _tropSatTileTemplate(frameKey) {
-        const params = new URLSearchParams({
-            sat_id: _tropSatSatId,
-            sector: 'FULLDISK',
-            channel: _tropSatChannel,
-            frame_key: String(frameKey || ''),
-            render_live: '1',
-            rv: String(_tropSatCatalog?.render_version || 'products'),
-            t: String(_tropSatTileRefreshToken || 0),
-        });
-        return apiUrl(`/api/satellite-v2/tile/{z}/{x}/{y}?${params.toString()}`);
-    }
-
-    function _tropSatActiveFrameByKey(frameKey) {
-        return _tropSatFrames.find((frame) => String(frame?.frame_key || '') === String(frameKey || '')) || null;
-    }
-
-    function _tropSatFrameMaxNativeZoom(frame) {
-        const configured = Number(frame?.max_native_zoom);
-        if (Number.isFinite(configured)) return configured;
-        const zooms = Array.isArray(frame?.available_zooms)
-            ? frame.available_zooms.map(Number).filter(Number.isFinite)
-            : [];
-        return zooms.length ? Math.max(...zooms) : null;
-    }
-
-    function _getOrCreateTropSatLayer(frameKey) {
-        const poolKey = _tropSatLayerPoolKey(frameKey);
-        if (!_tropSatLayerPool.has(poolKey)) {
-            const frame = _tropSatActiveFrameByKey(frameKey);
-            const maxNativeZoom = _tropSatFrameMaxNativeZoom(frame);
-            const layer = L.tileLayer(_tropSatTileTemplate(frameKey), {
-                pane: 'tropical-satellite',
-                maxZoom: 19,
-                ...(Number.isFinite(maxNativeZoom) ? { maxNativeZoom } : {}),
-                minNativeZoom: 1, // FULLDISK
-                opacity: 0.92,
-                updateWhenIdle: false,
-                updateWhenZooming: false,
-                keepBuffer: 4,
-                crossOrigin: true,
-                noWrap: true,
-            });
-            layer.on('tileerror', () => {
-                const retryCount = Number(layer._wxTropSatTileErrorCount || 0) + 1;
-                layer._wxTropSatTileErrorCount = retryCount;
-                if (retryCount > 8 || !_isTypeEnabled('tropical') || !_tropSatActiveKey || !map.hasLayer(layer)) return;
-                if (layer._wxTropSatTileErrorRetryTimer) clearTimeout(layer._wxTropSatTileErrorRetryTimer);
-                const retryDelayMs = Math.min(6000, 900 + retryCount * 500);
-                layer._wxTropSatTileErrorRetryTimer = setTimeout(() => {
-                    layer._wxTropSatTileErrorRetryTimer = null;
-                    if (!_isTypeEnabled('tropical') || !_tropSatActiveKey || !map.hasLayer(layer)) return;
-                    _tropSatTileRefreshToken = Date.now();
-                    if (typeof layer.setUrl === 'function') {
-                        layer.setUrl(_tropSatTileTemplate(frameKey), false);
-                    } else if (typeof layer.redraw === 'function') {
-                        layer.redraw();
-                    }
-                }, retryDelayMs);
-            });
-            _tropSatLayerPool.set(poolKey, layer);
-        }
-        return _tropSatLayerPool.get(poolKey);
-    }
-
-    function _clearTropSatLayerPool() {
-        _tropSatPendingSwapToken += 1;
-        _tropSatFrameAdvanceInFlight = false;
-        _tropSatLayerPool.forEach((layer) => {
-            if (layer?._wxTropSatTileErrorRetryTimer) {
-                clearTimeout(layer._wxTropSatTileErrorRetryTimer);
-                layer._wxTropSatTileErrorRetryTimer = null;
-            }
-            if (map.hasLayer(layer)) map.removeLayer(layer);
-        });
-        _tropSatLayerPool.clear();
-        _tropSatLayerZCounter = 0;
-        _tropSatOverlay = null;
-    }
-
-    function _setTropSatLayerZIndex(layer, active = false) {
-        if (!layer || typeof layer.setZIndex !== 'function') return;
-        if (active) {
-            _tropSatLayerZCounter += 1;
-            layer.setZIndex(1000 + _tropSatLayerZCounter);
-            return;
-        }
-        layer.setZIndex(1);
-    }
-
-    function _hideInactiveTropSatLayers(activeLayer, previousLayer = null) {
-        const keep = new Set([activeLayer, previousLayer].filter(Boolean));
-        _tropSatLayerPool.forEach((layer) => {
-            if (keep.has(layer)) return;
-            if (typeof layer.setOpacity === 'function') layer.setOpacity(0);
-        });
-    }
-
-    function _canApplyTropSatFrame(renderSeq) {
-        return renderSeq === _tropSatRenderSeq && _isTypeEnabled('tropical') && !!_tropSatActiveKey;
-    }
-
-    async function _waitForTropSatLayerReady(layer, zoomLevel, renderSeq, timeoutMs = 5000) {
-        if (!layer || _satelliteLayerReadyForSwap(layer, zoomLevel)) return true;
-        return new Promise((resolve) => {
-            let settled = false;
-            let timeoutId = null;
-            const finish = (ready) => {
-                if (settled) return;
-                settled = true;
-                layer.off('load', onLoad);
-                clearTimeout(timeoutId);
-                resolve(ready);
-            };
-            const onLoad = () => finish(_satelliteLayerHasLoadedTilesForZoom(layer, zoomLevel));
-            timeoutId = setTimeout(() => finish(_satelliteLayerHasLoadedTilesForZoom(layer, zoomLevel)), timeoutMs);
-            if (!_canApplyTropSatFrame(renderSeq)) { finish(false); return; }
-            layer.on('load', onLoad);
-        });
-    }
-
-    async function _crossfadeTropSatLayers(oldLayer, newLayer, canContinue = () => true) {
-        return _crossfadeOverlays(
-            oldLayer,
-            newLayer,
-            0.92,
-            () => _isTypeEnabled('tropical') && !!_tropSatActiveKey,
-            canContinue,
-            SATELLITE_CROSSFADE_MS,
-            { removeOldAfterFade: !_tropSatScrubMode },
-        );
-    }
-
-    function _updateTropSatScrubberUi() {
-        const slider = byId('scrubber-slider');
-        const countEl = byId('scrubber-frame-count');
-        const tsEl = byId('scrubber-timestamp');
-        const n = _tropSatFrames.length;
-        const frame = n ? _tropSatFrames[_tropSatFrameIndex] : null;
-        if (slider) {
-            slider.min = '0';
-            slider.max = String(Math.max(0, n - 1));
-            slider.value = String(Math.max(0, Math.min(_tropSatFrameIndex, Math.max(0, n - 1))));
-            slider.disabled = n < 1;
-        }
-        if (countEl) countEl.textContent = n ? `${_tropSatFrameIndex + 1}/${n}` : '0/0';
-        if (tsEl) {
-            if (!frame?.timestamp_utc) {
-                tsEl.textContent = '--';
-            } else {
-                try {
-                    tsEl.textContent = new Date(frame.timestamp_utc).toLocaleString(undefined, {
-                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
-                    });
-                } catch {
-                    tsEl.textContent = frame.timestamp_utc;
-                }
-            }
-        }
-    }
-
-    async function _setTropSatFrame(index, options = {}) {
-        if (!_tropSatFrames.length || !_isTypeEnabled('tropical') || !_tropSatActiveKey) return false;
-        const waitForTiles = options?.waitForTiles === true;
-        const tileTimeoutMs = Number.isFinite(Number(options?.tileTimeoutMs))
-            ? Math.max(1000, Number(options.tileTimeoutMs))
-            : SATELLITE_TILE_READY_TIMEOUT_MS;
-        const clamped = Math.max(0, Math.min(_tropSatFrames.length - 1, Number(index) || 0));
-        const frame = _tropSatFrames[clamped];
-        const frameKey = frame?.frame_key || '';
-        if (!frameKey) return false;
-
-        const nextLayer = _getOrCreateTropSatLayer(frameKey);
-        const targetZoom = map.getZoom();
-        const prevLayer = _tropSatOverlay;
-        const renderSeq = ++_tropSatRenderSeq;
-        _tropSatFrameAdvanceInFlight = waitForTiles;
-
-        const updateFrameUi = () => {
-            _tropSatOverlay = nextLayer;
-            _tropSatFrameIndex = clamped;
-            _updateTropSatScrubberUi();
-            _setViewerTimestamp(_resolveDataTimestampMs(frame.timestamp_utc || frame.frame_key || null));
-            _setRtmaScrubberStatus(`${_tropSatFrameIndex + 1} / ${_tropSatFrames.length} frames.`);
-        };
-
-        if (prevLayer === nextLayer) {
-            _tropSatFrameAdvanceInFlight = false;
-            if (!_canApplyTropSatFrame(renderSeq)) return false;
-            updateFrameUi();
-            return true;
-        }
-
-        const swapToken = ++_tropSatPendingSwapToken;
-        if (!map.hasLayer(nextLayer)) nextLayer.addTo(map);
-        if (typeof nextLayer.setOpacity === 'function') nextLayer.setOpacity(prevLayer ? 0 : 0.92);
-        _setTropSatLayerZIndex(nextLayer, true);
-        _hideInactiveTropSatLayers(nextLayer, prevLayer);
-
-        const ready = waitForTiles
-            ? await _waitForTropSatLayerReady(nextLayer, targetZoom, renderSeq, tileTimeoutMs)
-            : true;
-        if (!ready || swapToken !== _tropSatPendingSwapToken || !_canApplyTropSatFrame(renderSeq)) {
-            if (!prevLayer && ready === false
-                && _satelliteLayerHasAnyLoadedTileForZoom(nextLayer, targetZoom)
-                && swapToken === _tropSatPendingSwapToken && _canApplyTropSatFrame(renderSeq)) {
-                _tropSatFrameAdvanceInFlight = false;
-                updateFrameUi();
-                return true;
-            }
-            if (map.hasLayer(nextLayer)) map.removeLayer(nextLayer);
-            _tropSatFrameAdvanceInFlight = false;
-            return false;
-        }
-
-        if (prevLayer && map.hasLayer(prevLayer)) {
-            const applied = await _crossfadeTropSatLayers(
-                prevLayer,
-                nextLayer,
-                () => swapToken === _tropSatPendingSwapToken && _canApplyTropSatFrame(renderSeq),
-            );
-            if (!applied) { _tropSatFrameAdvanceInFlight = false; return false; }
-        } else if (typeof nextLayer.setOpacity === 'function') {
-            nextLayer.setOpacity(0.92);
-        }
-
-        if (swapToken !== _tropSatPendingSwapToken || !_canApplyTropSatFrame(renderSeq)) {
-            _tropSatFrameAdvanceInFlight = false;
-            return false;
-        }
-        _tropSatFrameAdvanceInFlight = false;
-        updateFrameUi();
-        _hideInactiveTropSatLayers(nextLayer);
-        return true;
-    }
-
-    function _scheduleTropSatManualScrubFrame(index) {
-        if (!_tropSatScrubMode || !_tropSatFrames.length || !_isTypeEnabled('tropical')) return;
-        const target = Math.max(0, Math.min(_tropSatFrames.length - 1, Number(index) || 0));
-        _stopTropSatScrubPlay();
-        if (_tropSatManualTimer) clearTimeout(_tropSatManualTimer);
-        _setRtmaScrubberStatus(`Preparing frame ${target + 1} / ${_tropSatFrames.length}...`);
-        _tropSatManualTimer = setTimeout(async () => {
-            _tropSatManualTimer = null;
-            await _setTropSatFrame(target, { waitForTiles: false });
-        }, SATELLITE_MANUAL_SCRUB_DEBOUNCE_MS);
-    }
-
-    function _stopTropSatScrubPlay() {
-        if (_tropSatPlayTimer) {
-            clearTimeout(_tropSatPlayTimer);
-            _tropSatPlayTimer = null;
-        }
-        _tropSatPendingSwapToken += 1;
-        _tropSatFrameAdvanceInFlight = false;
-        if (_tropSatScrubMode) {
-            const btn = byId('scrubber-play');
-            if (btn) btn.textContent = '▶';
-        }
-    }
-
-    function _startTropSatScrubPlay() {
-        if (!_tropSatFrames.length || !_tropSatScrubMode) return;
-        if (_tropSatPlayTimer) return;
-        if (_tropSatManualTimer) { clearTimeout(_tropSatManualTimer); _tropSatManualTimer = null; }
-        const btn = byId('scrubber-play');
-        if (btn) btn.textContent = '⏸';
-
-        let stalledTicks = 0;
-        const tick = async () => {
-            if (!_tropSatPlayTimer || !_tropSatFrames.length || !_tropSatScrubMode) return;
-            if (_tropSatFrameAdvanceInFlight) {
-                _tropSatPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(220, 120));
-                return;
-            }
-            const atLast = _tropSatFrameIndex >= _tropSatFrames.length - 1;
-            if (atLast) {
-                _tropSatPlayTimer = setTimeout(async () => {
-                    if (!_tropSatPlayTimer || !_tropSatFrames.length || !_tropSatScrubMode) return;
-                    const advanced = await _setTropSatFrame(0, { waitForTiles: false });
-                    if (!_tropSatPlayTimer || !_tropSatFrames.length || !_tropSatScrubMode) return;
-                    if (advanced) {
-                        stalledTicks = 0;
-                        _updateRtmaScrubberUi();
-                        _tropSatPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(650, 120));
-                        return;
-                    }
-                    _tropSatPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(220, 120));
-                }, _scrubberPlaybackDelay(RTMA_SCRUB_LOOP_HOLD_MS, 350));
-                return;
-            }
-            const next = _tropSatFrameIndex + 1;
-            const advanced = await _setTropSatFrame(next, { waitForTiles: false });
-            if (!_tropSatPlayTimer || !_tropSatFrames.length || !_tropSatScrubMode) return;
-            if (advanced) {
-                stalledTicks = 0;
-                _updateRtmaScrubberUi();
-                _tropSatPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(650, 120));
-                return;
-            }
-            stalledTicks += 1;
-            if (stalledTicks >= 8) {
-                stalledTicks = 0;
-                _setRtmaScrubberStatus(`Frame ${next + 1} / ${_tropSatFrames.length}; tiles are filling.`);
-                _tropSatPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(650, 120));
-                return;
-            }
-            _tropSatPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(220, 120));
-        };
-        _tropSatPlayTimer = setTimeout(tick, _scrubberPlaybackDelay(650, 120));
-    }
-
-    async function _fetchTropSatFrameSet({ signal }) {
-        const params = new URLSearchParams({
-            sat_id: _tropSatSatId,
-            sector: 'FULLDISK',
-            channel: _tropSatChannel,
-            hours: String(TROPSAT_LOOKBACK_HOURS),
-            max_frames: String(TROPSAT_MAX_FRAMES),
-            refresh: 'false',
-        });
-        const resp = await fetch(apiUrl(`/api/satellite-v2/catalog?${params.toString()}`), { cache: 'no-store', signal });
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok || (data.status !== 'success' && data.status !== 'stale')) {
-            throw new Error(data.detail || data.message || resp.statusText || 'Satellite catalog request failed');
-        }
-        const frames = Array.isArray(data.frames) ? data.frames.filter((f) => f && f.frame_key) : [];
-        return { data, frames };
-    }
-
-    async function loadTropSatScrubberFrames() {
-        if (!_isTypeEnabled('tropical') || !_tropSatActiveKey) return;
-        const previousFrameKey = _tropSatFrames[_tropSatFrameIndex]?.frame_key || '';
-        if (_tropSatManualTimer) { clearTimeout(_tropSatManualTimer); _tropSatManualTimer = null; }
-
-        // Claim the shared scrubber bar from any other owner.
-        _exitRtmaScrubMode(false);
-        _exitMrmsScrubMode(false);
-        _stopRadarScrubPlay();
-        _radarScrubFrames = [];
-        if (_satelliteScrubMode) _exitSatelliteScrubMode(false);
-
-        const loadSeq = ++_tropSatLoadSeq;
-        if (_tropSatFetchController) _tropSatFetchController.abort();
-        _tropSatFetchController = new AbortController();
-        const { signal } = _tropSatFetchController;
-        _tropSatScrubMode = true;
-        _tropSatRenderSeq += 1;
-        _stopTropSatScrubPlay();
-        byId('weather-mode-archive')?.classList.remove('active');
-        _setArchiveScrubber(true);
-        _setScrubberControlsEnabled(false);
-        _tropSatFrames = [];
-        _tropSatFrameIndex = 0;
-        _updateTropSatScrubberUi();
-        _setRtmaScrubberStatus('Loading satellite animation frames...');
-
-        try {
-            const frameSet = await _fetchTropSatFrameSet({ signal });
-            if (!_tropSatScrubMode || loadSeq !== _tropSatLoadSeq) return;
-            _tropSatCatalog = frameSet.data;
-            _tropSatFrames = frameSet.frames;
-
-            if (!_tropSatFrames.length) {
-                _setScrubberControlsEnabled(false);
-                _updateTropSatScrubberUi();
-                _setRtmaScrubberStatus('No satellite frames found for this selection.');
-                return;
-            }
-
-            _tropSatFrameIndex = _satelliteFrameIndexForReload(_tropSatFrames, previousFrameKey);
-            _updateRtmaScrubberUi();
-            _setScrubberControlsEnabled(true);
-            const frameDisplayed = await _setTropSatFrame(_tropSatFrameIndex, {
-                waitForTiles: false,
-                tileTimeoutMs: SATELLITE_INITIAL_TILE_READY_TIMEOUT_MS,
-            });
-            if (!_tropSatScrubMode || loadSeq !== _tropSatLoadSeq) return;
-            _updateRtmaScrubberUi();
-            const totalTiles = _tropSatFrames.reduce((sum, f) => sum + _satelliteFrameTileCount(f), 0);
-            if (frameDisplayed) {
-                _setRtmaScrubberStatus(`${_tropSatFrames.length} frames loaded (${totalTiles} cached tiles); tiles fill as they render.`);
-            } else {
-                _setRtmaScrubberStatus(`${_tropSatFrames.length} frames listed; tiles will fill as requested.`);
-            }
-        } catch (err) {
-            if (err.name === 'AbortError') return;
-            if (!_tropSatScrubMode || loadSeq !== _tropSatLoadSeq) return;
-            _tropSatFrames = [];
-            _tropSatFrameIndex = 0;
-            _updateTropSatScrubberUi();
-            _setScrubberControlsEnabled(false);
-            _setRtmaScrubberStatus(`Error: ${err.message}`);
-        } finally {
-            if (_tropSatFetchController?.signal === signal) _tropSatFetchController = null;
-        }
-    }
-
-    function _exitTropSatScrubMode() {
-        if (_tropSatManualTimer) { clearTimeout(_tropSatManualTimer); _tropSatManualTimer = null; }
-        if (_tropSatFetchController) { _tropSatFetchController.abort(); _tropSatFetchController = null; }
-        _stopTropSatScrubPlay();
-        _tropSatScrubMode = false;
-        _tropSatLoadSeq += 1;
-        _tropSatRenderSeq += 1;
-        _setArchiveScrubber(false);
-        _setScrubberControlsEnabled(false);
-        _setRtmaScrubberStatus('');
-    }
-
-    async function _updateTropSatLegend() {
-        if (!_isTypeEnabled('tropical') || !_tropSatActiveKey) return;
-        const channel = _tropSatChannel;
-        try {
-            const legend = await _fetchSatelliteLegend(channel);
-            if (!_isTypeEnabled('tropical') || _tropSatChannel !== channel) return;
-            if (!legend?.available || !Array.isArray(legend.anchors) || !legend.anchors.length) {
-                setLegend(null);
-                return;
-            }
-            const title = legend.title ? `Satellite: ${legend.title}` : 'Satellite';
-            const units = legend.units ? `Brightness Temperature (${legend.units})` : 'Brightness Temperature';
-            setLegend(renderContinuousLegend(title, units, legend.anchors, legend.ticks));
-        } catch (err) {
-            console.warn('[tropical-sat] Legend unavailable:', err?.message || err);
-            if (_isTypeEnabled('tropical') && _tropSatChannel === channel) setLegend(null);
-        }
-    }
-
-    function _reconcileTropSatLegend() {
-        if (_tropicalMapViewMode === 'system') {
-            _renderTropicalLegend();
-        } else {
-            setLegend(null);
-        }
-    }
-
-    // Fully turn the tropical satellite layer off (used by Home/Refresh/tab-switch).
-    // Guarded so it never hides another feature's scrubber when tropical sat isn't the owner.
-    function _disableTropSatLayer() {
-        const wasActive = _tropSatActiveKey || _tropSatScrubMode;
-        _tropSatActiveKey = '';
-        if (wasActive) {
-            _exitTropSatScrubMode();
-            _clearTropSatLayerPool();
-        }
-        document.querySelectorAll('.troposat-check').forEach((cb) => { cb.checked = false; });
-    }
-
-    function _onTropSatCheckboxChange(event) {
-        const cb = event.target;
-        if (!cb || !cb.classList.contains('troposat-check')) return;
-        const key = cb.dataset.tropsatKey || '';
-        if (cb.checked) {
-            document.querySelectorAll('.troposat-check').forEach((other) => {
-                if (other !== cb) other.checked = false;
-            });
-            const [satId, channel] = key.split('|');
-            const switching = _tropSatActiveKey && _tropSatActiveKey !== key;
-            _tropSatActiveKey = key;
-            _tropSatSatId = satId;
-            _tropSatChannel = channel;
-            if (switching) {
-                _clearTropSatLayerPool();
-                _tropSatFrames = [];
-                _tropSatFrameIndex = 0;
-            }
-            _tropSatTileRefreshToken = Date.now();
-            loadTropSatScrubberFrames();
-            void _updateTropSatLegend();
-        } else if (_tropSatActiveKey === key) {
-            _tropSatActiveKey = '';
-            _exitTropSatScrubMode();
-            _clearTropSatLayerPool();
-            _reconcileTropSatLegend();
-        }
-    }
-
     function refreshActiveLayers() {
         if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length || _satelliteScrubMode) return;
         const alertsEnabled = _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0;
@@ -9444,7 +8928,6 @@
             _clearTropicalLayer();
             _closeOutlookDetail();
             _closeTropicalDetail();
-            _disableTropSatLayer();
         }
 
         if (!spcEnabled) {
@@ -10713,6 +10196,9 @@
         const summary = byId('weather-tropical-summary');
         const trackBox = byId('weather-tropical-track');
         const productsBox = byId('weather-tropical-products');
+        // Floater is live-storm only; hide by default — the live detail loader
+        // re-shows it via _renderTropicalFloater() when a floater exists.
+        _hideTropicalFloater();
         // No storm selected: blank the System tab so stale content doesn't linger.
         if (!data) {
             if (head) head.innerHTML = '';
@@ -10884,6 +10370,43 @@
         _openTropicalDetailPanel(label || 'Storm graphic', '', body, 'wx-tropical-detail-graphic');
     }
 
+    // ── Satellite Floater (NESDIS/STAR storm-centered imagery, active storms) ──
+    const _FLOATER_BASE = 'https://cdn.star.nesdis.noaa.gov/FLOATER';
+    const _FLOATER_LABELS = { GEOCOLOR: 'GeoColor', 13: 'Clean IR (Band 13)', '02': 'Red Visible (Band 02)' };
+    let _tropicalFloaterStormId = null;
+
+    function _floaterUrl(atcfId, product, size, bust) {
+        return `${_FLOATER_BASE}/${atcfId}/${product}/${size}.jpg?t=${bust}`;
+    }
+
+    function _hideTropicalFloater() {
+        _tropicalFloaterStormId = null;
+        const section = byId('wx-tropical-inspector-floater');
+        if (section) section.hidden = true;
+    }
+
+    // Reveal the floater product pills if the active storm has a NESDIS floater
+    // (probe GeoColor — all products exist whenever the floater does). On error
+    // (no active floater, e.g. archived storms) the whole section stays hidden.
+    function _renderTropicalFloater(stormId) {
+        const section = byId('wx-tropical-inspector-floater');
+        if (!section) return;
+        const id = String(stormId || '').toUpperCase();
+        if (!/^(AL|EP|CP)\d{6}$/.test(id)) { _hideTropicalFloater(); return; }
+        _tropicalFloaterStormId = id;
+        const probe = new Image();
+        probe.onload = () => { if (_tropicalFloaterStormId === id) section.hidden = false; };
+        probe.onerror = () => { if (_tropicalFloaterStormId === id) _hideTropicalFloater(); };
+        probe.src = _floaterUrl(id, 'GEOCOLOR', '250x250', Math.floor(Date.now() / 300000));
+    }
+
+    // Open the 2000px floater image for one product in the shared image lightbox.
+    function _openFloaterModal(product) {
+        if (!_tropicalFloaterStormId || !product) return;
+        const url = _floaterUrl(_tropicalFloaterStormId, product, '2000x2000', Math.floor(Date.now() / 300000));
+        _openTropicalGraphicDetail(url, `Satellite Floater — ${_FLOATER_LABELS[product] || product}`);
+    }
+
     // Render the Graphics section: a button per candidate graphic, each hidden until its
     // image is verified to load (so products NHC hasn't issued for this storm auto-hide).
     function _renderTropicalGraphics(data) {
@@ -10946,6 +10469,7 @@
             _exitTropicalArchiveContext();
             _highlightTropicalArchiveCard();
             _renderTropicalSummary(data);
+            _renderTropicalFloater(data.stormId);
             _highlightSelectedTropicalCard();
             // Default an active storm to Cone + Points (Track off), then sync the
             // Storm Layers pills so their active state matches what's rendered.
@@ -11212,10 +10736,11 @@
             const motion = a.motion
                 ? `${a.motion.text || ''}${Number.isFinite(a.motion.mph) ? ` at ${a.motion.mph} mph` : ''}`.trim()
                 : '--';
-            const stepper = `<div class="wx-adv-stepper" role="group" aria-label="Step advisory">`
-                + `<button type="button" data-adv-step="-1" aria-label="Previous advisory"${idx <= 0 ? ' disabled' : ''}>&#9664;</button>`
-                + `<strong>${escapeHtml(step)}</strong>`
-                + `<button type="button" data-adv-step="1" aria-label="Next advisory"${idx >= total - 1 ? ' disabled' : ''}>&#9654;</button>`
+            const options = _tropicalArchiveAdvisories.map((advStep, i) =>
+                `<option value="${i}"${i === idx ? ' selected' : ''}>Advisory ${escapeHtml(advStep)}</option>`
+            ).join('');
+            const stepper = `<div class="wx-adv-stepper" role="group" aria-label="Select advisory">`
+                + `<select class="wx-adv-select" aria-label="Choose advisory">${options}</select>`
                 + `</div>`;
             const grid = [
                 ['Issued', escapeHtml(data.issued || '--'), ' is-wide', false],
@@ -11229,9 +10754,10 @@
                 + (isHtml ? value : `<strong>${value}</strong>`) + `</div>`
             )).join('');
             summary.innerHTML = grid;
-            summary.querySelectorAll('[data-adv-step]').forEach((btn) => {
-                btn.addEventListener('click', () => _stepArchiveScrub(Number(btn.getAttribute('data-adv-step'))));
-            });
+            const select = summary.querySelector('.wx-adv-select');
+            if (select) {
+                select.addEventListener('change', (e) => _archiveScrubSetIndex(Number(e.target.value)));
+            }
         }
     }
 
@@ -11659,10 +11185,11 @@
         }
         if (summary) {
             const pres = Number(p.MSLP);
-            const stepper = `<div class="wx-adv-stepper" role="group" aria-label="Step fix">`
-                + `<button type="button" data-fix-step="-1" aria-label="Previous fix"${idx <= 0 ? ' disabled' : ''}>&#9664;</button>`
-                + `<strong>${idx + 1}/${total}</strong>`
-                + `<button type="button" data-fix-step="1" aria-label="Next fix"${idx >= total - 1 ? ' disabled' : ''}>&#9654;</button>`
+            const options = _tropicalArchiveFixes.map((fix, i) =>
+                `<option value="${i}"${i === idx ? ' selected' : ''}>${escapeHtml(_formatFixDTG(fix.properties?.DTG || ''))} (${i + 1}/${total})</option>`
+            ).join('');
+            const stepper = `<div class="wx-adv-stepper" role="group" aria-label="Select fix">`
+                + `<select class="wx-adv-select" aria-label="Choose fix">${options}</select>`
                 + `</div>`;
             const grid = [
                 ['Time', escapeHtml(_formatFixDTG(p.DTG)), ' is-wide', false],
@@ -11676,9 +11203,10 @@
                 + (isHtml ? value : `<strong>${value}</strong>`) + `</div>`
             )).join('');
             summary.innerHTML = grid;
-            summary.querySelectorAll('[data-fix-step]').forEach((btn) => {
-                btn.addEventListener('click', () => _stepArchiveScrub(Number(btn.getAttribute('data-fix-step'))));
-            });
+            const select = summary.querySelector('.wx-adv-select');
+            if (select) {
+                select.addEventListener('change', (e) => _archiveScrubSetIndex(Number(e.target.value)));
+            }
         }
     }
 
@@ -13381,10 +12909,7 @@
         const tsEl = byId('scrubber-timestamp');
         const cntEl = byId('scrubber-frame-count');
         let activeFrames, activeIndex;
-        if (_tropSatScrubMode) {
-            activeFrames = _tropSatFrames;
-            activeIndex = _tropSatFrameIndex;
-        } else if (_mrmsScrubFrames.length) {
+        if (_mrmsScrubFrames.length) {
             activeFrames = _mrmsScrubFrames;
             activeIndex = _mrmsScrubFrameIndex;
         } else if (_satelliteScrubMode) {
@@ -14762,10 +14287,6 @@
     _updateScrubberPlaybackSpeedUi();
 
     byId('scrubber-play')?.addEventListener('click', () => {
-        if (_tropSatScrubMode) {
-            if (_tropSatPlayTimer) { _stopTropSatScrubPlay(); } else { _startTropSatScrubPlay(); }
-            return;
-        }
         if (_mrmsScrubFrames.length) {
             if (_mrmsScrubPlayTimer) {
                 _stopMrmsScrubPlay();
@@ -14802,11 +14323,6 @@
     });
 
     byId('scrubber-step-back')?.addEventListener('click', async () => {
-        if (_tropSatScrubMode) {
-            _stopTropSatScrubPlay();
-            await _setTropSatFrame(_tropSatFrameIndex - 1, { waitForTiles: false });
-            return;
-        }
         if (_mrmsScrubFrames.length) {
             _stopMrmsScrubPlay();
             _renderMrmsScrubFrame(_mrmsScrubFrameIndex - 1);
@@ -14832,11 +14348,6 @@
     });
 
     byId('scrubber-step-fwd')?.addEventListener('click', async () => {
-        if (_tropSatScrubMode) {
-            _stopTropSatScrubPlay();
-            await _setTropSatFrame(_tropSatFrameIndex + 1, { waitForTiles: false });
-            return;
-        }
         if (_mrmsScrubFrames.length) {
             _stopMrmsScrubPlay();
             _renderMrmsScrubFrame(_mrmsScrubFrameIndex + 1);
@@ -14862,10 +14373,6 @@
     });
 
     byId('scrubber-slider')?.addEventListener('input', async (e) => {
-        if (_tropSatScrubMode) {
-            _scheduleTropSatManualScrubFrame(parseInt(e.target.value, 10));
-            return;
-        }
         if (_mrmsScrubFrames.length) {
             _stopMrmsScrubPlay();
             _renderMrmsScrubFrame(parseInt(e.target.value, 10));
@@ -15262,6 +14769,11 @@
         _renderTropicalArchiveList();
     });
 
+    byId('wx-floater-pills')?.addEventListener('click', (e) => {
+        const product = e.target?.getAttribute?.('data-floater-product');
+        if (product) _openFloaterModal(product);
+    });
+
     byId('adv-scrub-first')?.addEventListener('click', () => _jumpArchiveScrub(0));
     byId('adv-scrub-prev')?.addEventListener('click', () => _stepArchiveScrub(-1));
     byId('adv-scrub-next')?.addEventListener('click', () => _stepArchiveScrub(1));
@@ -15283,7 +14795,6 @@
         if (!_isTypeEnabled('tropical')) return;
         _closeOutlookDetail();
         _closeTropicalDetail();
-        _disableTropSatLayer();
         _setTropicalMapViewMode('both');
         fitTropicalDefaultExtent();
         loadTropicalStorms(true);
@@ -16131,7 +15642,6 @@
     byId('weather-toggle-states')?.addEventListener('change', _syncRightSidebarLayers);
     byId('weather-toggle-counties')?.addEventListener('change', _syncRightSidebarLayers);
     byId('weather-toggle-countries')?.addEventListener('change', _syncRightSidebarLayers);
-    byId('wx-side-group-tropical')?.addEventListener('change', _onTropSatCheckboxChange);
 
     map.on('moveend', () => {
         _refreshCitiesIfVisible();

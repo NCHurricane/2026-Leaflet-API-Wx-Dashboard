@@ -325,7 +325,6 @@
             #wx-side-group-map-layers .wx-check-row,
             #wx-side-group-current .wx-check-row,
             #wx-side-group-alerts .wx-check-row,
-            #wx-side-group-tropical .wx-check-row,
             #wx-tropical-inspector-layers .wx-check-row {
                 display: flex;
                 align-items: center;
@@ -336,8 +335,7 @@
 
             #wx-side-group-map-layers .wx-check-row span,
             #wx-side-group-current .wx-check-row span,
-            #wx-side-group-alerts .wx-check-row span,
-            #wx-side-group-tropical .wx-check-row span {
+            #wx-side-group-alerts .wx-check-row span {
                 order: 2;
                 flex: 1 1 auto;
                 text-align: right;
@@ -352,7 +350,6 @@
             #wx-side-group-map-layers .wx-check-row input[type="checkbox"],
             #wx-side-group-current .wx-check-row input[type="checkbox"],
             #wx-side-group-alerts .wx-check-row input[type="checkbox"],
-            #wx-side-group-tropical .wx-check-row input[type="checkbox"],
             #wx-tropical-inspector-layers .wx-check-row input[type="checkbox"] {
                 order: 1;
                 flex: 0 0 auto;
@@ -3191,6 +3188,34 @@
                 letter-spacing: 0.03em;
             }
 
+            /* Satellite Floater pills (NESDIS/STAR storm-centered imagery → modal) */
+            .wx-floater-pills {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            .wx-floater-pill {
+                width: auto;
+                /* override the global button { width: 100% } */
+                padding: 4px 10px;
+                font-size: 0.7rem;
+                font-weight: 600;
+                line-height: 1.2;
+                color: #94a3b8;
+                background: rgba(51, 65, 85, 0.4);
+                border: 1px solid rgba(148, 163, 184, 0.32);
+                border-radius: 6px;
+                cursor: pointer;
+                transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+            }
+
+            .wx-floater-pill:hover {
+                color: #f8fafc;
+                border-color: #38bdf8;
+                background: rgba(30, 41, 59, 0.7);
+            }
+
             /* Per-advisory stepper inside the System summary's Advisory cell */
             .wx-adv-stepper {
                 display: inline-flex;
@@ -3227,6 +3252,28 @@
             .wx-adv-stepper button:disabled {
                 opacity: 0.35;
                 cursor: default;
+            }
+
+            .wx-adv-select {
+                max-width: 100%;
+                padding: 4px 8px;
+                font-size: 0.7rem;
+                color: #e2e8f0;
+                background: rgba(15, 23, 42, 0.7);
+                border: 1px solid rgba(148, 163, 184, 0.4);
+                border-radius: 5px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+
+            .wx-adv-select:hover {
+                border-color: var(--tc-cat-color, #38bdf8);
+                background: rgba(30, 41, 59, 0.85);
+            }
+
+            .wx-adv-select:focus-visible {
+                outline: 2px solid var(--tc-cat-color, #38bdf8);
+                outline-offset: 1px;
             }
 
             #weather-tropical-inspector {
@@ -4782,22 +4829,6 @@
                             <div class="wx-check-row"><span>County Borders</span><input id="weather-toggle-counties"
                                     type="checkbox"></div>
                         </div>
-                        <div id="wx-side-group-tropical" class="wx-block wx-side-group" data-type="tropical"
-                            style="display:none;">
-                            <h3>Satellite</h3>
-                            <div class="wx-check-row"><span>GOES-19 (East) &mdash; Ch 13 Clean IR</span><input
-                                    class="troposat-check" id="troposat-g19-ch13" type="checkbox"
-                                    data-tropsat-key="goes19|Channel13"></div>
-                            <div class="wx-check-row"><span>GOES-19 (East) &mdash; Ch 02 Red Visible</span><input
-                                    class="troposat-check" id="troposat-g19-ch02" type="checkbox"
-                                    data-tropsat-key="goes19|Channel02"></div>
-                            <div class="wx-check-row"><span>GOES-18 (West) &mdash; Ch 13 Clean IR</span><input
-                                    class="troposat-check" id="troposat-g18-ch13" type="checkbox"
-                                    data-tropsat-key="goes18|Channel13"></div>
-                            <div class="wx-check-row"><span>GOES-18 (West) &mdash; Ch 02 Red Visible</span><input
-                                    class="troposat-check" id="troposat-g18-ch02" type="checkbox"
-                                    data-tropsat-key="goes18|Channel02"></div>
-                        </div>
                         <div id="wx-side-groups-empty" class="wx-block wx-small" style="display:none;">
                             Enable a product group to see style controls.
                         </div>
@@ -4976,8 +5007,6 @@
                                                 data-tc-layer="peak_surge"><span>Peak surge</span></label>
                                         <label class="wx-tc-pill"><input type="checkbox"
                                                 data-tc-layer="best_track"><span>Best track</span></label>
-                                        <label class="wx-tc-pill is-stub" title="Coming soon"><input
-                                                type="checkbox" disabled><span>Satellite floater</span></label>
                                     </div>
                                 </div>
                             </section>
@@ -4995,6 +5024,21 @@
                                         class="wx-accordion-chevron" aria-hidden="true">&#9662;</span></button>
                                 <div class="wx-accordion-body">
                                     <div id="weather-tropical-graphics" class="wx-tropical-graphics-list"></div>
+                                </div>
+                            </section>
+                            <section id="wx-tropical-inspector-floater"
+                                class="wx-tropical-inspector-section wx-accordion" data-open="false" hidden>
+                                <button type="button" class="wx-accordion-header"><span>Satellite Floater</span><span
+                                        class="wx-accordion-chevron" aria-hidden="true">&#9662;</span></button>
+                                <div class="wx-accordion-body">
+                                    <div id="wx-floater-pills" class="wx-floater-pills">
+                                        <button type="button" class="wx-floater-pill"
+                                            data-floater-product="GEOCOLOR">GeoColor</button>
+                                        <button type="button" class="wx-floater-pill"
+                                            data-floater-product="13">Clean IR</button>
+                                        <button type="button" class="wx-floater-pill"
+                                            data-floater-product="02">Red Visible</button>
+                                    </div>
                                 </div>
                             </section>
                         </div>
@@ -5088,7 +5132,7 @@
         <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
         <script src="js/shared.js?v=20260526a"></script>
         <script src="js/radar-site-locations.js?v=20260504c"></script>
-        <script src="js/weather.js?v=20260605d"></script>
+        <script src="js/weather.js?v=20260605l"></script>
         <script>initNav('weather');</script>
     </body>
 
