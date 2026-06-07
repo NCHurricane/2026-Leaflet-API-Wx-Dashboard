@@ -681,6 +681,7 @@ def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
         _FORECAST_WIND_RADII_LAYER_KINDS,
         _extract_gis_layers_from_zip,
         _parse_advisory,
+        _parse_initial_wind_extent_kml,
         _parse_peak_surge_kml,
         _parse_storm_surge_kml,
         _parse_track,
@@ -744,6 +745,13 @@ def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
         coll = _parse_peak_surge_kml(peak)
         if coll and coll.get("features"):
             layers["peak_surge"] = {"cache_path": "", "feature_count": len(coll["features"]), "source_path": "NHC peakSurge", "geojson": coll}
+
+    # Initial Wind Extent (cone outline) — issued with most advisories
+    iwe = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/forecast/{sid}_initialwindextent_{step}adv.kml")
+    if iwe:
+        coll = _parse_initial_wind_extent_kml(iwe)
+        if coll and coll.get("features"):
+            layers["initial_wind_extent"] = {"cache_path": "", "feature_count": len(coll["features"]), "source_path": "NHC initialwindextent", "geojson": coll}
 
     return {
         "status": "success",
