@@ -60,6 +60,7 @@ def start_scheduler() -> None:
     from workers.rtma_worker import run_rtma_hourly_worker, run_rtma_rapid_worker
     from satellite_v2.worker import run_satellite_v2_worker
     from workers.surface_worker import run_surface_worker
+    from workers.cache_cleanup_worker import run_cache_cleanup_worker
 
     now = datetime.now(timezone.utc)
 
@@ -181,6 +182,15 @@ def start_scheduler() -> None:
         misfire_grace_time=60,
         next_run_time=now + timedelta(seconds=85),
     )
+    _scheduler.add_job(
+        run_cache_cleanup_worker,
+        "interval",
+        hours=6,
+        id="cache_cleanup_worker",
+        max_instances=1,
+        misfire_grace_time=600,
+        next_run_time=now + timedelta(minutes=1),
+    )
 
     _scheduler.start()
 
@@ -191,7 +201,8 @@ def start_scheduler() -> None:
         "surface (30 min), satellite_v2 (15 min, +55s delay), "
         "satellite_v2_meso (5 min, +65s delay), "
         "satellite_v2_light_composites (5 min, +75s delay), "
-        "satellite_v2_geocolor (10 min, +85s delay)"
+        "satellite_v2_geocolor (10 min, +85s delay), "
+        "cache_cleanup (6 hours, +1 min delay)"
     )
 
 
