@@ -785,6 +785,7 @@ def run_radar_live_worker(force: bool = False) -> None:
     source_label = "NODD-AWS"
 
     total_cached = 0
+    total_failed = 0
     for site in LIVE_RADAR_SITES:
         site_id = str(site).strip().upper()
         if not site_id:
@@ -800,13 +801,17 @@ def run_radar_live_worker(force: bool = False) -> None:
                 )
                 total_cached += int(cached)
             except Exception as exc:
+                total_failed += 1
                 print(
                     f"[radar_live_worker] {site_id}/{product_key} failed: {type(exc).__name__}: {exc}"
                 )
 
     print(f"[radar_live_worker] completed - cached frames: {total_cached}")
 
-    mark_run_complete("radar_live")
+    if total_failed and not total_cached:
+        print("[radar_live_worker] All renders failed - cache not marked fresh")
+    else:
+        mark_run_complete("radar_live")
 
 
 def run_radar_live_site_product(

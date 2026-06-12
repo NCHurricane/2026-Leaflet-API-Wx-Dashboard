@@ -94,7 +94,10 @@ def run_spc_worker(force: bool = False) -> None:
         f"[spc_worker] SPC cache refresh complete in {time.time() - start:.2f}s "
         f"({errors} error(s))"
     )
-    mark_run_complete("spc")
+    if errors == len(tasks):
+        print("[spc_worker] All fetches failed — cache not marked fresh")
+    else:
+        mark_run_complete("spc")
 
 
 if __name__ == "__main__":

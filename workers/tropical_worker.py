@@ -1376,6 +1376,7 @@ def run_tropical_worker(
     start = time.time()
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     errors: list[str] = []
+    current_fetch_failed = False
 
     try:
         if raw_path is not None:
@@ -1392,6 +1393,7 @@ def run_tropical_worker(
             current_payload = {"activeStorms": []}
     except (OSError, urllib.error.URLError, ValueError, json.JSONDecodeError) as exc:
         errors.append(f"CurrentStorms: {exc}")
+        current_fetch_failed = True
         current_payload = _read_json(CURRENT_STORMS_FILE) or {"activeStorms": []}
 
     try:
@@ -1426,7 +1428,14 @@ def run_tropical_worker(
         "errors": errors,
     }
     _write_json_atomic(SUMMARY_FILE, summary)
-    mark_run_complete("tropical")
+    if current_fetch_failed and not feeds:
+        # Both core fetches failed (e.g. total network/SSL outage): nothing
+        # usable was cached, so leave the freshness sentinel untouched and let
+        # the next scheduled run retry. Partial successes still mark complete
+        # so a few bad storms don't cause NHC request hammering.
+        print("[tropical_worker] Core fetches failed - cache not marked fresh")
+    else:
+        mark_run_complete("tropical")
     print(
         f"[tropical_worker] Complete in {time.time() - start:.2f}s "
         f"({len(storms)} active storm(s), {len(errors)} error(s))"

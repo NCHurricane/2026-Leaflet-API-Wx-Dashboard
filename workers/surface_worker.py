@@ -591,7 +591,10 @@ def run_surface_worker(force: bool = False, products: list[str] | None = None) -
         else:
             print(f"[surface_worker] gradient [{reg}]: skipped (no dataframe)")
 
-    mark_run_complete("surface")
+    if region_dfs:
+        mark_run_complete("surface")
+    else:
+        print("[surface_worker] All METAR fetches failed — cache not marked fresh")
 
 
 if __name__ == "__main__":
