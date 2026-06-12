@@ -13,8 +13,8 @@ import tempfile
 import time as _time
 from datetime import datetime, timezone
 
-import matplotlib
 import numpy as np
+from PIL import Image
 from scipy.spatial import cKDTree
 from rasterio.features import rasterize as _rasterize
 from rasterio.transform import from_bounds as _from_bounds
@@ -312,12 +312,20 @@ def _interpolate_surface_grid(
         IDW_POWER = 0.1
     NEAR_STATION_KM = 0.0
 
-    # Build grid longitudes (linear) and latitudes (Mercator-sampled).
-    grid_lons = np.linspace(west, east, width, dtype=np.float64)
-    north_merc = float(_lat_to_merc_y(np.asarray(north, dtype=np.float64)))
-    south_merc = float(_lat_to_merc_y(np.asarray(south, dtype=np.float64)))
-    merc_ys = np.linspace(north_merc, south_merc, height, dtype=np.float64)
-    grid_lats = _merc_y_to_lat(merc_ys)  # shape (height,)
+    # Build the (H, W) lon/lat meshgrid once per region; it is identical for
+    # every product in a run.
+    region_key = region.upper()
+    cached_mesh = _GRID_MESH_CACHE.get(region_key)
+    if cached_mesh is None:
+        grid_lons = np.linspace(west, east, width, dtype=np.float64)
+        north_merc = float(_lat_to_merc_y(np.asarray(north, dtype=np.float64)))
+        south_merc = float(_lat_to_merc_y(np.asarray(south, dtype=np.float64)))
+        merc_ys = np.linspace(north_merc, south_merc, height, dtype=np.float64)
+        grid_lats = _merc_y_to_lat(merc_ys)  # shape (height,)
+        glon_grid, glat_grid = np.meshgrid(grid_lons, grid_lats)  # (H, W)
+        _GRID_MESH_CACHE[region_key] = (glon_grid, glat_grid)
+    else:
+        glon_grid, glat_grid = cached_mesh
 
     # Project stations to approximate km space (cosLat scaling at mean lat).
     mean_lat = float(np.mean(lat))
@@ -327,13 +335,12 @@ def _interpolate_surface_grid(
     tree = cKDTree(np.column_stack([sx, sy]))
 
     # Project all grid points to the same space.
-    glon_grid, glat_grid = np.meshgrid(grid_lons, grid_lats)  # (H, W)
     gx = glon_grid * cos_lat * 111.0
     gy = glat_grid * 111.0
     query_pts = np.column_stack([gx.ravel(), gy.ravel()])  # (H*W, 2)
 
     k = min(MAX_NEIGHBORS, len(lon))
-    dists, idxs = tree.query(query_pts, k=k)
+    dists, idxs = tree.query(query_pts, k=k, workers=-1)
 
     if k == 1:
         # Edge case: single station
@@ -366,6 +373,61 @@ def _interpolate_surface_grid(
     return grid, [west, east, south, north]
 
 
+_GRID_MESH_CACHE: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+_LAND_MASK_CACHE: dict[str, np.ndarray | None] = {}
+
+
+def _region_land_mask(
+    region_upper: str, bounds: list[float], shape: tuple[int, int]
+) -> np.ndarray | None:
+    """Rasterize the land-clip mask once per region per run (it depends only
+    on the region geometry and the fixed grid shape)."""
+    if region_upper in _LAND_MASK_CACHE:
+        return _LAND_MASK_CACHE[region_upper]
+
+    mask: np.ndarray | None = None
+    mask_geom = None
+    mask_label = region_upper
+    if region_upper == "CONUS":
+        mask_geom = _build_conus_geometry()
+    elif region_upper == "WORLD":
+        mask_geom = _build_world_land_geometry()
+        mask_label = "WORLD land"
+
+    if mask_geom is not None:
+        try:
+            west_b, east_b, south_b, north_b = bounds
+            north_merc = float(_lat_to_merc_y(np.asarray(north_b, dtype=np.float64)))
+            south_merc = float(_lat_to_merc_y(np.asarray(south_b, dtype=np.float64)))
+
+            def _lonlat_to_lon_mercy(x, y, z=None):
+                merc_y = _lat_to_merc_y(np.asarray(y, dtype=np.float64))
+                if z is None:
+                    return x, merc_y
+                return x, merc_y, z
+
+            mask_geom_merc = _shapely_transform(_lonlat_to_lon_mercy, mask_geom)
+            transform = _from_bounds(
+                west_b, south_merc, east_b, north_merc, shape[1], shape[0]
+            )
+            mask = _rasterize(
+                [(mask_geom_merc, 1)],
+                out_shape=shape,
+                transform=transform,
+                fill=0,
+                dtype=np.uint8,
+            )
+        except Exception as _mask_err:
+            print(
+                f"[surface_worker] {mask_label} mask failed "
+                f"(continuing without clip): {_mask_err}"
+            )
+            mask = None
+
+    _LAND_MASK_CACHE[region_upper] = mask
+    return mask
+
+
 def _write_json_atomic(path: str, payload: dict) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with tempfile.NamedTemporaryFile(
@@ -385,9 +447,6 @@ def _write_gradient_cache(
     unit: str,
     region: str = "CONUS",
 ) -> None:
-    matplotlib.use("Agg")
-    from matplotlib import image as mpl_image
-
     gradient_root = _gradient_root(region)
     os.makedirs(gradient_root, exist_ok=True)
     png_path = os.path.join(gradient_root, f"{product}.png")
@@ -397,7 +456,9 @@ def _write_gradient_cache(
         "wb", delete=False, dir=gradient_root, suffix=".png"
     ) as fh:
         tmp_png = fh.name
-    mpl_image.imsave(tmp_png, rgba)
+    Image.fromarray(rgba, mode="RGBA").save(
+        tmp_png, format="PNG", optimize=False, compress_level=1
+    )
     os.replace(tmp_png, png_path)
 
     rel = os.path.relpath(png_path, _CACHE_ROOT).replace("\\", "/")
@@ -477,58 +538,10 @@ def _build_surface_gradients(df, selected_products: set[str] | None = None, regi
             rgba = _build_rgba_from_values(grid, cfg["anchors"])
 
             # Clip gradients to land boundaries so overlays do not bleed into
-            # oceans. Keep masking in Mercator Y to match grid sampling.
-            region_upper = region.upper()
-            mask_geom = None
-            mask_label = region_upper
-            if region_upper == "CONUS":
-                mask_geom = _build_conus_geometry()
-                mask_label = "CONUS"
-            elif region_upper == "WORLD":
-                mask_geom = _build_world_land_geometry()
-                mask_label = "WORLD land"
-
-            if mask_geom is not None:
-                try:
-                    west_b, east_b, south_b, north_b = bounds
-                    north_merc = float(
-                        _lat_to_merc_y(np.asarray(north_b, dtype=np.float64))
-                    )
-                    south_merc = float(
-                        _lat_to_merc_y(np.asarray(south_b, dtype=np.float64))
-                    )
-
-                    def _lonlat_to_lon_mercy(x, y, z=None):
-                        merc_y = _lat_to_merc_y(
-                            np.asarray(y, dtype=np.float64))
-                        if z is None:
-                            return x, merc_y
-                        return x, merc_y, z
-
-                    mask_geom_merc = _shapely_transform(
-                        _lonlat_to_lon_mercy, mask_geom
-                    )
-                    transform = _from_bounds(
-                        west_b,
-                        south_merc,
-                        east_b,
-                        north_merc,
-                        grid.shape[1],
-                        grid.shape[0],
-                    )
-                    land_mask = _rasterize(
-                        [(mask_geom_merc, 1)],
-                        out_shape=grid.shape,
-                        transform=transform,
-                        fill=0,
-                        dtype=np.uint8,
-                    )
-                    rgba[:, :, 3] = np.where(land_mask == 1, 255, 0)
-                except Exception as _mask_err:
-                    print(
-                        f"[surface_worker] gradient {product}: "
-                        f"{mask_label} mask failed (continuing without clip): {_mask_err}"
-                    )
+            # oceans. Mask is computed once per region per run.
+            land_mask = _region_land_mask(region.upper(), bounds, grid.shape)
+            if land_mask is not None:
+                rgba[:, :, 3] = np.where(land_mask == 1, 255, 0)
 
             _write_gradient_cache(
                 product=product,

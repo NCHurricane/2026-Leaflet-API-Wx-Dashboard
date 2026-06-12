@@ -7,7 +7,7 @@ import os
 import threading
 import warnings
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -90,8 +90,21 @@ class SourceRaster:
 @dataclass
 class SatelliteTileRenderer:
     product_key: str
-    source_grids: dict[str, SourceGrid]
     source_rasters: dict[str, SourceRaster]
+    source_files: dict[str, Path] = field(default_factory=dict)
+    _source_grids: dict[str, SourceGrid] | None = None
+
+    @property
+    def source_grids(self) -> dict[str, SourceGrid]:
+        # Interpolator grids are only needed by render_tile (single-tile,
+        # on-demand path); canvas warming uses source_rasters exclusively, so
+        # build these lazily instead of paying for them on every load.
+        if self._source_grids is None:
+            self._source_grids = {
+                channel: _load_source_grid(path)
+                for channel, path in self.source_files.items()
+            }
+        return self._source_grids
 
     @classmethod
     def from_source(
@@ -267,18 +280,17 @@ def _load_renderer_uncached(
     source_files: dict[str, str | Path],
     required: tuple[str, ...],
 ) -> "SatelliteTileRenderer":
-    grids = {
-        source_channel: _load_source_grid(source_files[source_channel])
-        for source_channel in required
-    }
     rasters = {
         source_channel: _load_source_raster(source_files[source_channel])
         for source_channel in required
     }
     return renderer_cls(
         product_key=product_key,
-        source_grids=grids,
         source_rasters=rasters,
+        source_files={
+            source_channel: Path(source_files[source_channel])
+            for source_channel in required
+        },
     )
 
 

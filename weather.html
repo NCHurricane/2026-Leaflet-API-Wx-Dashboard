@@ -1458,6 +1458,14 @@
                 image-rendering: crisp-edges !important;
 }
 
+            /* Dark halo behind country/state/county border lines so they stay
+               readable over both dark and light basemaps and data fills.
+               One filter on the whole pane is far cheaper than per-path filters. */
+            .leaflet-boundary-lines-pane {
+                filter: drop-shadow(0 0 1px rgba(2, 6, 23, 0.95))
+                    drop-shadow(0 0 1px rgba(2, 6, 23, 0.6));
+            }
+
             .leaflet-top.leaflet-left {
                 display: flex;
                 flex-direction: row;
@@ -1817,7 +1825,11 @@
                 font-weight: 700;
                 letter-spacing: 0.01em;
                 padding: 0;
-                text-shadow: 0 0 2px rgba(0, 0, 0, 0.95);
+                text-shadow:
+                    -1px 0 0 rgba(0, 0, 0, 0.9),
+                    1px 0 0 rgba(0, 0, 0, 0.9),
+                    0 -1px 0 rgba(0, 0, 0, 0.9),
+                    0 1px 0 rgba(0, 0, 0, 0.9);
                 pointer-events: none;
                 white-space: nowrap;
             }
@@ -1842,13 +1854,17 @@
                 font-family: 'Montserrat-Italic', system-ui, sans-serif;
                 display: block;
                 color: #d8f1ff;
-                font-size: 0.6rem;
+                font-size: calc(var(--city-font-size, 0.6) * 1rem);
                 font-weight: 900;
                 letter-spacing: 0.02em;
                 line-height: 1;
                 text-align: center;
                 white-space: nowrap;
-                text-shadow: 0 0 2px rgba(0, 0, 0, 0.95);
+                text-shadow:
+                    -1px 0 0 rgba(0, 0, 0, 0.9),
+                    1px 0 0 rgba(0, 0, 0, 0.9),
+                    0 -1px 0 rgba(0, 0, 0, 0.9),
+                    0 1px 0 rgba(0, 0, 0, 0.9);
             }
 
             .sfc-marker {
@@ -4819,6 +4835,13 @@
                                 </div>
                                 <input id="weather-cities-density" type="range" min="0.01" max="1" step="0.005"
                                     value="0.25">
+                            </div>
+                            <div class="wx-cities-density">
+                                <div class="wx-cities-density-head">
+                                    <label for="weather-cities-font-size">City Font Size</label>
+                                </div>
+                                <input id="weather-cities-font-size" type="range" min="0.4" max="1.2" step="0.05"
+                                    value="0.6">
                             </div>
                             <div class="wx-check-row"><span>Lat/Lon Grid</span><input id="weather-tropical-graticule"
                                     type="checkbox"></div>

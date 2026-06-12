@@ -622,7 +622,10 @@ def run_satellite_v2_worker(
         if profile_key == "full" or worker_name_override
         else f"{worker_name}_{profile_key}"
     )
-    if not force and is_cache_fresh(state_name, _FRESH_WINDOW_SECONDS):
+    fresh_window_seconds = int(
+        profile_config.get("fresh_window_seconds") or _FRESH_WINDOW_SECONDS
+    )
+    if not force and is_cache_fresh(state_name, fresh_window_seconds):
         print(f"[{worker_name}] Cache fresh for profile {profile_key} - skipping run")
         return
 

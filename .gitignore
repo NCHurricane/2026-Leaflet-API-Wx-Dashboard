@@ -27,8 +27,9 @@ Thumbs.db
 *.tmp
 logs/
 
-# Generic caches/build artifacts
-cache/
+# Generic caches/build artifacts (but keep Python modules living in cache/)
+cache/*
+!cache/overlay_cache_utils.py
 basemap_cache/
 surface/basemap_cache/
 

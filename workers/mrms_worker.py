@@ -407,7 +407,7 @@ def _render_mrms_png_standalone(
 
     from mrms.legend_utils import build_mrms_overlay_meta, mask_mrms_data
     from mrms.mrms_utils import read_mrms_grib2, warp_array_to_mercator
-    from config.mrms_config import MRMS_PRODUCTS, MRMS_COLORMAPS
+    from config.mrms_config import MRMS_PRODUCTS, MRMS_COLORMAPS, MRMS_WARP_MAX_DIM
 
     prod_info = MRMS_PRODUCTS[product]
     cmap_key = prod_info.get("colormap", "precip_rate")
@@ -422,7 +422,9 @@ def _render_mrms_png_standalone(
     if lat is None or lon is None:
         raise ValueError("GRIB2 read did not return lat/lon metadata")
 
-    data, actual_bounds = warp_array_to_mercator(data, np.asarray(lat), np.asarray(lon))
+    data, actual_bounds = warp_array_to_mercator(
+        data, np.asarray(lat), np.asarray(lon), max_dim=MRMS_WARP_MAX_DIM
+    )
 
     # Extract colormap and norm
     cmap_obj = MRMS_COLORMAPS.get(cmap_key)
@@ -453,7 +455,7 @@ def _render_mrms_png_standalone(
 
     # Create PIL image from RGBA array
     img = Image.fromarray(rgba, mode="RGBA")
-    img.save(out_path, format="PNG", optimize=False)
+    img.save(out_path, format="PNG", optimize=False, compress_level=1)
 
     # Write sidecars
     sidecar = out_path.replace(".png", "_bounds.json")

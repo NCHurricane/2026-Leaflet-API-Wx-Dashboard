@@ -490,6 +490,13 @@
     const map = L.map('weather-map', { layers: [tilesDarkNoLabels] });
     map.fitBounds(CONUS_DEFAULT_BOUNDS, { animate: false });
 
+    // Initialize city font size CSS variable from slider (or default to 0.6)
+    const cityFontSizeSlider = byId('weather-cities-font-size');
+    if (cityFontSizeSlider) {
+        const val = parseFloat(cityFontSizeSlider.value || '0.6');
+        document.documentElement.style.setProperty('--city-font-size', String(val));
+    }
+
     function _normalizedLonSpanDegrees(west, east) {
         let span = Number(east) - Number(west);
         if (!Number.isFinite(span)) return 0;
@@ -730,6 +737,14 @@
         satelliteOverlayPane.style.zIndex = '330';
         satelliteOverlayPane.style.pointerEvents = 'none';
     }
+    if (!map.getPane('boundary-lines')) {
+        // Above overlayPane (400) so borders sit over data fills on every tab,
+        // below radar-site markers (451/460). The pane gets a CSS drop-shadow
+        // halo so the lines read on both dark and light basemaps.
+        const boundaryLinesPane = map.createPane('boundary-lines');
+        boundaryLinesPane.style.zIndex = '420';
+        boundaryLinesPane.style.pointerEvents = 'none';
+    }
     const LogoControl = L.Control.extend({
         options: { position: 'topright' },
         onAdd() {
@@ -925,7 +940,7 @@
     const _STORM_TRACK_PIVOT_MAX_DEG = 45;
     const _STORM_TRACK_MAX_PLACE_ROWS = 50;
     let alertsOpacity = 0.75;
-    let spcOpacity = 0.60;
+    let spcOpacity = 1.0;
     let spcStrokeOpacity = 1.0;
     let surfaceValueOpacity = 0.9;
     let surfaceGradientOpacity = 0.9;
@@ -1213,6 +1228,7 @@
     let _alertRadarRefreshTimer = null;
     let _alertRadarLastModified = '';
     let _alertRadarRetryCount = 0;
+    let _alertRadarAddSeq = 0;
 
     function _alertRadarOpacity() {
         const slider = byId('weather-opacity-alert-radar');
@@ -1256,6 +1272,12 @@
 
     async function _refreshAlertRadarTiles() {
         if (!_alertRadarFrameLayers.length) return;
+        if (document.hidden) {
+            // Defer IEM freshness checks while the tab is hidden; the
+            // visibilitychange handler catches up immediately on return.
+            _alertRadarRefreshTimer = setTimeout(_refreshAlertRadarTiles, _ALERT_RADAR_REFRESH_MS);
+            return;
+        }
         const latest = await _checkAlertRadarFreshness();
         const isNewer = latest && latest !== _alertRadarLastModified;
         if (isNewer) {
@@ -1275,8 +1297,10 @@
 
     function _rebuildAlertRadarLayers() {
         // Cache-bust the tile URLs by appending the last-modified token,
-        // so Leaflet re-fetches fresh tiles for the current viewport.
-        const bust = encodeURIComponent(_alertRadarLastModified || Date.now().toString());
+        // so Leaflet re-fetches fresh tiles for the current viewport. Only
+        // called when a newer token arrived, so the token is always set;
+        // never substitute Date.now() — it would bust every cached tile.
+        const bust = encodeURIComponent(_alertRadarLastModified);
         const oldLayers = _alertRadarFrameLayers;
         _alertRadarFrameLayers = [];
         const targetOpacity = _alertRadarOpacity();
@@ -1299,11 +1323,24 @@
         });
     }
 
-    function _addAlertRadarTiles() {
+    async function _addAlertRadarTiles() {
+        const seq = ++_alertRadarAddSeq;
         _clearAlertRadarTiles();
         if (!_alertRadarEnabled()) return;
+
+        // Seed the freshness token BEFORE building layers so tile URLs are
+        // stable across page loads and tab re-entry — stable URLs hit the
+        // browser cache (the proxy serves them immutable). Never fall back to
+        // Date.now(): a one-off token busts every cached tile for no reason.
+        if (!_alertRadarLastModified) {
+            const lm = await _checkAlertRadarFreshness();
+            if (seq !== _alertRadarAddSeq) return; // superseded while awaiting
+            if (!_alertRadarEnabled()) return;
+            _alertRadarLastModified = lm || '';
+        }
+
         const targetOpacity = _alertRadarOpacity();
-        const bust = encodeURIComponent(_alertRadarLastModified || Date.now().toString());
+        const bust = encodeURIComponent(_alertRadarLastModified);
         for (let i = 0; i < _ALERT_RADAR_FRAME_COUNT; i += 1) {
             const layer = L.tileLayer(`/api/radar/tiles/{z}/{x}/{y}?frame=${i}&v=${bust}`, {
                 minZoom: 0,
@@ -1319,8 +1356,6 @@
         _alertRadarFrameLayers[_alertRadarFrameIndex].setOpacity(targetOpacity);
         _alertRadarTileLayer = _alertRadarFrameLayers[_alertRadarFrameIndex];
 
-        // Seed last-modified and schedule first refresh.
-        _checkAlertRadarFreshness().then((lm) => { _alertRadarLastModified = lm || ''; });
         _alertRadarRefreshTimer = setTimeout(_refreshAlertRadarTiles, _ALERT_RADAR_REFRESH_MS);
 
         _alertRadarPlayTimer = setInterval(() => {
@@ -5428,6 +5463,7 @@
             if (byId('weather-show-spc')?.checked) {
                 spcLayer.addTo(map);
                 _applySpcCigPatternsToGroup(spcLayer);
+                _bringBoundaryLayersAboveSpcOverlays();
             }
 
             if (supplemental.reportsEnabled && !hazards.length) {
@@ -6033,14 +6069,25 @@
         if (typeof highlightLayer.bringToFront === 'function') highlightLayer.bringToFront();
     }
 
-    function _bringBoundaryLayersAboveRadarOverlays() {
-        // Keep boundary lines above radar image overlays only while on Radar tab,
-        // so layering in other weather tabs remains unchanged.
-        if (_activeWeatherType() !== 'radar') return;
+    function _bringBoundaryLayersToFront() {
         [countriesLayer, statesLayer, countiesLayer].forEach((layer) => {
             if (!layer || !map.hasLayer(layer)) return;
             if (typeof layer.bringToFront === 'function') layer.bringToFront();
         });
+    }
+
+    function _bringBoundaryLayersAboveRadarOverlays() {
+        // Keep boundary lines above radar image overlays only while on Radar tab,
+        // so layering in other weather tabs remains unchanged.
+        if (_activeWeatherType() !== 'radar') return;
+        _bringBoundaryLayersToFront();
+    }
+
+    function _bringBoundaryLayersAboveSpcOverlays() {
+        // SPC outlook/watch/MD polygons share the overlay pane with the boundary
+        // vectors, so each SPC re-render lands above them; restore borders on top.
+        if (!_isTypeEnabled('spc')) return;
+        _bringBoundaryLayersToFront();
     }
 
     function _bringRadarSitesAboveRadarOverlays() {
@@ -12447,13 +12494,12 @@
 
             // ── Fall back to legacy on-demand endpoint (cold cache / stale cache / 404) ───
             if (!data || !data.image_url) {
-                const bounds = map.getBounds();
-                const s = bounds.getSouth().toFixed(4);
-                const w = bounds.getWest().toFixed(4);
-                const n = bounds.getNorth().toFixed(4);
-                const e = bounds.getEast().toFixed(4);
+                // Always request the fixed CONUS extent the worker pre-warms
+                // (mrms_worker pre-warm bounds_key). Viewport-derived bounds
+                // would mint a new cache key — and force a full re-render —
+                // for every distinct pan/zoom.
                 const legacyResp = await fetch(
-                    apiUrl(`/api/data/mrms?product=${encodeURIComponent(product)}&south=${s}&west=${w}&north=${n}&east=${e}`)
+                    apiUrl(`/api/data/mrms?product=${encodeURIComponent(product)}&south=21.0&west=-130.0&north=52.0&east=-60.0`)
                 );
                 if (!legacyResp.ok) {
                     const err = await legacyResp.json().catch(() => ({ detail: legacyResp.statusText }));
@@ -13898,6 +13944,7 @@
             if (byId('weather-show-spc')?.checked) {
                 spcLayer.addTo(map);
                 _applySpcCigPatternsToGroup(spcLayer);
+                _bringBoundaryLayersAboveSpcOverlays();
             }
         }
     }
@@ -14405,10 +14452,12 @@
             };
 
             statesLayer = L.geoJSON(states, {
+                pane: 'boundary-lines',
                 style: { color: '#dbe6ef', weight: 1, opacity: 0.8, fillOpacity: 0 },
                 interactive: false,
             });
             countiesLayer = L.geoJSON(counties, {
+                pane: 'boundary-lines',
                 style: { color: '#8aa2b6', weight: 0.5, opacity: 0.45, fillOpacity: 0 },
                 interactive: false,
             });
@@ -14425,6 +14474,7 @@
             const countriesRaw = await resp.json();
             const countries = _normalizeGeoJsonForDateline(countriesRaw);
             countriesLayer = L.geoJSON(countries, {
+                pane: 'boundary-lines',
                 style: { color: '#aac4d8', weight: 1, opacity: 0.7, fillOpacity: 0 },
                 interactive: false,
             });
@@ -14687,6 +14737,7 @@
         if (_activeWeatherType() === 'radar') {
             _bringRadarSitesAboveRadarOverlays();
         }
+        _bringBoundaryLayersAboveSpcOverlays();
     }
 
     // Helper function to show/hide network filters based on region
@@ -15414,6 +15465,24 @@
         if (!document.hidden && _satelliteAnimateAutoRefreshEnabled && _satelliteScrubMode && _isTypeEnabled('satellite')) {
             void _refreshSatelliteAnimationFrames({ auto: true, silent: true });
         }
+        if (!document.hidden && _alertRadarFrameLayers.length) {
+            // Catch up on IEM freshness deferred while hidden. Reset the
+            // pending timer so only one refresh chain stays scheduled.
+            if (_alertRadarRefreshTimer) {
+                clearTimeout(_alertRadarRefreshTimer);
+                _alertRadarRefreshTimer = null;
+            }
+            void _refreshAlertRadarTiles();
+        }
+        if (!document.hidden && !_archiveMode && !_rtmaScrubFrames.length && !_mrmsScrubFrames.length) {
+            if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length) {
+                loadAlerts();
+            }
+            if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) {
+                const supplemental = _spcSupplementalSelections();
+                if (supplemental.mdsEnabled || supplemental.watchesEnabled) refreshSpc();
+            }
+        }
         _updateRadarNextUpdateCountdown();
     });
 
@@ -15639,6 +15708,10 @@
         _updateCitiesDensityLabel();
         if (_citiesData) _rebuildCitiesLayer();
     });
+    byId('weather-cities-font-size')?.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value || '0.6');
+        document.documentElement.style.setProperty('--city-font-size', String(val));
+    });
     byId('weather-toggle-states')?.addEventListener('change', _syncRightSidebarLayers);
     byId('weather-toggle-counties')?.addEventListener('change', _syncRightSidebarLayers);
     byId('weather-toggle-countries')?.addEventListener('change', _syncRightSidebarLayers);
@@ -15818,6 +15891,7 @@
     // ── Auto-refresh alerts every 30s to match the OS-task backend cadence ──
     const ALERTS_AUTO_REFRESH_MS = 30_000;
     setInterval(() => {
+        if (document.hidden) return;
         if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length) return;
         if (!_isTypeEnabled('alerts')) return;
         if (!_getCheckedAlertCategories().length) return;
@@ -15828,6 +15902,7 @@
     // and expired products are removed without a manual refresh.
     const SPC_AUTO_REFRESH_MS = 60_000;
     setInterval(() => {
+        if (document.hidden) return;
         if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length) return;
         if (!_isTypeEnabled('spc')) return;
         if (!byId('weather-show-spc')?.checked) return;

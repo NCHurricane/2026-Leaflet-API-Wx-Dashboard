@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 import os
 import tempfile
+import threading
+import time
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
@@ -31,16 +33,60 @@ def _bucket_name(sat_id: str) -> str:
     return f"noaa-{sat_key}"
 
 
+_S3_CLIENT = None
+_S3_CLIENT_LOCK = threading.Lock()
+
+
 def _s3_client():
-    return boto3.client(
-        "s3",
-        config=Config(
-            signature_version=UNSIGNED,
-            connect_timeout=10,
-            read_timeout=45,
-            retries={"max_attempts": 3, "mode": "standard"},
-        ),
-    )
+    # boto3 clients are thread-safe; reuse one instead of rebuilding per call.
+    global _S3_CLIENT
+    if _S3_CLIENT is None:
+        with _S3_CLIENT_LOCK:
+            if _S3_CLIENT is None:
+                _S3_CLIENT = boto3.client(
+                    "s3",
+                    config=Config(
+                        signature_version=UNSIGNED,
+                        connect_timeout=10,
+                        read_timeout=45,
+                        retries={"max_attempts": 3, "mode": "standard"},
+                    ),
+                )
+    return _S3_CLIENT
+
+
+# Hour-prefix listings are shared across source channels (one LIST returns all
+# C01-C16 files) and across the pre/post-warm catalog builds of a job, so a
+# short TTL cache removes most S3 round trips per worker run.
+_PREFIX_LIST_TTL_SECONDS = 60.0
+_PREFIX_LIST_CACHE: dict[tuple[str, str], tuple[float, list[tuple[str, int]]]] = {}
+_PREFIX_LIST_CACHE_LOCK = threading.Lock()
+
+
+def _list_prefix_objects(bucket: str, prefix: str) -> list[tuple[str, int]]:
+    now = time.monotonic()
+    cache_key = (bucket, prefix)
+    with _PREFIX_LIST_CACHE_LOCK:
+        cached = _PREFIX_LIST_CACHE.get(cache_key)
+        if cached is not None and now - cached[0] <= _PREFIX_LIST_TTL_SECONDS:
+            return cached[1]
+
+    objects: list[tuple[str, int]] = []
+    paginator = _s3_client().get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            objects.append((str(obj.get("Key") or ""), int(obj.get("Size") or 0)))
+
+    with _PREFIX_LIST_CACHE_LOCK:
+        _PREFIX_LIST_CACHE[cache_key] = (now, objects)
+        if len(_PREFIX_LIST_CACHE) > 64:
+            for stale_key in [
+                key
+                for key, (stamp, _) in _PREFIX_LIST_CACHE.items()
+                if now - stamp > _PREFIX_LIST_TTL_SECONDS
+            ]:
+                _PREFIX_LIST_CACHE.pop(stale_key, None)
+    return objects
 
 
 def _iter_hour_prefixes(hours: int) -> list[tuple[int, int, int]]:
@@ -94,35 +140,31 @@ def _list_recent_channel_frames(
     product_prefix = aws_product_prefix_for_sector(sector_key)
     token = source_channel_token(source_channel)
     bucket = _bucket_name(sat_key)
-    client = _s3_client()
 
     frames: dict[str, SourceFrame] = {}
     for year, day, hour in _iter_hour_prefixes(hours):
         prefix = f"{product_prefix}/{year}/{day:03d}/{hour:02d}/"
-        paginator = client.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-            for obj in page.get("Contents", []):
-                key = str(obj.get("Key") or "")
-                filename = key.rsplit("/", 1)[-1]
-                if not _filename_matches_sector(filename, sector_key):
-                    continue
-                if f"{token}_" not in filename:
-                    continue
-                parsed = _parse_frame_timestamp(key)
-                if parsed is None:
-                    continue
-                frame_key, timestamp = parsed
-                frames[frame_key] = SourceFrame(
-                    frame_key=frame_key,
-                    timestamp_utc=timestamp,
-                    provider="aws",
-                    source_key=key,
-                    source_url=f"s3://{bucket}/{key}",
-                    file_size=int(obj.get("Size") or 0),
-                    source_keys={source_channel: key},
-                    source_urls={source_channel: f"s3://{bucket}/{key}"},
-                    file_sizes={source_channel: int(obj.get("Size") or 0)},
-                )
+        for key, size in _list_prefix_objects(bucket, prefix):
+            filename = key.rsplit("/", 1)[-1]
+            if not _filename_matches_sector(filename, sector_key):
+                continue
+            if f"{token}_" not in filename:
+                continue
+            parsed = _parse_frame_timestamp(key)
+            if parsed is None:
+                continue
+            frame_key, timestamp = parsed
+            frames[frame_key] = SourceFrame(
+                frame_key=frame_key,
+                timestamp_utc=timestamp,
+                provider="aws",
+                source_key=key,
+                source_url=f"s3://{bucket}/{key}",
+                file_size=size,
+                source_keys={source_channel: key},
+                source_urls={source_channel: f"s3://{bucket}/{key}"},
+                file_sizes={source_channel: size},
+            )
     return frames
 
 

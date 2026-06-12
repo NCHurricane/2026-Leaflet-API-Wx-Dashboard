@@ -96,7 +96,7 @@ def _render_tile_to_target(
             write_negative_tile_marker(target)
             os.unlink(tmp_name)
             return "invalid"
-        image.save(tmp_name, format="PNG", optimize=False)
+        image.save(tmp_name, format="PNG", optimize=False, compress_level=1)
         if not is_valid_tile_file(Path(tmp_name)):
             if target_was_invalid:
                 target.unlink(missing_ok=True)
@@ -251,7 +251,7 @@ def _render_warm_zoom_canvas_task(task: dict[str, Any]) -> dict[str, int]:
         )
         os.close(fd)
         try:
-            tile_img.save(tmp_name, format="PNG", optimize=False)
+            tile_img.save(tmp_name, format="PNG", optimize=False, compress_level=1)
             if not is_valid_tile_file(Path(tmp_name)):
                 if target_was_invalid:
                     target.unlink(missing_ok=True)
@@ -394,38 +394,63 @@ def warm_frame_tiles_from_canvas(
     if not frame_key:
         raise ValueError("Satellite v2 frame is missing frame_key.")
 
-    source_files = download_product_source_frames(
-        cache_root, sat_key, sector_key, channel, frame
-    )
     stats = {"rendered": 0, "skipped": 0, "errors": 0, "repaired": 0, "invalid": 0}
 
     zoom_list = [int(value) for value in zooms]
     if not zoom_list:
         return stats
 
-    source_file_map = {key: str(path) for key, path in source_files.items()}
-    tasks: list[dict[str, Any]] = []
+    # Cheap pre-check: keep only coords whose tile (or negative marker) is not
+    # already on disk, so fully warmed frames skip the source download and
+    # canvas render entirely.
+    pending_coords: dict[int, list[tuple[int, int]]] = {}
     for zoom in zoom_list:
         coords = sector_tile_coords(sector_key, zoom)
         if not coords:
             continue
-        tasks.append(
-            {
-                "cache_root": str(cache_root),
-                "sat_id": sat_key,
-                "sector": sector_key,
-                "channel": channel,
-                "frame_key": frame_key,
-                "z": zoom,
-                "coords": coords,
-                "overwrite": overwrite,
-                "tile_size": SATELLITE_V2_TILE_SIZE,
-                "source_files": source_file_map,
-            }
-        )
+        if overwrite:
+            pending_coords[zoom] = coords
+            continue
+        missing: list[tuple[int, int]] = []
+        for x, y in coords:
+            target = tile_path(
+                cache_root, sat_key, sector_key, channel, frame_key, zoom, x, y
+            )
+            try:
+                if target.stat().st_size > 0:
+                    stats["skipped"] += 1
+                    continue
+            except OSError:
+                pass
+            if is_negative_tile_cached(target):
+                stats["skipped"] += 1
+                continue
+            missing.append((x, y))
+        if missing:
+            pending_coords[zoom] = missing
 
-    if not tasks:
+    if not pending_coords:
         return stats
+
+    source_files = download_product_source_frames(
+        cache_root, sat_key, sector_key, channel, frame
+    )
+    source_file_map = {key: str(path) for key, path in source_files.items()}
+    tasks: list[dict[str, Any]] = [
+        {
+            "cache_root": str(cache_root),
+            "sat_id": sat_key,
+            "sector": sector_key,
+            "channel": channel,
+            "frame_key": frame_key,
+            "z": zoom,
+            "coords": coords,
+            "overwrite": overwrite,
+            "tile_size": SATELLITE_V2_TILE_SIZE,
+            "source_files": source_file_map,
+        }
+        for zoom, coords in pending_coords.items()
+    ]
 
     worker_count = max(1, min(int(render_workers or 1), len(tasks)))
     if worker_count <= 1:

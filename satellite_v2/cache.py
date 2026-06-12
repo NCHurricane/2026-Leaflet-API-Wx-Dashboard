@@ -210,11 +210,17 @@ def count_frame_tiles(
         if not zoom_dir.exists():
             counts[str(zoom)] = 0
             continue
-        counts[str(zoom)] = sum(
-            1
-            for item in zoom_dir.glob("*/*.png")
-            if item.is_file() and is_valid_tile_file(item)
-        )
+        # Cheap stat-based count: tiles are content-validated at write time
+        # (atomic tmp+rename), so decoding every PNG here just to count them
+        # made catalog builds dominate worker runtime.
+        count = 0
+        for item in zoom_dir.glob("*/*.png"):
+            try:
+                if item.stat().st_size > 0:
+                    count += 1
+            except OSError:
+                continue
+        counts[str(zoom)] = count
     return counts
 
 
@@ -233,12 +239,14 @@ def sample_frame_tiles(
         ).parent.parent
         if not zoom_dir.exists():
             continue
+        def _nonempty(item: Path) -> bool:
+            try:
+                return item.stat().st_size > 0
+            except OSError:
+                return False
+
         first = next(
-            (
-                item
-                for item in zoom_dir.glob("*/*.png")
-                if item.is_file() and is_valid_tile_file(item)
-            ),
+            (item for item in zoom_dir.glob("*/*.png") if _nonempty(item)),
             None,
         )
         if first is None:

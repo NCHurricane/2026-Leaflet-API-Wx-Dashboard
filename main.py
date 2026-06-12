@@ -1,3 +1,14 @@
+import os as _os
+
+import certifi as _certifi
+
+# Python on macOS ships with no default CA bundle (ssl cafile=None), so plain
+# urllib/pandas HTTPS fetches fail certificate verification. Point OpenSSL at
+# certifi's bundle unless the environment already provides one. Must run
+# before any module builds an SSL context.
+_os.environ.setdefault("SSL_CERT_FILE", _certifi.where())
+_os.environ.setdefault("REQUESTS_CA_BUNDLE", _certifi.where())
+
 from surface import surface_utils
 from config.rtma_config import RTMA_STREAM_MAX_HOURS, clamp_stream_hours
 from config.satellite_v2_config import (
@@ -18,6 +29,7 @@ from fastapi import FastAPI, HTTPException
 import uvicorn
 import time as _time
 import os
+import re
 import shutil
 import threading
 from pathlib import Path
@@ -197,7 +209,32 @@ os.makedirs(os.path.join(_CACHE_ROOT, "rtma"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "archive"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "radar"), exist_ok=True)
 os.makedirs(os.path.join(_CACHE_ROOT, "satellite"), exist_ok=True)
-app.mount("/cache", StaticFiles(directory=_CACHE_ROOT), name="cache")
+
+
+class CacheStaticFiles(StaticFiles):
+    """StaticFiles with Cache-Control tuned for the overlay cache.
+
+    Frame-keyed PNGs (YYYY_MM_DD_HH_MM_SS.png) are write-once, prune-only:
+    serve them as long-lived immutable so scrubber/tab revisits hit the
+    browser cache. Everything else — index.json, *_meta/_bounds sidecars, and
+    overlay_{hash}.png which is overwritten in place at the same URL — gets
+    no-cache so StaticFiles' native ETag/Last-Modified turns unchanged files
+    into 304s instead of full re-downloads.
+    """
+
+    _FRAME_KEY_PNG = re.compile(r"^\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}\.png$")
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        name = os.path.basename(str(full_path))
+        if self._FRAME_KEY_PNG.match(name):
+            response.headers["Cache-Control"] = "public, max-age=86400, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/cache", CacheStaticFiles(directory=_CACHE_ROOT), name="cache")
 
 app.mount("/css", StaticFiles(directory=os.path.join(BASE_DIR, "css")), name="css")
 app.mount("/js", StaticFiles(directory=os.path.join(BASE_DIR, "js")), name="js")
@@ -2349,11 +2386,14 @@ def _render_mrms_png(
     # lat/lon corners of the warped image — Leaflet expects geographic corner
     # coordinates for imageOverlay.
     from mrms.mrms_utils import warp_array_to_mercator
+    from config.mrms_config import MRMS_WARP_MAX_DIM
     from PIL import Image
     import numpy as _np_render
 
     data = _np_render.ma.asarray(data)
-    data, actual_bounds = warp_array_to_mercator(data, _lat, _lon)
+    data, actual_bounds = warp_array_to_mercator(
+        data, _lat, _lon, max_dim=MRMS_WARP_MAX_DIM
+    )
 
     # Render the warped Mercator array directly to PNG using PIL, bypassing
     # matplotlib's figure system. This avoids matplotlib's silent downscaling
@@ -2367,7 +2407,9 @@ def _render_mrms_png(
     invalid = masked | _np_render.isnan(filled)
     if _np_render.any(invalid):
         rgba[invalid, 3] = 0
-    Image.fromarray(rgba, mode="RGBA").save(out_path, format="PNG", optimize=False)
+    Image.fromarray(rgba, mode="RGBA").save(
+        out_path, format="PNG", optimize=False, compress_level=1
+    )
 
     # Write bounds sidecar
     sidecar = out_path.replace(".png", "_bounds.json")
@@ -3106,6 +3148,10 @@ def get_overlay_frames(
     Only frames whose PNG file exists are included.
     """
     from cache.overlay_cache_utils import flat_overlay_list_frames
+    from config.cache_config import (
+        OVERLAY_EMPTY_CACHE_SYNC_FRAMES,
+        OVERLAY_STALE_SERVE_WINDOW_MIN,
+    )
 
     allowed_families = {"rtma", "mrms"}
     if family not in allowed_families:
@@ -3119,8 +3165,10 @@ def get_overlay_frames(
         (region_key, stream, product) if family == "rtma" else ("CONUS", "default", product)
     )
 
-    def _filter_by_lookback(frame_list):
-        cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=hours_back)
+    def _filter_by_lookback(frame_list, grace_minutes=0):
+        cutoff_dt = datetime.now(timezone.utc) - timedelta(
+            hours=hours_back, minutes=grace_minutes
+        )
         out = []
         for frame in frame_list:
             ts = frame.get("timestamp")
@@ -3135,29 +3183,64 @@ def get_overlay_frames(
             out.append(frame)
         return out
 
-    def _render_on_demand():
+    def _render_on_demand(max_render_frames=None):
         try:
             if family == "mrms":
                 from workers.mrms_live_worker import run_mrms_live_product
-                return run_mrms_live_product(product, force=True, max_hours=hours_back)
+                return run_mrms_live_product(
+                    product,
+                    force=True,
+                    max_hours=hours_back,
+                    max_render_frames=max_render_frames,
+                )
             else:
                 from workers.rtma_live_worker import run_rtma_live_product
                 return run_rtma_live_product(
-                    region_key, stream, product, force=True, max_hours=hours_back
+                    region_key,
+                    stream,
+                    product,
+                    force=True,
+                    max_hours=hours_back,
+                    max_render_frames=max_render_frames,
                 )
         except Exception as exc:
             label = product if family == "mrms" else f"{region_key}/{stream}/{product}"
             print(f"[overlay_frames] {family.upper()} on-demand render failed for {label}: {exc}")
             return 0
 
+    def _kick_background_render():
+        return _spawn_live_render_thread(
+            ("overlay", family, region_key, stream, product),
+            f"{family}-{region_key}-{stream}-{product}",
+            _render_on_demand,
+        )
+
+    stale_window_min = OVERLAY_STALE_SERVE_WINDOW_MIN.get(
+        "mrms" if family == "mrms" else stream, 30
+    )
+
     raw_frames = flat_overlay_list_frames(_CACHE_ROOT, family, path_parts)
     frames = _filter_by_lookback(raw_frames) if raw_frames else []
+    refreshing = False
 
-    # Trigger on-demand rendering if cache is empty OR contains only stale frames.
+    if not frames and raw_frames:
+        # Cache holds only stale frames (typical after a server restart):
+        # serve any within the per-source grace window immediately as scrubber
+        # fill-ins and refresh in the background, instead of blocking this
+        # request on a full-window synchronous render.
+        stale_frames = _filter_by_lookback(raw_frames, grace_minutes=stale_window_min)
+        if stale_frames:
+            frames = stale_frames
+            refreshing = _kick_background_render()
+
     if not frames:
-        if _render_on_demand() > 0:
+        # Cache empty (or too stale to show): render only the newest frames
+        # synchronously so the first paint isn't blank; the rest of the window
+        # fills in the background and frontend polling picks the frames up.
+        if _render_on_demand(max_render_frames=OVERLAY_EMPTY_CACHE_SYNC_FRAMES) > 0:
             raw_frames = flat_overlay_list_frames(_CACHE_ROOT, family, path_parts)
             frames = _filter_by_lookback(raw_frames)
+            refreshing = _kick_background_render()
 
     return {
         "family": family,
@@ -3165,6 +3248,7 @@ def get_overlay_frames(
         "stream": stream,
         "product": product,
         "frame_count": len(frames),
+        "refreshing": refreshing,
         "frames": frames,
     }
 
@@ -4185,14 +4269,51 @@ def _radar_live_render_on_demand(
     return cached
 
 
+_LIVE_RENDER_BG_LOCK = threading.Lock()
+_LIVE_RENDER_BG_INFLIGHT: set[tuple] = set()
+
+
+def _spawn_live_render_thread(key: tuple, label: str, render_fn) -> bool:
+    """Run a live render in a daemon thread, deduped by key.
+
+    Returns True when a refresh is running for the key (newly started or
+    already in flight), so callers can tag responses as refreshing.
+    """
+    with _LIVE_RENDER_BG_LOCK:
+        if key in _LIVE_RENDER_BG_INFLIGHT:
+            return True
+        _LIVE_RENDER_BG_INFLIGHT.add(key)
+
+    def _run():
+        try:
+            render_fn()
+        except Exception as exc:
+            print(f"[live_render_bg] {label} failed: {type(exc).__name__}: {exc}")
+        finally:
+            with _LIVE_RENDER_BG_LOCK:
+                _LIVE_RENDER_BG_INFLIGHT.discard(key)
+
+    threading.Thread(target=_run, name=f"live-render-bg-{label}", daemon=True).start()
+    return True
+
+
+def _radar_live_render_in_background(site_id: str, product_key: str) -> bool:
+    """Fill the live radar frame window in the background (deduped)."""
+    return _spawn_live_render_thread(
+        ("radar_live", site_id, product_key),
+        f"radar-{site_id}-{product_key}",
+        lambda: _radar_live_render_on_demand(
+            site_id, product_key, latest_only=False, backfill_history=False
+        ),
+    )
+
+
 def _radar_live_is_configured(site: str, product_key: str) -> bool:
     return site in set(_radar_live_sites()) and product_key in _radar_live_catalog()
 
 
-def _radar_live_filter_stale_latest_meta(
-    meta: dict | None, *, max_age_hours: float
-) -> dict | None:
-    """Return latest-frame meta only when it is within the live lookback window."""
+def _radar_live_latest_meta_dt(meta: dict | None) -> datetime | None:
+    """Best-effort UTC datetime of a latest-frame meta dict, or None."""
     if not meta:
         return None
 
@@ -4216,6 +4337,14 @@ def _radar_live_filter_stale_latest_meta(
             except Exception:
                 dt = None
 
+    return dt
+
+
+def _radar_live_filter_stale_latest_meta(
+    meta: dict | None, *, max_age_hours: float
+) -> dict | None:
+    """Return latest-frame meta only when it is within the live lookback window."""
+    dt = _radar_live_latest_meta_dt(meta)
     if dt is None:
         return None
 
@@ -4754,10 +4883,13 @@ def get_radar_alert_tiles(z: str, x: str, y: str, frame: int = 4):
         req = ur.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with ur.urlopen(req, timeout=10) as resp:
             data = resp.read()
+            # Tile URLs carry a v={last-modified token} that changes whenever
+            # IEM publishes new data, so for a given URL the content is fixed:
+            # let the browser cache it hard instead of re-fetching every 120s.
             return Response(
                 content=data,
                 media_type="image/png",
-                headers={"Cache-Control": "public, max-age=120"},
+                headers={"Cache-Control": "public, max-age=3600, immutable"},
             )
     except Exception as e:
         print(f"[radar tiles] Tile fetch error: {e}")
@@ -4850,7 +4982,10 @@ def get_radar_live_latest(
 ):
     """Return latest live radar frame from cache."""
     from cache.overlay_cache_utils import radar_read_latest_frame
-    from config.radar_config import LIVE_RADAR_LOOKBACK_HOURS
+    from config.radar_config import (
+        LIVE_RADAR_LOOKBACK_HOURS,
+        LIVE_RADAR_WORKER_INTERVAL_MIN,
+    )
 
     site_id = normalize_radar_site_id(site)
     product_key = str(product or "L3_N0B").strip().upper()
@@ -4874,6 +5009,16 @@ def get_radar_live_latest(
         max_age_hours=freshness_hours,
     )
     fallback_cached = 0
+    if force and meta:
+        # The frontend sends force=1 on every poll for unconfigured sites. A
+        # cached frame newer than the worker cadence means a forced re-render
+        # cannot produce anything newer — skip the synchronous probe + render.
+        meta_dt = _radar_live_latest_meta_dt(meta)
+        recent_cutoff = datetime.now(timezone.utc) - timedelta(
+            minutes=float(LIVE_RADAR_WORKER_INTERVAL_MIN or 5) + 1.0
+        )
+        if meta_dt is not None and meta_dt >= recent_cutoff:
+            force = False
     if force:
         try:
             fallback_cached = _radar_live_render_on_demand(
@@ -4990,70 +5135,14 @@ def get_radar_live_frames(site: str = "KMHX", product: str = "L3_N0B", hours: in
             detail=f"Live radar site is not supported: {site_id}.",
         )
 
-    frames = radar_list_frames(_CACHE_ROOT, site_id, level_code, product_key)
-    fallback_cached = 0
-    if not frames:
-        try:
-            fallback_cached = _radar_live_render_on_demand(
-                site_id,
-                product_key,
-                latest_only=False,
-                backfill_history=False,
-            )
-        except Exception as exc:
-            print(
-                f"[radar_live_fallback] frames {site_id}/{product_key} failed: "
-                f"{type(exc).__name__}: {exc}"
-            )
-        frames = radar_list_frames(_CACHE_ROOT, site_id, level_code, product_key)
+    from config.cache_config import (
+        OVERLAY_EMPTY_CACHE_SYNC_FRAMES,
+        OVERLAY_STALE_SERVE_WINDOW_MIN,
+    )
 
-    if not frames:
-        return {
-            "status": "success",
-            "source": "live_cache_fallback" if fallback_cached > 0 else "live_cache",
-            "configured": configured,
-            "site": site_id,
-            "product": product_key,
-            "frame_count": 0,
-            "frames": [],
-        }
-
-    cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours or 2)))
-    filtered = []
-    for frame in frames:
-        ts = frame.get("timestamp")
-        if ts:
-            try:
-                dt = parse_utc_datetime(ts)
-            except Exception:
-                dt = None
-        else:
-            dt = None
-        if dt and dt < cutoff_dt:
-            continue
-        filtered.append(frame)
-
-    # If cache only contains stale frames, run one on-demand pass and re-check.
-    if not filtered and frames:
-        try:
-            fallback_cached = max(
-                fallback_cached,
-                _radar_live_render_on_demand(
-                    site_id,
-                    product_key,
-                    latest_only=False,
-                    backfill_history=False,
-                ),
-            )
-        except Exception as exc:
-            print(
-                f"[radar_live_fallback] stale-only frames {site_id}/{product_key} failed: "
-                f"{type(exc).__name__}: {exc}"
-            )
-
-        frames = radar_list_frames(_CACHE_ROOT, site_id, level_code, product_key)
-        filtered = []
-        for frame in frames:
+    def _within(frame_list, cutoff):
+        out = []
+        for frame in frame_list:
             ts = frame.get("timestamp")
             if ts:
                 try:
@@ -5062,9 +5151,58 @@ def get_radar_live_frames(site: str = "KMHX", product: str = "L3_N0B", hours: in
                     dt = None
             else:
                 dt = None
-            if dt and dt < cutoff_dt:
+            if dt and dt < cutoff:
                 continue
-            filtered.append(frame)
+            out.append(frame)
+        return out
+
+    def _render_newest_sync():
+        # Render just the newest frames synchronously so the first paint is
+        # not blank; the rest of the window fills in the background.
+        try:
+            return _radar_live_render_on_demand(
+                site_id,
+                product_key,
+                latest_only=False,
+                backfill_history=False,
+                newest_first=True,
+                max_render_frames=OVERLAY_EMPTY_CACHE_SYNC_FRAMES,
+            )
+        except Exception as exc:
+            print(
+                f"[radar_live_fallback] frames {site_id}/{product_key} failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return 0
+
+    cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours or 2)))
+    frames = radar_list_frames(_CACHE_ROOT, site_id, level_code, product_key)
+    fallback_cached = 0
+    refreshing = False
+
+    if not frames:
+        fallback_cached = _render_newest_sync()
+        frames = radar_list_frames(_CACHE_ROOT, site_id, level_code, product_key)
+        if frames:
+            refreshing = _radar_live_render_in_background(site_id, product_key)
+
+    filtered = _within(frames, cutoff_dt) if frames else []
+
+    if not filtered and frames:
+        # Cache holds only stale frames (typical after a server restart):
+        # serve any within the grace window immediately as scrubber fill-ins
+        # and refresh in the background, instead of blocking this request on
+        # a full-window synchronous render.
+        grace_min = OVERLAY_STALE_SERVE_WINDOW_MIN.get("radar_live", 15)
+        filtered = _within(frames, cutoff_dt - timedelta(minutes=grace_min))
+        if filtered:
+            refreshing = _radar_live_render_in_background(site_id, product_key)
+        else:
+            fallback_cached = max(fallback_cached, _render_newest_sync())
+            frames = radar_list_frames(_CACHE_ROOT, site_id, level_code, product_key)
+            filtered = _within(frames, cutoff_dt)
+            if filtered:
+                refreshing = _radar_live_render_in_background(site_id, product_key)
 
     return {
         "status": "success",
@@ -5073,6 +5211,7 @@ def get_radar_live_frames(site: str = "KMHX", product: str = "L3_N0B", hours: in
         "site": site_id,
         "product": product_key,
         "frame_count": len(filtered),
+        "refreshing": refreshing,
         "frames": filtered,
     }
 

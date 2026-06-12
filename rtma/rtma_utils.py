@@ -853,6 +853,37 @@ def build_rtma_legend(config: dict) -> dict:
     }
 
 
+def rtma_city_geojson_is_cached(
+    cache_root: str,
+    source: RtmaSource,
+    region: str,
+    stream: str,
+    product: str,
+    source_data_key: str | None = None,
+) -> bool:
+    """Cheap check mirroring ensure_rtma_city_geojson's cache guard, without
+    loading any grid data on a miss."""
+    product_dir = os.path.join(cache_root, "rtma", "points", region, stream)
+    if source_data_key:
+        token = _sanitize_cache_token(source_data_key)
+        out_name = f"{product}__{token}.geojson"
+    else:
+        out_name = f"{product}.geojson"
+    out_path = os.path.join(product_dir, out_name)
+    meta_path = out_path.replace(".geojson", "_meta.json")
+    if not (os.path.exists(out_path) and os.path.exists(meta_path)):
+        return False
+    try:
+        with open(meta_path, "r", encoding="utf-8") as handle:
+            meta = json.load(handle)
+        return (
+            meta.get("source_data_key") == source.data_key
+            and meta.get("source_url") == source.url
+        )
+    except Exception:
+        return False
+
+
 def ensure_rtma_city_geojson(
     cache_root: str,
     source: RtmaSource,
@@ -1182,6 +1213,7 @@ def _render_rtma_png_standalone(
         ]
 
     from mrms.mrms_utils import warp_array_to_mercator
+    from config.mrms_config import MRMS_WARP_MAX_DIM
 
     # Use pre-computed lat/lon if provided (for batch rendering optimization).
     if lat_1d is None or lon_1d is None:
@@ -1196,7 +1228,9 @@ def _render_rtma_png_standalone(
             lat_1d = lat_arr
             lon_1d = lon_arr
 
-    data, actual_bounds = warp_array_to_mercator(data, lat_1d, lon_1d)
+    data, actual_bounds = warp_array_to_mercator(
+        data, lat_1d, lon_1d, max_dim=MRMS_WARP_MAX_DIM
+    )
 
     # Apply colormap and norm using PIL pipeline
     cmap = _resolve_render_colormap(config).copy()
@@ -1219,7 +1253,7 @@ def _render_rtma_png_standalone(
     # Create PIL image from RGBA array
     img = Image.fromarray(rgba, mode="RGBA")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    img.save(out_path, format="PNG", optimize=False)
+    img.save(out_path, format="PNG", optimize=False, compress_level=1)
 
     # Write sidecars
     with open(out_path.replace(".png", "_bounds.json"), "w", encoding="utf-8") as f:

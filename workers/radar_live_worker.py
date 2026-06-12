@@ -447,7 +447,14 @@ def _render_overlay_png(
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(
-            str(out_path), format="png", dpi=dpi, transparent=True, pad_inches=0
+            str(out_path),
+            format="png",
+            dpi=dpi,
+            transparent=True,
+            pad_inches=0,
+            # Lossless; level 1 encodes ~3-4x faster than the default 6 at the
+            # cost of larger files, which is fine for a local disk cache.
+            pil_kwargs={"compress_level": 1},
         )
         t_save = time.time() if profile else None
 

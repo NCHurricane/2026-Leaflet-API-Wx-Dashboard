@@ -64,10 +64,30 @@ def _render_mrms_frame_to_overlay(
 
     Returns True on success, False on failure.
     """
-    from mrms.mrms_utils import _render_mrms_png_standalone
-    from workers.mrms_worker import _write_mrms_overlay_cache
+    from workers.mrms_worker import (
+        _render_mrms_png_standalone,
+        _write_mrms_overlay_cache,
+    )
+    from cache.overlay_cache_utils import (
+        flat_overlay_image_path,
+        flat_overlay_read_processed_keys,
+        frame_key_from_datetime,
+    )
 
     _CONUS_EXTENT = [-130.0, -60.0, 21.0, 52.0]  # [west, east, south, north]
+
+    # Dedup BEFORE rendering: _write_mrms_overlay_cache also skips processed
+    # frames, but only after the expensive GRIB decode + warp has already run.
+    dt_utc = (
+        file_dt if file_dt.tzinfo is not None else file_dt.replace(tzinfo=timezone.utc)
+    )
+    frame_key = frame_key_from_datetime(dt_utc)
+    path_parts = ("CONUS", "default", product)
+    processed_keys = flat_overlay_read_processed_keys(cache_root, "mrms", path_parts)
+    if f"mrms:{product}:{frame_key}" in processed_keys:
+        img_path = flat_overlay_image_path(cache_root, "mrms", path_parts, frame_key)
+        if os.path.exists(img_path) and os.path.getsize(img_path) > 0:
+            return True
 
     try:
         # Create temp PNG path

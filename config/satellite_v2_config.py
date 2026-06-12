@@ -578,12 +578,16 @@ SATELLITE_V2_WORKER_PROFILES = {
         "description": "All configured Satellite v2 worker jobs.",
         "products": SATELLITE_V2_WORKER_PRODUCTS,
         "satellites": SATELLITE_V2_WORKER_SATELLITES,
+        # 75% of the 15-min task cadence so consecutive ticks are never
+        # skipped just because the previous run finished recently.
+        "fresh_window_seconds": 11 * 60,
     },
     "local-primary": {
         "description": "High-use GOES-19/18 CONUS products for local/main PC warming. Full Disk rendered live.",
         "products": ("Channel13", "Channel02", "Channel08RAMSDIS"),
         "satellites": ("goes19", "goes18"),
         "sectors": ("CONUS",),
+        "fresh_window_seconds": 11 * 60,
     },
     "remote-backfill": {
         "description": "Lower-priority products and GOES-18 jobs for helper-machine backfill (disabled when using local-primary only scope).",
@@ -592,6 +596,7 @@ SATELLITE_V2_WORKER_PROFILES = {
         "exclude_jobs": tuple(
             ("goes19", product_key) for product_key in SATELLITE_V2_WORKER_PRODUCTS
         ),
+        "fresh_window_seconds": 11 * 60,
     },
     "goes19-freshness": {
         "description": "Single-worker GOES-19 freshness profile (CONUS only). FULLDISK is on-demand; MESO is handled by goes19-meso.",
@@ -604,6 +609,7 @@ SATELLITE_V2_WORKER_PROFILES = {
         "deadline_buffer_seconds": 180,
         "latest_frames_per_job": 1,
         "overlap_lock": True,
+        "fresh_window_seconds": 90 * 60,
     },
     "goes19-meso": {
         "description": "Dedicated GOES-19 MESO1/MESO2 rolling-warm profile. Run as a separate scheduled task.",
@@ -616,6 +622,8 @@ SATELLITE_V2_WORKER_PROFILES = {
         "deadline_buffer_seconds": 60,
         "latest_frames_per_job": 1,
         "overlap_lock": True,
+        # 75% of the 5-min task cadence (MESO data is 1-min; do not skip ticks).
+        "fresh_window_seconds": 225,
     },
     "goes19-light-composites": {
         "description": "Dedicated GOES-19 CONUS light-composite rolling-warm profile.",
@@ -628,6 +636,7 @@ SATELLITE_V2_WORKER_PROFILES = {
         "deadline_buffer_seconds": 60,
         "latest_frames_per_job": 1,
         "overlap_lock": True,
+        "fresh_window_seconds": 225,
     },
     "goes19-geocolor": {
         "description": "Dedicated GOES-19 CONUS GEOColor rolling-warm profile.",
@@ -640,6 +649,8 @@ SATELLITE_V2_WORKER_PROFILES = {
         "deadline_buffer_seconds": 60,
         "latest_frames_per_job": 1,
         "overlap_lock": True,
+        # 75% of the 10-min task cadence.
+        "fresh_window_seconds": 450,
     },
 }
 SATELLITE_V2_WORKER_BASELINE_FRAMES = 2

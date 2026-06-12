@@ -91,6 +91,10 @@ def _remove_temp_files(directory: str, patterns: list[str]) -> int:
         return 0
 
     removed_count = 0
+    # Only remove temp/lock files that are clearly orphaned. Live worker
+    # overlap locks (cache/.workers/*.lock, held up to ~2h by rolling
+    # profiles) and in-flight *.tmp writes must not be deleted.
+    cutoff_timestamp = _time.time() - 24 * 3600
 
     try:
         for root, dirs, files in os.walk(directory):
@@ -100,8 +104,9 @@ def _remove_temp_files(directory: str, patterns: list[str]) -> int:
                     if pattern.replace("*", "") in filename:
                         filepath = os.path.join(root, filename)
                         try:
-                            os.remove(filepath)
-                            removed_count += 1
+                            if os.path.getmtime(filepath) < cutoff_timestamp:
+                                os.remove(filepath)
+                                removed_count += 1
                         except (OSError, FileNotFoundError):
                             pass
     except Exception as exc:

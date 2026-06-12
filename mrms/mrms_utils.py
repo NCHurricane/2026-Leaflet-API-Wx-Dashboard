@@ -74,6 +74,7 @@ def warp_array_to_mercator(
     data: np.ma.MaskedArray,
     lat_1d: np.ndarray,
     lon_1d: np.ndarray,
+    max_dim: int | None = None,
 ) -> tuple[np.ma.MaskedArray, list[float]]:
     """Reproject a flat (equirectangular) data array to Web Mercator (EPSG:3857)
     so pixels align with Leaflet's imageOverlay at any zoom level.
@@ -82,6 +83,10 @@ def warp_array_to_mercator(
         data:   2-D masked array, rows ordered N→S (origin=upper) or S→N (origin=lower).
         lat_1d: 1-D latitude coordinate array matching data rows.
         lon_1d: 1-D longitude coordinate array matching data cols.
+        max_dim: Optional cap on the longest output dimension in pixels. The
+            warp target is scaled down proportionally when the default output
+            would exceed it; nearest-neighbor resampling keeps every output
+            pixel an exact source data value.
 
     Returns:
         (warped_masked_array, [west, east, south, north]) — bounds are WGS84,
@@ -139,6 +144,25 @@ def warp_array_to_mercator(
         right=lon_max + 0.5 * dlon,
         top=lat_max + 0.5 * dlat,
     )
+
+    if max_dim and max(dst_width, dst_height) > max_dim:
+        scale = float(max_dim) / float(max(dst_width, dst_height))
+        capped_width = max(1, int(round(dst_width * scale)))
+        capped_height = max(1, int(round(dst_height * scale)))
+        dst_transform, dst_width, dst_height = (
+            rasterio.warp.calculate_default_transform(
+                src_crs,
+                dst_crs,
+                src_cols,
+                src_rows,
+                left=lon_min - 0.5 * dlon,
+                bottom=lat_min - 0.5 * dlat,
+                right=lon_max + 0.5 * dlon,
+                top=lat_max + 0.5 * dlat,
+                dst_width=capped_width,
+                dst_height=capped_height,
+            )
+        )
 
     dst_data = np.full((dst_height, dst_width), fill_val, dtype=np.float32)
     rasterio.warp.reproject(

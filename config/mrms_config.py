@@ -927,6 +927,12 @@ MRMS_COLORMAPS = {
 # MRMS S3 Bucket
 MRMS_BUCKET = "noaa-mrms-pds"
 
+# Cap on the longest dimension (px) of warped Web Mercator overlay output.
+# The native ~1km CONUS grid warps to ~6600px wide, which is far beyond what a
+# 1440p display can show and slows rendering ~linearly with pixel count.
+# Nearest-neighbor resampling keeps every pixel an exact data value at any cap.
+MRMS_WARP_MAX_DIM = 4096
+
 # Archive depth (MRMS data available from ~2015+ depending on product)
 MRMS_ARCHIVE_START = "2015-01-01"
 

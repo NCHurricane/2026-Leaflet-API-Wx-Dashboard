@@ -69,6 +69,13 @@ def _worker_name_for_stream(stream: str) -> str:
     return _STREAM_WORKER_NAME.get(stream, "rtma")
 
 
+def _png_ok(path: str) -> bool:
+    try:
+        return os.path.getsize(path) > 0
+    except OSError:
+        return False
+
+
 def _product_supported_on_stream(product: str, stream: str) -> bool:
     # 24h delta needs a now-24h pair and is only valid on hourly stream.
     if product == "temperature_change_24h" and stream != "rtma_hourly":
@@ -185,6 +192,12 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
             ensure_rtma_city_geojson,
             ensure_rtma_grib,
             iter_rtma_sources_within_hours,
+            rtma_city_geojson_is_cached,
+        )
+        from cache.overlay_cache_utils import (
+            flat_overlay_image_path,
+            flat_overlay_read_processed_keys,
+            frame_key_from_datetime,
         )
     except Exception as exc:
         print(f"[rtma_worker] Import error: {exc}")
@@ -240,7 +253,52 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                 overlay_products = [p for p in stream_products if p != "wind_direction"]
                 keep_n = _OVERLAY_KEEP_N.get(stream, 30)
 
+                # Read processed-keys once per (region, stream, product) instead
+                # of once per product per source.
+                processed_by_product = {
+                    p: flat_overlay_read_processed_keys(
+                        cache_root, "rtma", (region.upper(), stream, p)
+                    )
+                    for p in overlay_products
+                }
+
                 for source in sources:
+                    # Skip all GRIB decode/render work when every product of
+                    # this frame is already cached (the common case for all but
+                    # the newest frame each run).
+                    frame_key = frame_key_from_datetime(source.valid_time)
+                    missing_overlays = [
+                        p
+                        for p in overlay_products
+                        if source.data_key not in processed_by_product.get(p, set())
+                        or not _png_ok(
+                            flat_overlay_image_path(
+                                cache_root,
+                                "rtma",
+                                (region.upper(), stream, p),
+                                frame_key,
+                            )
+                        )
+                    ]
+                    missing_geojson = [
+                        p
+                        for p in stream_products
+                        if not rtma_city_geojson_is_cached(
+                            cache_root,
+                            source,
+                            region,
+                            stream,
+                            p,
+                            source_data_key=source.data_key,
+                        )
+                    ]
+                    if not missing_overlays and not missing_geojson:
+                        skipped += len(stream_products)
+                        # Verified-cached source still counts as a successful
+                        # pass so freshness-sentinel behavior is unchanged.
+                        stream_ok[stream] += 1
+                        continue
+
                     # Pre-download the GRIB once for this frame.
                     try:
                         ensure_rtma_grib(cache_root, source)
@@ -252,8 +310,8 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                         )
                         continue
 
-                    # Generate GeoJSON for every analysis product from the cached GRIB.
-                    for product in stream_products:
+                    # Generate GeoJSON for analysis products that are not yet cached.
+                    for product in missing_geojson:
                         try:
                             _geo_path, meta = ensure_rtma_city_geojson(
                                 cache_root,
@@ -283,47 +341,55 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                     # Wind direction has no useful scalar gradient; skip its overlay.
                     # Compute lat_1d/lon_1d once per source to reuse across all products (efficiency).
                     lat_1d_cache, lon_1d_cache = None, None
-                    try:
-                        import numpy as np
-                        from rtma.rtma_utils import (
-                            ensure_rtma_grib,
-                            _extract_dataset,
-                            _crop_grid,
-                        )
-
-                        grib_path = ensure_rtma_grib(cache_root, source)
-                        bounds = _REGION_BOUNDS_CACHE.get(region, [-125, -70, 21, 52])
-                        crop_extent = [float(b) for b in bounds]
-
-                        # Extract lat/lon from a representative product (temp).
-                        _, latitude, longitude, _ = _extract_dataset(grib_path, "t2m")
-                        _, lat_cropped, lon_cropped = _crop_grid(
-                            np.zeros_like(latitude), latitude, longitude, crop_extent
-                        )
-
-                        # Compute 1D grids from cropped coordinates.
-                        lat_arr = np.asarray(lat_cropped, dtype=float)
-                        lon_arr = np.asarray(lon_cropped, dtype=float)
-                        if lat_arr.ndim == 2:
-                            lat_1d_cache = np.linspace(
-                                float(np.nanmin(lat_arr)),
-                                float(np.nanmax(lat_arr)),
-                                lat_arr.shape[0],
+                    if missing_overlays:
+                        try:
+                            import numpy as np
+                            from rtma.rtma_utils import (
+                                ensure_rtma_grib,
+                                _extract_dataset,
+                                _crop_grid,
                             )
-                            lon_1d_cache = np.linspace(
-                                float(np.nanmin(lon_arr)),
-                                float(np.nanmax(lon_arr)),
-                                lon_arr.shape[1],
+
+                            grib_path = ensure_rtma_grib(cache_root, source)
+                            bounds = _REGION_BOUNDS_CACHE.get(
+                                region, [-125, -70, 21, 52]
                             )
-                        else:
-                            lat_1d_cache = lat_arr
-                            lon_1d_cache = lon_arr
-                    except Exception as exc:
-                        print(f"[rtma_worker] Failed to precompute lat/lon: {exc}")
+                            crop_extent = [float(b) for b in bounds]
+
+                            # Extract lat/lon from a representative product (temp).
+                            _, latitude, longitude, _ = _extract_dataset(
+                                grib_path, "t2m"
+                            )
+                            _, lat_cropped, lon_cropped = _crop_grid(
+                                np.zeros_like(latitude),
+                                latitude,
+                                longitude,
+                                crop_extent,
+                            )
+
+                            # Compute 1D grids from cropped coordinates.
+                            lat_arr = np.asarray(lat_cropped, dtype=float)
+                            lon_arr = np.asarray(lon_cropped, dtype=float)
+                            if lat_arr.ndim == 2:
+                                lat_1d_cache = np.linspace(
+                                    float(np.nanmin(lat_arr)),
+                                    float(np.nanmax(lat_arr)),
+                                    lat_arr.shape[0],
+                                )
+                                lon_1d_cache = np.linspace(
+                                    float(np.nanmin(lon_arr)),
+                                    float(np.nanmax(lon_arr)),
+                                    lon_arr.shape[1],
+                                )
+                            else:
+                                lat_1d_cache = lat_arr
+                                lon_1d_cache = lon_arr
+                        except Exception as exc:
+                            print(f"[rtma_worker] Failed to precompute lat/lon: {exc}")
 
                     # Collect metadata for batch index/processed_keys update (one write per source).
                     overlay_metadata = []
-                    for product in overlay_products:
+                    for product in missing_overlays:
                         metadata = _render_overlay_for_source(
                             cache_root,
                             source,

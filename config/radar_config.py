@@ -84,8 +84,9 @@ LIVE_RADAR_KEEP_FRAMES = 45
 
 # Rendering performance settings (easily tunable without code changes)
 # Figure size in inches. At DPI=200: 12 → 2400×2400px (native L3 Super-Res 0.25km grid)
-# Increased to 12 inches for full native resolution at 250nm (460km) coverage.
-LIVE_RADAR_FIGURE_SIZE_INCHES = 18
+# 12 inches matches the data's native resolution at 250nm (460km) coverage; larger
+# values only oversample the source grid and slow rendering ~quadratically.
+LIVE_RADAR_FIGURE_SIZE_INCHES = 12
 # DPI for rendering. 200 DPI achieves native 0.25km grid resolution for Level 3 Super-Res.
 LIVE_RADAR_RENDER_DPI = 200
 # Number of parallel worker processes for rendering frames. 0=auto (CPU count), 1=sequential

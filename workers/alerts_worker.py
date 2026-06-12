@@ -66,7 +66,8 @@ def run_alerts_worker(force: bool = False) -> None:
             "_geometry_mode": "full",
             "features": features,
         }
-        CACHE_FILE_FULL.write_text(json.dumps(full_payload), encoding="utf-8")
+        full_payload_text = json.dumps(full_payload)
+        CACHE_FILE_FULL.write_text(full_payload_text, encoding="utf-8")
 
         # Create and write simplified display-low variant.
         simplify_start = time.time()
@@ -84,7 +85,7 @@ def run_alerts_worker(force: bool = False) -> None:
         CACHE_FILE_DISPLAY_LOW.write_text(json.dumps(display_payload), encoding="utf-8")
 
         # Write legacy backward-compatible cache (full geometry).
-        CACHE_FILE.write_text(json.dumps(full_payload), encoding="utf-8")
+        CACHE_FILE.write_text(full_payload_text, encoding="utf-8")
 
         # Emit worker metrics.
         total_elapsed = time.time() - worker_start
