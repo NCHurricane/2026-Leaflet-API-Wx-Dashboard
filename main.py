@@ -28,7 +28,6 @@ from fastapi import FastAPI, HTTPException
 import uvicorn
 import time as _time
 import os
-import re
 import shutil
 import threading
 from pathlib import Path
@@ -41,9 +40,11 @@ from app_core.http import (
 )
 from app_core.paths import BASE_DIR, CACHE_ROOT as _CACHE_ROOT, ensure_runtime_dirs
 from app_core.progress import active_tasks
-from app_core.runtime import initialize_runtime, is_using_nodd, shutdown_runtime
-from app_core.static_assets import CacheStaticFiles, serve_page as _serve_page
+from app_core.runtime import initialize_runtime, shutdown_runtime
+from app_core.static_assets import CacheStaticFiles
+from routes.core import router as core_router
 from routes.health import router as health_router
+from routes.pages import router as pages_router
 
 _TRANSPARENT_PNG_1X1 = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
@@ -57,6 +58,8 @@ _TRANSPARENT_PNG_1X1 = (
 # Defer directory creation and module initialization to startup handler
 app = FastAPI(title="NCHurricane Weather API")
 app.include_router(health_router)
+app.include_router(pages_router)
+app.include_router(core_router)
 
 
 @app.on_event("startup")
@@ -251,20 +254,6 @@ def build_mrms_recent_windows(
             }
         )
     return windows
-
-
-@app.get("/")
-def read_root():
-    return _serve_page("index.html")
-
-
-@app.get("/api/status")
-def read_status():
-    return {
-        "status": "Weather System Online",
-        "version": "2026.1",
-        "radar_satellite_default_source": "NODD" if is_using_nodd() else "THREDDS",
-    }
 
 
 # ── MRMS app state (Phase 3) ─────────────────────────────────────────────────
@@ -3742,27 +3731,6 @@ def archive_spc(
     }
     _write_archive_cache(cache_file, result)
     return result
-
-
-def read_index_page():
-    return _serve_page("index.html")
-
-
-@app.get("/radar.html")
-def read_radar_page():
-    return _serve_page("radar.html")
-
-
-@app.get("/weather.html")
-def read_weather_page():
-    return _serve_page("weather.html")
-
-
-@app.get("/api/progress/{task_id}")
-def get_task_progress(task_id: str):
-    return active_tasks.get(
-        task_id, {"percent": 0, "message": "Waiting...", "stage": "idle"}
-    )
 
 
 @app.get("/api/radar/sites")
