@@ -15,7 +15,10 @@ The app combines a Python API backend with static HTML/CSS/JS frontends and gene
 
 NCHurricane Dashboard 2026 is an operational weather workstation app designed for local Windows use. It focuses on practical analysis speed:
 
-- One-click workflow pages by data type
+- A main landing page at `index.html`
+- A current combined weather workspace at `weather.html`
+- A planned product-page direction where each major product gets its own clean
+  URL, such as `/radar`, `/satellite`, and `/alerts`
 - Current and archive rendering endpoints
 - Progress tracking for long-running jobs
 - Local caching of downloads and generated products
@@ -81,7 +84,13 @@ Suggested branch protections on `main`:
 ## Architecture at a Glance
 
 - `main.py` hosts the FastAPI app, endpoint routing, static mounts, and task progress state.
-- Domain modules (`surface/`, `alerts/`, `radar/`, `satellite/`, `mrms/`, `lightning/`) handle download + render logic.
+- `index.html` is the main dashboard landing page served at `/`.
+- `weather.html` and `js/weather.js` currently host the combined Leaflet weather workspace.
+- Planned canonical product pages include `/alerts`, `/radar`, `/satellite`,
+  `/spc`, `/surface`, `/mrms`, `/rtma`, `/drought`, and `/tropical`; these are
+  not all present in this checkout yet. Legacy `.html` product URLs may remain
+  as redirects or compatibility routes during migration.
+- Domain modules (`surface/`, `alerts/`, `radar/`, `satellite_v2/`, `mrms/`, `rtma/`, `spc/`, `workers/`) handle download, cache, and render logic.
 - Generated media is stored in workflow-specific directories and served as static content.
 - Frontend pages call API endpoints directly and poll progress for long-running jobs.
 
@@ -92,20 +101,18 @@ Suggested branch protections on `main`:
   main.py
   requirements.txt
   index.html
-  surface.html
-  alerts.html
-  radar.html
-  satellite.html / satellite-archive.html
-  mrms.html
+  weather.html
   js/
   css/
   config/
   surface/
   alerts/
   radar/
-  satellite/
+  satellite_v2/
   mrms/
-  lightning/
+  rtma/
+  spc/
+  workers/
   shapefiles/
   data/
   img/
@@ -138,24 +145,35 @@ python main.py
 
 ### 4. Run Profiles (Worker Modes)
 
-Use the launchers in `tools/` to start with explicit worker behavior:
+The default local startup path is:
+
+```powershell
+python main.py
+```
+
+The app supports explicit worker behavior through `WX_INPROC_WORKERS`, but the
+previously documented `tools/*.ps1` launcher scripts are not present in this
+checkout. The refactor target is a cross-platform app-managed worker supervisor
+so Windows Task Scheduler is not required for normal local use.
 
 - API-only mode (no in-process APScheduler):
 
 ```powershell
-.\tools\run_api_only.ps1
+Remove `WX_INPROC_WORKERS` from the current shell, then run `python main.py`.
 ```
 
 - In-process mode (enable `WX_INPROC_WORKERS=1`):
 
 ```powershell
-.\tools\run_inproc_workers.ps1
+$env:WX_INPROC_WORKERS = "1"
+python main.py
 ```
 
 - Dual mode (Task Scheduler + in-process workers):
 
 ```powershell
-.\tools\run_dual_mode.ps1
+$env:WX_INPROC_WORKERS = "1"
+python main.py
 ```
 
 Dual mode is intended for validation/stress testing because it can duplicate refresh work.
@@ -167,6 +185,7 @@ Server starts on:
 Open in browser:
 
 - `http://127.0.0.1:8000/`
+- `http://127.0.0.1:8000/weather.html`
 
 ## API Quick Reference
 
@@ -269,8 +288,9 @@ python -m workers.satellite_v2_worker --profile remote-backfill --tile-workers 3
 python -m workers.satellite_v2_meso_worker --profile remote-backfill --tile-workers 2 --force --all-frames
 ```
 
-The `tools/run_satellite_v2_network_backfill.ps1` helper uses `--all-frames`
-by default. Pass `-FastWarmOnly` to use the normal baseline/deep rotation.
+The previously documented `tools/run_satellite_v2_network_backfill.ps1` helper
+is not present in this checkout. Use the Python module commands above until that
+launcher is recreated or removed from the operational notes.
 
 ### MRMS
 

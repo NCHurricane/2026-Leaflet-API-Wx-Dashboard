@@ -30,8 +30,13 @@ Current weather-radar live endpoints:
 
 ## Worker / Scheduler Pattern
 
-Default mode is OS-scheduled cache refresh (Windows Task Scheduler). In-process
+Current mode is OS-scheduled cache refresh (Windows Task Scheduler). In-process
 APScheduler is fallback-only and opt-in via `WX_INPROC_WORKERS=1`.
+
+Refactor target: make an app-managed Python worker supervisor the default
+runtime path so the dashboard can run consistently on Windows, macOS, and Linux.
+OS schedulers should become optional advanced deployment integrations, not the
+only comfortable way to keep caches fresh.
 
 When fallback mode is enabled, `workers/scheduler.py` registers:
 
@@ -42,6 +47,15 @@ When fallback mode is enabled, `workers/scheduler.py` registers:
 
 Workers write cache artifacts that API endpoints read directly. Cold-cache
 endpoint fallbacks can still run workers synchronously when needed.
+
+Supervisor requirements:
+
+- Use existing freshness markers and per-worker skip gates.
+- Keep API-only mode available.
+- Keep one-off worker module commands available.
+- Avoid duplicate refresh work when an OS scheduler is also enabled.
+- Log worker output consistently under `logs/scheduled/` or a replacement
+  cross-platform log directory.
 
 Guard pattern — import is wrapped in try/except so app starts without APScheduler if it is not installed:
 
@@ -232,6 +246,63 @@ Migration target for Surface, MRMS, Radar, and Satellite:
 4. Preserve product-specific projection/render details under a common cache/index API.
 
 Alerts intentionally remains on vector GeoJSON workflow.
+
+## Product Page Shell Pattern
+
+Planned product pages should share the same shell contract:
+
+1. Top navigation/status bar.
+2. Map canvas owned by that product page.
+3. Left product controls.
+4. Right inspector, legend, and selected-feature details.
+5. Bottom timeline/archive/scrubber area when the product supports time.
+6. Shared refresh/error/status surface.
+
+Canonical product URLs should be extensionless:
+
+- `/alerts`
+- `/radar`
+- `/satellite`
+- `/spc`
+- `/surface`
+- `/mrms`
+- `/rtma`
+- `/drought`
+- `/tropical`
+
+Legacy `.html` URLs may redirect to canonical routes or remain as temporary
+compatibility routes during migration.
+
+## Shared Frontend Utility Pattern
+
+Each product page should own its entry file, but common behavior should live in
+shared utilities:
+
+- API client and URL helpers.
+- Map factory/base-layer setup.
+- Page shell initialization.
+- Timestamp/status/reliability helpers.
+- Layer lifecycle and cleanup helpers.
+- Timer/AbortController cleanup registry.
+- Legend helpers.
+- Timeline/scrubber controller.
+- Shared constants that are intentionally duplicated from backend config.
+
+Do not create product pages by copy-pasting the current combined `weather.js`
+state model into separate files. Split shared utilities first, then give each
+product page a narrow entry module.
+
+## Clean-Cut Migration Pattern
+
+During migration, preserve behavior first and keep `weather.html` working as the
+combined workspace. After each product page is verified:
+
+1. Remove that product's now-unused code from the combined workspace.
+2. Remove stale exported JS helpers only after no page references them.
+3. Convert temporary `.html` compatibility routes to redirects or remove them
+   only after canonical routes are stable.
+4. Update docs and smoke tests to treat the product page as canonical.
+5. Keep API endpoint compatibility unless a separate API cleanup is planned.
 
 ## Radar UX State Pattern (Weather Tab)
 

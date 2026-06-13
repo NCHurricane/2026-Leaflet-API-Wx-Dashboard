@@ -6,28 +6,56 @@ Private GitHub repository. Rollback via `git restore`/`git revert`. High-risk re
 
 ## Phase 1+ State (Leaflet Map)
 
-Unified weather page serves a live Leaflet map with mixed layer types:
+The application landing page is `index.html`, served at `/`. The current
+combined weather workspace is `weather.html`, served at `/weather.html`, and it
+hosts a live Leaflet map with mixed layer types:
 
 - Vector GeoJSON overlays (alerts, SPC)
 - Pre-rendered raster overlays + frame-locked value points (RTMA)
 - Radar live overlays from cache-first per-site/per-product PNG streams
 
-Active pages and their JS:
+Active root pages and their JS in this checkout:
 
+- `index.html` — main landing page for the dashboard
 - `weather.html` / `js/weather.js` — Leaflet map, alerts + SPC GeoJSON layers, RTMA pre-rendered overlays, RTMA scrubber, radar live multi-site + time-mode playback
-- `radar.html` / `js/radar.js` — independent radar workflow (unchanged)
-- `satellite.html` / `js/satellite.js` — independent satellite workflow (unchanged)
+
+Planned product-page migration:
+
+- Product-specific pages are the intended post-refactor direction:
+  `/alerts`, `/radar`, `/satellite`, `/spc`, `/surface`, `/mrms`, `/rtma`,
+  `/drought`, and `/tropical`.
+- Legacy `.html` product URLs may be kept as redirects or compatibility routes
+  during the transition, but clean extensionless URLs should become canonical.
+- `main.py` already exposes `/radar.html`, but `radar.html` is not present in
+  the repository root in this checkout. Preserve that route during backend
+  refactors because it is a planned product-page route.
+- `satellite.html` is also not present in the repository root. `js/satellite.js`
+  exists and should not be treated as dead code solely because the page is not
+  present yet.
+- `weather.html` remains the combined workspace during the transition and should
+  not be promoted to the application landing page.
 
 Removed in Phase 0:
 
 - `legacy/` pages and JS are retained but unrouted
 - Legacy API render endpoints removed from main.py
 
-## Backend Workers (OS-first, APScheduler fallback)
+## Backend Workers (Cross-Platform Supervisor Target)
 
-Cache refresh is OS-first via Windows Task Scheduler. In-process APScheduler
-jobs are now fallback-only and are enabled only when
-`WX_INPROC_WORKERS=1`.
+Current cache refresh is OS-first via Windows Task Scheduler. In-process
+APScheduler jobs are fallback-only and enabled only when `WX_INPROC_WORKERS=1`.
+
+The post-refactor deployability target is cross-platform:
+
+- Default: app-managed Python worker supervisor that runs on Windows, macOS, and
+  Linux.
+- Optional: OS scheduler integration for advanced/headless installs.
+- Manual: one-off worker module commands for backfill, troubleshooting, and
+  cache priming.
+
+This lets non-technical local users run the dashboard without configuring
+Windows Task Scheduler or macOS `launchd`, while preserving OS schedulers for
+operator-managed deployments.
 
 Current in-process fallback intervals in `workers/scheduler.py`:
 
@@ -44,26 +72,30 @@ Manual RTMA backfill/preload:
 - `workers/rtma_preload.py` primes the full lookback cache (hourly + rapid update)
 - Intended for one-time rebuilds and cold-start priming
 
-Default runtime behavior (no env var): no APScheduler jobs are registered and
-cache freshness is delegated to OS tasks.
+Current default runtime behavior (no env var): no APScheduler jobs are
+registered and cache freshness is delegated to OS tasks. This is expected to
+change when the cross-platform worker supervisor is implemented.
 
 ### Local Dev Run Profiles
 
-Use these helper launchers for consistent startup behavior:
-
-- `tools/run_api_only.ps1` - API-only mode. Clears `WX_INPROC_WORKERS` for the current process and starts `main.py`.
-- `tools/run_inproc_workers.ps1` - in-process mode. Sets `WX_INPROC_WORKERS=1` and starts `main.py`.
-- `tools/run_dual_mode.ps1` - dual mode. Sets `WX_INPROC_WORKERS=1` and starts `main.py` (Windows Task Scheduler jobs must also be enabled).
-
-PowerShell examples from repository root:
+The default local startup path is currently:
 
 ```powershell
-.\tools\run_api_only.ps1
-.\tools\run_inproc_workers.ps1
-.\tools\run_dual_mode.ps1
+python main.py
 ```
 
+The architecture still supports API-only, in-process worker, and dual-mode
+runtime profiles through `WX_INPROC_WORKERS`, but the previously documented
+helper launchers under `tools/` are not present in this checkout. Recreate those
+launchers or update this section before relying on them operationally.
+
 Dual mode is intended for validation and stress testing only. It can duplicate refresh work and increase network/disk activity.
+
+Future launcher expectation:
+
+- A cross-platform app startup path should start the API, start the app-managed
+  worker supervisor by default, and open the browser.
+- API-only mode should remain available for development and debugging.
 
 ## Data Endpoints
 
@@ -192,9 +224,10 @@ cache/
 | `config/geo_config.py`         | `STATE_BOUNDS` dict (used in weather.js)                                      |
 | `config/alerts_config.py`      | `ALERT_COLORS` dict                                                           |
 
-## Radar / Satellite Exception (Current)
+## Radar / Satellite Product Pages (Planned / Needs Revalidation)
 
-The independent `radar.html` and `satellite.html` pages still retain:
+The intended product-page split includes independent `radar.html` and
+`satellite.html` pages. Those pages may retain or reintroduce:
 
 - Synchronous render pipeline
 - Lambert conformal conic projection
@@ -202,7 +235,10 @@ The independent `radar.html` and `satellite.html` pages still retain:
 - `/api/radar`, `/api/satellite` endpoints
 - `active_tasks` progress tracking
 
-Weather-tab radar (`weather.html`) is now on a cache-first live overlay contract via `/api/radar/live/*`.
+Those root HTML files are not present in this checkout yet. Treat this section
+as a planned migration target until the pages and endpoints are revalidated.
+Weather-tab radar (`weather.html`) is currently on a cache-first live overlay
+contract via `/api/radar/live/*`.
 
 Planned direction:
 
