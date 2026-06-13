@@ -313,6 +313,7 @@ Recommended next artifact:
 - A decision-complete refactor plan that defines router boundaries, service
   boundaries, migration order, endpoint compatibility rules, and verification
   checks for each extracted product family.
+- Phase-by-phase execution details now live in `docs/refactor-playbook.md`.
 
 ## Implementation-Ready Refactor Plan
 
