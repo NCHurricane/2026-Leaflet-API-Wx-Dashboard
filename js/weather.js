@@ -727,11 +727,6 @@
         const radarSitesPane = map.createPane('radar-sites');
         radarSitesPane.style.zIndex = '460';
     }
-    if (!map.getPane('mrms-radar-sites')) {
-        const mrmsRadarSitesPane = map.createPane('mrms-radar-sites');
-        mrmsRadarSitesPane.style.zIndex = '451';
-        mrmsRadarSitesPane.style.pointerEvents = 'none';
-    }
     if (!map.getPane('satellite-overlays')) {
         const satelliteOverlayPane = map.createPane('satellite-overlays');
         satelliteOverlayPane.style.zIndex = '330';
@@ -853,7 +848,6 @@
     let _rtmaGridSeq = 0;
     let _rtmaGridInFlightKey = null;
     let mrmsOverlay = null;
-    let mrmsRadarSiteLayer = null;
     let droughtLayer = null;
     let tropicalLayer = null;
     let tropicalOutlookLayer = null;
@@ -974,86 +968,8 @@
     const _rtmaScrubFrameCache = new Map();
     const _rtmaScrubFrameErrors = new Set();
     let _mrmsRequestSeq = 0;
-    const _MRMS_RADAR_SITE_POINT_STYLE = Object.freeze({
-        radius: 2.8,
-        color: '#f8f8f8',
-        weight: 1.1,
-        opacity: 0.95,
-        fillColor: '#ff3b30',
-        fillOpacity: 0.9,
-        pane: 'mrms-radar-sites',
-        interactive: false,
-        bubblingMouseEvents: false,
-    });
     const _SPC_PRIMARY_TIMEOUT_MS = 10_000;
     const _SPC_SUPPLEMENTAL_TIMEOUT_MS = 20_000;
-
-    function _resolveMrmsRadarSiteBounds(bounds) {
-        if (Array.isArray(bounds) && bounds.length === 4) {
-            return bounds.map((value) => Number(value));
-        }
-        if (mrmsOverlay && typeof mrmsOverlay.getBounds === 'function') {
-            const overlayBounds = mrmsOverlay.getBounds();
-            if (overlayBounds && typeof overlayBounds.getWest === 'function') {
-                return [
-                    overlayBounds.getWest(),
-                    overlayBounds.getEast(),
-                    overlayBounds.getSouth(),
-                    overlayBounds.getNorth(),
-                ];
-            }
-        }
-        return null;
-    }
-
-    function _getMrmsRadarSiteLocations(bounds) {
-        const sites = Array.isArray(window.RADAR_SITE_LOCATIONS)
-            ? window.RADAR_SITE_LOCATIONS
-            : [];
-        const siteBounds = _resolveMrmsRadarSiteBounds(bounds);
-        if (!siteBounds || siteBounds.some((value) => !Number.isFinite(value))) {
-            return [];
-        }
-
-        const [west, east, south, north] = siteBounds;
-        return sites.filter((site) => {
-            const lat = Number(site?.lat);
-            const lon = Number(site?.lon);
-            return Number.isFinite(lat)
-                && Number.isFinite(lon)
-                && lon >= west
-                && lon <= east
-                && lat >= south
-                && lat <= north;
-        });
-    }
-
-    function _ensureMrmsRadarSiteLayer() {
-        if (mrmsRadarSiteLayer) return mrmsRadarSiteLayer;
-        mrmsRadarSiteLayer = L.layerGroup();
-        return mrmsRadarSiteLayer;
-    }
-
-    function _syncMrmsRadarSiteOverlay(bounds) {
-        if (!_isTypeEnabled('mrms') || !mrmsOverlay) {
-            if (mrmsRadarSiteLayer && map.hasLayer(mrmsRadarSiteLayer)) {
-                map.removeLayer(mrmsRadarSiteLayer);
-            }
-            return;
-        }
-
-        const layer = _ensureMrmsRadarSiteLayer();
-        layer.clearLayers();
-        _getMrmsRadarSiteLocations(bounds).forEach((site) => {
-            layer.addLayer(L.circleMarker([site.lat, site.lon], _MRMS_RADAR_SITE_POINT_STYLE));
-        });
-        if (!map.hasLayer(layer)) {
-            layer.addTo(map);
-        }
-        if (typeof layer.bringToFront === 'function') {
-            layer.bringToFront();
-        }
-    }
     const _SPC_REPORT_COLORS = {
         torn: '#ff4d4f',
         wind: '#26a9ff',
@@ -1066,6 +982,8 @@
     const RTMA_SCRUB_PLAY_INTERVAL_MS = 300;
     const RTMA_SCRUB_LOOP_HOLD_MS = 2000;
     const RTMA_SCRUB_SWAP_FADE_MS = 90;
+    const _RADAR_OVERLAY_FRAMES = 4;
+    const _RADAR_OVERLAY_STEP_MIN = 5;
     const RADAR_CROSSFADE_MS = 5;
     const SATELLITE_CROSSFADE_MS = RADAR_CROSSFADE_MS;
     const SATELLITE_LOOKBACK_HOURS_MAX = 12;
@@ -5777,7 +5695,6 @@
         if (rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) map.removeLayer(rtmaGradientLayer);
         if (rtmaPointLayer && map.hasLayer(rtmaPointLayer)) map.removeLayer(rtmaPointLayer);
         if (mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
-        if (mrmsRadarSiteLayer && map.hasLayer(mrmsRadarSiteLayer)) map.removeLayer(mrmsRadarSiteLayer);
         if (droughtLayer && map.hasLayer(droughtLayer)) map.removeLayer(droughtLayer);
         if (tropicalLayer && map.hasLayer(tropicalLayer)) map.removeLayer(tropicalLayer);
         if (tropicalOutlookLayer && map.hasLayer(tropicalOutlookLayer)) map.removeLayer(tropicalOutlookLayer);
@@ -5955,6 +5872,7 @@
             case 'spc':
                 if (spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
                 spcLayer = null;
+                setMapEmptyMessage(null);
                 break;
 
             case 'drought':
@@ -7005,7 +6923,9 @@
     }
 
     function _loadMrmsUnified() {
-        // Unified load: load scrubber frames (MRMS has no separate "latest" endpoint)
+        // Unified load: load scrubber frames first; the scrubber path falls
+        // back to the current on-demand overlay when no timestamped frame
+        // GRIBs exist for this product.
         loadMrmsScrubberFrames();
     }
 
@@ -8969,7 +8889,6 @@
         if (!rtmaEnabled && rtmaPointLayer && map.hasLayer(rtmaPointLayer)) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
         if (!rtmaEnabled) { _rtmaSecondaryPoints = []; _rtmaSecondaryUnits = ''; }
         if (!mrmsEnabled && mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
-        if (!mrmsEnabled && mrmsRadarSiteLayer && map.hasLayer(mrmsRadarSiteLayer)) map.removeLayer(mrmsRadarSiteLayer);
         if (!droughtEnabled && droughtLayer && map.hasLayer(droughtLayer)) { map.removeLayer(droughtLayer); droughtLayer = null; }
         if (!tropicalEnabled) {
             _clearTropicalLayer();
@@ -12518,7 +12437,6 @@
             mrmsOverlay = L.imageOverlay(apiUrl(data.image_url), leafletBounds, { opacity: mrmsOpacity });
             mrmsOverlay._isMrmsOverlay = true; // tag for sweep cleanup
             if (_activeMrmsProduct()) mrmsOverlay.addTo(map);
-            _syncMrmsRadarSiteOverlay(b);
 
             buildMrmsLegend(data);
 
@@ -13496,7 +13414,6 @@
                 }
             }
             mrmsOverlay = newOverlay;
-            _syncMrmsRadarSiteOverlay(bounds);
 
             buildMrmsLegend(frame);
             const tsMs = _resolveDataTimestampMs(frame?.timestamp);
@@ -13591,11 +13508,14 @@
             if (loadSeq !== _mrmsScrubLoadSeq || !_isTypeEnabled('mrms')) return;
             if (!_mrmsScrubFrames.length) {
                 _setArchiveProgress(false);
-                _setArchiveScrubber(true);
+                _setArchiveScrubber(false);
                 _setScrubberControlsEnabled(false);
                 _updateRtmaScrubberUi();
-                _setRtmaScrubberStatus('No MRMS frames found for selected window/product.');
-                setStatus('No MRMS frames found for the selected settings.');
+                _setRtmaScrubberStatus('');
+                _mrmsScrubLoadSeq += 1;
+                _mrmsScrubRenderSeq += 1;
+                setStatus(`No MRMS animation frames found for ${product}; loading current overlay...`);
+                await loadMrms();
                 return;
             }
 
@@ -13902,7 +13822,6 @@
             mrmsOverlay = L.imageOverlay(apiUrl(frame.image_url), leafletBounds, { opacity: mrmsOpacity });
             mrmsOverlay.addTo(map);
         }
-        _syncMrmsRadarSiteOverlay(b);
     }
 
     function _renderArchiveGeoJsonFrame(frame, layerType) {

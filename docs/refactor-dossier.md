@@ -17,17 +17,19 @@ calls, workers, cache ownership, startup behavior, and documentation gaps.
 
 ## Backend Surface
 
-Current backend shape:
+Backend shape after the route/service extraction:
 
-- `main.py` owns the FastAPI app, lifecycle hooks, static mounts, page routes,
-  and almost all API routes.
-- `routes/` currently contains only `health.py`.
-- `main.py` includes `routes.health.router`.
-- Static mounts currently include `/sounds`, `/cache`, `/css`, `/js`, `/data`,
-  `/img`, and `/fonts`.
+- `main.py` owns FastAPI app assembly, middleware, static mounts, lifecycle
+  hooks, router registration, SSL certificate environment setup, and the
+  uvicorn launch config.
+- Product/page route handlers live under `routes/`.
+- Product cache, render, worker-fallback, and serialization behavior lives under
+  `services/` or existing domain packages such as `satellite_v2/`.
+- Static mounts include `/sounds`, `/cache`, `/css`, `/js`, `/data`, `/img`, and
+  `/fonts`.
 - `/cache` uses custom cache-control behavior through `CacheStaticFiles`.
 
-Route inventory from `main.py`:
+Route inventory preserved after extraction:
 
 | Group | Method | Path | Handler |
 | --- | --- | --- | --- |
@@ -83,11 +85,11 @@ Route inventory from `main.py`:
 | satellite_v2 | GET | `/api/satellite-v2/legend` | `get_satellite_v2_legend` |
 | satellite_v2 | GET | `/api/satellite-v2/tile/{z}/{x}/{y}` | `get_satellite_v2_tile` |
 
-Route split candidates:
+Route split result:
 
 - `routes/core.py`: status, progress, page serving helpers.
 - `routes/overlays.py`: world/US boundaries, overlay latest/frames.
-- `routes/alerts.py`: alerts endpoint and alert radar tile endpoints if kept together.
+- `routes/alerts.py`: alerts endpoint and compatibility polygons endpoint.
 - `routes/spc.py`, `routes/drought.py`, `routes/surface.py`, `routes/mrms.py`,
   `routes/rtma.py`, `routes/archive.py`, `routes/radar.py`, `routes/tropical.py`,
   `routes/satellite_v2.py`.
@@ -116,16 +118,14 @@ Root-level coupling:
 | `rtma` | `config`, `mrms` |
 | `alerts` | `config`, `lib`, `alerts` |
 
-Important coupling risk:
+Important coupling risk resolved during extraction:
 
-- `workers/alerts_worker.py` imports `main`. This creates a backwards
-  dependency from worker code into the application entrypoint. Before moving
-  route logic out of `main.py`, the shared alert-fetch/cache behavior should be
-  extracted to an app-neutral service/helper module.
+- `workers/alerts_worker.py` now imports shared alert behavior from
+  `services.alerts_service` instead of importing `main`.
 
 Refactor implication:
 
-- `main.py` should become composition/orchestration only.
+- `main.py` is now composition/orchestration only.
 - Route modules should import service/helper modules, not workers where possible.
 - Workers and routes should share service/cache modules, avoiding worker -> app
   and service -> route dependencies.
@@ -211,22 +211,21 @@ In-process fallback jobs from `workers/scheduler.py` include:
 
 Cache/data ownership observations:
 
-- `main.py` still reads/writes multiple cache artifacts directly, including
-  surface, drought, overlay boundaries, MRMS render sidecars, archive sessions,
-  tropical cache reads, and on-demand worker fallbacks.
+- `services/*` now owns the route-facing cache reads/writes, render sidecars,
+  archive sessions, tropical cache reads, and bounded worker fallbacks that were
+  previously embedded in `main.py`.
 - `satellite_v2/*` owns satellite source/cache/catalog/render/tile artifacts.
 - `workers/*` own most scheduled refresh artifacts and freshness markers.
 - `cache/overlays/*` is the shared overlay contract for RTMA, MRMS, and radar
   live workflows.
 - `cache/tropical/*` is owned by tropical live/archive workers and read by
-  tropical routes.
+  tropical services/routes.
 - `cache/.workers/*` is the shared freshness contract.
 
 Refactor implication:
 
-- Before route extraction, cache path construction and worker fallback calls
-  should be moved behind product service modules where practical.
-- Routes should read through those services rather than reaching directly into
+- Product route extraction is complete for the backend route surface.
+- Routes now read through service modules rather than reaching directly into
   cache paths and worker functions throughout `main.py`.
 
 ## Documentation And Runtime Gaps

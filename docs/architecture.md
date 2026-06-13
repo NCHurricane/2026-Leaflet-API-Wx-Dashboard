@@ -209,7 +209,13 @@ cache/
 
 | Module                         | Role                                                                          |
 | ------------------------------ | ----------------------------------------------------------------------------- |
-| `main.py`                      | FastAPI app, routing, lifecycle events                                        |
+| `main.py`                      | FastAPI app assembly, middleware, static mounts, router registration, lifecycle events |
+| `app_core/http.py`             | Shared HTTP/date validation helpers                                           |
+| `app_core/paths.py`            | Runtime path constants and directory creation                                 |
+| `app_core/runtime.py`          | Startup/shutdown orchestration                                                |
+| `app_core/static_assets.py`    | Cache-aware static file serving                                               |
+| `routes/*.py`                  | Product/page API route registration via `APIRouter`                           |
+| `services/*.py`                | Product cache, render, worker-fallback, and serialization logic               |
 | `workers/scheduler.py`         | APScheduler setup and lifecycle                                               |
 | `workers/alerts_worker.py`     | NWS alerts fetch → cache                                                      |
 | `workers/spc_worker.py`        | SPC outlook fetch → cache                                                     |
@@ -260,7 +266,9 @@ Backend infrastructure complete; frontend scrubber not yet built.
 
 - `workers/mrms_worker.py` writes each rendered CONUS PNG to the overlay cache after every 15-min cycle. Accepts `keep_n: int | None` to defer pruning during batch writes.
 - `workers/mrms_preload.py` backfills all 14 products across their full lookback windows using `list_mrms_files`. Per-product pruning happens once at the end of each batch.
-- `main.py` — `mrms` added to the `allowed_families` allowlist on both `/api/overlay/latest` and `/api/overlay/frames`.
+- `routes/overlays.py` / `services/overlay_service.py` — `mrms` is included in
+  the `allowed_families` allowlist on both `/api/overlay/latest` and
+  `/api/overlay/frames`.
 - `js/weather.js` `loadMrms()` — tries `/api/overlay/latest?family=mrms&...` first; falls back to legacy `/api/data/mrms` on failure.
 
 **Required before 24-hour MRMS scrubber works:**

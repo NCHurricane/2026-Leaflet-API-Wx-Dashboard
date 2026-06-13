@@ -137,6 +137,17 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+For refactor verification and local test tooling, also install the dev
+dependencies:
+
+```powershell
+pip install -r requirements-dev.txt
+```
+
+`requirements-dev.txt` includes `ruff`, `pytest`, and `httpx2`. The app does
+not need `httpx2` at runtime, but Starlette/FastAPI `TestClient` requires it in
+the current dependency stack.
+
 ### 3. Run the App
 
 ```powershell
