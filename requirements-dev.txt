@@ -1,0 +1,6 @@
+# Development and verification tools
+ruff>=0.8.0
+pytest>=8.0.0
+
+# Required by starlette.testclient / fastapi.testclient in current FastAPI stack.
+httpx2

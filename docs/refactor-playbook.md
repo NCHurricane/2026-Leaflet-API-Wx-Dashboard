@@ -22,6 +22,26 @@ completed, verified, and committed before the next phase starts.
 - If a phase fails import/startup checks, stop and fix that phase before
   continuing.
 
+## Verification Environment
+
+Install runtime dependencies first:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+For linting and in-process FastAPI/Starlette smoke tests, install dev
+dependencies too:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+```
+
+`httpx2` is a dev/test dependency, not a runtime app dependency. Without it,
+`fastapi.testclient.TestClient` and `starlette.testclient.TestClient` cannot be
+used in this environment; run localhost smoke checks against a started Uvicorn
+server instead.
+
 ## Phase 1: Baseline Capture
 
 Goal: record current behavior before moving code.
