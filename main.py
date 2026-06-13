@@ -37,6 +37,14 @@ from config.geo_config import STATE_BOUNDS
 from satellite_v2 import service as satellite_v2_service
 import sys
 from io import StringIO as _StringIO
+from app_core.http import (
+    error_payload,
+    parse_utc_datetime,
+    validate_archive_range,
+)
+from app_core.paths import BASE_DIR, CACHE_ROOT as _CACHE_ROOT, ensure_runtime_dirs
+from app_core.progress import active_tasks
+from app_core.static_assets import CacheStaticFiles, serve_page as _serve_page
 from routes.health import router as health_router
 
 _TRANSPARENT_PNG_1X1 = (
@@ -63,12 +71,6 @@ radar_utils = None
 _SCHEDULER_AVAILABLE = False
 start_scheduler = None
 stop_scheduler = None
-
-# --- GLOBAL TASK STORE ---
-active_tasks = {}
-
-# --- CONFIGURATION ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Defer directory creation and module initialization to startup handler
 app = FastAPI(title="NCHurricane Weather API")
@@ -200,40 +202,7 @@ app.add_middleware(
 app.mount("/sounds", StaticFiles(directory="sounds"), name="sounds")
 
 # Cache directory — worker-written GeoJSON artifacts (gitignored)
-_CACHE_ROOT = os.path.join(BASE_DIR, "cache")
-os.makedirs(os.path.join(_CACHE_ROOT, "alerts"), exist_ok=True)
-os.makedirs(os.path.join(_CACHE_ROOT, "spc"), exist_ok=True)
-os.makedirs(os.path.join(_CACHE_ROOT, "surface"), exist_ok=True)
-os.makedirs(os.path.join(_CACHE_ROOT, "mrms"), exist_ok=True)
-os.makedirs(os.path.join(_CACHE_ROOT, "rtma"), exist_ok=True)
-os.makedirs(os.path.join(_CACHE_ROOT, "archive"), exist_ok=True)
-os.makedirs(os.path.join(_CACHE_ROOT, "radar"), exist_ok=True)
-os.makedirs(os.path.join(_CACHE_ROOT, "satellite"), exist_ok=True)
-
-
-class CacheStaticFiles(StaticFiles):
-    """StaticFiles with Cache-Control tuned for the overlay cache.
-
-    Frame-keyed PNGs (YYYY_MM_DD_HH_MM_SS.png) are write-once, prune-only:
-    serve them as long-lived immutable so scrubber/tab revisits hit the
-    browser cache. Everything else — index.json, *_meta/_bounds sidecars, and
-    overlay_{hash}.png which is overwritten in place at the same URL — gets
-    no-cache so StaticFiles' native ETag/Last-Modified turns unchanged files
-    into 304s instead of full re-downloads.
-    """
-
-    _FRAME_KEY_PNG = re.compile(r"^\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}\.png$")
-
-    def file_response(self, full_path, stat_result, scope, status_code=200):
-        response = super().file_response(full_path, stat_result, scope, status_code)
-        name = os.path.basename(str(full_path))
-        if self._FRAME_KEY_PNG.match(name):
-            response.headers["Cache-Control"] = "public, max-age=86400, immutable"
-        else:
-            response.headers["Cache-Control"] = "no-cache"
-        return response
-
-
+ensure_runtime_dirs()
 app.mount("/cache", CacheStaticFiles(directory=_CACHE_ROOT), name="cache")
 
 app.mount("/css", StaticFiles(directory=os.path.join(BASE_DIR, "css")), name="css")
@@ -243,14 +212,6 @@ app.mount("/img", StaticFiles(directory=os.path.join(BASE_DIR, "img")), name="im
 app.mount(
     "/fonts", StaticFiles(directory=os.path.join(BASE_DIR, "fonts")), name="fonts"
 )
-
-
-def _serve_page(filename: str):
-    page_path = os.path.join(BASE_DIR, filename)
-    if not os.path.exists(page_path):
-        raise HTTPException(status_code=404, detail=f"Page not found: {filename}")
-    return FileResponse(page_path)
-
 
 def parse_styles(style_str: Optional[str]):
     parsed_styles = {}
@@ -300,22 +261,6 @@ def _resolve_extent(
     return None
 
 
-MAX_ARCHIVE_SPAN_DAYS = {
-    "alerts": 7,
-    "surface": 7,
-    "radar": 2,
-    "satellite": 3,
-    "spc": 14,
-}
-
-
-def error_payload(message: str, *, code: str = "bad_request", details=None):
-    payload = {"error": message, "code": code}
-    if details is not None:
-        payload["details"] = details
-    return payload
-
-
 def infer_data_mode(date_from: Optional[str], date_to: Optional[str]) -> str:
     has_from = bool((date_from or "").strip())
     has_to = bool((date_to or "").strip())
@@ -331,103 +276,8 @@ def infer_data_mode(date_from: Optional[str], date_to: Optional[str]) -> str:
         ),
     )
 
-
-def parse_utc_datetime(value: str) -> datetime:
-    raw = (value or "").strip()
-    if not raw:
-        raise HTTPException(
-            status_code=400,
-            detail=error_payload("Invalid empty datetime value.", code="invalid_date"),
-        )
-
-    normalized = raw.replace("Z", "+00:00")
-    parsed = None
-    parse_attempts = ["%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M", "%Y-%m-%d"]
-
-    if any(token in normalized for token in ["+", "T"]):
-        try:
-            parsed = datetime.fromisoformat(normalized)
-        except ValueError:
-            parsed = None
-
-    if parsed is None:
-        for fmt in parse_attempts:
-            try:
-                parsed = datetime.strptime(normalized, fmt)
-                break
-            except ValueError:
-                continue
-
-    if parsed is None:
-        raise HTTPException(
-            status_code=400,
-            detail=error_payload(
-                f"Invalid date format: {value}",
-                code="invalid_date",
-                details="Use YYYY-MM-DD HH:MM, YYYY-MM-DDTHH:MM, or YYYY-MM-DD",
-            ),
-        )
-
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
-def validate_archive_range(category: str, start_utc: datetime, end_utc: datetime):
-    if end_utc < start_utc:
-        raise HTTPException(
-            status_code=400,
-            detail=error_payload(
-                "date_to must be greater than or equal to date_from.",
-                code="invalid_date_range",
-            ),
-        )
-
-    max_days = float(MAX_ARCHIVE_SPAN_DAYS.get(category, 7))
-    max_delta = timedelta(days=max_days)
-    if (end_utc - start_utc) > max_delta:
-        raise HTTPException(
-            status_code=400,
-            detail=error_payload(
-                f"Archive range too large for {category}.",
-                code="date_range_too_large",
-                details=f"Maximum allowed span is {max_days} day(s).",
-            ),
-        )
-
-
 def format_utc_for_legacy(value: datetime) -> str:
     return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M")
-
-
-def success_payload(
-    *,
-    message: str,
-    image_url: Optional[str],
-    source: str,
-    data_mode: str,
-    request_id: str = "",
-    status: str = "success",
-):
-    payload = {
-        "status": status,
-        "message": message,
-        "image_url": image_url,
-        "source": source,
-        "data_mode": data_mode,
-    }
-    if request_id:
-        payload["request_id"] = request_id
-    return payload
-
-
-def attach_mode_and_source(payload: dict, data_mode: str):
-    if not isinstance(payload, dict):
-        return payload
-    source_value = payload.get("source") or payload.get("data_source") or "Unknown"
-    payload["source"] = source_value
-    payload["data_mode"] = data_mode
-    return payload
 
 
 RADAR_SITE_ALIASES = {
