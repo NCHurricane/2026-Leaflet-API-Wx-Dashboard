@@ -1066,6 +1066,8 @@
     const RTMA_SCRUB_PLAY_INTERVAL_MS = 300;
     const RTMA_SCRUB_LOOP_HOLD_MS = 2000;
     const RTMA_SCRUB_SWAP_FADE_MS = 90;
+    const _RADAR_OVERLAY_FRAMES = 4;
+    const _RADAR_OVERLAY_STEP_MIN = 5;
     const RADAR_CROSSFADE_MS = 5;
     const SATELLITE_CROSSFADE_MS = RADAR_CROSSFADE_MS;
     const SATELLITE_LOOKBACK_HOURS_MAX = 12;
@@ -5955,6 +5957,7 @@
             case 'spc':
                 if (spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
                 spcLayer = null;
+                setMapEmptyMessage(null);
                 break;
 
             case 'drought':
@@ -7005,7 +7008,9 @@
     }
 
     function _loadMrmsUnified() {
-        // Unified load: load scrubber frames (MRMS has no separate "latest" endpoint)
+        // Unified load: load scrubber frames first; the scrubber path falls
+        // back to the current on-demand overlay when no timestamped frame
+        // GRIBs exist for this product.
         loadMrmsScrubberFrames();
     }
 
@@ -13591,11 +13596,14 @@
             if (loadSeq !== _mrmsScrubLoadSeq || !_isTypeEnabled('mrms')) return;
             if (!_mrmsScrubFrames.length) {
                 _setArchiveProgress(false);
-                _setArchiveScrubber(true);
+                _setArchiveScrubber(false);
                 _setScrubberControlsEnabled(false);
                 _updateRtmaScrubberUi();
-                _setRtmaScrubberStatus('No MRMS frames found for selected window/product.');
-                setStatus('No MRMS frames found for the selected settings.');
+                _setRtmaScrubberStatus('');
+                _mrmsScrubLoadSeq += 1;
+                _mrmsScrubRenderSeq += 1;
+                setStatus(`No MRMS animation frames found for ${product}; loading current overlay...`);
+                await loadMrms();
                 return;
             }
 
