@@ -42,9 +42,11 @@ from app_core.paths import BASE_DIR, CACHE_ROOT as _CACHE_ROOT, ensure_runtime_d
 from app_core.progress import active_tasks
 from app_core.runtime import initialize_runtime, shutdown_runtime
 from app_core.static_assets import CacheStaticFiles
+from routes.alerts import router as alerts_router
 from routes.core import router as core_router
 from routes.health import router as health_router
 from routes.pages import router as pages_router
+from services.alerts_service import enrich_alert_features_geometry
 
 _TRANSPARENT_PNG_1X1 = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
@@ -60,6 +62,7 @@ app = FastAPI(title="NCHurricane Weather API")
 app.include_router(health_router)
 app.include_router(pages_router)
 app.include_router(core_router)
+app.include_router(alerts_router)
 
 
 @app.on_event("startup")
@@ -504,140 +507,6 @@ def _surface_source_timestamp_iso(df) -> str | None:
     return latest_dt.isoformat() if latest_dt else None
 
 
-def _enrich_alert_features_geometry(features: list[dict]) -> None:
-    """Fill missing alert geometries using parallel enrichment with geometry caching.
-
-    Priority order:
-      1. Cached geometry (from previous run, keyed by alert properties)
-      2. NWS forecast-zone geometry (terrain-accurate, e.g. mountain ridgelines)
-      3. SAME/county FIPS fallback (entire county polygons) when zone fetch fails
-
-    Zone geometries are prefetched concurrently, feature enrichment is parallelized
-    across available CPU cores, and enriched geometries are cached to disk to skip
-    re-enrichment for repeat alerts.
-    """
-    import hashlib
-    try:
-        from concurrent.futures import ThreadPoolExecutor
-        from pathlib import Path
-        from shapely.geometry import mapping, shape
-        from alerts.alerts_utils import (
-            CensusCounties,
-            _prefetch_zone_geometries,
-            _resolve_zone_geometry,
-        )
-
-        # Load enriched geometry cache to skip re-enrichment
-        geom_cache = {}
-        try:
-            cache_path = Path(__file__).resolve().parent / "cache" / "alerts" / "enriched_geom_cache.json"
-            if cache_path.exists():
-                geom_cache = json.load(cache_path.open())
-        except Exception:
-            pass
-
-        def _feature_cache_key(feat: dict) -> str:
-            """Generate cache key from alert properties that affect enrichment."""
-            if not isinstance(feat, dict):
-                return ""
-            props = feat.get("properties") or {}
-            key_data = json.dumps({
-                "zones": sorted(props.get("affectedZones") or []),
-                "same": sorted((props.get("geocode") or {}).get("SAME") or []),
-            }, sort_keys=True)
-            return hashlib.md5(key_data.encode()).hexdigest()
-
-        # Bulk-prefetch all zone geometries upfront (concurrent pass).
-        # This ensures all zones are in cache before parallelization.
-        _prefetch_zone_geometries(features)
-
-        # Load county data upfront (thread-safe, just loads into memory).
-        # This avoids race conditions during parallel enrichment.
-        needs_counties = any(
-            not feat.get("geometry") and (feat.get("properties") or {}).get("geocode", {}).get("SAME")
-            for feat in features if isinstance(feat, dict)
-        )
-        if needs_counties:
-            CensusCounties.load()
-
-        def _enrich_single_feature(feat: dict) -> tuple[dict, Any, str]:
-            """Enrich one feature's geometry. Returns (feat, enriched_geom, cache_key)."""
-            if not isinstance(feat, dict):
-                return feat, None, ""
-
-            cache_key = _feature_cache_key(feat)
-
-            # Check cache first
-            if cache_key and cache_key in geom_cache:
-                cached_geom = geom_cache[cache_key]
-                if cached_geom:
-                    return feat, cached_geom, cache_key
-
-            raw_geom = feat.get("geometry")
-            has_valid_geom = False
-            if raw_geom:
-                try:
-                    g = shape(raw_geom)
-                    has_valid_geom = g is not None and not g.is_empty
-                except Exception:
-                    has_valid_geom = False
-            if has_valid_geom:
-                return feat, None, cache_key
-
-            props = feat.get("properties") or {}
-            final_geom = None
-
-            # 1. Try NWS zone geometry first (terrain-accurate boundaries)
-            zone_urls = props.get("affectedZones") or []
-            if zone_urls:
-                final_geom = _resolve_zone_geometry(zone_urls)
-
-            # 2. Fall back to SAME county polygons if zone geometry unavailable
-            if (final_geom is None or final_geom.is_empty) and needs_counties:
-                same_codes = (props.get("geocode") or {}).get("SAME") or []
-                if same_codes:
-                    fips_codes = [
-                        c[1:] for c in same_codes if isinstance(c, str) and len(c) == 6
-                    ]
-                    if fips_codes:
-                        final_geom = CensusCounties.get_geometry_for_fips(fips_codes)
-
-            return feat, final_geom, cache_key
-
-        # Parallelize feature enrichment across available cores
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            results = list(executor.map(_enrich_single_feature, features))
-
-        # Apply enriched geometries back to features and update cache
-        for feat, final_geom, cache_key in results:
-            if final_geom is not None:
-                try:
-                    if isinstance(final_geom, dict):
-                        # Cached GeoJSON dict from previous run - apply directly
-                        feat["geometry"] = final_geom
-                    else:
-                        # Freshly enriched Shapely geometry - check validity and cache
-                        if not final_geom.is_empty:
-                            geom_dict = mapping(final_geom)
-                            feat["geometry"] = geom_dict
-                            # Cache the enriched geometry for future runs
-                            if cache_key:
-                                geom_cache[cache_key] = geom_dict
-                except Exception:
-                    pass
-
-        # Persist enriched geometry cache (non-fatal if fails)
-        try:
-            cache_path = Path(__file__).resolve().parent / "cache" / "alerts" / "enriched_geom_cache.json"
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(json.dumps(geom_cache), encoding="utf-8")
-        except Exception:
-            pass
-
-    except Exception as exc:
-        print(f"[WARN] Alert geometry enrichment skipped: {exc}")
-
-
 # ── World-borders GeoJSON (coastlines + land-only country borders) ────────────
 
 _WORLD_BORDERS_CACHE_PATH = os.path.join(
@@ -901,171 +770,6 @@ def get_us_boundaries():
 
 
 # ── Phase 1: Data Endpoints (served from worker cache) ───────────────────────
-
-
-@app.get("/api/data/alerts")
-def get_data_alerts(
-    state: Optional[str] = None,
-    geometry_mode: Optional[str] = None,
-    zoom_bucket: Optional[str] = None,
-    west: Optional[float] = None,
-    east: Optional[float] = None,
-    south: Optional[float] = None,
-    north: Optional[float] = None,
-):
-    """Return national alerts GeoJSON from worker cache with dual-geometry support.
-
-    Query Parameters:
-        state: Optional state code to filter by (e.g., 'NC', 'CA')
-        geometry_mode: 'full' or 'display' (default: 'full')
-            - 'full': canonical full geometry, always used for interactions
-            - 'display': simplified variant for low-zoom rendering
-        zoom_bucket: 'low' or 'high' (default: 'high')
-            - 'low': CONUS-like zoom with simplified geometry
-            - 'high': state/local zoom with full geometry
-        west/east/south/north: Optional viewport bbox (lon/lat) to include
-            surrounding-area alerts near the current map view.
-
-    Returns GeoJSON FeatureCollection with metadata about geometry mode and
-    simplification statistics.
-    """
-    from config.alerts_config import GEOMETRY_ENDPOINT_DEFAULTS
-
-    # Normalize and validate parameters.
-    mode = (
-        str(geometry_mode or GEOMETRY_ENDPOINT_DEFAULTS["geometry_mode"])
-        .lower()
-        .strip()
-    )
-    bucket = (
-        str(zoom_bucket or GEOMETRY_ENDPOINT_DEFAULTS["zoom_bucket"]).lower().strip()
-    )
-
-    if mode not in {"full", "display"}:
-        mode = GEOMETRY_ENDPOINT_DEFAULTS["geometry_mode"]
-    if bucket not in {"low", "high"}:
-        bucket = GEOMETRY_ENDPOINT_DEFAULTS["zoom_bucket"]
-
-    # Select cache file based on geometry_mode and zoom_bucket.
-    # Use display-low variant only if explicitly requested with low zoom.
-    if mode == "display" and bucket == "low":
-        cache_file = os.path.join(_CACHE_ROOT, "alerts", "national_display_low.geojson")
-    else:
-        # Default to full geometry (backward compatible).
-        cache_file = os.path.join(_CACHE_ROOT, "alerts", "national_full.geojson")
-
-    # Fallback to legacy cache if specific cache not found.
-    if not os.path.exists(cache_file):
-        cache_file = os.path.join(_CACHE_ROOT, "alerts", "national.geojson")
-
-    if not os.path.exists(cache_file):
-        # Cold cache: trigger a synchronous worker run.
-        try:
-            from workers.alerts_worker import run_alerts_worker
-
-            run_alerts_worker()
-        except Exception as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=f"Alerts cache not yet available: {exc}",
-            )
-
-    try:
-        with open(cache_file, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
-    features = data.get("features", [])
-
-    # Apply state filtering identically to both variants.
-    if state:
-        state_upper = state.upper().strip()
-
-        def _matches(feat: dict) -> bool:
-            props = feat.get("properties") or {}
-            for zone in props.get("affectedZones") or []:
-                if f"/{state_upper}" in str(zone):
-                    return True
-            return state_upper in str(props.get("areaDesc") or "")
-
-        features = [f for f in features if _matches(f)]
-
-    # Optional viewport-aware bbox filtering (fast feature-bounds overlap).
-    if west is not None and east is not None and south is not None and north is not None:
-        try:
-            w = float(west)
-            e = float(east)
-            s = float(south)
-            n = float(north)
-            if w > e:
-                w, e = e, w
-            if s > n:
-                s, n = n, s
-
-            def _iter_coords(node):
-                if isinstance(node, (list, tuple)):
-                    if len(node) >= 2 and all(
-                        isinstance(v, (int, float)) for v in node[:2]
-                    ):
-                        yield float(node[0]), float(node[1])
-                    else:
-                        for child in node:
-                            yield from _iter_coords(child)
-
-            def _feature_overlaps_bbox(feat: dict) -> bool:
-                geom = (feat or {}).get("geometry") or {}
-                coords = geom.get("coordinates")
-                if not coords:
-                    return False
-                min_x = float("inf")
-                max_x = float("-inf")
-                min_y = float("inf")
-                max_y = float("-inf")
-                seen = False
-                for x, y in _iter_coords(coords):
-                    seen = True
-                    if x < min_x:
-                        min_x = x
-                    if x > max_x:
-                        max_x = x
-                    if y < min_y:
-                        min_y = y
-                    if y > max_y:
-                        max_y = y
-                if not seen:
-                    return False
-                return not (max_x < w or min_x > e or max_y < s or min_y > n)
-
-            features = [f for f in features if _feature_overlaps_bbox(f)]
-        except Exception:
-            pass
-
-    # Count simplified features (only relevant for display mode).
-    simplified_count = 0
-    if mode == "display" and bucket == "low":
-        simplified_count = sum(1 for f in features if f.get("_simplified") is True)
-
-    # Clean up internal metadata flags from response (don't expose to client).
-    for feat in features:
-        if "_simplified" in feat:
-            del feat["_simplified"]
-
-    # Build response with dual-geometry metadata.
-    return {
-        "type": "FeatureCollection",
-        "features": features,
-        "_source": data.get("_source", "NWS"),
-        "_updated": data.get("_updated"),
-        "count": len(features),
-        # Geometry optimization metadata (Phase 3).
-        "_geometry_mode": mode,
-        "_zoom_bucket": bucket,
-        "_simplified_feature_count": simplified_count,
-        "_simplification_metrics": data.get(
-            "_simplification_metrics", {}
-        ),  # Empty dict if full variant
-    }
 
 
 @app.get("/api/data/spc")
@@ -3385,13 +3089,13 @@ def archive_alerts(
     )
     cached = _read_archive_cache(cache_file)
     if cached is not None:
-        _enrich_alert_features_geometry(cached.get("features", []))
+        enrich_alert_features_geometry(cached.get("features", []))
         return cached
     try:
         features = _fetch_iem_alerts_range(dt_from, dt_to, state_upper or None)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"IEM fetch error: {exc}")
-    _enrich_alert_features_geometry(features)
+    enrich_alert_features_geometry(features)
     result = {
         "type": "FeatureCollection",
         "features": features,

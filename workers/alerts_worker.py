@@ -46,7 +46,7 @@ def run_alerts_worker(force: bool = False) -> None:
             fetch_active_alerts_with_source,
             _create_display_low_features,
         )
-        from main import _enrich_alert_features_geometry
+        from services.alerts_service import enrich_alert_features_geometry
 
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -55,7 +55,7 @@ def run_alerts_worker(force: bool = False) -> None:
         features, source = fetch_active_alerts_with_source(state=None, source="nws")
         enrich_start = time.time()
 
-        _enrich_alert_features_geometry(features)
+        enrich_alert_features_geometry(features)
         enrich_elapsed = time.time() - enrich_start
 
         # Write full geometry cache (canonical).
