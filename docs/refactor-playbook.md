@@ -864,3 +864,24 @@ Verification:
   retired.
 - No stale references to removed JS symbols.
 - Docs identify canonical product URLs.
+
+## Post-Refactor: Archive Mode Redesign
+
+Goal: rethink archive mode as a product workflow after the structural refactor
+is complete.
+
+Current decision:
+
+- Leave existing non-tropical archive endpoints in place during this refactor.
+- Do not redesign, remove, or build frontend archive mode as part of the current
+  backend/frontend split.
+- Treat non-tropical archive workflows as dormant backend capabilities unless a
+  current page explicitly depends on them.
+- Revisit archive mode per product page after the refactor, potentially using
+  Tropical archive behavior as a reference guide.
+
+Future archive work should decide, product by product, whether to:
+
+- keep and modernize the existing endpoint behavior,
+- replace it with a newer archive API and UI workflow,
+- or remove/archive-disable unsupported legacy behavior.
