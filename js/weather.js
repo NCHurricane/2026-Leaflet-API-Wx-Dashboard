@@ -9102,12 +9102,6 @@
         _highlightSelectedTropicalCard();
     }
 
-    function _tropicalSnippet(value, maxLength = 420) {
-        const text = String(value || '').trim();
-        if (text.length <= maxLength) return text;
-        return `${text.slice(0, maxLength - 1).trim()}...`;
-    }
-
     const _TROPICAL_BASIN_NAMES = { AL: 'Atlantic', EP: 'Eastern Pacific', CP: 'Central Pacific' };
 
     function _outlookChip(pct, category, label) {
@@ -9120,7 +9114,6 @@
         const name = area?.name || `Disturbance ${area?.disturbance || ''}`;
         const color = area?.color || '#9ca3af';
         const basinName = _TROPICAL_BASIN_NAMES[basin] || basin;
-        const snippet = _tropicalSnippet(area?.discussion, 180);
         const chips = [
             _outlookChip(area?.twoDayPct, area?.twoDayCategory, '2-DAY'),
             _outlookChip(area?.sevenDayPct, area?.sevenDayCategory, '7-DAY'),
@@ -9135,7 +9128,6 @@
                     <span class="wx-tropical-outlook-basin">${escapeHtml(basinName)}</span>
                     <span class="wx-tropical-outlook-name">${escapeHtml(name)}</span>
                     ${chips ? `<span class="wx-tropical-outlook-chips">${chips}</span>` : ''}
-                    ${snippet ? `<span class="wx-tropical-outlook-snippet">${escapeHtml(snippet)}</span>` : ''}
                 </span>
             </button>`;
     }

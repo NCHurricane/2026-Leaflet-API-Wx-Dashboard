@@ -76,6 +76,8 @@ Use this desktop-first shell as the reference:
    - cards for active items, outlook/development areas, reports, or other
      product entities
    - compact controls that support browsing without hiding the map
+   - compact cards by default; keep long discussion/body text in the inspector
+     or modal instead of embedding snippets in left-hub cards
 3. Center map
    - primary presentation surface
    - product-owned map layers and selected-feature highlighting
@@ -154,6 +156,9 @@ The recovered Tropical plan remains useful, with these changes:
 - Keep the parked mini-map/radar-loop work out unless explicitly requested.
 - Preserve the cache-first strategy; the browser should not poll NHC directly.
 - Keep official NHC text products in the existing slide-in/modal pattern.
+- Keep Tropical Outlook cards compact: show basin/name and probability chips,
+  but do not include discussion snippets in the left hub because they consume
+  too much space when active storms are present.
 - Treat Tropical archive behavior as a reference for future archive workflows,
   but do not redesign all archive workflows during this phase.
 
