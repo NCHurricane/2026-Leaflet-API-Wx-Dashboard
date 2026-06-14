@@ -9083,11 +9083,14 @@
         const box = byId('weather-tropical-system-cards');
         if (!box) return;
         const list = Array.isArray(storms) ? storms : [];
+        const count = byId('weather-tropical-system-count');
+        if (count) count.textContent = String(list.length);
         if (list.length === 0) {
             box.innerHTML = `
-                <div class="wx-tropical-outlook-card wx-tropical-outlook-quiet">
-                    <div class="wx-tropical-outlook-body">
-                        <div class="wx-tropical-outlook-label">No active systems</div>
+                <div class="wx-tropical-empty-card">
+                    <div class="wx-tropical-empty-title">No active systems</div>
+                    <div class="wx-tropical-empty-note">
+                        The selected basin has no active tropical cyclones.
                     </div>
                 </div>`;
             return;
@@ -9145,6 +9148,16 @@
             </div>`;
     }
 
+    function _tropicalOutlookUnavailableCardHtml() {
+        return `
+            <div class="wx-tropical-empty-card">
+                <div class="wx-tropical-empty-title">Outlook unavailable</div>
+                <div class="wx-tropical-empty-note">
+                    Tropical outlook data could not be loaded for the selected basin.
+                </div>
+            </div>`;
+    }
+
     function _attachOutlookCardClickHandlers() {
         const cards = document.querySelectorAll('.wx-tropical-outlook-card');
         cards.forEach((card) => {
@@ -9162,6 +9175,13 @@
         const box = byId('weather-tropical-outlook-cards');
         if (!box) return;
         const feeds = Array.isArray(feedPayloads) ? feedPayloads : [feedPayloads].filter(Boolean);
+        const count = byId('weather-tropical-outlook-count');
+        let activeAreaCount = 0;
+        if (!feeds.length) {
+            if (count) count.textContent = '0';
+            box.innerHTML = _tropicalOutlookUnavailableCardHtml();
+            return;
+        }
         const cards = feeds.map((feed) => {
             const basin = feed?.basin || '';
             const gtwo = feed?.gtwo;
@@ -9170,11 +9190,13 @@
             const geojson = gtwo.geojson;
             const features = (geojson?.features || []).filter((f) => f.geometry?.type === 'Polygon');
             if (!features.length) return _tropicalOutlookQuietCardHtml(basin);
+            activeAreaCount += features.length;
             return features.map((feat) => {
                 const area = feat.properties || {};
                 return _tropicalOutlookAreaCardHtml(area, basin, feat);
             }).join('');
         }).filter(Boolean);
+        if (count) count.textContent = String(activeAreaCount);
         box.innerHTML = cards.join('');
     }
 

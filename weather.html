@@ -3148,20 +3148,50 @@
             #weather-tropical-hub {
                 display: flex;
                 flex-direction: column;
-                gap: 8px;
+                gap: 14px;
             }
 
             .wx-tropical-basin-control {
-                margin-bottom: 1rem;
+                margin-bottom: 12px;
+                padding-bottom: 12px;
+                border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+            }
+
+            .wx-tropical-panel {
+                display: flex;
+                flex-direction: column;
+                gap: 7px;
+                min-width: 0;
+            }
+
+            .wx-tropical-panel-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
             }
 
             .wx-tropical-section-title {
-                margin: 8px 0 2px;
+                margin: 0;
                 color: #94a3b8;
                 font-size: 0.66rem;
                 font-weight: 800;
                 letter-spacing: 0.05em;
                 text-transform: uppercase;
+            }
+
+            .wx-tropical-count {
+                min-width: 1.75rem;
+                padding: 1px 6px;
+                border: 1px solid rgba(148, 163, 184, 0.24);
+                border-radius: 999px;
+                color: #cbd5e1;
+                background: rgba(15, 23, 42, 0.55);
+                font-size: 0.62rem;
+                font-weight: 800;
+                line-height: 1.45;
+                text-align: center;
+                font-variant-numeric: tabular-nums;
             }
 
             .wx-tropical-card-list {
@@ -3172,6 +3202,29 @@
 
             .wx-tropical-card-list:empty {
                 display: none;
+            }
+
+            .wx-tropical-empty-card {
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+                padding: 9px 10px;
+                border: 1px dashed rgba(148, 163, 184, 0.28);
+                border-radius: 8px;
+                color: #cbd5e1;
+                background: rgba(15, 23, 42, 0.36);
+            }
+
+            .wx-tropical-empty-title {
+                color: #e2e8f0;
+                font-size: 0.74rem;
+                font-weight: 800;
+            }
+
+            .wx-tropical-empty-note {
+                color: #94a3b8;
+                font-size: 0.64rem;
+                line-height: 1.35;
             }
 
             /* --- Archive tab (HURDAT2 browser) --- */
@@ -4741,12 +4794,22 @@
                                 </select>
                             </div>
                             <div id="weather-tropical-hub">
-                                <h3 id="wx-tropical-active-heading" class="wx-tropical-section-title">Active Systems</h3>
-                                <div id="weather-tropical-system-cards" class="wx-tropical-card-list"
-                                    role="region" aria-labelledby="wx-tropical-active-heading"></div>
-                                <h3 id="wx-tropical-outlook-heading" class="wx-tropical-section-title">Tropical Outlook</h3>
-                                <div id="weather-tropical-outlook-cards" class="wx-tropical-card-list"
-                                    role="region" aria-labelledby="wx-tropical-outlook-heading"></div>
+                                <section class="wx-tropical-panel" aria-labelledby="wx-tropical-active-heading">
+                                    <div class="wx-tropical-panel-head">
+                                        <h3 id="wx-tropical-active-heading" class="wx-tropical-section-title">Active Systems</h3>
+                                        <span id="weather-tropical-system-count" class="wx-tropical-count">0</span>
+                                    </div>
+                                    <div id="weather-tropical-system-cards" class="wx-tropical-card-list"
+                                        role="region" aria-labelledby="wx-tropical-active-heading"></div>
+                                </section>
+                                <section class="wx-tropical-panel" aria-labelledby="wx-tropical-outlook-heading">
+                                    <div class="wx-tropical-panel-head">
+                                        <h3 id="wx-tropical-outlook-heading" class="wx-tropical-section-title">Tropical Outlook</h3>
+                                        <span id="weather-tropical-outlook-count" class="wx-tropical-count">0</span>
+                                    </div>
+                                    <div id="weather-tropical-outlook-cards" class="wx-tropical-card-list"
+                                        role="region" aria-labelledby="wx-tropical-outlook-heading"></div>
+                                </section>
                             </div>
 
                             <label for="weather-tropical-system">System</label>
