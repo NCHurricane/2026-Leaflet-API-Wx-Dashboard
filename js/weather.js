@@ -5607,6 +5607,14 @@
         wrap.style.display = show ? '' : 'none';
     }
 
+    function _invalidateMapSizeSoon() {
+        requestAnimationFrame(() => {
+            if (map && typeof map.invalidateSize === 'function') {
+                map.invalidateSize();
+            }
+        });
+    }
+
     function _updateTypeSections() {
         ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'].forEach((type) => {
             const section = byId(`wx-section-${type}`);
@@ -5630,6 +5638,7 @@
         const showAnim = (rtmaActive || mrmsActive) || (radarActive && (!radarOnly || radarHasSite));
         if (animWin && !showAnim) animWin.style.display = 'none';
         _updateActiveTabName();
+        _invalidateMapSizeSoon();
     }
 
     const _TAB_TYPE_LABELS = {

@@ -56,10 +56,25 @@
 
             .weather-shell {
                 display: grid;
-                grid-template-rows: auto 1fr;
+                grid-template-rows: minmax(0, 1fr);
                 gap: 0;
-                min-height: calc(100vh - 150px);
+                height: calc(100vh - 92px);
+                min-height: 640px;
                 background: var(--wx-navy);
+            }
+
+            .weather-main {
+                display: grid;
+                grid-template-columns: var(--wx-controls-w, 320px) minmax(0, 1fr) var(--wx-inspector-w, 340px);
+                grid-template-rows: minmax(0, 1fr) auto auto;
+                grid-template-areas:
+                    "controls map inspector"
+                    "controls timeline inspector"
+                    "controls colorbar inspector";
+                gap: 8px;
+                min-width: 0;
+                min-height: 0;
+                padding: 0 4px 4px;
             }
 
             .weather-top-types {
@@ -138,20 +153,19 @@
             }
 
             .weather-map-wrap {
+                grid-area: map;
                 position: relative;
                 background: #030812;
                 overflow: hidden;
-                --wx-side-top: 6rem;
-                --wx-side-width: 350px;
-                --wx-side-inset: 5px;
-                --wx-side-visible-collapsed: 5px;
-                --wx-side-handle-gap: 1px;
+                min-width: 0;
+                min-height: 0;
+                border: 1px solid #1f3764;
             }
 
             #weather-map {
                 width: 100%;
                 height: 100%;
-                min-height: 90vh;
+                min-height: 0;
             }
 
             .weather-map-empty-overlay {
@@ -179,56 +193,37 @@
             }
 
             .weather-side {
-                position: absolute;
-                top: var(--wx-side-top);
-                width: var(--wx-side-width);
+                position: relative;
+                min-width: 0;
+                min-height: 0;
                 overflow-x: hidden;
                 overflow-y: auto;
                 background: var(--wx-panel);
                 border: 1px solid #274276;
                 padding: 10px 12px;
-                z-index: 490;
                 color: var(--wx-text);
-                transition: transform 180ms ease;
-                will-change: transform;
             }
 
             .weather-side-left {
-                left: var(--wx-side-inset);
-                max-height: calc(90% - 95px);
+                grid-area: controls;
                 border-right: 3px solid var(--wx-yellow);
             }
 
             .weather-side-right {
-                right: var(--wx-side-inset);
-                max-height: calc(100% - 150px);
+                grid-area: inspector;
                 border-left: 3px solid var(--wx-yellow);
             }
 
             .weather-side.collapsed.weather-side-left {
-                transform: translateX(calc(-100% + 5px));
+                transform: none;
             }
 
             .weather-side.collapsed.weather-side-right {
-                transform: translateX(calc(100% - 5px));
+                transform: none;
             }
 
             .weather-side-toggle {
-                position: absolute;
-                top: calc(var(--wx-side-top) + 12px);
-                width: 30px;
-                height: 100px;
-                border: 1px solid #274276;
-                background: rgba(45, 79, 204, 0.95);
-                color: var(--wx-yellow);
-                font-size: 2rem;
-                font-weight: 900;
-                line-height: 1;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                cursor: pointer;
-                z-index: 520;
+                display: none;
             }
 
             .weather-side-toggle-left {
@@ -1096,14 +1091,11 @@
             }
 
             .weather-colorbar {
-                position: absolute;
-                left: 50%;
-                transform: translateX(-50%);
-                bottom: 3rem;
-                z-index: 490;
+                grid-area: colorbar;
+                justify-self: center;
                 font-weight: 700;
                 min-width: 575px;
-                max-width: 96vw;
+                max-width: 100%;
                 width: fit-content;
                 background: rgba(245, 248, 252, 0.9);
                 border: 2px solid #1a1a1a;
@@ -1885,32 +1877,26 @@
             }
 
             #weather-archive-bar {
-                position: absolute;
-                left: 0;
-                right: 0;
-                bottom: 0;
+                grid-area: timeline;
                 background: rgba(15, 23, 42, 0.96);
-                border-top: 1px solid #334155;
+                border: 1px solid #334155;
                 padding: 7px 10px;
                 display: flex;
                 flex-direction: column;
                 gap: 6px;
-                z-index: 530;
+                min-width: 0;
             }
 
             /* Tropical archive advisory timeline (separate from the time-machine bar) */
             #wx-tropical-adv-scrubber {
-                position: absolute;
-                left: 0;
-                right: 0;
-                bottom: 0;
+                grid-area: timeline;
                 background: rgba(15, 23, 42, 0.96);
-                border-top: 1px solid #334155;
+                border: 1px solid #334155;
                 padding: 7px 10px;
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                z-index: 531;
+                min-width: 0;
             }
 
             #wx-tropical-adv-scrubber[hidden] {
@@ -2432,9 +2418,30 @@
                 font-weight: 800;
             }
 
-            @media (max-width: 1180px) {
+            @media (max-width: 1100px) {
+                .weather-shell {
+                    height: auto;
+                    min-height: 0;
+                }
+
+                .weather-main {
+                    grid-template-columns: minmax(0, 1fr);
+                    grid-template-rows: auto minmax(480px, 62vh) auto auto auto;
+                    grid-template-areas:
+                        "controls"
+                        "map"
+                        "timeline"
+                        "colorbar"
+                        "inspector";
+                }
+
                 .weather-side {
-                    width: 220px;
+                    max-height: 48vh;
+                }
+
+                .weather-colorbar {
+                    min-width: 0;
+                    width: 100%;
                 }
             }
 
@@ -3970,14 +3977,16 @@
         </header>
 
         <div class="weather-shell">
-            <div class="weather-map-wrap">
-                <div id="weather-map"></div>
-                <div id="weather-map-empty-overlay" class="weather-map-empty-overlay" hidden>
-                    <span id="weather-map-empty-message"></span>
+            <div class="weather-main">
+                <div class="weather-map-wrap">
+                    <div id="weather-map"></div>
+                    <div id="weather-map-empty-overlay" class="weather-map-empty-overlay" hidden>
+                        <span id="weather-map-empty-message"></span>
+                    </div>
+                    <div id="wx-new-alert-border-flash" aria-hidden="true"></div>
+                    <div id="wx-new-alert-stack"></div>
+                    <div id="wx-radar-toast-stack" aria-live="polite" aria-atomic="true"></div>
                 </div>
-                <div id="wx-new-alert-border-flash" aria-hidden="true"></div>
-                <div id="wx-new-alert-stack"></div>
-                <div id="wx-radar-toast-stack" aria-live="polite" aria-atomic="true"></div>
 
                 <aside class="weather-side weather-side-left" id="weather-side-left">
                     <h3 id="wx-active-tab-name">Current</h3>
