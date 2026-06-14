@@ -9147,16 +9147,12 @@
 
     function _attachOutlookCardClickHandlers() {
         const cards = document.querySelectorAll('.wx-tropical-outlook-card');
-        console.log('[outlook] attaching handlers to', cards.length, 'cards');
         cards.forEach((card) => {
             const featureId = card.getAttribute('data-feature-id');
-            console.log('[outlook] card featureId:', featureId);
             if (!featureId) return;
             card.style.cursor = 'pointer';
             card.addEventListener('click', () => {
-                console.log('[outlook] card clicked, featureId:', featureId);
                 const feature = _outlookFeatureMap[featureId];
-                console.log('[outlook] feature:', feature);
                 if (feature) _highlightOutlookFeature(feature);
             });
         });
@@ -9469,7 +9465,6 @@
     }
 
     function _openOutlookDetail(feature) {
-        console.log('[outlook] opening detail panel for feature:', feature);
         const props = feature?.properties || {};
         const name = props.name || 'Formation Area';
         const discussion = props.discussion || '';

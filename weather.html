@@ -3151,6 +3151,19 @@
                 gap: 8px;
             }
 
+            .wx-tropical-basin-control {
+                margin-bottom: 1rem;
+            }
+
+            .wx-tropical-section-title {
+                margin: 8px 0 2px;
+                color: #94a3b8;
+                font-size: 0.66rem;
+                font-weight: 800;
+                letter-spacing: 0.05em;
+                text-transform: uppercase;
+            }
+
             .wx-tropical-card-list {
                 display: flex;
                 flex-direction: column;
@@ -4718,7 +4731,7 @@
 
                     <div id="wx-section-tropical" class="wx-block" data-type="tropical" data-tropical-mode="overview" style="display:none;">
                         <div id="weather-tropical-opts">
-                                <div class="wx-block" style="margin-bottom: 1rem;">
+                            <div class="wx-block wx-tropical-basin-control">
                                 <label for="weather-tropical-basin">Region / Basin</label>
                                 <select id="weather-tropical-basin" class="wx-sidebar-select">
                                     <option value="WORLD" selected>World</option>
@@ -4727,11 +4740,13 @@
                                     <option value="CP">Central Pacific</option>
                                 </select>
                             </div>
-                            <h3 id="wx-active-tab-name">ACTIVE SYSTEMS</h3>
                             <div id="weather-tropical-hub">
-                                <div id="weather-tropical-system-cards" class="wx-tropical-card-list"></div>
-                            <h3 id="wx-active-tab-name" style="margin-bottom: 0;">TROPICAL OUTLOOK</h3>
-                                <div id="weather-tropical-outlook-cards" class="wx-tropical-card-list"></div>
+                                <h3 id="wx-tropical-active-heading" class="wx-tropical-section-title">Active Systems</h3>
+                                <div id="weather-tropical-system-cards" class="wx-tropical-card-list"
+                                    role="region" aria-labelledby="wx-tropical-active-heading"></div>
+                                <h3 id="wx-tropical-outlook-heading" class="wx-tropical-section-title">Tropical Outlook</h3>
+                                <div id="weather-tropical-outlook-cards" class="wx-tropical-card-list"
+                                    role="region" aria-labelledby="wx-tropical-outlook-heading"></div>
                             </div>
 
                             <label for="weather-tropical-system">System</label>
