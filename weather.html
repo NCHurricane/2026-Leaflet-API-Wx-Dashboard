@@ -214,36 +214,6 @@
                 border-left: 3px solid var(--wx-yellow);
             }
 
-            .weather-side.collapsed.weather-side-left {
-                transform: none;
-            }
-
-            .weather-side.collapsed.weather-side-right {
-                transform: none;
-            }
-
-            .weather-side-toggle {
-                display: none;
-            }
-
-            .weather-side-toggle-left {
-                left: calc(var(--wx-side-inset) + var(--wx-side-width) + var(--wx-side-handle-gap));
-                border-radius: 6px;
-            }
-
-            .weather-side-toggle-right {
-                right: calc(var(--wx-side-inset) + var(--wx-side-width) + var(--wx-side-handle-gap));
-                border-radius: 6px;
-            }
-
-            #weather-side-left.collapsed+.weather-side-toggle-left {
-                left: calc(var(--wx-side-inset) + var(--wx-side-visible-collapsed) + var(--wx-side-handle-gap));
-            }
-
-            #weather-side-right.collapsed+.weather-side-toggle-right {
-                right: calc(var(--wx-side-inset) + var(--wx-side-visible-collapsed) + var(--wx-side-handle-gap));
-            }
-
             .weather-side h3 {
                 margin: 0 0 10px;
                 font-size: 1.05rem;
@@ -4898,9 +4868,6 @@
                         </div>
                     </div>
                 </aside>
-                <button id="weather-side-toggle-left" class="weather-side-toggle weather-side-toggle-left" type="button"
-                    aria-label="Collapse left sidebar" aria-expanded="true">‹</button>
-
                 <aside class="weather-side weather-side-right" id="weather-side-right">
                     <div class="wx-right-tabs" role="tablist" aria-label="Right panel tabs">
                         <button type="button" id="wx-right-tab-btn-layers" class="wx-right-tab" data-right-tab="layers"
@@ -5186,9 +5153,6 @@
                         <div id="wx-archive-status" class="wx-archive-status">Select a basin and season to browse past storms.</div>
                     </div>
                 </aside>
-                <button id="weather-side-toggle-right" class="weather-side-toggle weather-side-toggle-right"
-                    type="button" aria-label="Collapse right sidebar" aria-expanded="true">›</button>
-
                 <div id="weather-colorbar" class="weather-colorbar" style="display:none;"></div>
 
                 <div id="weather-archive-bar" hidden>

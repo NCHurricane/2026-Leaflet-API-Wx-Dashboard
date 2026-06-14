@@ -861,10 +861,9 @@
     // time-machine `_archiveMode` used by radar/satellite/alerts.
     let _tropicalArchiveCatalog = null;
     let _tropicalArchiveSelectedId = null;
-    // Archive "context": while active we collapse the live left sidebar and relabel
-    // the Layers tab → "Current" (the way back to live mode).
+    // Archive "context": while active we relabel the Layers tab → "Current"
+    // as the way back to live mode.
     let _tropicalArchiveContext = false;
-    let _archiveAutoCollapsedLeft = false;  // true only if WE collapsed it (respect manual re-open)
     // Phase C — per-advisory scrubber state for a modern archived storm.
     let _tropicalArchiveStormBase = null;   // storm.json (best-track + advisories index)
     let _tropicalArchiveStormId = null;
@@ -3992,7 +3991,7 @@
     // ── Active Warnings Panel (third sidebar column) ─────────────────────────
     // Persistent index of currently-active warnings. Populated from
     // _allAlertFeatures whenever alerts refresh. Auto-shows when ≥1 row
-    // matches the active filter; user-collapsed state is preserved.
+    // matches the active filter.
     const ACTIVE_WARNING_SEVERE_EVENTS = new Set([
         'Tornado Warning',
         'Severe Thunderstorm Warning',
@@ -4354,8 +4353,8 @@
             btn.addEventListener('click', () => {
                 if (btn.hidden) return;
                 const target = btn.getAttribute('data-right-tab');
-                // Archive enters the collapsed/"Current" context; the Layers/"Current"
-                // tab is the explicit way back to live mode. System keeps the context.
+                // Archive enters the "Current" context; the Layers/"Current" tab is
+                // the explicit way back to live mode. System keeps the context.
                 if (target === 'archive') {
                     _enterTropicalArchiveContext();
                 } else if (target === 'layers') {
@@ -10552,45 +10551,23 @@
         _populateTropicalArchiveSeasons();
     }
 
-    function _setLeftSidebarCollapsed(collapsed) {
-        const side = byId('weather-side-left');
-        const btn = byId('weather-side-toggle-left');
-        if (!side) return;
-        side.classList.toggle('collapsed', collapsed);
-        if (btn) {
-            btn.textContent = collapsed ? '›' : '‹';
-            btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-        }
-    }
-
     function _setLayersTabLabel(label) {
         const btn = byId('wx-right-tab-btn-layers');
         if (btn) btn.textContent = label;
     }
 
-    // Entering archive context: collapse the live left sidebar (once) and relabel the
-    // Layers tab to "Current" so the user has a clear way back to live mode.
+    // Entering archive context: relabel the Layers tab to "Current" so the user
+    // has a clear way back to live mode.
     function _enterTropicalArchiveContext() {
         if (_tropicalArchiveContext) return;
         _tropicalArchiveContext = true;
-        const side = byId('weather-side-left');
-        if (side && !side.classList.contains('collapsed')) {
-            _setLeftSidebarCollapsed(true);
-            _archiveAutoCollapsedLeft = true;
-        }
         _setLayersTabLabel('Current');
     }
 
-    // Leaving archive context: restore the left sidebar (only if we auto-collapsed it
-    // and the user hasn't manually re-opened it) and revert the tab label.
+    // Leaving archive context: revert the tab label.
     function _exitTropicalArchiveContext() {
         if (!_tropicalArchiveContext) return;
         _tropicalArchiveContext = false;
-        const side = byId('weather-side-left');
-        if (_archiveAutoCollapsedLeft && side && side.classList.contains('collapsed')) {
-            _setLeftSidebarCollapsed(false);
-        }
-        _archiveAutoCollapsedLeft = false;
         _setLayersTabLabel('Layers');
     }
 
@@ -13762,28 +13739,6 @@
         if (sliderWindow) sliderWindow.style.display = visible ? '' : 'none';
     }
 
-    function _wireSidebarToggle(sideId, buttonId, expandedSymbol, collapsedSymbol) {
-        const side = byId(sideId);
-        const btn = byId(buttonId);
-        if (!side || !btn) return;
-
-        const updateButton = () => {
-            const expanded = !side.classList.contains('collapsed');
-            btn.textContent = expanded ? expandedSymbol : collapsedSymbol;
-            btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-        };
-
-        btn.addEventListener('click', () => {
-            side.classList.toggle('collapsed');
-            // A manual left-sidebar toggle relinquishes archive's auto-restore, so we
-            // never fight the user's own choice when leaving archive context.
-            if (sideId === 'weather-side-left') _archiveAutoCollapsedLeft = false;
-            updateButton();
-        });
-
-        updateButton();
-    }
-
     function _updateScrubberUI() {
         const slider = byId('scrubber-slider');
         const tsEl = byId('scrubber-timestamp');
@@ -15802,8 +15757,6 @@
         _updateRightSidebarGroups();
         _updateSubOptionVisibility();
         updateMrmsSubControls();
-        _wireSidebarToggle('weather-side-left', 'weather-side-toggle-left', '‹', '›');
-        _wireSidebarToggle('weather-side-right', 'weather-side-toggle-right', '›', '‹');
         _wireRightSidebarTabs();
         _wireActiveWarningsPanel();
         _wireSidebarWarningFilterCheckboxes();
