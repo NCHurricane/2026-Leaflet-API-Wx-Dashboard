@@ -249,16 +249,24 @@ Alerts intentionally remains on vector GeoJSON workflow.
 
 ## Product Page Shell Pattern
 
-Planned product pages should share the same shell contract. The Tropical tab is
-the reference implementation for this pattern because it already has the
+Planned product pages should share the same map-first dashboard shell. The
+Tropical tab is the reference product implementation because it already has the
 clearest product-specific hub/map/inspector workflow.
 
 1. Top navigation/status bar.
-2. Left product hub or controls.
-3. Map canvas owned by that product page.
-4. Right inspector, legend, products, and selected-feature details.
-5. Bottom timeline/archive/scrubber area when the product supports time.
+2. Fixed left product hub or controls dock.
+3. Bounded center map canvas owned by that product page.
+4. Fixed right inspector, legend, products, and selected-feature details dock.
+5. Docked bottom timeline/archive/scrubber area when the product supports time.
 6. Shared refresh/error/status surface.
+
+The default desktop shell should use docked dashboard panels rather than
+collapsible sidebars floating over the map. Collapse or stacking behavior is a
+responsive/mobile concern, not the primary desktop model.
+
+Keep product-specific selectors in product controls unless they truly apply to
+every product. For example, region selection should not become a global command
+bar control while Tropical uses basin selection instead.
 
 Canonical product URLs should be extensionless:
 
@@ -311,8 +319,9 @@ For Tropical backend changes, follow the post-refactor ownership boundaries:
 ## Clean-Cut Migration Pattern
 
 During migration, preserve behavior first and keep `weather.html` working as the
-combined workspace. First refine Tropical as the reference layout inside the
-combined workspace. After each standalone product page is verified:
+combined workspace. First land the fixed dashboard grid shell, then refine
+Tropical as the reference product layout inside that shell. After each
+standalone product page is verified:
 
 1. Remove that product's now-unused code from the combined workspace.
 2. Remove stale exported JS helpers only after no page references them.

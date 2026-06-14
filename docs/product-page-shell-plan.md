@@ -3,12 +3,14 @@
 Created: 2026-06-13
 
 This plan updates Phase 13 after the backend route/service refactor. The next
-frontend step is to use the existing Tropical tab redesign work as the reference
-layout before splitting products into standalone pages.
+frontend step is to replace the current floating/collapsible sidebar layout with
+a true map-first dashboard grid, then use the Tropical tab redesign work as the
+first product reference inside that shell.
 
 ## Current Decision
 
-Tropical is the first UI reference pass.
+Use a fixed, map-first dashboard shell. Tropical is the first product reference
+inside that shell.
 
 The existing Tropical tab already has the strongest product-specific shell:
 
@@ -20,22 +22,27 @@ The existing Tropical tab already has the strongest product-specific shell:
 - Tropical-specific layer toggles and legend behavior
 - cache-first data flow through the Tropical API and worker cache
 
-The implementation should refine and verify Tropical inside the current
-combined `weather.html` workspace first. After the Tropical layout is accepted,
-use it as the guide for standalone product pages.
+The implementation should first make `weather.html` a real dashboard layout:
+fixed left controls, bounded center map, fixed right inspector, and docked
+timeline/colorbar rows. After that shell is accepted, refine Tropical inside the
+combined workspace and use it as the guide for standalone product pages.
 
 ## Relationship To Phases 13-15
 
-Phase 13 is enhanced, not replaced.
+Phase 13 is course-corrected.
 
-- Capture the Tropical layout as the reference product shell.
+- Build the fixed dashboard grid shell before more product-specific UI polish.
+- Treat the current collapsible sidebars as legacy panel chrome.
+- Keep existing element ids and product behavior stable during the first grid
+  pass.
 - Define which shell pieces are reusable and which are product-specific.
 - Do not start broad product-page creation until this shell contract is clear.
 
 Phase 14 changes order.
 
 - The old recommended order placed Tropical last.
-- The new order starts with Tropical as the reference UI pass.
+- The new order starts with the dashboard grid shell, then Tropical as the
+  reference UI pass.
 - Standalone product pages should then be created one product at a time using
   the accepted shell pattern.
 
@@ -65,13 +72,15 @@ adding route logic back to `main.py`.
 
 ## Reference Layout
 
-Use this desktop-first shell as the reference:
+Use this desktop-first dashboard shell as the reference:
 
 1. Top navigation/status
    - product navigation
    - global online/status/error indicators
    - product refresh state
-2. Left product hub
+   - do not make product-specific selectors, such as `#weather-region`, truly
+     global unless every product uses them
+2. Left controls dock
    - product-specific discovery and selection
    - cards for active items, outlook/development areas, reports, or other
      product entities
@@ -80,6 +89,8 @@ Use this desktop-first shell as the reference:
      or modal instead of embedding snippets in left-hub cards
 3. Center map
    - primary presentation surface
+   - bounded grid cell, not full-viewport background with panels floating over
+     it
    - product-owned map layers and selected-feature highlighting
    - no decorative cards around the map
 4. Right inspector
@@ -90,9 +101,54 @@ Use this desktop-first shell as the reference:
 5. Bottom timeline/scrubber
    - present only when the product has time navigation
    - controls animation, archive, or frame selection
+   - dock under the map cell instead of overlaying the map
 6. Shared status/error surface
    - product-specific loading, stale data, empty state, and error messages
    - should not leak between products or tabs
+
+## Dashboard Grid Target
+
+Replace the current absolute-positioning model with a grid shell:
+
+- command/header row
+- product tab row
+- main dashboard grid
+
+The main grid should use:
+
+- left controls dock: approximately `320px`
+- center map/workspace: flexible `minmax(0, 1fr)`
+- right inspector dock: approximately `340px`
+- optional timeline row under the center map
+- optional colorbar/legend row under the timeline
+
+Every grid ancestor of the Leaflet map must allow shrinking with `min-height: 0`
+and `min-width: 0`, otherwise the map cell can overflow or collapse.
+
+Default desktop behavior:
+
+- panels are fixed dashboard docks, not collapsible overlays
+- left and right docks scroll internally
+- the page itself should not become a long-scrolling document
+- map controls, attribution, alert overlays, toasts, and Tropical outlook detail
+  panels remain scoped to the map cell
+
+Responsive behavior:
+
+- below roughly `1100px`, stack controls, map, timeline/colorbar, and inspector
+  vertically
+- keep an explicit map height in stacked mode so Leaflet remains visible
+
+Implementation order:
+
+1. Land the grid shell while preserving existing ids and behavior.
+2. Call `map.invalidateSize()` after the grid lands and after product/tab
+   switches that affect panel visibility.
+3. Verify all current product tabs before deleting legacy collapse behavior.
+4. Remove the side collapse toggles and handlers only after the grid shell is
+   accepted.
+5. Add left-dock subtabs for dense products such as MRMS, SPC, and RTMA after
+   the base grid is stable.
 
 ## Reusable Shell Pieces
 
@@ -131,16 +187,17 @@ domain behavior behind a generic abstraction.
 
 Recommended order after Tropical reference acceptance:
 
-1. Tropical reference pass in the combined workspace.
-2. Tropical standalone page candidate, if the shell is accepted and stable.
-3. Alerts.
-4. SPC.
-5. Surface.
-6. Drought.
-7. Satellite.
-8. Radar.
-9. MRMS.
-10. RTMA.
+1. Fixed dashboard grid shell in the combined workspace.
+2. Tropical reference pass inside the grid shell.
+3. Tropical standalone page candidate, if the shell is accepted and stable.
+4. Alerts.
+5. SPC.
+6. Surface.
+7. Drought.
+8. Satellite.
+9. Radar.
+10. MRMS.
+11. RTMA.
 
 This order can change if browser testing shows another product is lower-risk,
 but Tropical should remain the reference design source.
@@ -174,6 +231,8 @@ node --check js\weather.js
 For browser smoke:
 
 - hard-refresh `weather.html`
+- verify the map sits in a bounded center cell with no left/right panel overlap
+- verify left and right docks scroll internally
 - open the Tropical tab
 - verify Region is hidden only for Tropical
 - verify basin/outlook cards render
@@ -181,6 +240,10 @@ For browser smoke:
 - select a storm and confirm the right Inspector opens
 - toggle Tropical layers and confirm map cleanup on tab switch
 - open official product text and confirm the slide-in/modal closes cleanly
+- switch through all product tabs and confirm controls, timeline/colorbar, and
+  right inspector panes still swap correctly
+- resize below the responsive breakpoint and confirm panels stack without
+  clipping the map
 
 For future standalone product pages:
 

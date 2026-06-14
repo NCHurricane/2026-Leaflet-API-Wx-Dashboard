@@ -768,8 +768,9 @@ Verification:
 
 ## Phase 13: Shared Frontend Shell And Utility Design
 
-Goal: design product-page frontend architecture before creating pages, using
-the Tropical tab redesign as the reference UI pattern.
+Goal: design the map-first dashboard shell before creating product pages, then
+use the Tropical tab redesign as the reference product pattern inside that
+shell.
 
 Files to create:
 
@@ -779,9 +780,13 @@ Do not modify frontend code in this phase.
 
 Current direction:
 
-- Tropical is the first UI reference pass, not the last product.
+- Replace the current floating/collapsible sidebars with a fixed dashboard grid:
+  left controls dock, bounded center map, right inspector dock, and docked
+  timeline/colorbar rows.
+- Tropical is the first product reference pass after the grid shell, not the
+  last product.
 - Refine and verify Tropical inside the existing combined `weather.html`
-  workspace first.
+  workspace after the grid shell is stable.
 - After the Tropical layout is accepted, use its hub/map/inspector pattern to
   guide standalone product pages.
 - The recovered Tropical plan is still valid as design source material, but its
@@ -794,9 +799,9 @@ Design decisions to record:
 - Shared shell regions:
   - top nav/status
   - map canvas
-  - left controls
-  - right inspector/legend
-  - bottom timeline
+  - fixed left controls dock
+  - fixed right inspector/legend dock
+  - docked bottom timeline/colorbar rows
   - refresh/error/status area
 - Shared utilities:
   - API client
@@ -815,6 +820,7 @@ Design decisions to record:
 Verification:
 
 - Plan prevents copy-pasting the full `weather.js` state model.
+- Plan replaces the collapsible sidebar assumption with a fixed dashboard grid.
 - Plan defines which code remains shared and which code belongs to each product.
 - Plan identifies what is Tropical-specific versus reusable for other products.
 
@@ -826,16 +832,17 @@ Do not start this phase until Phases 1-13 are complete.
 
 Recommended order:
 
-1. Tropical reference pass in the combined workspace.
-2. `/tropical` standalone page candidate, if the reference layout is accepted.
-3. `/alerts`
-4. `/spc`
-5. `/surface`
-6. `/drought`
-7. `/satellite`
-8. `/radar`
-9. `/mrms`
-10. `/rtma`
+1. Fixed dashboard grid shell in the combined workspace.
+2. Tropical reference pass in the combined workspace.
+3. `/tropical` standalone page candidate, if the reference layout is accepted.
+4. `/alerts`
+5. `/spc`
+6. `/surface`
+7. `/drought`
+8. `/satellite`
+9. `/radar`
+10. `/mrms`
+11. `/rtma`
 
 Per-product steps:
 
@@ -851,6 +858,7 @@ Stop if:
 
 - Product page duplicates large sections of `weather.js` without extracting a
   shared utility first.
+- Product-page work starts before the fixed dashboard grid is accepted.
 - Standalone page work starts before the Tropical reference shell is accepted.
 
 ## Phase 15: Clean Cut
