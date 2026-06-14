@@ -9119,6 +9119,8 @@
     function _tropicalOutlookAreaCardHtml(area, basin, feature) {
         const name = area?.name || `Disturbance ${area?.disturbance || ''}`;
         const color = area?.color || '#9ca3af';
+        const basinName = _TROPICAL_BASIN_NAMES[basin] || basin;
+        const snippet = _tropicalSnippet(area?.discussion, 180);
         const chips = [
             _outlookChip(area?.twoDayPct, area?.twoDayCategory, '2-DAY'),
             _outlookChip(area?.sevenDayPct, area?.sevenDayCategory, '7-DAY'),
@@ -9127,14 +9129,15 @@
         if (featureId && feature) _outlookFeatureMap[featureId] = feature;
         const dataAttr = featureId ? ` data-feature-id="${featureId}"` : '';
         return `
-            <div class="wx-tropical-outlook-card" style="--oc-cat-color:${color};"${dataAttr}>
+            <button type="button" class="wx-tropical-outlook-card" style="--oc-cat-color:${color};"${dataAttr} aria-label="Open outlook details for ${escapeHtml(name)}">
                 <span class="wx-tropical-outlook-bar" aria-hidden="true"></span>
                 <span class="wx-tropical-outlook-body">
-                    <span class="wx-tropical-outlook-basin">${escapeHtml(_TROPICAL_BASIN_NAMES[basin] || basin)}</span>
+                    <span class="wx-tropical-outlook-basin">${escapeHtml(basinName)}</span>
                     <span class="wx-tropical-outlook-name">${escapeHtml(name)}</span>
                     ${chips ? `<span class="wx-tropical-outlook-chips">${chips}</span>` : ''}
+                    ${snippet ? `<span class="wx-tropical-outlook-snippet">${escapeHtml(snippet)}</span>` : ''}
                 </span>
-            </div>`;
+            </button>`;
     }
 
     function _tropicalOutlookQuietCardHtml(basin) {
@@ -9159,11 +9162,9 @@
     }
 
     function _attachOutlookCardClickHandlers() {
-        const cards = document.querySelectorAll('.wx-tropical-outlook-card');
+        const cards = document.querySelectorAll('.wx-tropical-outlook-card[data-feature-id]');
         cards.forEach((card) => {
             const featureId = card.getAttribute('data-feature-id');
-            if (!featureId) return;
-            card.style.cursor = 'pointer';
             card.addEventListener('click', () => {
                 const feature = _outlookFeatureMap[featureId];
                 if (feature) _highlightOutlookFeature(feature);

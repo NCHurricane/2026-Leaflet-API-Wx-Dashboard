@@ -3518,11 +3518,28 @@
                 align-items: stretch;
                 width: 100%;
                 padding: 0;
+                text-align: left;
                 border: 1px solid rgba(148, 163, 184, 0.28);
                 border-radius: 8px;
                 background: rgba(15, 23, 42, 0.55);
                 color: #e2e8f0;
+                font: inherit;
                 overflow: hidden;
+            }
+
+            button.wx-tropical-outlook-card {
+                cursor: pointer;
+                transition: border-color 0.15s ease, background 0.15s ease;
+            }
+
+            button.wx-tropical-outlook-card:hover {
+                border-color: rgba(148, 163, 184, 0.55);
+                background: rgba(30, 41, 59, 0.72);
+            }
+
+            button.wx-tropical-outlook-card:focus-visible {
+                outline: 2px solid var(--oc-cat-color, #38bdf8);
+                outline-offset: 2px;
             }
 
             .wx-tropical-outlook-card.wx-tropical-outlook-quiet {
