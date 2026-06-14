@@ -768,13 +768,26 @@ Verification:
 
 ## Phase 13: Shared Frontend Shell And Utility Design
 
-Goal: design product-page frontend architecture before creating pages.
+Goal: design product-page frontend architecture before creating pages, using
+the Tropical tab redesign as the reference UI pattern.
 
 Files to create:
 
 - `docs/product-page-shell-plan.md`
 
 Do not modify frontend code in this phase.
+
+Current direction:
+
+- Tropical is the first UI reference pass, not the last product.
+- Refine and verify Tropical inside the existing combined `weather.html`
+  workspace first.
+- After the Tropical layout is accepted, use its hub/map/inspector pattern to
+  guide standalone product pages.
+- The recovered Tropical plan is still valid as design source material, but its
+  old backend anchors must be updated for the route/service split:
+  `routes/tropical.py`, `services/tropical_service.py`, and
+  `workers/tropical_worker.py` now own Tropical backend behavior.
 
 Design decisions to record:
 
@@ -803,6 +816,7 @@ Verification:
 
 - Plan prevents copy-pasting the full `weather.js` state model.
 - Plan defines which code remains shared and which code belongs to each product.
+- Plan identifies what is Tropical-specific versus reusable for other products.
 
 ## Phase 14: Product Page Split
 
@@ -812,15 +826,16 @@ Do not start this phase until Phases 1-13 are complete.
 
 Recommended order:
 
-1. `/alerts`
-2. `/spc`
-3. `/surface`
-4. `/drought`
-5. `/satellite`
-6. `/radar`
-7. `/mrms`
-8. `/rtma`
-9. `/tropical`
+1. Tropical reference pass in the combined workspace.
+2. `/tropical` standalone page candidate, if the reference layout is accepted.
+3. `/alerts`
+4. `/spc`
+5. `/surface`
+6. `/drought`
+7. `/satellite`
+8. `/radar`
+9. `/mrms`
+10. `/rtma`
 
 Per-product steps:
 
@@ -836,6 +851,7 @@ Stop if:
 
 - Product page duplicates large sections of `weather.js` without extracting a
   shared utility first.
+- Standalone page work starts before the Tropical reference shell is accepted.
 
 ## Phase 15: Clean Cut
 

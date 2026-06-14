@@ -249,12 +249,14 @@ Alerts intentionally remains on vector GeoJSON workflow.
 
 ## Product Page Shell Pattern
 
-Planned product pages should share the same shell contract:
+Planned product pages should share the same shell contract. The Tropical tab is
+the reference implementation for this pattern because it already has the
+clearest product-specific hub/map/inspector workflow.
 
 1. Top navigation/status bar.
-2. Map canvas owned by that product page.
-3. Left product controls.
-4. Right inspector, legend, and selected-feature details.
+2. Left product hub or controls.
+3. Map canvas owned by that product page.
+4. Right inspector, legend, products, and selected-feature details.
 5. Bottom timeline/archive/scrubber area when the product supports time.
 6. Shared refresh/error/status surface.
 
@@ -292,10 +294,25 @@ Do not create product pages by copy-pasting the current combined `weather.js`
 state model into separate files. Split shared utilities first, then give each
 product page a narrow entry module.
 
+Use Tropical to decide the first shared utilities. Start by extracting only the
+pieces that are clearly reusable, such as API helpers, map setup, layer cleanup,
+status/error rendering, legend rendering, inspector wiring, and timer cleanup.
+Keep Tropical-specific domain behavior in the Tropical entry/module.
+
+For Tropical backend changes, follow the post-refactor ownership boundaries:
+
+- API route declarations belong in `routes/tropical.py`.
+- Route-facing cache and response behavior belongs in
+  `services/tropical_service.py`.
+- NHC ingestion, GTWO parsing, GIS parsing, and cache generation belong in
+  `workers/tropical_worker.py`.
+- Do not add Tropical route logic back to `main.py`.
+
 ## Clean-Cut Migration Pattern
 
 During migration, preserve behavior first and keep `weather.html` working as the
-combined workspace. After each product page is verified:
+combined workspace. First refine Tropical as the reference layout inside the
+combined workspace. After each standalone product page is verified:
 
 1. Remove that product's now-unused code from the combined workspace.
 2. Remove stale exported JS helpers only after no page references them.

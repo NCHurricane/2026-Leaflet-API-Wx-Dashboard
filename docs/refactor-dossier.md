@@ -296,6 +296,8 @@ these defaults:
   add product pages without disturbing product API modules.
 - Add a shared page shell and shared frontend utility layer before creating many
   product pages.
+- Use the existing Tropical redesign work as the first reference shell before
+  broad product-page extraction.
 - After product pages are verified, perform a clean-cut cleanup from the old
   combined workspace instead of keeping duplicated product code indefinitely.
 - Split `main.py` by route family using `APIRouter`.
@@ -326,6 +328,8 @@ Scope:
 - It records later UI architecture requirements: clean product URLs, shared page
   shell, shared frontend utilities, and clean-cut removal from the combined
   workspace after verification.
+- For the frontend phase, Tropical is the reference UI pass and should guide the
+  shared shell before other products are split out.
 
 Why preserve `/radar.html`:
 
