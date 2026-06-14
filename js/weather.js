@@ -13729,11 +13729,22 @@
             if (fill) fill.style.width = `${pct || 0}%`;
             if (text) text.textContent = msg || '';
         }
+        _syncArchiveTimelineVisibility();
     }
 
     function _setArchiveScrubber(visible) {
         const row = byId('archive-scrubber-row');
         if (row) row.style.display = visible ? '' : 'none';
+        _syncArchiveTimelineVisibility();
+    }
+
+    function _syncArchiveTimelineVisibility() {
+        const bar = byId('weather-archive-bar');
+        if (!bar) return;
+        const rows = [byId('archive-progress-row'), byId('archive-scrubber-row')];
+        const hasVisibleRow = rows.some((row) => row && row.style.display !== 'none' && !row.hidden);
+        bar.hidden = !hasVisibleRow;
+        _invalidateMapSizeSoon();
     }
 
     function _showRadarLookbackSlider(visible) {

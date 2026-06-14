@@ -1887,6 +1887,10 @@
                 min-width: 0;
             }
 
+            #weather-archive-bar[hidden] {
+                display: none;
+            }
+
             /* Tropical archive advisory timeline (separate from the time-machine bar) */
             #wx-tropical-adv-scrubber {
                 grid-area: timeline;
@@ -5187,7 +5191,7 @@
 
                 <div id="weather-colorbar" class="weather-colorbar" style="display:none;"></div>
 
-                <div id="weather-archive-bar">
+                <div id="weather-archive-bar" hidden>
                     <div id="archive-progress-row" style="display:none;">
                         <div id="archive-progress-track">
                             <div id="archive-progress-fill"></div>
