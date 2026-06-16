@@ -4,7 +4,7 @@ import os
 import re
 
 from fastapi import HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app_core.paths import BASE_DIR
@@ -38,3 +38,22 @@ def serve_page(filename: str):
     if not os.path.exists(page_path):
         raise HTTPException(status_code=404, detail=f"Page not found: {filename}")
     return FileResponse(page_path)
+
+
+def serve_product_shell_page(product_type: str):
+    """Serve the shared weather shell with product-page metadata."""
+    if not re.fullmatch(r"[a-z0-9_-]+", product_type):
+        raise HTTPException(status_code=404, detail=f"Unknown product page: {product_type}")
+
+    page_path = os.path.join(BASE_DIR, "weather.html")
+    if not os.path.exists(page_path):
+        raise HTTPException(status_code=404, detail="Page not found: weather.html")
+
+    with open(page_path, encoding="utf-8") as page_file:
+        content = page_file.read()
+
+    meta = f'        <meta name="nch-product-page" content="{product_type}">\n'
+    if meta not in content:
+        content = content.replace("        <title>", f"{meta}        <title>", 1)
+
+    return HTMLResponse(content, headers={"Cache-Control": "no-cache"})

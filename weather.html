@@ -129,6 +129,14 @@
                 outline: none;
             }
 
+            body.wx-standalone-product .weather-header {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            body.wx-standalone-product .weather-header-right {
+                display: none;
+            }
+
             @media (max-width: 1280px) {
                 .weather-header {
                     grid-template-columns: 1fr;
@@ -835,9 +843,9 @@
                 border-top: 1px solid var(--wx-border);
             }
 
-            #weather-spc-overlay-opts>label+.weather-spc-dual-row,
-            #weather-spc-overlay-opts>label+.wx-check-row,
-            #weather-spc-overlay-opts>label+.weather-spc-inline-filters {
+            #weather-spc-overlay-opts label+.weather-spc-dual-row,
+            #weather-spc-overlay-opts label+.wx-check-row,
+            #weather-spc-overlay-opts label+.weather-spc-inline-filters {
                 margin-top: 4px;
                 margin-bottom: 3px;
             }
@@ -930,9 +938,57 @@
                 margin: 0;
             }
 
+            .spc-subtabs,
+            .mrms-subtabs,
+            .satellite-subtabs {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 4px;
+                margin: 0 0 8px;
+            }
+
+            .spc-subtab-button,
+            .mrms-subtab-button,
+            .satellite-subtab-button {
+                min-width: 0;
+                padding: 5px 6px;
+                border: 1px solid rgba(148, 163, 184, 0.28);
+                border-radius: 4px;
+                background: rgba(15, 23, 42, 0.72);
+                color: #cbd5e1;
+                font-size: 0.66rem;
+                font-weight: 800;
+                line-height: 1.05;
+                text-align: center;
+                text-transform: uppercase;
+                cursor: pointer;
+            }
+
+            .spc-subtab-button[aria-selected="true"],
+            .mrms-subtab-button[aria-selected="true"],
+            .satellite-subtab-button[aria-selected="true"] {
+                border-color: rgba(34, 211, 238, 0.68);
+                background: rgba(14, 116, 144, 0.36);
+                color: #f8fafc;
+            }
+
+            .spc-subtab-panel,
+            .mrms-subtab-panel {
+                display: none;
+            }
+
+            .spc-subtab-panel.is-active,
+            .mrms-subtab-panel.is-active {
+                display: block;
+            }
+
+            .satellite-native-control {
+                display: none;
+            }
+
             #weather-spc-convective-list>.wx-check-row,
             #weather-spc-fire-list>.wx-check-row,
-            #weather-spc-overlay-opts>.wx-check-row,
+            #weather-spc-overlay-opts .wx-check-row,
             .weather-spc-watch-type-rows>.wx-check-row {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) 20px;
@@ -945,14 +1001,14 @@
 
             #weather-spc-convective-list>.wx-check-row span,
             #weather-spc-fire-list>.wx-check-row span,
-            #weather-spc-overlay-opts>.wx-check-row span,
+            #weather-spc-overlay-opts .wx-check-row span,
             .weather-spc-watch-type-rows>.wx-check-row span {
                 display: block;
             }
 
             #weather-spc-convective-list>.wx-check-row input[type="checkbox"],
             #weather-spc-fire-list>.wx-check-row input[type="checkbox"],
-            #weather-spc-overlay-opts>.wx-check-row input[type="checkbox"],
+            #weather-spc-overlay-opts .wx-check-row input[type="checkbox"],
             .weather-spc-watch-type-rows>.wx-check-row input[type="checkbox"] {
                 width: 18px;
                 height: 18px;
@@ -3129,12 +3185,55 @@
             #weather-tropical-hub {
                 display: flex;
                 flex-direction: column;
-                gap: 14px;
+                gap: 10px;
+            }
+
+            #weather-tropical-opts {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .wx-tropical-tabs {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 4px;
+                margin: 0;
+                padding: 3px;
+                background: rgba(0, 0, 0, 0.24);
+                border: 1px solid rgba(148, 163, 184, 0.24);
+                border-radius: 6px;
+            }
+
+            .wx-tropical-tab {
+                min-width: 0;
+                width: auto;
+                padding: 6px 7px;
+                border: 0;
+                border-radius: 4px;
+                background: transparent;
+                color: #94a3b8;
+                font-size: 0.66rem;
+                font-weight: 800;
+                line-height: 1.05;
+                text-align: center;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                cursor: pointer;
+            }
+
+            .wx-tropical-tab[aria-selected="true"] {
+                background: rgba(14, 116, 144, 0.42);
+                color: #f8fafc;
+            }
+
+            .wx-tropical-tab-panel[hidden] {
+                display: none;
             }
 
             .wx-tropical-basin-control {
-                margin-bottom: 12px;
-                padding-bottom: 12px;
+                margin-bottom: 0;
+                padding-bottom: 10px;
                 border-bottom: 1px solid rgba(148, 163, 184, 0.18);
             }
 
@@ -3395,9 +3494,8 @@
                 display: none;
             }
 
-            /* Storm cards replace the System dropdown on the Tropical tab */
-            #weather-tropical-opts label[for="weather-tropical-system"],
-            #weather-tropical-opts #weather-tropical-system {
+            /* Storm cards are the UI; the native select remains as synced state. */
+            .tropical-native-control {
                 display: none;
             }
 
@@ -3668,39 +3766,25 @@
                 overflow-wrap: anywhere;
             }
 
-            .wx-tropical-actions {
-                display: flex;
-                gap: 6px;
-                margin-top: 10px;
-            }
-
-            .wx-tropical-actions button {
-                flex: 1;
+            .wx-tropical-status-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                align-items: center;
+                gap: 8px;
+                padding-top: 2px;
             }
 
             .wx-tropical-status {
-                margin-top: 8px;
+                min-width: 0;
+                color: #94a3b8;
+                line-height: 1.3;
             }
 
-            .wx-tropical-outlook {
-                margin-top: 8px;
-                border-top: 1px solid rgba(148, 163, 184, 0.28);
-                padding-top: 8px;
-                color: #cbd5e1;
-                font-size: 0.72rem;
-                line-height: 1.35;
-            }
-
-            .wx-tropical-outlook h4 {
-                margin: 0 0 4px;
-                color: #fbbf24;
-                font-size: 0.7rem;
-                letter-spacing: 0.04em;
-                text-transform: uppercase;
-            }
-
-            .wx-tropical-outlook p {
-                margin: 0 0 6px;
+            .wx-tropical-refresh {
+                width: auto;
+                padding: 5px 9px;
+                font-size: 0.66rem;
+                line-height: 1;
             }
 
             .wx-tropical-product-list {
@@ -4205,7 +4289,23 @@
                     <div id="wx-section-spc" class="wx-block" data-type="spc" style="display:none;">
                         <input id="weather-show-spc" type="checkbox" checked hidden>
                         <div id="weather-spc-opts">
-                            <div style="margin-top: 8px;">
+                            <div class="spc-subtabs" role="tablist" aria-label="SPC product groups">
+                                <button id="spc-subtab-outlooks" class="spc-subtab-button" type="button" role="tab"
+                                    aria-selected="true" aria-controls="spc-panel-outlooks"
+                                    data-spc-subtab="outlooks">Outlooks</button>
+                                <button id="spc-subtab-watches" class="spc-subtab-button" type="button" role="tab"
+                                    aria-selected="false" aria-controls="spc-panel-watches"
+                                    data-spc-subtab="watches">Watches</button>
+                                <button id="spc-subtab-reports" class="spc-subtab-button" type="button" role="tab"
+                                    aria-selected="false" aria-controls="spc-panel-reports"
+                                    data-spc-subtab="reports">Reports/MDs</button>
+                                <button id="spc-subtab-fire" class="spc-subtab-button" type="button" role="tab"
+                                    aria-selected="false" aria-controls="spc-panel-fire"
+                                    data-spc-subtab="fire">Fire</button>
+                            </div>
+
+                            <div id="spc-panel-outlooks" class="spc-subtab-panel is-active" role="tabpanel"
+                                aria-labelledby="spc-subtab-outlooks" data-spc-panel="outlooks">
                                 <label for="weather-spc-day">Convective Outlook Day</label>
                                 <select id="weather-spc-day">
                                     <option value="1" selected>Day 1</option>
@@ -4254,42 +4354,49 @@
                                     </div>
                                 </div>
                             </div>
+
                             <div id="weather-spc-overlay-opts">
-                                <label>Watches</label>
-                                <div class="weather-spc-dual-row">
-                                    <span class="weather-spc-dual-label weather-spc-convective-label">Tornado</span>
-                                    <label><input id="weather-spc-watch-tor-polygon" type="checkbox">Polygon</label>
-                                    <label><input id="weather-spc-watch-tor-counties" type="checkbox">Counties</label>
+                                <div id="spc-panel-watches" class="spc-subtab-panel" role="tabpanel"
+                                    aria-labelledby="spc-subtab-watches" data-spc-panel="watches">
+                                    <label>Watches</label>
+                                    <div class="weather-spc-dual-row">
+                                        <span class="weather-spc-dual-label weather-spc-convective-label">Tornado</span>
+                                        <label><input id="weather-spc-watch-tor-polygon" type="checkbox">Polygon</label>
+                                        <label><input id="weather-spc-watch-tor-counties" type="checkbox">Counties</label>
+                                    </div>
+                                    <div class="weather-spc-dual-row">
+                                        <span class="weather-spc-dual-label weather-spc-convective-label">SVR
+                                            T-Storm</span>
+                                        <label><input id="weather-spc-watch-svr-polygon" type="checkbox">Polygon</label>
+                                        <label><input id="weather-spc-watch-svr-counties" type="checkbox">Counties</label>
+                                    </div>
                                 </div>
-                                <div class="weather-spc-dual-row">
-                                    <span class="weather-spc-dual-label weather-spc-convective-label">SVR
-                                        T-Storm</span>
-                                    <label><input id="weather-spc-watch-svr-polygon" type="checkbox">Polygon</label>
-                                    <label><input id="weather-spc-watch-svr-counties" type="checkbox">Counties</label>
-                                </div>
-                                <label style="margin-top: 18px;">Mesoscale Discussions</label>
 
-                                <div class="wx-check-row"><span>Mesoscale Discussions</span><input
-                                        id="weather-spc-show-mds" type="checkbox"></div>
+                                <div id="spc-panel-reports" class="spc-subtab-panel" role="tabpanel"
+                                    aria-labelledby="spc-subtab-reports" data-spc-panel="reports">
+                                    <label>Mesoscale Discussions</label>
+                                    <div class="wx-check-row"><span>Mesoscale Discussions</span><input
+                                            id="weather-spc-show-mds" type="checkbox"></div>
 
+                                    <label style="margin-top: 18px;">Storm Reports</label>
+                                    <div class="wx-check-row"><span>Today</span><input id="weather-spc-reports-today"
+                                            type="checkbox"></div>
+                                    <div class="wx-check-row"><span>Yesterday</span><input
+                                            id="weather-spc-reports-yesterday" type="checkbox"></div>
 
-                                <label style="margin-top: 18px;">Storm Reports</label>
-                                <div class="wx-check-row"><span>Today</span><input id="weather-spc-reports-today"
-                                        type="checkbox"></div>
-                                <div class="wx-check-row"><span>Yesterday</span><input
-                                        id="weather-spc-reports-yesterday" type="checkbox"></div>
-
-                                <div class="weather-spc-inline-filters">
-                                    <label style="padding-top: 0;"><input id="weather-spc-report-type-torn"
-                                            type="checkbox" checked>Tornado</label>
-                                    <label style="padding-top: 0;"><input id="weather-spc-report-type-wind"
-                                            type="checkbox" checked>Wind</label>
-                                    <label style="padding-top: 0;"><input id="weather-spc-report-type-hail"
-                                            type="checkbox" checked>Hail</label>
+                                    <div class="weather-spc-inline-filters">
+                                        <label style="padding-top: 0;"><input id="weather-spc-report-type-torn"
+                                                type="checkbox" checked>Tornado</label>
+                                        <label style="padding-top: 0;"><input id="weather-spc-report-type-wind"
+                                                type="checkbox" checked>Wind</label>
+                                        <label style="padding-top: 0;"><input id="weather-spc-report-type-hail"
+                                                type="checkbox" checked>Hail</label>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div style="margin-top: 18px;">
+                            <div id="spc-panel-fire" class="spc-subtab-panel" role="tabpanel"
+                                aria-labelledby="spc-subtab-fire" data-spc-panel="fire">
                                 <label for="weather-spc-fire-day">Fire Weather Day</label>
                                 <select id="weather-spc-fire-day">
                                     <option value="1" selected>Day 1</option>
@@ -4382,14 +4489,32 @@
 
                     <div id="wx-section-satellite" class="wx-block" data-type="satellite" style="display:none;">
                         <div id="weather-satellite-opts">
-                            <label for="weather-satellite-sat-id">Satellite</label>
-                            <select id="weather-satellite-sat-id" class="wx-sidebar-select">
+                            <label>Satellite</label>
+                            <div class="satellite-subtabs" role="tablist" aria-label="Satellite platform">
+                                <button id="satellite-subtab-goes18" class="satellite-subtab-button" type="button"
+                                    role="tab" aria-selected="false" data-satellite-sat="goes18">GOES-18</button>
+                                <button id="satellite-subtab-goes19" class="satellite-subtab-button" type="button"
+                                    role="tab" aria-selected="true" data-satellite-sat="goes19">GOES-19</button>
+                            </div>
+                            <select id="weather-satellite-sat-id" class="wx-sidebar-select satellite-native-control"
+                                aria-hidden="true" tabindex="-1">
                                 <option value="goes19" selected>GOES-19 (East)</option>
                                 <option value="goes18">GOES-18 (West)</option>
                             </select>
 
-                            <label for="weather-satellite-sector">Sector</label>
-                            <select id="weather-satellite-sector" class="wx-sidebar-select">
+                            <label>Sector</label>
+                            <div class="satellite-subtabs" role="tablist" aria-label="Satellite sector">
+                                <button id="satellite-sector-fulldisk" class="satellite-subtab-button" type="button"
+                                    role="tab" aria-selected="false" data-satellite-sector="FullDisk">Full Disk</button>
+                                <button id="satellite-sector-conus" class="satellite-subtab-button" type="button"
+                                    role="tab" aria-selected="true" data-satellite-sector="CONUS">CONUS</button>
+                                <button id="satellite-sector-meso1" class="satellite-subtab-button" type="button"
+                                    role="tab" aria-selected="false" data-satellite-sector="Meso1">Meso 1</button>
+                                <button id="satellite-sector-meso2" class="satellite-subtab-button" type="button"
+                                    role="tab" aria-selected="false" data-satellite-sector="Meso2">Meso 2</button>
+                            </div>
+                            <select id="weather-satellite-sector" class="wx-sidebar-select satellite-native-control"
+                                aria-hidden="true" tabindex="-1">
                                 <option value="CONUS" selected>CONUS</option>
                                 <option value="FullDisk">Full Disk</option>
                                 <option value="Meso1">Mesoscale 1</option>
@@ -4413,16 +4538,7 @@
                                 <option value="Dust">Dust</option>
                                 <option value="RocketPlume">Rocket Plume</option>
                             </select>
-                            <div class="wx-radar-action-row" style="margin-top:8px;">
-                                <button id="weather-satellite-current" class="wx-mode-tab active"
-                                    type="button">Current</button>
-                            </div>
                             <span id="weather-satellite-status" class="wx-small"></span>
-
-                            <div class="wx-radar-action-row" style="margin-top:8px;">
-                                <button id="weather-satellite-animate" class="wx-mode-tab"
-                                    type="button">Animate</button>
-                            </div>
 
                             <div id="weather-satellite-lookback-wrap"
                                 style="display:none; margin-top:12px; padding-top:8px; border-top:1px solid #334155;">
@@ -4521,211 +4637,245 @@
                     </div>
 
                     <div id="wx-section-mrms" class="wx-block" data-type="mrms" style="display:none;">
-                        <div class="wx-check-row mrms-product-row">
-                            <span>Surface Precip Type</span>
-                            <input class="mrms-product-check" type="checkbox" value="PrecipFlag" checked>
+                        <div class="mrms-subtabs" role="tablist" aria-label="MRMS product groups">
+                            <button id="mrms-subtab-precip" class="mrms-subtab-button" type="button" role="tab"
+                                aria-selected="true" aria-controls="mrms-panel-precip"
+                                data-mrms-subtab="precip">Precip</button>
+                            <button id="mrms-subtab-reflectivity" class="mrms-subtab-button" type="button" role="tab"
+                                aria-selected="false" aria-controls="mrms-panel-reflectivity"
+                                data-mrms-subtab="reflectivity">Reflectivity</button>
+                            <button id="mrms-subtab-storm" class="mrms-subtab-button" type="button" role="tab"
+                                aria-selected="false" aria-controls="mrms-panel-storm"
+                                data-mrms-subtab="storm">Storm</button>
+                            <button id="mrms-subtab-hail" class="mrms-subtab-button" type="button" role="tab"
+                                aria-selected="false" aria-controls="mrms-panel-hail"
+                                data-mrms-subtab="hail">Hail/Lightning</button>
+                            <button id="mrms-subtab-environment" class="mrms-subtab-button" type="button" role="tab"
+                                aria-selected="false" aria-controls="mrms-panel-environment"
+                                data-mrms-subtab="environment">Environment</button>
                         </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>Precipitation Rate</span>
-                            <input class="mrms-product-check" type="checkbox" value="PrecipRate">
-                        </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>QPE Accumulation</span>
-                            <input class="mrms-product-check" type="checkbox" value="QPE">
-                        </div>
-                        <div id="mrms-sub-qpe" class="mrms-sub-panel" style="display:none;">
-                            <div class="mrms-sub-group">
-                                <span class="mrms-sub-group-label">Source</span>
-                                <div class="wx-check-row"><span>MultiSensor Pass2</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-qpe-source" value="MS2" checked></div>
-                                <div class="wx-check-row"><span>MultiSensor Pass1</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-qpe-source" value="MS1">
+
+                        <div id="mrms-panel-precip" class="mrms-subtab-panel is-active" role="tabpanel"
+                            aria-labelledby="mrms-subtab-precip" data-mrms-panel="precip">
+                            <div class="wx-check-row mrms-product-row">
+                                <span>Surface Precip Type</span>
+                                <input class="mrms-product-check" type="checkbox" value="PrecipFlag" checked>
+                            </div>
+                            <div class="wx-check-row mrms-product-row">
+                                <span>Precipitation Rate</span>
+                                <input class="mrms-product-check" type="checkbox" value="PrecipRate">
+                            </div>
+                            <div class="wx-check-row mrms-product-row">
+                                <span>QPE Accumulation</span>
+                                <input class="mrms-product-check" type="checkbox" value="QPE">
+                            </div>
+                            <div id="mrms-sub-qpe" class="mrms-sub-panel" style="display:none;">
+                                <div class="mrms-sub-group">
+                                    <span class="mrms-sub-group-label">Source</span>
+                                    <div class="wx-check-row"><span>MultiSensor Pass2</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-qpe-source" value="MS2" checked></div>
+                                    <div class="wx-check-row"><span>MultiSensor Pass1</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-qpe-source" value="MS1"></div>
+                                    <div class="wx-check-row"><span>Radar Only</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-qpe-source" value="RO"></div>
                                 </div>
-                                <div class="wx-check-row"><span>Radar Only</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-qpe-source" value="RO"></div>
-                            </div>
-                            <div class="mrms-sub-group">
-                                <span class="mrms-sub-group-label">Period</span>
-                                <div class="wx-check-row"><span>1 Hour</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-qpe-period" value="01H" checked></div>
-                                <div class="wx-check-row"><span>3 Hour</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-qpe-period" value="03H"></div>
-                                <div class="wx-check-row"><span>6 Hour</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-qpe-period" value="06H"></div>
-                                <div class="wx-check-row"><span>12 Hour</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-qpe-period" value="12H"></div>
-                                <div class="wx-check-row"><span>24 Hour</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-qpe-period" value="24H"></div>
-                                <div class="wx-check-row"><span>48 Hour</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-qpe-period" value="48H"></div>
-                                <div class="wx-check-row"><span>72 Hour</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-qpe-period" value="72H"></div>
-                            </div>
-                        </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>Reflectivity</span>
-                            <input class="mrms-product-check" type="checkbox" value="Reflectivity">
-                        </div>
-                        <div id="mrms-sub-reflectivity" class="mrms-sub-panel" style="display:none;">
-                            <div class="mrms-sub-group">
-                                <span class="mrms-sub-group-label">Variant</span>
-                                <div class="wx-check-row"><span>Hybrid Scan (HSR)</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-refl-variant" value="HSR" checked></div>
-                                <div class="wx-check-row"><span>Base Reflectivity (QC)</span><input
-                                        class="mrms-sub-radio" type="radio" name="mrms-refl-variant" value="BaseQC">
-                                </div>
-                                <div class="wx-check-row"><span>Composite – Low</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-refl-variant" value="CompLow"></div>
-                                <div class="wx-check-row"><span>Composite – High</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-refl-variant" value="CompHigh"></div>
-                                <div class="wx-check-row"><span>Composite – Super</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-refl-variant" value="CompSuper"></div>
-                                <div class="wx-check-row"><span>Base Refl 1hr Max</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-refl-variant" value="BREF_1HR_MAX"></div>
-                                <div class="wx-check-row"><span>Comp Refl 1hr Max</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-refl-variant" value="CREF_1HR_MAX"></div>
-                            </div>
-                        </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>Rotation Tracks</span>
-                            <input class="mrms-product-check" type="checkbox" value="RotationTrack">
-                        </div>
-                        <div id="mrms-sub-rotation" class="mrms-sub-panel" style="display:none;">
-                            <div class="mrms-sub-group">
-                                <span class="mrms-sub-group-label">Level</span>
-                                <div class="wx-check-row"><span>Low Level (0-2 km)</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-rotation-level" value="LL" checked></div>
-                                <div class="wx-check-row"><span>Mid Level (3-6 km)</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-rotation-level" value="ML">
-                                </div>
-                            </div>
-                            <div class="mrms-sub-group">
-                                <span class="mrms-sub-group-label">Window</span>
-                                <div class="wx-check-row"><span>30 min</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-rotation-time" value="30min"></div>
-                                <div class="wx-check-row"><span>60 min</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-rotation-time" value="60min" checked></div>
-                                <div class="wx-check-row"><span>2 hr</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-rotation-time" value="120min"></div>
-                                <div class="wx-check-row"><span>4 hr</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-rotation-time" value="240min"></div>
-                                <div class="wx-check-row"><span>6 hr</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-rotation-time" value="360min"></div>
-                                <div class="wx-check-row"><span>24 hr</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-rotation-time" value="1440min"></div>
-                            </div>
-                        </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>MESH / Hail</span>
-                            <input class="mrms-product-check" type="checkbox" value="MESH">
-                        </div>
-                        <div id="mrms-sub-mesh" class="mrms-sub-panel" style="display:none;">
-                            <div class="mrms-sub-group">
-                                <span class="mrms-sub-group-label">Window</span>
-                                <div class="wx-check-row"><span>Instant</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-mesh-time" value="Instant" checked></div>
-                                <div class="wx-check-row"><span>Max 30 min</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-mesh-time" value="Max_30min"></div>
-                                <div class="wx-check-row"><span>Max 60 min</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-mesh-time" value="Max_60min"></div>
-                                <div class="wx-check-row"><span>Max 2 hr</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-mesh-time" value="Max_120min"></div>
-                                <div class="wx-check-row"><span>Max 4 hr</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-mesh-time" value="Max_240min"></div>
-                                <div class="wx-check-row"><span>Max 6 hr</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-mesh-time" value="Max_360min"></div>
-                                <div class="wx-check-row"><span>Max 24 hr</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-mesh-time" value="Max_1440min"></div>
-                            </div>
-                        </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>Azimuthal Shear</span>
-                            <input class="mrms-product-check" type="checkbox" value="AzShear">
-                        </div>
-                        <div id="mrms-sub-azshear" class="mrms-sub-panel" style="display:none;">
-                            <div class="mrms-sub-group">
-                                <span class="mrms-sub-group-label">Level</span>
-                                <div class="wx-check-row"><span>Low Level (0-2 km)</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-azshear-level" value="Low" checked></div>
-                                <div class="wx-check-row"><span>Mid Level (3-6 km)</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-azshear-level" value="Mid">
+                                <div class="mrms-sub-group">
+                                    <span class="mrms-sub-group-label">Period</span>
+                                    <div class="wx-check-row"><span>1 Hour</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-qpe-period" value="01H" checked></div>
+                                    <div class="wx-check-row"><span>3 Hour</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-qpe-period" value="03H"></div>
+                                    <div class="wx-check-row"><span>6 Hour</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-qpe-period" value="06H"></div>
+                                    <div class="wx-check-row"><span>12 Hour</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-qpe-period" value="12H"></div>
+                                    <div class="wx-check-row"><span>24 Hour</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-qpe-period" value="24H"></div>
+                                    <div class="wx-check-row"><span>48 Hour</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-qpe-period" value="48H"></div>
+                                    <div class="wx-check-row"><span>72 Hour</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-qpe-period" value="72H"></div>
                                 </div>
                             </div>
                         </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>Echo Top</span>
-                            <input class="mrms-product-check" type="checkbox" value="EchoTop">
-                        </div>
-                        <div id="mrms-sub-echotop" class="mrms-sub-panel" style="display:none;">
-                            <div class="mrms-sub-group">
-                                <span class="mrms-sub-group-label">dBZ Threshold</span>
-                                <div class="wx-check-row"><span>18 dBZ</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-echotop-threshold" value="18" checked></div>
-                                <div class="wx-check-row"><span>30 dBZ</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-echotop-threshold" value="30"></div>
-                                <div class="wx-check-row"><span>50 dBZ</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-echotop-threshold" value="50"></div>
-                                <div class="wx-check-row"><span>60 dBZ</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-echotop-threshold" value="60"></div>
+
+                        <div id="mrms-panel-reflectivity" class="mrms-subtab-panel" role="tabpanel"
+                            aria-labelledby="mrms-subtab-reflectivity" data-mrms-panel="reflectivity">
+                            <div class="wx-check-row mrms-product-row">
+                                <span>Reflectivity</span>
+                                <input class="mrms-product-check" type="checkbox" value="Reflectivity">
+                            </div>
+                            <div id="mrms-sub-reflectivity" class="mrms-sub-panel" style="display:none;">
+                                <div class="mrms-sub-group">
+                                    <span class="mrms-sub-group-label">Variant</span>
+                                    <div class="wx-check-row"><span>Hybrid Scan (HSR)</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-refl-variant" value="HSR" checked></div>
+                                    <div class="wx-check-row"><span>Base Reflectivity (QC)</span><input
+                                            class="mrms-sub-radio" type="radio" name="mrms-refl-variant" value="BaseQC">
+                                    </div>
+                                    <div class="wx-check-row"><span>Composite – Low</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-refl-variant" value="CompLow"></div>
+                                    <div class="wx-check-row"><span>Composite – High</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-refl-variant" value="CompHigh"></div>
+                                    <div class="wx-check-row"><span>Composite – Super</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-refl-variant" value="CompSuper"></div>
+                                    <div class="wx-check-row"><span>Base Refl 1hr Max</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-refl-variant" value="BREF_1HR_MAX"></div>
+                                    <div class="wx-check-row"><span>Comp Refl 1hr Max</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-refl-variant" value="CREF_1HR_MAX"></div>
+                                </div>
+                            </div>
+                            <div class="wx-check-row mrms-product-row">
+                                <span>Echo Top</span>
+                                <input class="mrms-product-check" type="checkbox" value="EchoTop">
+                            </div>
+                            <div id="mrms-sub-echotop" class="mrms-sub-panel" style="display:none;">
+                                <div class="mrms-sub-group">
+                                    <span class="mrms-sub-group-label">dBZ Threshold</span>
+                                    <div class="wx-check-row"><span>18 dBZ</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-echotop-threshold" value="18" checked></div>
+                                    <div class="wx-check-row"><span>30 dBZ</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-echotop-threshold" value="30"></div>
+                                    <div class="wx-check-row"><span>50 dBZ</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-echotop-threshold" value="50"></div>
+                                    <div class="wx-check-row"><span>60 dBZ</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-echotop-threshold" value="60"></div>
+                                </div>
+                            </div>
+                            <div class="wx-check-row mrms-product-row">
+                                <span>VIL</span>
+                                <input class="mrms-product-check" type="checkbox" value="VIL">
+                            </div>
+                            <div id="mrms-sub-vil" class="mrms-sub-panel" style="display:none;">
+                                <div class="mrms-sub-group">
+                                    <span class="mrms-sub-group-label">Type</span>
+                                    <div class="wx-check-row"><span>Instant</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-vil-type" value="Instant" checked></div>
+                                    <div class="wx-check-row"><span>Density</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-vil-type" value="Density"></div>
+                                    <div class="wx-check-row"><span>Max 2 hr</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-vil-type" value="Max_120min"></div>
+                                    <div class="wx-check-row"><span>Max 24 hr</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-vil-type" value="Max_1440min"></div>
+                                </div>
                             </div>
                         </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>VIL</span>
-                            <input class="mrms-product-check" type="checkbox" value="VIL">
-                        </div>
-                        <div id="mrms-sub-vil" class="mrms-sub-panel" style="display:none;">
-                            <div class="mrms-sub-group">
-                                <span class="mrms-sub-group-label">Type</span>
-                                <div class="wx-check-row"><span>Instant</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-vil-type" value="Instant" checked></div>
-                                <div class="wx-check-row"><span>Density</span><input class="mrms-sub-radio" type="radio"
-                                        name="mrms-vil-type" value="Density"></div>
-                                <div class="wx-check-row"><span>Max 2 hr</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-vil-type" value="Max_120min"></div>
-                                <div class="wx-check-row"><span>Max 24 hr</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-vil-type" value="Max_1440min"></div>
+
+                        <div id="mrms-panel-storm" class="mrms-subtab-panel" role="tabpanel"
+                            aria-labelledby="mrms-subtab-storm" data-mrms-panel="storm">
+                            <div class="wx-check-row mrms-product-row">
+                                <span>Rotation Tracks</span>
+                                <input class="mrms-product-check" type="checkbox" value="RotationTrack">
+                            </div>
+                            <div id="mrms-sub-rotation" class="mrms-sub-panel" style="display:none;">
+                                <div class="mrms-sub-group">
+                                    <span class="mrms-sub-group-label">Level</span>
+                                    <div class="wx-check-row"><span>Low Level (0-2 km)</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-rotation-level" value="LL" checked></div>
+                                    <div class="wx-check-row"><span>Mid Level (3-6 km)</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-rotation-level" value="ML"></div>
+                                </div>
+                                <div class="mrms-sub-group">
+                                    <span class="mrms-sub-group-label">Window</span>
+                                    <div class="wx-check-row"><span>30 min</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-rotation-time" value="30min"></div>
+                                    <div class="wx-check-row"><span>60 min</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-rotation-time" value="60min" checked></div>
+                                    <div class="wx-check-row"><span>2 hr</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-rotation-time" value="120min"></div>
+                                    <div class="wx-check-row"><span>4 hr</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-rotation-time" value="240min"></div>
+                                    <div class="wx-check-row"><span>6 hr</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-rotation-time" value="360min"></div>
+                                    <div class="wx-check-row"><span>24 hr</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-rotation-time" value="1440min"></div>
+                                </div>
+                            </div>
+                            <div class="wx-check-row mrms-product-row">
+                                <span>Azimuthal Shear</span>
+                                <input class="mrms-product-check" type="checkbox" value="AzShear">
+                            </div>
+                            <div id="mrms-sub-azshear" class="mrms-sub-panel" style="display:none;">
+                                <div class="mrms-sub-group">
+                                    <span class="mrms-sub-group-label">Level</span>
+                                    <div class="wx-check-row"><span>Low Level (0-2 km)</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-azshear-level" value="Low" checked></div>
+                                    <div class="wx-check-row"><span>Mid Level (3-6 km)</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-azshear-level" value="Mid"></div>
+                                </div>
                             </div>
                         </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>SHI</span>
-                            <input class="mrms-product-check" type="checkbox" value="SHI">
-                        </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>POSH</span>
-                            <input class="mrms-product-check" type="checkbox" value="POSH">
-                        </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>Lightning Probability</span>
-                            <input class="mrms-product-check" type="checkbox" value="Lightning">
-                        </div>
-                        <div id="mrms-sub-lightning" class="mrms-sub-panel" style="display:none;">
-                            <div class="mrms-sub-group">
-                                <span class="mrms-sub-group-label">Window</span>
-                                <div class="wx-check-row"><span>Next 30 min</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-lightning-window" value="30min" checked></div>
-                                <div class="wx-check-row"><span>Next 60 min</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-lightning-window" value="60min"></div>
+
+                        <div id="mrms-panel-hail" class="mrms-subtab-panel" role="tabpanel"
+                            aria-labelledby="mrms-subtab-hail" data-mrms-panel="hail">
+                            <div class="wx-check-row mrms-product-row">
+                                <span>MESH / Hail</span>
+                                <input class="mrms-product-check" type="checkbox" value="MESH">
+                            </div>
+                            <div id="mrms-sub-mesh" class="mrms-sub-panel" style="display:none;">
+                                <div class="mrms-sub-group">
+                                    <span class="mrms-sub-group-label">Window</span>
+                                    <div class="wx-check-row"><span>Instant</span><input class="mrms-sub-radio" type="radio"
+                                            name="mrms-mesh-time" value="Instant" checked></div>
+                                    <div class="wx-check-row"><span>Max 30 min</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-mesh-time" value="Max_30min"></div>
+                                    <div class="wx-check-row"><span>Max 60 min</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-mesh-time" value="Max_60min"></div>
+                                    <div class="wx-check-row"><span>Max 2 hr</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-mesh-time" value="Max_120min"></div>
+                                    <div class="wx-check-row"><span>Max 4 hr</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-mesh-time" value="Max_240min"></div>
+                                    <div class="wx-check-row"><span>Max 6 hr</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-mesh-time" value="Max_360min"></div>
+                                    <div class="wx-check-row"><span>Max 24 hr</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-mesh-time" value="Max_1440min"></div>
+                                </div>
+                            </div>
+                            <div class="wx-check-row mrms-product-row">
+                                <span>SHI</span>
+                                <input class="mrms-product-check" type="checkbox" value="SHI">
+                            </div>
+                            <div class="wx-check-row mrms-product-row">
+                                <span>POSH</span>
+                                <input class="mrms-product-check" type="checkbox" value="POSH">
+                            </div>
+                            <div class="wx-check-row mrms-product-row">
+                                <span>Lightning Probability</span>
+                                <input class="mrms-product-check" type="checkbox" value="Lightning">
+                            </div>
+                            <div id="mrms-sub-lightning" class="mrms-sub-panel" style="display:none;">
+                                <div class="mrms-sub-group">
+                                    <span class="mrms-sub-group-label">Window</span>
+                                    <div class="wx-check-row"><span>Next 30 min</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-lightning-window" value="30min" checked></div>
+                                    <div class="wx-check-row"><span>Next 60 min</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-lightning-window" value="60min"></div>
+                                </div>
                             </div>
                         </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>Model / Environment</span>
-                            <input class="mrms-product-check" type="checkbox" value="Model">
-                        </div>
-                        <div id="mrms-sub-model" class="mrms-sub-panel" style="display:none;">
-                            <div class="mrms-sub-group">
-                                <span class="mrms-sub-group-label">Field</span>
-                                <div class="wx-check-row"><span>Freezing Level Height</span><input
-                                        class="mrms-sub-radio" type="radio" name="mrms-model-field"
-                                        value="FreezingLevel" checked></div>
-                                <div class="wx-check-row"><span>Surface Temperature</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-model-field" value="SurfaceTemp"></div>
-                                <div class="wx-check-row"><span>Wet Bulb Temperature</span><input class="mrms-sub-radio"
-                                        type="radio" name="mrms-model-field" value="WetBulbTemp"></div>
+
+                        <div id="mrms-panel-environment" class="mrms-subtab-panel" role="tabpanel"
+                            aria-labelledby="mrms-subtab-environment" data-mrms-panel="environment">
+                            <div class="wx-check-row mrms-product-row">
+                                <span>Model / Environment</span>
+                                <input class="mrms-product-check" type="checkbox" value="Model">
                             </div>
-                        </div>
-                        <div class="wx-check-row mrms-product-row">
-                            <span>Radar Quality Index</span>
-                            <input class="mrms-product-check" type="checkbox" value="RadarQualityIndex">
+                            <div id="mrms-sub-model" class="mrms-sub-panel" style="display:none;">
+                                <div class="mrms-sub-group">
+                                    <span class="mrms-sub-group-label">Field</span>
+                                    <div class="wx-check-row"><span>Freezing Level Height</span><input
+                                            class="mrms-sub-radio" type="radio" name="mrms-model-field"
+                                            value="FreezingLevel" checked></div>
+                                    <div class="wx-check-row"><span>Surface Temperature</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-model-field" value="SurfaceTemp"></div>
+                                    <div class="wx-check-row"><span>Wet Bulb Temperature</span><input class="mrms-sub-radio"
+                                            type="radio" name="mrms-model-field" value="WetBulbTemp"></div>
+                                </div>
+                            </div>
+                            <div class="wx-check-row mrms-product-row">
+                                <span>Radar Quality Index</span>
+                                <input class="mrms-product-check" type="checkbox" value="RadarQualityIndex">
+                            </div>
                         </div>
                         <div class="wx-check-row" style="margin-top:8px;">
                             <span>Auto-Update</span>
@@ -4782,8 +4932,21 @@
                                     <option value="CP">Central Pacific</option>
                                 </select>
                             </div>
+                            <div class="wx-tropical-tabs" role="tablist" aria-label="Tropical data views">
+                                <button id="wx-tropical-tab-active" class="wx-tropical-tab" type="button" role="tab"
+                                    aria-selected="false" aria-controls="wx-tropical-panel-active"
+                                    data-tropical-tab="active">Active</button>
+                                <button id="wx-tropical-tab-outlooks" class="wx-tropical-tab" type="button" role="tab"
+                                    aria-selected="true" aria-controls="wx-tropical-panel-outlooks"
+                                    data-tropical-tab="outlooks">Outlooks</button>
+                                <button id="wx-tropical-tab-archive" class="wx-tropical-tab" type="button" role="tab"
+                                    aria-selected="false" aria-controls="wx-tropical-panel-archive"
+                                    data-tropical-tab="archive">Archive</button>
+                            </div>
                             <div id="weather-tropical-hub">
-                                <section class="wx-tropical-panel" aria-labelledby="wx-tropical-active-heading">
+                                <section id="wx-tropical-panel-active"
+                                    class="wx-tropical-panel wx-tropical-tab-panel"
+                                    role="tabpanel" aria-labelledby="wx-tropical-tab-active" hidden>
                                     <div class="wx-tropical-panel-head">
                                         <h3 id="wx-tropical-active-heading" class="wx-tropical-section-title">Active Systems</h3>
                                         <span id="weather-tropical-system-count" class="wx-tropical-count">0</span>
@@ -4791,7 +4954,9 @@
                                     <div id="weather-tropical-system-cards" class="wx-tropical-card-list"
                                         role="region" aria-labelledby="wx-tropical-active-heading"></div>
                                 </section>
-                                <section class="wx-tropical-panel" aria-labelledby="wx-tropical-outlook-heading">
+                                <section id="wx-tropical-panel-outlooks"
+                                    class="wx-tropical-panel wx-tropical-tab-panel"
+                                    role="tabpanel" aria-labelledby="wx-tropical-tab-outlooks">
                                     <div class="wx-tropical-panel-head">
                                         <h3 id="wx-tropical-outlook-heading" class="wx-tropical-section-title">Tropical Outlook</h3>
                                         <span id="weather-tropical-outlook-count" class="wx-tropical-count">0</span>
@@ -4799,19 +4964,42 @@
                                     <div id="weather-tropical-outlook-cards" class="wx-tropical-card-list"
                                         role="region" aria-labelledby="wx-tropical-outlook-heading"></div>
                                 </section>
+                                <section id="wx-tropical-panel-archive"
+                                    class="wx-tropical-panel wx-tropical-tab-panel"
+                                    role="tabpanel" aria-labelledby="wx-tropical-tab-archive" hidden>
+                                    <div class="wx-archive-controls">
+                                        <div class="wx-archive-field">
+                                            <label for="wx-archive-basin">Basin</label>
+                                            <select id="wx-archive-basin">
+                                                <option value="AL">Atlantic</option>
+                                            </select>
+                                        </div>
+                                        <div class="wx-archive-field">
+                                            <label for="wx-archive-season">Season</label>
+                                            <select id="wx-archive-season"></select>
+                                        </div>
+                                    </div>
+
+                                    <div id="wx-archive-card-list" class="wx-tropical-card-list">
+                                        <!-- Populated from the HURDAT2 catalog at runtime. -->
+                                    </div>
+
+                                    <div id="wx-archive-status" class="wx-archive-status">Select a basin and season to browse past storms.</div>
+                                </section>
                             </div>
 
-                            <label for="weather-tropical-system">System</label>
-                            <select id="weather-tropical-system" class="wx-sidebar-select">
-                                <option value="">Loading active systems...</option>
+                            <label for="weather-tropical-system" class="tropical-native-control">System</label>
+                            <select id="weather-tropical-system" class="wx-sidebar-select tropical-native-control"
+                                aria-hidden="true" tabindex="-1">
+                                <option value="">Select a system</option>
                             </select>
 
-                            <div class="wx-tropical-actions">
-                                <button id="weather-refresh-tropical" type="button">Refresh</button>
+                            <div class="wx-tropical-status-row">
+                                <div id="weather-tropical-status" class="wx-small wx-tropical-status" role="status"
+                                    aria-live="polite"></div>
+                                <button id="weather-refresh-tropical" class="wx-tropical-refresh" type="button"
+                                    title="Refresh Tropical">Refresh</button>
                             </div>
-
-                            <div id="weather-tropical-status" class="wx-small wx-tropical-status"></div>
-                            <div id="weather-tropical-outlook" class="wx-tropical-outlook"></div>
                         </div>
                     </div>
 
@@ -4874,8 +5062,6 @@
                             role="tab" aria-selected="false" aria-controls="wx-right-pane-layers">Layers</button>
                         <button type="button" id="wx-right-tab-btn-system" class="wx-right-tab" data-right-tab="system"
                             role="tab" aria-selected="false" aria-controls="wx-right-pane-system" hidden>System</button>
-                        <button type="button" id="wx-right-tab-btn-archive" class="wx-right-tab" data-right-tab="archive"
-                            role="tab" aria-selected="false" aria-controls="wx-right-pane-archive" hidden>Archive</button>
                         <button type="button" id="wx-right-tab-btn-warnings" class="wx-right-tab is-active"
                             data-right-tab="warnings" role="tab" aria-selected="true"
                             aria-controls="wx-right-pane-warnings">
@@ -5130,28 +5316,6 @@
                             </section>
                         </div>
                     </div>
-
-                    <div id="wx-right-pane-archive" class="wx-right-pane" role="tabpanel"
-                        aria-labelledby="wx-right-tab-btn-archive" hidden>
-                        <div class="wx-archive-controls">
-                            <div class="wx-archive-field">
-                                <label for="wx-archive-basin">Basin</label>
-                                <select id="wx-archive-basin">
-                                    <option value="AL">Atlantic</option>
-                                </select>
-                            </div>
-                            <div class="wx-archive-field">
-                                <label for="wx-archive-season">Season</label>
-                                <select id="wx-archive-season"></select>
-                            </div>
-                        </div>
-
-                        <div id="wx-archive-card-list" class="wx-tropical-card-list">
-                            <!-- Populated from the HURDAT2 catalog at runtime. -->
-                        </div>
-
-                        <div id="wx-archive-status" class="wx-archive-status">Select a basin and season to browse past storms.</div>
-                    </div>
                 </aside>
                 <div id="weather-colorbar" class="weather-colorbar" style="display:none;"></div>
 
@@ -5216,6 +5380,10 @@
         <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
         <script src="js/shared.js?v=20260526a"></script>
         <script src="js/radar-site-locations.js?v=20260504c"></script>
+        <script src="js/product-page-shell.js?v=20260616a"></script>
+        <script src="js/product-app-context.js?v=20260616a"></script>
+        <script src="js/alerts-engine.js?v=20260616a"></script>
+        <script src="js/alerts-page.js?v=20260616a"></script>
         <script src="js/weather.js?v=20260605l"></script>
         <script>initNav('weather');</script>
     </body>

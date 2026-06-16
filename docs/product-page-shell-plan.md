@@ -7,14 +7,54 @@ frontend step is to replace the current floating/collapsible sidebar layout with
 a true map-first dashboard grid, then use the Tropical tab redesign work as the
 first product reference inside that shell.
 
+## Active Worktrees And Branches
+
+- Main repository: `F:\Python\dashboard_2026`.
+- Backend refactor worktree: `F:\Python\dashboard_2026_refactor` on
+  `codex/backend-product-refactor`.
+- Frontend product-page worktree: `F:\Python\dashboard_2026_frontend_pages` on
+  `codex/frontend-product-pages`.
+- Dashboard shell, `weather.html`, and `js/weather.js` UI work belongs in the
+  frontend product-page worktree unless the task explicitly says otherwise.
+- Backend route/service work belongs in the backend refactor worktree unless the
+  task explicitly says otherwise.
+
 ## Current Decision
 
 Use a fixed, map-first dashboard shell. Tropical is the first product reference
 inside that shell.
 
+Current handoff:
+
+- MRMS and SPC left-dock subtabs are implemented and visually accepted.
+- Satellite subtabs are implemented for GOES-18/GOES-19 and Full Disk, CONUS,
+  Meso 1, and Meso 2; the Channel Product dropdown remains unchanged. The
+  left-sidebar Current/Animate buttons were removed because the scrubber is now
+  dashboard-owned and auto-loads with Satellite.
+- RTMA remains in the compact grouped left-dock layout; subtabs added too much
+  navigation for the amount of control density.
+- Dense-product subtabs are complete for this pass: MRMS, SPC, and Satellite.
+  Keep other products compact unless their control families materially grow.
+- Tropical reference pass is accepted in the fixed dashboard shell:
+  basin selection, active-system cards, outlook cards, and the right-side System
+  Inspector define the product-specific pattern for the standalone `/tropical`
+  page.
+- Phase 14 `/tropical` route-level candidate is accepted for this pass. It uses
+  canonical `/tropical` routing with the accepted dashboard shell in
+  Tropical-only mode and avoids copying the full `weather.js` state model.
+- Phase 14 route-level split candidates are working and accepted for this pass:
+  `/tropical`, `/alerts`, `/spc`, `/surface`, `/drought`, `/satellite`,
+  `/radar`, `/mrms`, and `/rtma` all serve the accepted dashboard shell in
+  product-only mode. `/surface` maps to the existing `current` product mode.
+- SPC standalone startup required one additional ordering fix: normalize SPC
+  controls and report-filter state before the initial `refreshActiveLayers()`
+  call, otherwise the first Day 1 Categorical response can be discarded as a
+  stale selection and only appear after toggling Categorical.
+
 The existing Tropical tab already has the strongest product-specific shell:
 
-- left Tropical Hub with system and outlook cards
+- left Tropical Hub with basin selection plus Active, Outlooks, and Archive
+  tabs; Outlooks is the default tab on page load
 - center Leaflet map as the primary workspace
 - right Tropical Inspector with summary, forecast, layers, products, graphics,
   and floater sections
@@ -51,6 +91,28 @@ Phase 15 remains valid.
 - Clean-cut removal from `weather.html` and `js/weather.js` still happens only
   after a standalone product page is verified.
 - Avoid keeping duplicated product code indefinitely.
+- Phase 15A prep has begun by extracting standalone route/bootstrap ownership
+  into `js/product-page-shell.js` and registering `/alerts` metadata through
+  `js/alerts-page.js`. This is not yet a removal pass; `/alerts` still runs on
+  the accepted `weather.html` and `js/weather.js` shell for verification.
+- Phase 15B prep routes `/alerts` through a generated product shell response
+  that injects product metadata into the shared shell. This avoids duplicating
+  `weather.html` while allowing Alerts-specific page-controller code to move
+  into `js/alerts-page.js`. The Alerts map/rendering engine remains in
+  `js/weather.js` until a shared app context exists.
+- Phase 15C prep added `js/product-app-context.js` and registers an Alerts app
+  context from `js/weather.js`. This defines the dependency boundary for the
+  later Alerts engine extraction without moving `loadAlerts()` yet.
+- `js/alerts-engine.js` now owns the first context-backed Alerts engine facade:
+  live-response eligibility. Keep moving similarly small engine slices before
+  attempting to move `loadAlerts()`.
+- `js/alerts-engine.js` now also owns the live Alerts loading orchestration,
+  in-memory category refiltering, display-geometry refresh, Leaflet alert
+  style/layer construction, and archive Alerts loading/frame slicing.
+  `js/alerts-page.js` owns Alerts category controls and active-warning panel
+  rendering/wiring. Popup/detail presentation and new-alert notification
+  banners remain injected from `js/weather.js` because they still share broader
+  dashboard/map interaction state.
 
 ## Backend Alignment
 
@@ -147,8 +209,10 @@ Implementation order:
 3. Verify all current product tabs before deleting legacy collapse behavior.
 4. Remove the side collapse toggles and handlers only after the grid shell is
    accepted.
-5. Add left-dock subtabs for dense products such as MRMS, SPC, and RTMA after
-   the base grid is stable.
+5. Add left-dock subtabs only for dense products after the base grid is stable.
+   MRMS and SPC are visually accepted, Satellite uses platform/sector subtabs,
+   and RTMA should stay compact unless its control set grows. Dense-product
+   subtab work is complete for this pass.
 
 ## Reusable Shell Pieces
 
@@ -188,16 +252,18 @@ domain behavior behind a generic abstraction.
 Recommended order after Tropical reference acceptance:
 
 1. Fixed dashboard grid shell in the combined workspace.
-2. Tropical reference pass inside the grid shell.
-3. Tropical standalone page candidate, if the shell is accepted and stable.
-4. Alerts.
-5. SPC.
-6. Surface.
-7. Drought.
-8. Satellite.
-9. Radar.
-10. MRMS.
-11. RTMA.
+2. Tropical reference pass inside the grid shell. Accepted.
+3. Tropical standalone route-level candidate. Accepted for this pass.
+4. Alerts route-level candidate. Accepted for this pass.
+5. SPC route-level candidate. Accepted for this pass after the standalone
+   startup/default Day 1 Categorical fix.
+6. Surface route-level candidate. Accepted for this pass as `/surface` mapped
+   to existing `current` product mode.
+7. Drought route-level candidate. Accepted for this pass.
+8. Satellite route-level candidate. Accepted for this pass.
+9. Radar route-level candidate. Accepted for this pass.
+10. MRMS route-level candidate. Accepted for this pass.
+11. RTMA route-level candidate. Accepted for this pass.
 
 This order can change if browser testing shows another product is lower-risk,
 but Tropical should remain the reference design source.
@@ -216,6 +282,12 @@ The recovered Tropical plan remains useful, with these changes:
 - Keep Tropical Outlook cards compact: show basin/name and probability chips,
   but do not include discussion snippets in the left hub because they consume
   too much space when active storms are present.
+- Keep Tropical compact rather than adding another subtab layer: storm cards and
+  outlook cards are the browsing UI, archive browsing lives in the left Tropical
+  tab set, and the hidden native System select remains only as synced selection
+  state for existing JavaScript.
+- Keep the right Archive tab removed. Styling and System remain right-side tabs,
+  and System stays hidden until an active or archived storm is selected.
 - Treat Tropical archive behavior as a reference for future archive workflows,
   but do not redesign all archive workflows during this phase.
 
@@ -248,6 +320,12 @@ For browser smoke:
 For future standalone product pages:
 
 - canonical route returns 200
+- `/tropical`, `/alerts`, `/spc`, `/surface`, `/drought`, `/satellite`,
+  `/radar`, `/mrms`, and `/rtma` currently serve the accepted shell with
+  route-level standalone mode hooks; do not remove their combined-workspace
+  code until a clean-cut phase is explicitly started and confirmed
+- `/spc` must show Day 1 Categorical on hard refresh without requiring a
+  checkbox toggle
 - product API calls succeed
 - map renders nonblank
 - product layers can be cleared without affecting other products

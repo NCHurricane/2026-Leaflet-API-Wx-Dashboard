@@ -2,6 +2,29 @@
     'use strict';
 
     const byId = (id) => document.getElementById(id);
+    const _productPageShell = window.NCHProductPageShell || null;
+    const _productAppContexts = window.NCHProductAppContexts || null;
+    const _alertsEngineFactory = window.NCHAlertsEngine || null;
+    const _alertsPageController = window.NCHAlertsPage || null;
+    const _standaloneProductType = _productPageShell?.standaloneProductType() || null;
+    let _alertsEngine = null;
+
+    function _isStandaloneProductPage(type = _standaloneProductType) {
+        return _productPageShell?.isStandaloneProductPage(type) || !!type;
+    }
+
+    function _configureStandaloneProductPage(allTypes) {
+        if (_productPageShell) {
+            _productPageShell.configureStandaloneProductPage({
+                allTypes,
+                labels: _TAB_TYPE_LABELS,
+                getElementById: byId,
+            });
+            return;
+        }
+
+        if (!_isStandaloneProductPage()) return;
+    }
 
     function _asDate(value) {
         if (value == null || value === '') return null;
@@ -80,6 +103,7 @@
         if (spcDaySelect) {
             spcDaySelect.addEventListener('change', () => {
                 _syncSpcConvectiveOptions(_shouldResetSpcConvectiveDaySelection());
+                _syncSpcSubtabForSelection('outlooks');
                 refreshSpc();
             });
         }
@@ -87,6 +111,7 @@
         if (fireDaySelect) {
             fireDaySelect.addEventListener('change', () => {
                 _syncSpcFireWeatherOptions(_shouldResetSpcFireDaySelection());
+                _syncSpcSubtabForSelection('fire');
                 refreshSpc();
             });
         }
@@ -408,16 +433,27 @@
     const ALERT_CATEGORY_EVENT_SET = new Set(Object.values(ALERT_CATEGORIES).flat());
 
     function _getAlertCategoryCheckboxes() {
+        if (_alertsPageController?.getCategoryCheckboxes) {
+            return _alertsPageController.getCategoryCheckboxes();
+        }
         return [...document.querySelectorAll('.weather-alerts-category')];
     }
 
     function _setAllAlertCategories(checked) {
+        if (_alertsPageController?.setAllCategories) {
+            _alertsPageController.setAllCategories(checked);
+            return;
+        }
         _getAlertCategoryCheckboxes().forEach((el) => {
             el.checked = checked;
         });
     }
 
     function _syncAllAlertsMaster() {
+        if (_alertsPageController?.syncMaster) {
+            _alertsPageController.syncMaster();
+            return;
+        }
         const allEl = byId('weather-alerts-all');
         if (!allEl) return;
         const childEls = _getAlertCategoryCheckboxes().filter((el) => el !== allEl);
@@ -428,6 +464,10 @@
     }
 
     function _applyDefaultAlertSelection() {
+        if (_alertsPageController?.applyDefaultSelection) {
+            _alertsPageController.applyDefaultSelection();
+            return;
+        }
         const allEl = byId('weather-alerts-all');
         const defaultCategory = 'Severe Weather Warnings';
 
@@ -444,6 +484,9 @@
     }
 
     function _getCheckedAlertCategories() {
+        if (_alertsPageController?.getCheckedCategories) {
+            return _alertsPageController.getCheckedCategories();
+        }
         return [...document.querySelectorAll('.weather-alerts-category:checked')]
             .map((el) => el.value)
             .filter((val) => val !== 'All Alerts');
@@ -703,6 +746,7 @@
                     _renderTropicalSummary(null);
                     const sysSelect = byId('weather-tropical-system');
                     if (sysSelect) sysSelect.value = '';
+                    _setTropicalHubMode('overview');
                     _highlightSelectedTropicalCard();
                     _setTropicalMapViewMode('outlook');
                     _renderTropicalOutlookLegend();
@@ -1019,13 +1063,20 @@
     const _FREEZING_ISOTHERM_PRODUCTS = new Set(['station_plot', 'temperature', 'feels_like', 'dew_point']);
 
     // ── Style functions ──────────────────────────────────────────────────────
-    function alertStyle(feat) {
+    function _alertStyleInlineFallback(feat) {
         const event = feat?.properties?.event || '';
         const color = ALERT_COLORS[event] || ALERT_DEFAULT;
         // Z-order based on ALERT_PRIORITY: priority 1 = z-index 399, priority 101 = z-index 299
         const priority = ALERT_PRIORITY[event] || 200;
         const zIndex = 400 - priority;
         return { color, weight: 1.5, fillColor: color, fillOpacity: alertsOpacity * 0.5, opacity: alertsOpacity, zIndex };
+    }
+
+    function alertStyle(feat) {
+        if (_alertsEngine?.alertStyle) {
+            return _alertsEngine.alertStyle(feat);
+        }
+        return _alertStyleInlineFallback(feat);
     }
 
     function _spcFeatureColors(feat, fallback) {
@@ -1503,7 +1554,7 @@
         return true;
     }
 
-    function _buildAlertsLayer(displayFeatures) {
+    function _buildAlertsLayerInlineFallback(displayFeatures) {
         return L.geoJSON({ type: 'FeatureCollection', features: displayFeatures }, {
             style: alertStyle,
             onEachFeature: (feat, layer) => {
@@ -1534,6 +1585,13 @@
         });
     }
 
+    function _buildAlertsLayer(displayFeatures) {
+        if (_alertsEngine?.buildAlertsLayer) {
+            return _alertsEngine.buildAlertsLayer(displayFeatures);
+        }
+        return _buildAlertsLayerInlineFallback(displayFeatures);
+    }
+
     // Atomic layer swap: keep old layer visible until the replacement is ready.
     function _swapAlertsLayer(nextLayer) {
         const prevLayer = alertsLayer;
@@ -1543,7 +1601,7 @@
     }
 
     // Re-apply alert category filters from in-memory datasets without waiting on network.
-    function _applyInMemoryAlertCategoryFilter() {
+    function _applyInMemoryAlertCategoryFilterInlineFallback() {
         const checkedCategories = _getCheckedAlertCategories();
         if (!checkedCategories.length) {
             _allAlertFeatures = [];
@@ -1571,9 +1629,17 @@
         _renderActiveWarningsPanel();
     }
 
+    function _applyInMemoryAlertCategoryFilter() {
+        if (_alertsEngine?.applyInMemoryCategoryFilter) {
+            _alertsEngine.applyInMemoryCategoryFilter();
+            return;
+        }
+        _applyInMemoryAlertCategoryFilterInlineFallback();
+    }
+
     // Re-fetch only the display geometry and swap the Leaflet render layer.
     // Called on zoom-bucket transitions to update the display without re-fetching full data.
-    async function _refreshAlertsDisplayLayer() {
+    async function _refreshAlertsDisplayLayerInlineFallback() {
         if (!_alertsFullBaseFeatures.length || !_canApplyAlertsResponse()) return;
         const checkedCategories = _getCheckedAlertCategories();
         if (!checkedCategories.length) return;
@@ -1611,6 +1677,13 @@
             // On failure, keep the current layer — do not clear it.
             console.warn('[alerts] Display layer refresh failed:', err.message);
         }
+    }
+
+    async function _refreshAlertsDisplayLayer() {
+        if (_alertsEngine?.refreshDisplayLayer) {
+            return _alertsEngine.refreshDisplayLayer();
+        }
+        return _refreshAlertsDisplayLayerInlineFallback();
     }
 
     // Compute the axis-aligned bounding box for a feature geometry.
@@ -3690,6 +3763,9 @@
     }
 
     function _canApplyAlertsResponse() {
+        if (_alertsEngine?.canApplyLiveResponse) {
+            return _alertsEngine.canApplyLiveResponse();
+        }
         return !_archiveMode
             && !_rtmaScrubFrames.length
             && _isTypeEnabled('alerts')
@@ -4149,6 +4225,10 @@
     }
 
     function _updateWarningFilterRowVisibility() {
+        if (_alertsPageController?.updateWarningFilterRowVisibility) {
+            _alertsPageController.updateWarningFilterRowVisibility();
+            return;
+        }
         const filterRow = byId('wx-warn-filter-row');
         if (!filterRow) return;
         const checkedCategories = _getCheckedAlertCategories();
@@ -4158,13 +4238,17 @@
     }
 
     function _updateAlertFilterOptionsVisibility() {
+        if (_alertsPageController?.updateFilterOptionsVisibility) {
+            _alertsPageController.updateFilterOptionsVisibility();
+            return;
+        }
         const filterContainer = byId('weather-alerts-filter-options');
         if (!filterContainer) return;
         filterContainer.hidden = false;
         _updateWarningFilterRowVisibility();
     }
 
-    function _renderActiveWarningsPanel() {
+    function _renderActiveWarningsPanelInlineFallback() {
         const list = byId('wx-warnings-list');
         const empty = byId('wx-warnings-empty');
         const countEl = byId('wx-warnings-count');
@@ -4253,7 +4337,15 @@
         seenIdsThisRender.forEach((id) => _warningsKnownIds.add(id));
     }
 
-    function _wireActiveWarningsPanel() {
+    function _renderActiveWarningsPanel() {
+        if (_alertsPageController?.renderActiveWarningsPanel) {
+            _alertsPageController.renderActiveWarningsPanel();
+            return;
+        }
+        _renderActiveWarningsPanelInlineFallback();
+    }
+
+    function _wireActiveWarningsPanelInlineFallback() {
         const pane = byId('wx-right-pane-warnings');
         const list = byId('wx-warnings-list');
         if (!pane || !list) return;
@@ -4318,7 +4410,15 @@
         });
     }
 
-    function _wireSidebarWarningFilterCheckboxes() {
+    function _wireActiveWarningsPanel() {
+        if (_alertsPageController?.wireActiveWarningsPanel) {
+            _alertsPageController.wireActiveWarningsPanel();
+            return;
+        }
+        _wireActiveWarningsPanelInlineFallback();
+    }
+
+    function _wireSidebarWarningFilterCheckboxesInlineFallback() {
         const filterCheckboxes = document.querySelectorAll('.wx-warn-filter-ck');
         if (!filterCheckboxes.length) return;
         filterCheckboxes.forEach((ck) => {
@@ -4339,6 +4439,14 @@
         });
     }
 
+    function _wireSidebarWarningFilterCheckboxes() {
+        if (_alertsPageController?.wireSidebarWarningFilterCheckboxes) {
+            _alertsPageController.wireSidebarWarningFilterCheckboxes();
+            return;
+        }
+        _wireSidebarWarningFilterCheckboxesInlineFallback();
+    }
+
     function _wireRightSidebarTabs() {
         const tabs = document.querySelectorAll('.wx-right-tab[data-right-tab]');
         if (!tabs.length) return;
@@ -4347,17 +4455,14 @@
             warnings: byId('wx-right-pane-warnings'),
             styling: byId('wx-right-pane-styling'),
             system: byId('wx-right-pane-system'),
-            archive: byId('wx-right-pane-archive'),
         };
         tabs.forEach((btn) => {
             btn.addEventListener('click', () => {
                 if (btn.hidden) return;
                 const target = btn.getAttribute('data-right-tab');
-                // Archive enters the "Current" context; the Layers/"Current" tab is
-                // the explicit way back to live mode. System keeps the context.
-                if (target === 'archive') {
-                    _enterTropicalArchiveContext();
-                } else if (target === 'layers') {
+                // Layers/"Current" is the explicit way back to live mode after
+                // an archived storm is displayed. System keeps the context.
+                if (target === 'layers') {
                     const wasArchive = _tropicalArchiveContext;
                     _exitTropicalArchiveContext();
                     if (wasArchive) _exitArchiveToLiveView();
@@ -4389,22 +4494,17 @@
         const warnBtn = byId('wx-right-tab-btn-warnings');
         const styleBtn = byId('wx-right-tab-btn-styling');
         const systemBtn = byId('wx-right-tab-btn-system');
-        const archiveBtn = byId('wx-right-tab-btn-archive');
         const warnPane = byId('wx-right-pane-warnings');
         const stylePane = byId('wx-right-pane-styling');
         const systemPane = byId('wx-right-pane-system');
-        const archivePane = byId('wx-right-pane-archive');
 
         const showWarn = alertsOn;
         // System tab is only relevant once a storm card is actively selected (system view).
         const showSystem = tropicalOn && _tropicalMapViewMode === 'system';
-        // Archive tab is tropical-only for now (future tabs gain their own archives later).
-        const showArchive = tropicalOn;
         const showStyle = !alertsOn && !tropicalOn && styleModeOn;
 
         if (warnBtn) warnBtn.hidden = !showWarn;
         if (systemBtn) systemBtn.hidden = !showSystem;
-        if (archiveBtn) archiveBtn.hidden = !showArchive;
         if (styleBtn) styleBtn.hidden = !showStyle;
 
         // If the active tab is now hidden, fall back: Tropical prefers System, else Layers.
@@ -4413,7 +4513,6 @@
             { btn: warnBtn, pane: warnPane, key: 'warnings' },
             { btn: styleBtn, pane: stylePane, key: 'styling' },
             { btn: systemBtn, pane: systemPane, key: 'system' },
-            { btn: archiveBtn, pane: archivePane, key: 'archive' },
         ];
         const active = tabs.find((t) => t.btn?.classList.contains('is-active'));
         if (active && active.btn?.hidden) {
@@ -4594,7 +4693,7 @@
         return `${base}${sep}${params.toString()}`;
     }
 
-    async function loadAlerts(options = {}) {
+    async function _loadAlertsInlineFallback(options = {}) {
         const { silentStatus = false } = options;
         const requestSeq = ++_alertsRequestSeq;
         const checkedCategories = _getCheckedAlertCategories();
@@ -4691,6 +4790,13 @@
             console.error('[alerts] Load error:', err);
             if (!silentStatus) setStatus(`Alerts error: ${err.message}`);
         }
+    }
+
+    async function loadAlerts(options = {}) {
+        if (_alertsEngine?.loadLiveAlerts) {
+            return _alertsEngine.loadLiveAlerts(options);
+        }
+        return _loadAlertsInlineFallback(options);
     }
 
     const _SPC_CONVECTIVE_LABELS = {
@@ -4980,6 +5086,44 @@
         if (group !== 'mds') _clearSpcMdSelection();
         if (group !== 'reports') _clearSpcReportSelections();
         if (group !== 'fire') _clearSpcFireSelections(options.keepFireTarget || null);
+    }
+
+    function _setSpcSubtab(tabKey) {
+        const buttons = Array.from(document.querySelectorAll('.spc-subtab-button'));
+        const panels = Array.from(document.querySelectorAll('.spc-subtab-panel'));
+        if (!buttons.length || !panels.length) return;
+
+        const selectedKey = buttons.some((button) => button.dataset.spcSubtab === tabKey)
+            ? tabKey
+            : 'outlooks';
+
+        buttons.forEach((button) => {
+            const isSelected = button.dataset.spcSubtab === selectedKey;
+            button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+            button.tabIndex = isSelected ? 0 : -1;
+        });
+
+        panels.forEach((panel) => {
+            panel.classList.toggle('is-active', panel.dataset.spcPanel === selectedKey);
+        });
+    }
+
+    function _syncSpcSubtabForSelection(preferredTab = null) {
+        if (preferredTab) {
+            _setSpcSubtab(preferredTab);
+            return;
+        }
+
+        const supplemental = _spcSupplementalSelections();
+        if (_getCheckedSpcFireHazards().length) {
+            _setSpcSubtab('fire');
+        } else if (supplemental.watchesEnabled) {
+            _setSpcSubtab('watches');
+        } else if (supplemental.reportsEnabled || supplemental.mdsEnabled) {
+            _setSpcSubtab('reports');
+        } else {
+            _setSpcSubtab('outlooks');
+        }
     }
 
     function _normalizeSpcWatchLayersForKey(watchLayers) {
@@ -7453,6 +7597,29 @@
         return String(byId('weather-satellite-channel')?.value || 'Channel13').trim() || 'Channel13';
     }
 
+    function _syncSatelliteSubtabs() {
+        const satId = _activeSatelliteSatId();
+        const sector = _activeSatelliteSector();
+        document.querySelectorAll('.satellite-subtab-button[data-satellite-sat]').forEach((button) => {
+            const isSelected = button.dataset.satelliteSat === satId;
+            button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+            button.tabIndex = isSelected ? 0 : -1;
+        });
+        document.querySelectorAll('.satellite-subtab-button[data-satellite-sector]').forEach((button) => {
+            const isSelected = button.dataset.satelliteSector === sector;
+            button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+            button.tabIndex = isSelected ? 0 : -1;
+        });
+    }
+
+    function _setSatelliteSelectValue(selectId, value) {
+        const select = byId(selectId);
+        if (!select || select.value === value) return;
+        select.value = value;
+        _syncSatelliteSubtabs();
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
     async function _fetchSatelliteLegend(channel) {
         const key = String(channel || '').trim() || 'Channel13';
         if (_satelliteLegendCache.has(key)) return _satelliteLegendCache.get(key);
@@ -8977,6 +9144,12 @@
         return String(byId('weather-tropical-system')?.value || '').trim().toUpperCase();
     }
 
+    function _setTropicalHubMode(mode) {
+        const root = byId('wx-section-tropical');
+        if (!root) return;
+        root.setAttribute('data-tropical-mode', mode === 'selected' ? 'selected' : 'overview');
+    }
+
     function _tropicalStormLabel(storm) {
         const name = storm?.name || storm?.stormName || storm?.systemName || storm?.id || 'Unnamed';
         const type = storm?.classification || storm?.systemType || storm?.type || '';
@@ -8989,11 +9162,12 @@
         if (!select) return;
         const previous = select.value;
         select.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = storms.length ? 'Select a system' : 'No active systems';
+        select.appendChild(placeholder);
         if (!storms.length) {
-            const opt = document.createElement('option');
-            opt.value = '';
-            opt.textContent = 'No active systems';
-            select.appendChild(opt);
+            select.value = '';
             return;
         }
         storms.forEach((storm) => {
@@ -9002,7 +9176,8 @@
             opt.textContent = _tropicalStormLabel(storm);
             select.appendChild(opt);
         });
-        select.value = storms.some((storm) => storm.id === previous) ? previous : String(storms[0].id || '');
+        const previousId = String(previous || '').toUpperCase();
+        select.value = storms.some((storm) => String(storm.id || '').toUpperCase() === previousId) ? previousId : '';
     }
 
     const TROPICAL_KT_TO_MPH = 1.15078;
@@ -9075,8 +9250,7 @@
         if (!stormId) return;
         const select = byId('weather-tropical-system');
         if (select) select.value = stormId;
-        const root = byId('wx-section-tropical');
-        if (root) root.setAttribute('data-tropical-mode', 'selected');
+        _setTropicalHubMode('selected');
         _closeTropicalDetail();
         _closeOutlookDetail();
         _setTropicalMapViewMode('system');
@@ -9085,6 +9259,54 @@
         // Jump to the System tab so the selected storm's details are immediately visible.
         // The tab handler no-ops when the button is hidden (i.e. Tropical not active).
         byId('wx-right-tab-btn-system')?.click();
+    }
+
+    function _setTropicalLeftTab(tabKey = 'outlooks') {
+        const buttons = Array.from(document.querySelectorAll('.wx-tropical-tab[data-tropical-tab]'));
+        const panels = Array.from(document.querySelectorAll('.wx-tropical-tab-panel'));
+        if (!buttons.length || !panels.length) return;
+
+        const selectedKey = buttons.some((button) => button.dataset.tropicalTab === tabKey)
+            ? tabKey
+            : 'outlooks';
+
+        buttons.forEach((button) => {
+            const isSelected = button.dataset.tropicalTab === selectedKey;
+            button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+            button.tabIndex = isSelected ? 0 : -1;
+        });
+
+        panels.forEach((panel) => {
+            panel.hidden = panel.id !== `wx-tropical-panel-${selectedKey}`;
+        });
+    }
+
+    function _wireTropicalLeftTabs() {
+        const buttons = Array.from(document.querySelectorAll('.wx-tropical-tab[data-tropical-tab]'));
+        if (!buttons.length) return;
+
+        buttons.forEach((button, index) => {
+            button.addEventListener('click', () => {
+                _setTropicalLeftTab(button.dataset.tropicalTab || 'outlooks');
+            });
+            button.addEventListener('keydown', (event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+
+                let nextIndex = index;
+                if (event.key === 'ArrowLeft') nextIndex = index === 0 ? buttons.length - 1 : index - 1;
+                if (event.key === 'ArrowRight') nextIndex = index === buttons.length - 1 ? 0 : index + 1;
+                if (event.key === 'Home') nextIndex = 0;
+                if (event.key === 'End') nextIndex = buttons.length - 1;
+
+                const nextButton = buttons[nextIndex];
+                if (!nextButton) return;
+                _setTropicalLeftTab(nextButton.dataset.tropicalTab || 'outlooks');
+                nextButton.focus();
+            });
+        });
+
+        _setTropicalLeftTab('outlooks');
     }
 
     function _renderTropicalStormCards(storms) {
@@ -9118,8 +9340,13 @@
         return `<span class="wx-tropical-chip" style="--chip-color:${color};">${label} ${pct}%</span>`;
     }
 
+    function _formatTropicalOutlookText(value) {
+        return String(value || '').replace(/Gulf of America/gi, 'Gulf');
+    }
+
     function _tropicalOutlookAreaCardHtml(area, basin, feature) {
         const name = area?.name || `Disturbance ${area?.disturbance || ''}`;
+        const displayName = _formatTropicalOutlookText(name);
         const color = area?.color || '#9ca3af';
         const basinName = _TROPICAL_BASIN_NAMES[basin] || basin;
         const chips = [
@@ -9130,11 +9357,11 @@
         if (featureId && feature) _outlookFeatureMap[featureId] = feature;
         const dataAttr = featureId ? ` data-feature-id="${featureId}"` : '';
         return `
-            <button type="button" class="wx-tropical-outlook-card" style="--oc-cat-color:${color};"${dataAttr} aria-label="Open outlook details for ${escapeHtml(name)}">
+            <button type="button" class="wx-tropical-outlook-card" style="--oc-cat-color:${color};"${dataAttr} aria-label="Open outlook details for ${escapeHtml(displayName)}">
                 <span class="wx-tropical-outlook-bar" aria-hidden="true"></span>
                 <span class="wx-tropical-outlook-body">
                     <span class="wx-tropical-outlook-basin">${escapeHtml(basinName)}</span>
-                    <span class="wx-tropical-outlook-name">${escapeHtml(name)}</span>
+                    <span class="wx-tropical-outlook-name">${escapeHtml(displayName)}</span>
                     ${chips ? `<span class="wx-tropical-outlook-chips">${chips}</span>` : ''}
                 </span>
             </button>`;
@@ -9489,14 +9716,14 @@
 
     function _openOutlookDetail(feature) {
         const props = feature?.properties || {};
-        const name = props.name || 'Formation Area';
-        const discussion = props.discussion || '';
+        const name = _formatTropicalOutlookText(props.name || 'Formation Area');
+        const discussion = _formatTropicalOutlookText(props.discussion || '');
         const issued = props.issued || '';
         const twoDayPct = props.twoDayPct;
         const sevenDayPct = props.sevenDayPct;
         const twoDayCategory = props.twoDayCategory || '';
         const sevenDayCategory = props.sevenDayCategory || '';
-        const disturbance = props.disturbance || '';
+        const disturbance = _formatTropicalOutlookText(props.disturbance || '');
         const titleText = disturbance ? `Area ${disturbance}: ${name}` : name;
 
         _closeOutlookDetail();
@@ -10509,6 +10736,7 @@
             loadTropicalBasinFeeds();
             if (!_tropicalStorms.length) {
                 _activeTropicalStorm = null;
+                _setTropicalHubMode('overview');
                 _clearTropicalLayer();
                 _renderTropicalSummary(null);
                 _setTropicalStatus('No active NHC systems for the selected basin.');
@@ -12347,6 +12575,7 @@
         const family = _activeMrmsProduct();
         document.querySelectorAll('.mrms-sub-panel').forEach((el) => { el.style.display = 'none'; });
         if (!family) return;
+        _syncMrmsSubtabForProduct(family);
         const subMap = {
             QPE: 'mrms-sub-qpe', RotationTrack: 'mrms-sub-rotation',
             MESH: 'mrms-sub-mesh', AzShear: 'mrms-sub-azshear',
@@ -12359,6 +12588,47 @@
             const sub = byId(subId);
             if (sub) sub.style.display = '';
         }
+    }
+
+    const MRMS_SUBTAB_BY_PRODUCT = Object.freeze({
+        PrecipFlag: 'precip',
+        PrecipRate: 'precip',
+        QPE: 'precip',
+        Reflectivity: 'reflectivity',
+        EchoTop: 'reflectivity',
+        VIL: 'reflectivity',
+        RotationTrack: 'storm',
+        AzShear: 'storm',
+        MESH: 'hail',
+        SHI: 'hail',
+        POSH: 'hail',
+        Lightning: 'hail',
+        Model: 'environment',
+        RadarQualityIndex: 'environment',
+    });
+
+    function _setMrmsSubtab(tabKey) {
+        const buttons = Array.from(document.querySelectorAll('.mrms-subtab-button'));
+        const panels = Array.from(document.querySelectorAll('.mrms-subtab-panel'));
+        if (!buttons.length || !panels.length) return;
+
+        const selectedKey = buttons.some((button) => button.dataset.mrmsSubtab === tabKey)
+            ? tabKey
+            : 'precip';
+
+        buttons.forEach((button) => {
+            const isSelected = button.dataset.mrmsSubtab === selectedKey;
+            button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+            button.tabIndex = isSelected ? 0 : -1;
+        });
+
+        panels.forEach((panel) => {
+            panel.classList.toggle('is-active', panel.dataset.mrmsPanel === selectedKey);
+        });
+    }
+
+    function _syncMrmsSubtabForProduct(family = _activeMrmsProduct()) {
+        _setMrmsSubtab(MRMS_SUBTAB_BY_PRODUCT[family] || 'precip');
     }
 
     async function loadMrms() {
@@ -13950,7 +14220,7 @@
         }
     }
 
-    async function _loadArchiveAlerts(dtFrom, dtTo) {
+    async function _loadArchiveAlertsInlineFallback(dtFrom, dtTo) {
         const state = byId('weather-region')?.value;
         const stParam = (state && state !== 'CONUS') ? `&state=${encodeURIComponent(state)}` : '';
         const url = apiUrl(
@@ -13970,11 +14240,19 @@
         }
     }
 
+    async function _loadArchiveAlerts(dtFrom, dtTo) {
+        if (_alertsEngine?.loadArchiveAlerts) {
+            await _alertsEngine.loadArchiveAlerts(dtFrom, dtTo);
+            return;
+        }
+        await _loadArchiveAlertsInlineFallback(dtFrom, dtTo);
+    }
+
     /**
      * Time-slice alert features into hourly frames.
      * An alert is "active" in a frame if its onset < frameEnd AND expires > frameStart.
      */
-    function _sliceAlertsIntoFrames(features, isoFrom, isoTo) {
+    function _sliceAlertsIntoFramesInlineFallback(features, isoFrom, isoTo) {
         const STEP_MS = 60_000;         // 1-minute frames
         const from = new Date(isoFrom);
         const to = new Date(isoTo);
@@ -14033,6 +14311,13 @@
             return [{ timestamp: isoFrom, features, type: 'FeatureCollection' }];
         }
         return frames;
+    }
+
+    function _sliceAlertsIntoFrames(features, isoFrom, isoTo) {
+        if (_alertsEngine?.sliceAlertsIntoFrames) {
+            return _alertsEngine.sliceAlertsIntoFrames(features, isoFrom, isoTo);
+        }
+        return _sliceAlertsIntoFramesInlineFallback(features, isoFrom, isoTo);
     }
 
     async function _loadArchiveSurface(dtFrom, dtTo) {
@@ -14696,6 +14981,10 @@
 
     byId('weather-tropical-basin')?.addEventListener('change', () => {
         if (!_isTypeEnabled('tropical')) return;
+        const sysSelect = byId('weather-tropical-system');
+        if (sysSelect) sysSelect.value = '';
+        _activeTropicalStorm = null;
+        _setTropicalHubMode('overview');
         _clearTropicalLayer();
         _closeTropicalDetail();
         _fitTropicalBasinExtent();
@@ -14748,6 +15037,10 @@
 
     byId('weather-refresh-tropical')?.addEventListener('click', () => {
         if (!_isTypeEnabled('tropical')) return;
+        const sysSelect = byId('weather-tropical-system');
+        if (sysSelect) sysSelect.value = '';
+        _activeTropicalStorm = null;
+        _setTropicalHubMode('overview');
         _closeOutlookDetail();
         _closeTropicalDetail();
         _setTropicalMapViewMode('both');
@@ -14946,14 +15239,39 @@
         });
     });
 
+    const spcSubtabButtons = Array.from(document.querySelectorAll('.spc-subtab-button'));
+    spcSubtabButtons.forEach((button, index) => {
+        button.addEventListener('click', () => {
+            _setSpcSubtab(button.dataset.spcSubtab || 'outlooks');
+        });
+        button.addEventListener('keydown', (event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+
+            let nextIndex = index;
+            if (event.key === 'ArrowLeft') nextIndex = index === 0 ? spcSubtabButtons.length - 1 : index - 1;
+            if (event.key === 'ArrowRight') nextIndex = index === spcSubtabButtons.length - 1 ? 0 : index + 1;
+            if (event.key === 'Home') nextIndex = 0;
+            if (event.key === 'End') nextIndex = spcSubtabButtons.length - 1;
+
+            const nextButton = spcSubtabButtons[nextIndex];
+            if (!nextButton) return;
+            _setSpcSubtab(nextButton.dataset.spcSubtab || 'outlooks');
+            nextButton.focus();
+        });
+    });
+    _syncSpcSubtabForSelection();
+
     byId('weather-spc-day')?.addEventListener('change', () => {
         _syncSpcConvectiveOptions(_shouldResetSpcConvectiveDaySelection());
+        _syncSpcSubtabForSelection('outlooks');
         if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) refreshSpc();
     });
 
     document.querySelectorAll('.weather-spc-convective-toggle').forEach((el) => {
         el.addEventListener('change', () => {
             if (el.checked) _clearSpcExclusivePeers('convective');
+            _syncSpcSubtabForSelection('outlooks');
             const BASE_HAZARDS = ['cat', 'torn', 'wind', 'hail'];
             const day = _getSpcDay();
             // For Day 3, make Categorical and Probabilistic mutually exclusive
@@ -15008,6 +15326,7 @@
             if (elA.checked) {
                 elB.checked = false;
                 _clearSpcExclusivePeers('watches');
+                _syncSpcSubtabForSelection('watches');
             }
             _refreshSpcIfVisible();
         });
@@ -15015,6 +15334,7 @@
             if (elB.checked) {
                 elA.checked = false;
                 _clearSpcExclusivePeers('watches');
+                _syncSpcSubtabForSelection('watches');
             }
             _refreshSpcIfVisible();
         });
@@ -15034,6 +15354,7 @@
                     });
             }
             _updateSpcReportFilterState();
+            _syncSpcSubtabForSelection('reports');
             _refreshSpcIfVisible();
         });
     });
@@ -15048,6 +15369,7 @@
             if (id === 'weather-spc-show-mds' && evt?.target?.checked) {
                 _clearSpcExclusivePeers('mds');
             }
+            _syncSpcSubtabForSelection('reports');
             _refreshSpcIfVisible();
         });
     });
@@ -15056,6 +15378,7 @@
         el.addEventListener('change', () => {
             if (el.checked) {
                 _clearSpcExclusivePeers('fire', { keepFireTarget: el });
+                _syncSpcSubtabForSelection('fire');
             }
             _refreshSpcIfVisible();
         });
@@ -15201,6 +15524,31 @@
         _updateSubOptionVisibility();
         refreshActiveLayers();
     });
+
+    const mrmsSubtabButtons = Array.from(document.querySelectorAll('.mrms-subtab-button'));
+    mrmsSubtabButtons.forEach((button, index) => {
+        button.addEventListener('click', () => {
+            _setMrmsSubtab(button.dataset.mrmsSubtab || 'precip');
+        });
+        button.addEventListener('keydown', (event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+
+            let nextIndex = index;
+            if (event.key === 'ArrowLeft') nextIndex = index === 0 ? mrmsSubtabButtons.length - 1 : index - 1;
+            if (event.key === 'ArrowRight') nextIndex = index === mrmsSubtabButtons.length - 1 ? 0 : index + 1;
+            if (event.key === 'Home') nextIndex = 0;
+            if (event.key === 'End') nextIndex = mrmsSubtabButtons.length - 1;
+
+            const nextButton = mrmsSubtabButtons[nextIndex];
+            if (!nextButton) return;
+            _setMrmsSubtab(nextButton.dataset.mrmsSubtab || 'precip');
+            nextButton.focus();
+        });
+    });
+    _syncMrmsSubtabForProduct();
+    updateMrmsSubControls();
+
     document.querySelectorAll('.mrms-product-check').forEach((cb) => {
         cb.addEventListener('change', () => {
             if (cb.checked) {
@@ -15559,24 +15907,41 @@
         _clearRadarLoadedOverlaysOnly();
     });
 
-    byId('weather-satellite-current')?.addEventListener('click', () => {
-        if (!_isTypeEnabled('satellite')) {
-            setStatus('Enable the Satellite tab first.');
-            return;
-        }
-        if (_satelliteScrubMode) {
-            _exitSatelliteScrubMode(false);
-        }
-        loadSatelliteCurrentFrame({ silent: false });
-    });
+    function bindSatelliteSubtabGroup(selector, selectId, dataKey) {
+        const buttons = Array.from(document.querySelectorAll(selector));
+        buttons.forEach((button, index) => {
+            button.addEventListener('click', () => {
+                _setSatelliteSelectValue(selectId, button.dataset[dataKey]);
+            });
+            button.addEventListener('keydown', (event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
 
-    byId('weather-satellite-animate')?.addEventListener('click', () => {
-        if (!_isTypeEnabled('satellite')) {
-            setStatus('Enable the Satellite tab first.');
-            return;
-        }
-        loadSatelliteScrubberFrames();
-    });
+                let nextIndex = index;
+                if (event.key === 'ArrowLeft') nextIndex = index === 0 ? buttons.length - 1 : index - 1;
+                if (event.key === 'ArrowRight') nextIndex = index === buttons.length - 1 ? 0 : index + 1;
+                if (event.key === 'Home') nextIndex = 0;
+                if (event.key === 'End') nextIndex = buttons.length - 1;
+
+                const nextButton = buttons[nextIndex];
+                if (!nextButton) return;
+                _setSatelliteSelectValue(selectId, nextButton.dataset[dataKey]);
+                nextButton.focus();
+            });
+        });
+    }
+
+    bindSatelliteSubtabGroup(
+        '.satellite-subtab-button[data-satellite-sat]',
+        'weather-satellite-sat-id',
+        'satelliteSat'
+    );
+    bindSatelliteSubtabGroup(
+        '.satellite-subtab-button[data-satellite-sector]',
+        'weather-satellite-sector',
+        'satelliteSector'
+    );
+    _syncSatelliteSubtabs();
 
     [
         'weather-satellite-sat-id',
@@ -15584,6 +15949,7 @@
         'weather-satellite-channel',
     ].forEach((id) => {
         byId(id)?.addEventListener('change', () => {
+            _syncSatelliteSubtabs();
             if (_isTypeEnabled('satellite')) {
                 _clearSatelliteLayerPool();
                 if (_satelliteScrubMode) {
@@ -15740,6 +16106,7 @@
         // on a "Current" tab load because the user had MRMS active before
         // refreshing).
         const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'];
+        _configureStandaloneProductPage(allTypes);
         allTypes.forEach((t) => {
             const el = byId(`weather-type-${t}`);
             if (el) el.checked = el.defaultChecked;
@@ -15749,6 +16116,9 @@
         document.querySelectorAll('.mrms-product-check').forEach((cb) => { cb.checked = cb.defaultChecked; });
         // Same for RTMA stream/product checkboxes.
         document.querySelectorAll('.weather-rtma-stream, .weather-rtma-product').forEach((cb) => { cb.checked = cb.defaultChecked; });
+        if (_standaloneProductType === 'spc') {
+            _resetTabControlsToDefaults('spc', { silent: true });
+        }
 
         _applyDefaultAlertSelection();
         _syncSpcConvectiveOptions(false);
@@ -15758,6 +16128,7 @@
         _updateSubOptionVisibility();
         updateMrmsSubControls();
         _wireRightSidebarTabs();
+        _wireTropicalLeftTabs();
         _wireActiveWarningsPanel();
         _wireSidebarWarningFilterCheckboxes();
         _updateAlertFilterOptionsVisibility();
@@ -15786,8 +16157,127 @@
         });
         _syncRightSidebarLayers();
         _setViewerTimestamp(null);
+        if (_isTypeEnabled('tropical')) {
+            fitTropicalDefaultExtent();
+        }
+        _updateSpcReportFilterState();
         refreshActiveLayers();
         _startReliabilityTicker();
+    }
+
+    function _registerProductAppContexts() {
+        if (_alertsPageController?.configureWarningsPanel) {
+            _alertsPageController.configureWarningsPanel({
+                activeAlertsForWarningsPanel: _activeAlertsForWarningsPanel,
+                alertCategories: ALERT_CATEGORIES,
+                alertCategoryEventSet: ALERT_CATEGORY_EVENT_SET,
+                alertColors: ALERT_COLORS,
+                alertDefaultColor: ALERT_DEFAULT,
+                alertFeatureCenterLatLng: _alertFeatureCenterLatLng,
+                applyInMemoryAlertCategoryFilter: _applyInMemoryAlertCategoryFilter,
+                escapeHtml: _escapeHtml,
+                formatExpiresInVerbose: _formatExpiresInVerbose,
+                formatLocalTimeWithTz: _formatLocalTimeWithTz,
+                formatRelativeTime: _formatRelativeTime,
+                getAllAlertFeatures: () => _allAlertFeatures,
+                getAlertsFullBaseFeatures: () => _alertsFullBaseFeatures,
+                getWarningsFilterEnabled: () => _warningsFilterEnabled,
+                getWarningsKnownIds: () => _warningsKnownIds,
+                getWarningsPanelFilter: () => _warningsPanelFilter,
+                hasAlertBaseFeatures: () => _alertsFullBaseFeatures.length > 0 || _alertsDisplayBaseFeatures.length > 0,
+                isTypeEnabled: _isTypeEnabled,
+                map,
+                openAlertsPagerAt: _openAlertsPagerAt,
+                severeWarningEvents: ACTIVE_WARNING_SEVERE_EVENTS,
+                setRegionAlertLocationState: _setRegionAlertLocationState,
+                setWarningsPanelFilter: (key) => {
+                    _warningsPanelFilter = key;
+                },
+                summarizeAreaDesc: _summarizeAreaDesc,
+                updateWarningFilterCounts: _updateWarningFilterCounts,
+                warningPanelEmptyText: _warningPanelEmptyText,
+            });
+        }
+
+        const alertsContext = _productAppContexts?.registerProductContext('alerts', {
+            alertColors: ALERT_COLORS,
+            alertDefaultColor: ALERT_DEFAULT,
+            alertPriority: ALERT_PRIORITY,
+            alertPulseEvents: ALERT_PULSE_EVENTS,
+            alertsRequestScopeFromRegion: _alertsRequestScopeFromRegion,
+            alertsZoomBucket: _alertsZoomBucket,
+            buildAlertsLayer: _buildAlertsLayer,
+            buildAlertsLegend,
+            buildAlertsUrl: _buildAlertsUrl,
+            fetchFn: (url, options) => fetch(url, options),
+            filterAlertsByCategories: _filterAlertsByCategories,
+            leaflet: L,
+            map,
+            apiUrl,
+            clearAllMapLayers: _clearAllMapLayers,
+            formatValidTimeLabel: _formatValidTimeLabel,
+            getAlertKnownIds: () => _knownAlertIds,
+            getAlertBaseFeatures: () => ({
+                fullBaseFeatures: _alertsFullBaseFeatures,
+                displayBaseFeatures: _alertsDisplayBaseFeatures,
+            }),
+            getAlertsOpacity: () => alertsOpacity,
+            getCheckedCategories: _getCheckedAlertCategories,
+            getRegionValue: () => byId('weather-region')?.value,
+            isCurrentRequestSeq: (requestSeq) => requestSeq === _alertsRequestSeq,
+            isArchiveMode: () => _archiveMode,
+            isStormTrackDrawMode: () => _stormTrackDrawMode,
+            isTypeEnabled: _isTypeEnabled,
+            hasMrmsScrubFrames: () => _mrmsScrubFrames.length > 0,
+            hasRtmaScrubFrames: () => _rtmaScrubFrames.length > 0,
+            makeThrottledHoverHandler: _makeThrottledHoverHandler,
+            nextRequestSeq: () => {
+                _alertsRequestSeq += 1;
+                return _alertsRequestSeq;
+            },
+            onArchiveFramesReady: _onArchiveFramesReady,
+            openAlertsPagerAt: _openAlertsPagerAt,
+            renderActiveWarningsPanel: _renderActiveWarningsPanel,
+            resolveDataTimestampMs: _resolveDataTimestampMs,
+            setAlertBaseFeatures: (fullBaseFeatures, displayBaseFeatures) => {
+                _alertsFullBaseFeatures = fullBaseFeatures;
+                _alertsDisplayBaseFeatures = displayBaseFeatures;
+            },
+            setAlertFeatureStateEmpty: () => {
+                _allAlertFeatures = [];
+                _alertsDisplayFeatures = [];
+                _swapAlertsLayer(null);
+            },
+            setAlertKnownIds: (ids) => {
+                _knownAlertIds = ids;
+            },
+            setAlertLastZoomBucket: (zoomBucket) => {
+                _lastAlertsZoomBucket = zoomBucket;
+            },
+            setAlertRenderedFeatures: (fullFeatures, displayFeatures) => {
+                _allAlertFeatures = fullFeatures;
+                _alertsDisplayFeatures = displayFeatures;
+            },
+            setAlertsCount: (count) => {
+                const countEl = byId('weather-alerts-count');
+                if (countEl) countEl.textContent = `${count} active alert(s)`;
+            },
+            setArchiveProgress: _setArchiveProgress,
+            setRegionAlertLocationState: _setRegionAlertLocationState,
+            setLegend,
+            setReliability: _setReliability,
+            setStatus,
+            setTimestampSource: _setTimestampSource,
+            setViewerTimestamp: _setViewerTimestamp,
+            shouldNotifyNewAlert: (feat) => ALERT_NOTIFY_EVENTS.has(feat?.properties?.event || ''),
+            showNewAlertBanner: _showNewAlertBanner,
+            staleNoteForTimestamp: _staleNoteForTimestamp,
+            stripInactiveAlerts: _stripInactiveAlerts,
+            swapAlertsLayer: _swapAlertsLayer,
+        });
+        if (alertsContext && _alertsEngineFactory?.createAlertsEngine) {
+            _alertsEngine = _alertsEngineFactory.createAlertsEngine(alertsContext);
+        }
     }
 
     // ── Auto-refresh alerts every 30s to match the OS-task backend cadence ──
@@ -15815,9 +16305,8 @@
         refreshSpc();
     }, SPC_AUTO_REFRESH_MS);
 
+    _registerProductAppContexts();
     init();
-
-    _updateSpcReportFilterState();
 
 }());
 

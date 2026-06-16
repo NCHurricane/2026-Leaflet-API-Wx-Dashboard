@@ -6,6 +6,18 @@ This playbook turns `docs/refactor-dossier.md` into execution phases that can
 be handed to a lower-level model or implemented manually. Each phase should be
 completed, verified, and committed before the next phase starts.
 
+## Active Worktrees And Branches
+
+- Main repository: `F:\Python\dashboard_2026`.
+- Backend refactor worktree: `F:\Python\dashboard_2026_refactor` on
+  `codex/backend-product-refactor`.
+- Frontend product-page worktree: `F:\Python\dashboard_2026_frontend_pages` on
+  `codex/frontend-product-pages`.
+- Before editing, confirm the requested work belongs to the current worktree.
+- Use the frontend product-page worktree for dashboard shell, product page, and
+  `weather.html` / `js/weather.js` UI changes.
+- Use the backend refactor worktree for FastAPI route/service/module changes.
+
 ## Global Rules
 
 - Do not modify `weather.html`, `js/weather.js`, cache data, imagery, logs, or
@@ -844,6 +856,39 @@ Recommended order:
 10. `/mrms`
 11. `/rtma`
 
+Current frontend shell status:
+
+- MRMS and SPC left-dock subtabs are implemented and visually accepted in
+  `F:\Python\dashboard_2026_frontend_pages`.
+- Satellite subtabs are implemented for platform and sector selection while
+  preserving the existing Channel Product dropdown. Satellite left-sidebar
+  Current/Animate buttons were removed because the dashboard scrubber auto-loads
+  and owns playback.
+- RTMA remains in the compact grouped left-dock layout; avoid adding subtabs to
+  compact products unless the controls become materially denser.
+- Dense-product subtabs are complete for this pass: MRMS, SPC, and Satellite.
+- Tropical reference pass is accepted in the fixed dashboard shell:
+  the left hub uses basin selection plus Active, Outlooks, and Archive tabs.
+  Outlooks is the default on page load. The right System Inspector remains the
+  selected storm detail surface and stays hidden until an active or archived
+  storm is selected.
+- The right Archive tab is removed for Tropical; archive browsing belongs in the
+  left Tropical tab set while Styling/System remain right-side concerns.
+- Phase 14 `/tropical` route-level candidate is accepted for this pass. It
+  serves the accepted dashboard shell in Tropical-only mode, keeps
+  `/weather.html` unchanged for the combined workspace, and avoids duplicating
+  the full `weather.js` state model before shared utilities are extracted.
+- Phase 14 route-level candidates for `/alerts`, `/spc`, `/surface`,
+  `/drought`, `/satellite`, `/radar`, `/mrms`, and `/rtma` are accepted for
+  this pass. They serve the accepted dashboard shell in product-only mode and
+  keep `/weather.html` unchanged for the combined workspace. `/surface` maps
+  to the existing `current` product mode.
+- SPC standalone startup has one important guard: reset SPC controls and run
+  `_updateSpcReportFilterState()` before the initial `refreshActiveLayers()`
+  call. Without that ordering, the first Day 1 Categorical response can be
+  rejected as stale and the layer only appears after toggling the Categorical
+  checkbox.
+
 Per-product steps:
 
 1. Create canonical route.
@@ -864,6 +909,39 @@ Stop if:
 ## Phase 15: Clean Cut
 
 Goal: remove duplicated legacy behavior after product pages are verified.
+
+Status: ready to plan next. The route-level split candidates are working and
+accepted, but they still share `weather.html` and `js/weather.js`. Do not begin
+removing combined-workspace product code until the user confirms the Phase 15
+clean-cut strategy.
+
+Phase 15A prep has started with a minimal frontend bootstrap extraction:
+`js/product-page-shell.js` owns canonical product route detection and
+standalone product checkbox/title setup, and `js/alerts-page.js` registers the
+Alerts standalone entry metadata. `/alerts` still uses the accepted
+`weather.html` shell and `js/weather.js` behavior for this step; no combined
+workspace Alerts code has been removed yet.
+
+Phase 15B prep now serves `/alerts` through a generated product shell response
+instead of a static `weather.html` file response. `serve_product_shell_page()`
+injects product-page metadata into the shared shell without copying
+`weather.html`, and `js/alerts-page.js` owns the first Alerts page-controller
+helpers for category defaults, master checkbox sync, checked-category reads,
+warning-filter visibility, and active-warning panel rendering/wiring.
+
+Phase 15C prep added `js/product-app-context.js`, a small registry for product
+engine dependencies. `js/weather.js` registers the Alerts app context before
+init, exposing the Leaflet map, API URL helper, status/legend setters,
+timestamp/reliability setters, archive/scrubber guards, and shared formatting
+hooks for the extracted Alerts modules.
+
+`js/alerts-engine.js` now owns the context-backed Alerts live-response
+eligibility check, live Alerts loading orchestration, in-memory category
+refiltering, display-geometry refresh, Leaflet alert style/layer construction,
+and archive Alerts loading/frame slicing. `js/weather.js` keeps inline fallback
+implementations for combined-workspace safety and still injects popup/detail
+presentation and new-alert notification banners because those flows share
+broader dashboard/map interaction state.
 
 Files to modify:
 
