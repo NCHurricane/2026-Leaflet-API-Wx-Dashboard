@@ -503,6 +503,19 @@
         const year = String(byId('wx-archive-season')?.value || '');
         const entries = ((catalog.basins || {})[basin] || {})[year] || [];
         const sorted = [...entries].sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+        const basinName = archiveBasinName(catalog, basin);
+
+        if (!sorted.length) {
+            box.innerHTML = `
+                <div class="wx-tropical-empty-card">
+                    <div class="wx-tropical-empty-title">No systems</div>
+                    <div class="wx-tropical-empty-note">
+                        No tropical systems recorded for the ${context.escapeHtml(basinName)} basin in ${context.escapeHtml(year)}.
+                    </div>
+                </div>`;
+            context.setArchiveStatus(`No systems · ${year} ${basinName} season`);
+            return;
+        }
 
         box.innerHTML = sorted.map(archiveCardHtml).join('');
         box.querySelectorAll('.wx-tropical-card[data-atcf-id]').forEach((card) => {
@@ -511,7 +524,6 @@
             });
         });
 
-        const basinName = archiveBasinName(catalog, basin);
         context.setArchiveStatus(
             `${sorted.length} storm${sorted.length === 1 ? '' : 's'} · ${year} ${basinName} season`,
         );
@@ -525,9 +537,14 @@
 
         const seasonSelect = byId('wx-archive-season');
         const basin = String(byId('wx-archive-basin')?.value || 'AL').toUpperCase();
-        const seasons = Object.keys((catalog.basins || {})[basin] || {})
-            .map(Number)
-            .sort((a, b) => b - a);
+        // Always offer the current year in every basin so the selection survives a
+        // basin switch (an empty current season then shows "No systems" rather than
+        // silently falling back to the basin's latest year with storms).
+        const seasonSet = new Set(
+            Object.keys((catalog.basins || {})[basin] || {}).map(Number),
+        );
+        seasonSet.add(new Date().getUTCFullYear());
+        const seasons = [...seasonSet].sort((a, b) => b - a);
 
         if (seasonSelect) {
             const previous = seasonSelect.value;

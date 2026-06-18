@@ -3574,8 +3574,11 @@ body.wx-standalone-product .weather-header-right {
     display: none;
 }
 
-/* Storm cards are the UI; the native select remains as synced state. */
-.tropical-native-control {
+/* Storm cards are the UI; the native label/select remain as synced state.
+   The compound selector outranks `.wx-block label { display: block }`, which
+   would otherwise un-hide the native "System" label. */
+.tropical-native-control,
+.wx-block .tropical-native-control {
     display: none;
 }
 
@@ -3848,10 +3851,6 @@ button.wx-tropical-outlook-card:focus-visible {
 }
 
 .wx-tropical-status-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
     padding-top: 2px;
 }
 
@@ -3862,10 +3861,7 @@ button.wx-tropical-outlook-card:focus-visible {
 }
 
 .wx-tropical-refresh {
-    width: auto;
-    padding: 5px 9px;
-    font-size: 0.66rem;
-    line-height: 1;
+    margin-top: 8px;
 }
 
 .wx-tropical-product-list {
