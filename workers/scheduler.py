@@ -55,6 +55,7 @@ def start_scheduler() -> None:
     from workers.alerts_worker import run_alerts_worker
     from workers.spc_worker import run_spc_worker
     from workers.tropical_worker import run_tropical_worker
+    from workers.tropical_archive_worker import refresh_current_season
     from workers.mrms_worker import run_mrms_worker
     from workers.radar_live_worker import run_radar_live_worker
     from workers.rtma_worker import run_rtma_hourly_worker, run_rtma_rapid_worker
@@ -90,6 +91,18 @@ def start_scheduler() -> None:
         max_instances=1,
         misfire_grace_time=300,
         next_run_time=now + timedelta(seconds=10),
+    )
+    # Keep the in-progress season in the Archive browser fresh from ATCF b-decks.
+    # HURDAT2 only publishes after a season closes, so the full archive build is
+    # lazy/immutable; this light refresh touches just the current year.
+    _scheduler.add_job(
+        refresh_current_season,
+        "interval",
+        hours=3,
+        id="tropical_archive_refresh",
+        max_instances=1,
+        misfire_grace_time=600,
+        next_run_time=now + timedelta(seconds=120),
     )
     # MRMS first tick deferred 30s so heavy S3 download doesn't compete with
     # the alerts/surface initial fetches for network bandwidth.

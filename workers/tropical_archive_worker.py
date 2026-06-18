@@ -985,6 +985,61 @@ def run_archive_worker(
     )
 
 
+def refresh_current_season(year: int | None = None) -> int:
+    """Refresh only the in-progress season from b-decks; leave history untouched.
+
+    Updates the current-year per-basin catalog entries and the current-season
+    per-storm ``storm.json`` payloads, without re-parsing HURDAT2 or rewriting the
+    thousands of historical payloads (which would wipe their lazily-cached GIS/
+    advisory enrichment). No-op (returns 0) when the full catalog hasn't been
+    built yet — the lazy full build handles first-time creation.
+    """
+    import json
+
+    if not CATALOG_FILE.is_file():
+        return 0
+    target_year = year or datetime.now(timezone.utc).year
+
+    # A discovery/fetch failure must not wipe valid current-season data, so collect
+    # the whole season up front and abort on error rather than mutating the catalog.
+    try:
+        storms = list(parse_current_season_btk(target_year))
+    except Exception as exc:
+        print(f"[tropical_archive_worker] current-season refresh skipped: {exc}")
+        return 0
+
+    try:
+        catalog_payload = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"[tropical_archive_worker] catalog unreadable, refresh skipped: {exc}")
+        return 0
+    basins = catalog_payload.get("basins") or {}
+
+    fresh_year: dict[str, list[dict]] = {}
+    for storm in storms:
+        fresh_year.setdefault(storm["basin"], []).append(_catalog_entry(storm))
+        storm_dir = STORMS_DIR / storm["atcf_id"]
+        storm_dir.mkdir(parents=True, exist_ok=True)
+        (storm_dir / "storm.json").write_text(
+            json.dumps(build_storm_payload(storm, source=_ATCF_BTK_SOURCE), ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    year_key = str(target_year)
+    for basin in ("AL", "EP", "CP"):
+        year_map = basins.setdefault(basin, {})
+        if basin in fresh_year:
+            year_map[year_key] = fresh_year[basin]
+        else:
+            year_map.pop(year_key, None)  # season has no storms (yet) in this basin
+    catalog_payload["basins"] = {b: basins[b] for b in ("AL", "EP", "CP") if basins.get(b)}
+    catalog_payload["updated"] = _utc_now_iso()
+    CATALOG_FILE.write_text(json.dumps(catalog_payload, ensure_ascii=False), encoding="utf-8")
+    mark_run_complete("tropical_archive")
+    print(f"[tropical_archive_worker] current-season refresh: {len(storms)} storm(s) for {year_key}")
+    return len(storms)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build the tropical archive (HURDAT2) cache.")
     parser.add_argument("--force", action="store_true", help="Re-download the source files.")
@@ -999,6 +1054,12 @@ if __name__ == "__main__":
         help="Use a local HURDAT2 NE/Central Pacific text file instead of fetching it.",
     )
     parser.add_argument(
+        "--refresh-current",
+        action="store_true",
+        help="Refresh only the in-progress season from ATCF b-decks (skips the full "
+        "HURDAT2 rebuild; leaves historical payloads and their enrichment intact).",
+    )
+    parser.add_argument(
         "--log-to-file",
         action="store_true",
         help="Redirect stdout/stderr to logs/scheduled/tropical_archive.log.",
@@ -1008,6 +1069,9 @@ if __name__ == "__main__":
         from workers._freshness import redirect_stdio_to_log
 
         redirect_stdio_to_log("tropical_archive")
-    run_archive_worker(
-        force=args.force, atlantic_file=args.atlantic_file, nepac_file=args.nepac_file
-    )
+    if args.refresh_current:
+        refresh_current_season()
+    else:
+        run_archive_worker(
+            force=args.force, atlantic_file=args.atlantic_file, nepac_file=args.nepac_file
+        )
