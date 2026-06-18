@@ -93,6 +93,12 @@
             if (linkProduct && linkProduct !== 'home') {
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
+                    // Uncheck all other products first
+                    allTypes.forEach((type) => {
+                        const el = getElementById(`weather-type-${type}`);
+                        if (el) el.checked = false;
+                    });
+                    // Then check the target product and dispatch change event
                     const checkbox = getElementById(`weather-type-${linkProduct}`);
                     if (checkbox) {
                         checkbox.checked = true;
