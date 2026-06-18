@@ -79,7 +79,7 @@
             el.disabled = type !== productType;
         });
 
-        // Highlight active product in navigation bar
+        // Highlight active product in navigation bar and wire nav link clicks
         const navLinks = querySelectorAll('.product-nav-link');
         navLinks.forEach((link) => {
             const linkProduct = link.getAttribute('data-product');
@@ -87,6 +87,20 @@
                 link.classList.add('is-active');
             } else {
                 link.classList.remove('is-active');
+            }
+
+            // Wire nav link clicks to trigger product selection
+            if (linkProduct && linkProduct !== 'home') {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const checkbox = getElementById(`weather-type-${linkProduct}`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    // Navigate after event is dispatched
+                    window.location.href = link.href;
+                });
             }
         });
 
