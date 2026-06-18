@@ -5,7 +5,8 @@
       "name": "dashboard",
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": ["main.py"],
-      "port": 8000
+      "port": 8000,
+      "autoPort": false
     }
   ]
 }

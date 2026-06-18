@@ -13,6 +13,7 @@ import html
 import io
 import json
 import re
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -22,6 +23,11 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+# Add project root to path for both module and direct execution
+project_root = str(Path(__file__).resolve().parent.parent)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from workers._freshness import is_cache_fresh, mark_run_complete
 

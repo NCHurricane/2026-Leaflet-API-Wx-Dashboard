@@ -12,9 +12,15 @@ Scheduled to run every 6 hours to keep the cache at a manageable size.
 from __future__ import annotations
 
 import os
+import sys
 import time as _time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+
+# Add project root to path for both module and direct execution
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from workers._freshness import is_cache_fresh, mark_run_complete
 

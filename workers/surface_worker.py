@@ -9,9 +9,15 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 import time as _time
 from datetime import datetime, timezone
+
+# Add project root to path for both module and direct execution
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 import numpy as np
 from PIL import Image

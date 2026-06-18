@@ -910,38 +910,107 @@ Stop if:
 
 Goal: remove duplicated legacy behavior after product pages are verified.
 
-Status: ready to plan next. The route-level split candidates are working and
-accepted, but they still share `weather.html` and `js/weather.js`. Do not begin
-removing combined-workspace product code until the user confirms the Phase 15
-clean-cut strategy.
+Status: **complete for Drought, Surface, MRMS, RTMA, and SPC**. Tropical
+migration is deferred.
 
-Phase 15A prep has started with a minimal frontend bootstrap extraction:
-`js/product-page-shell.js` owns canonical product route detection and
-standalone product checkbox/title setup, and `js/alerts-page.js` registers the
-Alerts standalone entry metadata. `/alerts` still uses the accepted
-`weather.html` shell and `js/weather.js` behavior for this step; no combined
-workspace Alerts code has been removed yet.
+Phase 15A prep started with `js/product-page-shell.js` owning canonical product
+route detection and standalone checkbox/title setup. `/alerts` began the
+product-shell route pattern via `serve_product_shell_page()`.
 
-Phase 15B prep now serves `/alerts` through a generated product shell response
-instead of a static `weather.html` file response. `serve_product_shell_page()`
-injects product-page metadata into the shared shell without copying
-`weather.html`, and `js/alerts-page.js` owns the first Alerts page-controller
-helpers for category defaults, master checkbox sync, checked-category reads,
-warning-filter visibility, and active-warning panel rendering/wiring.
+Phase 15B prep routed `/alerts` through a generated product shell response.
+`js/alerts-page.js` owns Alerts page-controller helpers. Phase 15C prep added
+`js/product-app-context.js` as the product engine dependency registry.
 
-Phase 15C prep added `js/product-app-context.js`, a small registry for product
-engine dependencies. `js/weather.js` registers the Alerts app context before
-init, exposing the Leaflet map, API URL helper, status/legend setters,
-timestamp/reliability setters, archive/scrubber guards, and shared formatting
-hooks for the extracted Alerts modules.
+`js/alerts-engine.js` owns context-backed Alerts loading orchestration,
+in-memory category refiltering, display-geometry refresh, Leaflet alert
+style/layer construction, and archive loading. Popup/detail presentation and
+new-alert notification banners remain in `js/weather.js` due to shared
+dashboard/map interaction state.
 
-`js/alerts-engine.js` now owns the context-backed Alerts live-response
-eligibility check, live Alerts loading orchestration, in-memory category
-refiltering, display-geometry refresh, Leaflet alert style/layer construction,
-and archive Alerts loading/frame slicing. `js/weather.js` keeps inline fallback
-implementations for combined-workspace safety and still injects popup/detail
-presentation and new-alert notification banners because those flows share
-broader dashboard/map interaction state.
+`/satellite` and `/radar` follow the same generated product-shell route pattern.
+`js/satellite-page.js` and `js/radar-page.js` own active selection reads,
+lookback controls, and control wiring. `js/satellite-engine.js` and
+`js/radar-engine.js` own context-backed loading orchestration. Tile-layer
+pooling, crossfade, prefetch, scrubber playback (satellite), and Leaflet overlay
+rendering, site-marker layers, radar speed-calibrator interactions (radar)
+remain in `js/weather.js` due to shared dashboard lifecycle coupling.
+
+Phase 15 clean-cut is complete for the five remaining products:
+
+- **Drought**: `loadDroughtLayer` delegates entirely to drought engine.
+  `drought-page.js` `wireControls` owns `.drought-cat-check` handlers.
+  `applyDroughtFilter` is an in-memory category filter in `drought-engine.js`
+  that avoids re-fetching when only category visibility changes.
+- **Surface**: `loadSurface` delegates entirely to surface engine.
+  `surface-page.js` `wireControls` owns `.weather-surface-product` and
+  `.weather-surface-gradient` handlers with mutual exclusion and gradient blur
+  visibility. `applyGradientChange` in `surface-engine.js` primes the gradient
+  cache and re-renders markers without a full API re-fetch.
+- **MRMS**: `loadMrms` and `loadMrmsScrubberFrames` delegate to mrms engine.
+  `mrms-page.js` `wireControls` owns all product check, sub-option radio, and
+  slider handlers. `composeMrmsProductKey` with its full sub-option composition
+  logic moved entirely to `mrms-page.js`.
+- **RTMA**: `loadRtma` and `loadRtmaScrubberFrames` delegate to rtma engine.
+  `rtma-page.js` `wireControls` owns `.weather-rtma-stream` and
+  `.weather-rtma-product` handlers with full mutual exclusion, wind pair
+  secondary load, temperature_change_24h stream coercion, and slider display
+  update. `_loadRtmaUnified` is exposed as `loadUnified` in the configure
+  context for the page to call.
+- **SPC**: `refreshSpc` delegates to spc engine via `_doRefreshSpcInternal`.
+  `spc-page.js` `wireControls` owns all SPC handlers: convective toggles
+  (mutual exclusion, CIG auto-select, day-3 cat/prob exclusion), watch polygon/
+  counties pairs, storm reports day and filter types, MDS, fire weather toggles,
+  and subtab keyboard navigation. `_wireSpcUiParityHandlers` and its call site
+  were removed. `_doRefreshSpcInternal` was extracted from `refreshSpc` to
+  break the engine → context → refreshSpc → engine recursion.
+
+All 10 product engine/page scripts are declared in `weather.html` before
+`js/weather.js`. A missing script tag causes `window.NCH*Engine` to be null,
+the engine instance to never be created, and all delegated load calls to return
+undefined silently. Verify this list whenever a new product module pair is added.
+
+Tropical Phase 1 is implemented. `js/tropical-engine.js` owns active-storm list
+loading and response sequencing, and `js/tropical-page.js` owns active-system
+option/card rendering. The existing detail/map selection workflow remains
+injected from `js/weather.js`.
+
+Tropical Phase 2 is implemented. Live storm-detail/advisory loading and response
+sequencing now run through `js/tropical-engine.js`. Rendering, layer setup,
+archive-state reset, floater display, and reliability updates remain focused
+callbacks supplied by `js/weather.js`.
+
+Tropical Phase 3 is implemented. Archive catalog loading now runs through
+`js/tropical-engine.js`. `js/tropical-page.js` owns basin/season option
+rendering, archive-card rendering and selection styling, plus the basin/season
+change handlers.
+
+Tropical Phase 4 is implemented. `js/tropical-engine.js` owns per-storm archive
+base-data and advisory fetching, shared response sequencing, advisory GIS
+merging with the best track, and advisory-versus-best-track mode dispatch.
+
+Tropical Phase 5 is implemented. `js/tropical-page.js` owns archive advisory/fix
+collections, current mode and index, playback and speed state, scrubber
+rendering, navigation, mode switching, and scrubber control handlers.
+
+Tropical Phase 6 is implemented. `js/tropical-page.js` owns whole-storm HURDAT2,
+per-advisory, and per-fix System inspector header/metric rendering, including
+the advisory/fix selectors embedded in the summary grid.
+
+Tropical Phase 7 is implemented. `js/tropical-page.js` owns forecast track-row
+and table rendering, official product buttons, and graphics-list rendering with
+image availability probes. Product and graphic detail opening remains injected
+from `js/weather.js`.
+
+Tropical Phase 8 is implemented. `js/tropical-page.js` owns product/graphic
+detail panel creation, active panel state, panel replacement, dragging,
+close-button and Escape cleanup, escaped content rendering, and missing-product
+status behavior.
+
+Tropical Phase 9 is implemented. `js/tropical-page.js` owns floater storm state,
+NESDIS URL generation, five-minute cache busting, availability probes,
+stale-probe guards, product labels, modal selection, and floater pill handlers.
+
+Archive map/layer rendering callbacks and GIS overlays remain in `js/weather.js`.
 
 Files to modify:
 
@@ -966,6 +1035,160 @@ Verification:
   retired.
 - No stale references to removed JS symbols.
 - Docs identify canonical product URLs.
+
+## Phase 16: Archive Mode Extraction (Frontend Product-Split Completion)
+
+Goal: move archive-mode implementations from `js/weather.js` into their respective product engine/page splits.
+
+Status: **Complete for Tropical, Alerts, Surface, MRMS, SPC, and Radar
+(2026-06-18). Manual browser smoke verification passed for all standalone
+products and `/weather.html`.**
+
+Files to modify:
+
+- `js/weather.js` (archive orchestration references, shared infrastructure)
+- `js/surface-engine.js` and `js/surface-page.js`
+- `js/mrms-engine.js` and `js/mrms-page.js`
+- `js/spc-engine.js` and `js/spc-page.js`
+- `js/radar-engine.js` and `js/radar-page.js`
+
+Current archive landscape in `weather.js`:
+
+- **Generic archive infrastructure** (stays in `weather.js` for now):
+  - `_archiveMode` flag, `enterArchiveMode()`, `exitArchiveMode()`.
+  - `loadArchive()` dispatch and response orchestration.
+  - `_onArchiveFramesReady()` frame-ready callback handler.
+  - `renderArchiveFrame()` render dispatcher.
+  - `_setArchiveProgress()`, `_setArchiveScrubber()`, archive timeline/scrubber UI helpers.
+  - Archive time-picker presets and snapshot helpers.
+
+- **Product-specific archive functions** (extract to engines):
+  - `_loadArchiveSurface(dtFrom, dtTo)` → `surface-engine.js`
+  - `_loadArchiveMrms(dtFrom, dtTo)` → `mrms-engine.js`
+  - `_loadArchiveSpc(dtFrom, dtTo)` → `spc-engine.js`
+  - Radar frame-list loading → `radar-engine.js`
+
+- **Product-specific archive rendering** (extract to pages):
+  - `_renderArchiveSurfaceFrame(frame)` → `surface-page.js`
+  - `_renderArchiveMrmsFrame(frame)` → `mrms-page.js`
+  - Archive advisory/fix rendering and scrubber UI → already in `tropical-page.js`
+  - Radar archive frame display → `radar-page.js`
+
+Implemented ownership:
+
+- `surface-engine.js` owns archived Surface requests; `surface-page.js` owns
+  archived station and legend rendering.
+- `mrms-engine.js` owns archived MRMS requests and hands asynchronous jobs to
+  the shared polling callback; `mrms-page.js` owns archive image-overlay
+  rendering.
+- `spc-engine.js` owns archived SPC requests; `spc-page.js` owns archived
+  outlook GeoJSON rendering.
+- `radar-engine.js` owns radar frame-list loading; `radar-page.js` owns radar
+  scrubber frame rendering, preload completion, overlay replacement, and
+  crossfade display.
+- `js/weather.js` retains generic archive mode, progress, polling, and shared
+  scrubber controls.
+
+Per-product steps:
+
+1. Extract `_loadArchive{Product}()` into the product engine (follow Alerts pattern).
+2. Extract `_renderArchive{Product}Frame()` into the product page (follow Tropical pattern).
+3. Product engine returns frames via callback supplied by `weather.js` or orchestrates directly.
+4. Product page owns archive timeline/scrubber state and control wiring for its product.
+5. Generic `_archiveMode` flag remains in `weather.js` to gate non-archive data loads across products.
+6. Test on both standalone product routes (`/surface`, `/mrms`, etc.) and `/weather.html`.
+
+Stop if:
+
+- Archive frames fail to render on standalone product pages.
+- Archive timeline/scrubber controls don't wire correctly.
+- Cross-product archive behavior breaks on `/weather.html`.
+
+## Phase 17: Cleanup and Optimization (Frontend Product-Split Completion)
+
+Goal: remove orphaned code, verify parity, and optimize `js/weather.js` organization after all product code is extracted.
+
+Status: **Complete (2026-06-18). Phase 16 and final Phase 17 all-page browser
+smoke tests passed. The
+first cleanup increment removed obsolete archive load wrappers, unused archive
+session state/context callbacks, and the unused Alerts frame-slicing
+delegate/export. The second increment moved MRMS subtab selection, keyboard
+navigation, and sub-panel visibility into `js/mrms-page.js`. Syntax and
+targeted stale-reference checks pass. The third increment removed the unused
+failing `leaflet.layergroup.collision` CDN script from `weather.html`. The
+fourth increment moved Radar and Satellite control wiring into their configured
+page-controller initialization blocks and removed the obsolete weather.js
+wiring wrappers. The fifth increment removed behavior-free Drought, Surface,
+and MRMS load wrappers; shared orchestration and page contexts now call those
+engines directly. The sixth increment removed behavior-free Alerts, Radar, and
+Satellite load wrappers while retaining `refreshSpc()` as the recursion-safe
+boundary to `_doRefreshSpcInternal()`. The seventh increment removed
+behavior-free Tropical load wrappers while retaining presentation delegates
+used as shared map, inspector, floater, and archive callback boundaries. The
+eighth increment removed confirmed zero-reference RTMA grid state, SPC request
+counters/helpers, Satellite latest-frame helpers, and the write-only Radar
+tab-visited flag. The ninth/final increment removed the remaining
+declaration-only legacy helpers and empty Radar multi-site overlay storage.
+Repeated symbol-count audits now report no declaration-only state or functions
+in `js/weather.js`.**
+
+Post-Phase 17 RTMA update (2026-06-18):
+
+- Replaced separate Wind Chill and Heat Index controls with one
+  `apparent_temperature` product labeled Feels Like.
+- The derived field uses temperature, dew point, and wind speed from the same
+  RTMA frame.
+- Each cell displays wind chill at 50 F or colder with wind at least 3 mph,
+  heat index at 80 F or warmer, and actual temperature otherwise.
+- The derived-product PNG path now uses `_load_rtma_product_grid()` instead of
+  assuming every product has one native GRIB variable.
+- Formula checks, synthetic PNG rendering, syntax, lint, and browser smoke
+  tests passed for both RTMA streams and `/weather.html`.
+
+Files to modify:
+
+- `js/weather.js`
+- Relevant docs (`docs/next-session-startup-prompt.md`, `docs/product-page-shell-plan.md`)
+
+Steps:
+
+1. **Identify orphaned code in `js/weather.js`:**
+   - Search for archive helper functions no longer called (e.g., `_toArchiveApiDatetime`, `_applyArchivePreset` if fully owned by pages now)
+   - Search for product-specific state variables that were only used by extracted archive code
+   - Use `grep -n "function\|const\|let" js/weather.js | grep -i "archive\|surface\|mrms\|spc\|radar"` and cross-reference with extracted modules
+
+2. **Verify no stale references:**
+   - `grep -r "_loadArchive\|_renderArchive" js/ --include="*.js"` — confirm only calls are from extracted code or weather.js shared orchestration
+   - `grep -r "export.*archive\|export.*surface.*archive" js/weather.js` — check for unused exports
+   - Verify each product page/engine doesn't reference deleted weather.js symbols
+
+3. **Remove orphaned code:**
+   - Delete product-specific archive helpers moved to engines/pages
+   - Delete unused product-specific state variables
+   - Keep generic archive infrastructure (`_archiveMode`, `enterArchiveMode()`, `exitArchiveMode()`, `loadArchive()`, `_onArchiveFramesReady()`)
+
+4. **Optimize organization:**
+   - Reorder remaining weather.js sections: shared state → shared init → generic archive → product wiring → event handlers
+   - Add section comments to mark regions (e.g., "// ── Generic Archive Orchestration ──")
+   - Consider grouping all product context injection into one area
+
+5. **Final verification:**
+   - `node --check js/weather.js` (syntax clean)
+   - Smoke test: `/tropical`, `/alerts`, `/surface`, `/mrms`, `/spc`, `/radar`, `/satellite`, `/weather.html`
+   - Verify archive mode works on each product route and combined workspace
+   - Confirm no console errors or failed assertions
+
+Documentation to update:
+
+- `docs/next-session-startup-prompt.md`: record completion and final state
+- `docs/product-page-shell-plan.md`: note shared utilities that remain in weather.js (if any architectural diagram exists)
+
+Stop if:
+
+- Any product page fails to load after cleanup.
+- Archive mode stops working on any product.
+- `node --check` fails.
+- Grep finds stale references to deleted functions.
 
 ## Post-Refactor: Archive Mode Redesign
 

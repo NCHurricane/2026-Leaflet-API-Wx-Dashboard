@@ -23,7 +23,13 @@ discovered and downloaded in their own pass.
 from __future__ import annotations
 
 import os
+import sys
 import time as _time
+
+# Add project root to path for both module and direct execution
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from config.geo_config import STATE_BOUNDS
 from config.rtma_config import (
@@ -212,8 +218,11 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
         return
 
     all_product_keys = [p for p in _PRELOAD_PRODUCTS if p in PRODUCTS]
-    analysis_products = [
-        p for p in all_product_keys if PRODUCTS[p]["kind"] == "analysis"
+    # Include both analysis and derived products for comprehensive preload coverage.
+    # Derived products (e.g., apparent_temperature) use the same GRIB files as their
+    # underlying analysis products, so they render efficiently alongside them.
+    preload_products = [
+        p for p in all_product_keys if PRODUCTS[p]["kind"] in ("analysis", "derived")
     ]
 
     ok = 0
@@ -229,15 +238,15 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                 continue
 
             stream_products = [
-                p for p in analysis_products if _product_supported_on_stream(p, stream)
+                p for p in preload_products if _product_supported_on_stream(p, stream)
             ]
             if not stream_products:
                 continue
 
             hours_back = clamp_stream_hours(stream)
 
-            # ── Analysis products (one GRIB per frame covers all variables) ──
-            if analysis_products:
+            # ── Analysis and derived products (one GRIB per frame covers all variables) ──
+            if preload_products:
                 try:
                     sources = list(
                         iter_rtma_sources_within_hours(
@@ -310,7 +319,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                         )
                         continue
 
-                    # Generate GeoJSON for analysis products that are not yet cached.
+                    # Generate GeoJSON for all products (analysis and derived) that are not yet cached.
                     for product in missing_geojson:
                         try:
                             _geo_path, meta = ensure_rtma_city_geojson(

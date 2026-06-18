@@ -27,7 +27,13 @@ Usage examples
 from __future__ import annotations
 
 import os
+import sys
 import time as _time
+
+# Add project root to path for both module and direct execution
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from config.geo_config import STATE_BOUNDS
 from config.rtma_config import (
@@ -172,12 +178,15 @@ def run_preload(
         return
 
     all_product_keys = [p for p in products if p in PRODUCTS]
-    analysis_products = [
-        p for p in all_product_keys if PRODUCTS[p]["kind"] == "analysis"
+    # Include both analysis and derived products for comprehensive preload coverage.
+    # Derived products (e.g., apparent_temperature) use the same GRIB files as their
+    # underlying analysis products, so they render efficiently alongside them.
+    preload_products = [
+        p for p in all_product_keys if PRODUCTS[p]["kind"] in ("analysis", "derived")
     ]
 
-    if not analysis_products:
-        print("[rtma_preload] No valid analysis products selected — aborting")
+    if not preload_products:
+        print("[rtma_preload] No valid products selected — aborting")
         return
 
     # Build the full job list so we can show progress totals up front.
@@ -188,7 +197,7 @@ def run_preload(
             if stream == "rtma_rapid_update" and region != "CONUS":
                 continue
             stream_products = [
-                p for p in analysis_products if _product_supported_on_stream(p, stream)
+                p for p in preload_products if _product_supported_on_stream(p, stream)
             ]
             if not stream_products:
                 continue
@@ -211,7 +220,7 @@ def run_preload(
         f"~{total_geojson} GeoJSON + ~{total_overlays} overlay frame(s) to check.\n"
         f"  Streams : {streams}\n"
         f"  Regions : {regions}\n"
-        f"  Products: {analysis_products}\n"
+        f"  Products: {preload_products}\n"
     )
 
     t0 = _time.perf_counter()

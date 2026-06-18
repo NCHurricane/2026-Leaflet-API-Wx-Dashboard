@@ -7,9 +7,16 @@ Produces:
 """
 
 import json
+import os
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Add project root to path for both module and direct execution
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from workers._freshness import is_cache_fresh, mark_run_complete
 

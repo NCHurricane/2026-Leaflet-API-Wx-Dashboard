@@ -121,6 +121,8 @@ RTMA overlay endpoints:
 1. Read pre-rendered frame metadata from overlay cache index/frame directories.
 2. Return overlay metadata (`render.image_url`, `bounds`, `legend`, `timestamp`, `source_data_key`).
 3. Frontend requests points with matching `source_data_key` to avoid frame drift.
+4. Derived `apparent_temperature` uses temperature, dew point, and wind speed
+   from the same source frame to produce one Feels Like field.
 
 Weather radar live endpoints:
 
@@ -165,6 +167,8 @@ Weather workflow is mixed by product family:
 
 - Alerts/SPC: data-only endpoints, Leaflet vector rendering
 - RTMA: server-side pre-rendered PNG overlays + cached points, Leaflet imageOverlay + markers
+  - Feels Like is a derived RTMA product: wind chill at <= 50 F with wind >= 3
+    mph, heat index at >= 80 F, otherwise actual temperature.
 - Radar (weather tab): cache-first pre-rendered PNG overlays (latest + frames), with bounded on-demand fallback rendering
 
 Radar/Satellite archive workflows: unchanged — synchronous render pipeline, Lambert projection, server-side image generation, layered PNG scrubber.

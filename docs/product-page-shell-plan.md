@@ -113,6 +113,102 @@ Phase 15 remains valid.
   rendering/wiring. Popup/detail presentation and new-alert notification
   banners remain injected from `js/weather.js` because they still share broader
   dashboard/map interaction state.
+- Phase 16 archive extraction is code-complete: Surface, MRMS, SPC, and Radar
+  archive/frame loading and rendering now follow the same engine/page ownership
+  boundary. `js/weather.js` retains generic archive mode, progress, polling,
+  and shared scrubber controls. Manual browser smoke verification passed for
+  all standalone products and `/weather.html`.
+- Phase 17 cleanup is complete. The first increment removed obsolete
+  archive load wrappers, unused archive session state/context callbacks, and
+  the unused Alerts frame-slicing delegate/export.
+- The second Phase 17 increment moved MRMS subtab selection, keyboard
+  navigation, and product sub-panel visibility into `js/mrms-page.js`.
+- The third Phase 17 increment removed the unused
+  `leaflet.layergroup.collision` CDN dependency from `weather.html`.
+- The fourth Phase 17 increment normalized Radar and Satellite page startup so
+  each controller is configured before `wireControls()` runs.
+- The fifth Phase 17 increment removed behavior-free Drought, Surface, and MRMS
+  load wrappers from `js/weather.js`; callers now use their engines directly.
+- The sixth Phase 17 increment removed behavior-free Alerts, Radar, and
+  Satellite load wrappers. SPC retains its refresh boundary to prevent
+  engine/context recursion.
+- The seventh Phase 17 increment removed behavior-free Tropical load wrappers.
+  Tropical presentation delegates remain where shared map and inspector code
+  uses them as callback boundaries.
+- The eighth Phase 17 increment removed confirmed zero-reference product state
+  and helpers across RTMA, SPC, Satellite, and Radar.
+- The ninth/final Phase 17 cleanup increment removed the remaining
+  declaration-only legacy helpers and empty Radar multi-site overlay storage.
+  Repeated symbol-count audits report no declaration-only state or functions
+  in `js/weather.js`. Final all-page browser smoke verification passed, so
+  Phase 17 is complete.
+- Post-Phase 17, RTMA now exposes one Feels Like derived product instead of
+  separate Wind Chill and Heat Index controls. It derives the displayed value
+  from temperature, dew point, and wind speed in the same RTMA frame.
+- `/satellite` now follows the same generated product-shell route pattern as
+  `/alerts`. `js/satellite-page.js` owns Satellite platform/sector subtabs,
+  active selection reads, lookback controls, and frame-window calculations.
+  `js/satellite-engine.js` owns context-backed current-frame and animation-loop
+  loading orchestration. Tile-layer pooling, crossfade, prefetch, and scrubber
+  playback remain injected from `js/weather.js` because they are still shared
+  with the dashboard map/scrubber lifecycle.
+- `/radar` now follows the generated product-shell route pattern too.
+  `js/radar-page.js` owns Radar site/product selection reads, status updates,
+  lookback display, and control wiring. `js/radar-engine.js` owns
+  context-backed latest-image and scrubber-frame loading orchestration. Leaflet
+  overlay rendering, crossfade, site-marker layers, and radar speed-calibrator
+  interactions remain injected from `js/weather.js`.
+- Phase 15 clean-cut is complete for Drought, Surface, MRMS, RTMA, and SPC.
+  All inline fallback implementations, combined-workspace event handlers, and
+  inline product key composers have been removed from `js/weather.js`. Each
+  product's load functions now delegate entirely to their engine instance; each
+  product's `wireControls()` in the page module owns all UI event binding. The
+  configure context for each product exposes the specific weather.js state and
+  helpers the page/engine needs rather than sharing a global object.
+  `_doRefreshSpcInternal()` was extracted from `refreshSpc()` to break the
+  SPC engine → context → refreshSpc → engine recursion loop.
+  `_wireSpcUiParityHandlers()` was removed after spc-page.js wireControls took
+  full ownership of day/fire-day selects and all SPC toggle handlers.
+- All 10 product engine/page scripts (drought, surface, mrms, rtma, spc — both
+  engine and page for each) are now included in `weather.html`. Omitting these
+  script tags caused engine instances to be null and all delegated load calls to
+  silently return undefined with no console errors.
+- Tropical Phase 1 migration is implemented: `js/tropical-engine.js` owns the
+  active-storm list request and response sequencing, while
+  `js/tropical-page.js` owns active-system option/card rendering. Card selection
+  still calls the existing detail/map workflow in `js/weather.js`.
+- Tropical Phase 2 migration is implemented: live storm-detail/advisory fetching
+  and response sequencing now run through `js/tropical-engine.js`.
+  `js/weather.js` supplies focused callbacks for live/archive state reset,
+  summary/floater/layer rendering, status labels, and reliability metadata.
+- Tropical Phase 3 migration is implemented: archive catalog fetching now runs
+  through `js/tropical-engine.js`; basin/season options, archive cards, selected
+  card styling, and archive browse-control handlers are owned by
+  `js/tropical-page.js`.
+- Tropical Phase 4 migration is implemented: per-storm archive base-data and
+  advisory requests, response sequencing, and advisory/best-track mode
+  dispatch now run through `js/tropical-engine.js`.
+- Tropical Phase 5 migration is implemented: archive advisory/fix collections,
+  mode/index/playback state, scrubber rendering, navigation, mode switching,
+  speed controls, and all scrubber event handlers are owned by
+  `js/tropical-page.js`.
+- Tropical Phase 6 migration is implemented: whole-storm HURDAT2, per-advisory,
+  and per-fix inspector header/metric rendering is owned by
+  `js/tropical-page.js`, including the in-summary advisory/fix selectors.
+- Tropical Phase 7 migration is implemented: forecast track-row/table
+  rendering, official product buttons, and verified storm-graphics lists are
+  owned by `js/tropical-page.js`. Product and graphic detail opening remains an
+  injected callback.
+- Tropical Phase 8 migration is implemented: product/graphic detail panel
+  creation, active panel state, replacement, dragging, close-button and Escape
+  cleanup, content escaping, and missing-product status behavior are owned by
+  `js/tropical-page.js`.
+- Tropical Phase 9 migration is implemented: floater storm state, NESDIS URL
+  generation, five-minute cache busting, availability probing, stale-probe
+  guards, product labels, modal selection, and pill handlers are owned by
+  `js/tropical-page.js`.
+- Archive map/layer rendering callbacks and GIS overlays remain in
+  `js/weather.js`.
 
 ## Backend Alignment
 

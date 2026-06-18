@@ -12,6 +12,9 @@ import cfgrib
 import numpy as np
 import requests
 from config.surface_config import TEMPERATURE_GRADIENT_ANCHORS
+from surface.surface_utils import (
+    calc_relative_humidity,
+)
 import warnings
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="cfgrib")
@@ -131,7 +134,7 @@ def _format_display_value(product: str, value: float) -> float | int:
     Temperature is shown as whole-degree values; all other RTMA products keep
     one decimal place.
     """
-    if product == "temperature":
+    if product in {"temperature", "apparent_temperature"}:
         if value >= 0:
             return int(np.floor(value + 0.5))
         return int(np.ceil(value - 0.5))
@@ -272,6 +275,18 @@ PRODUCTS = {
         "vmax": 100,
         "cmap": "wx_total_cloud_cover",
         "color_anchors": _TOTAL_CLOUD_COVER_ANCHORS,
+        "convert": None,
+    },
+    "apparent_temperature": {
+        "label": "Feels Like (Wind Chill / Heat Index)",
+        "kind": "derived",
+        "vars": ["t2m", "d2m", "si10"],
+        "units": "F",
+        "vmin": -60,
+        "vmax": 130,
+        "cmap": "wx_temperature",
+        "color_anchors": TEMPERATURE_GRADIENT_ANCHORS,
+        "legend_anchors": _TEMP_LEGEND_ANCHORS,
         "convert": None,
     },
 }
@@ -479,6 +494,18 @@ def _candidate_urls(
     prefix = REGION_PREFIXES[region_key]
     base_root = NODD_RTMA_ROOT
     candidates: list[RtmaSource] = []
+
+    if kind == "derived":
+        # For derived products, get candidates from the first underlying variable
+        # Derived fields use multiple variables from the same RTMA GRIB file.
+        # All variables share the same GRIB file
+        first_var = cfg.get("vars", [])[0]
+        for analysis_product in PRODUCTS:
+            if PRODUCTS[analysis_product].get("var") == first_var:
+                return _candidate_urls(region, stream, analysis_product, now)
+        raise ValueError(
+            f"Unable to find analysis product for derived product '{product}'."
+        )
 
     if kind == "analysis":
         if stream == "rtma_rapid_update":
@@ -774,6 +801,117 @@ def _resolve_24h_prior_source(
     return nearest
 
 
+def _calculate_apparent_temperature_values(
+    temp_f: np.ndarray,
+    dew_f: np.ndarray,
+    wind_ms: np.ndarray,
+) -> np.ma.MaskedArray:
+    """Return wind chill, heat index, or air temperature per grid cell."""
+    temperature = np.asarray(temp_f, dtype=float)
+    dew_point = np.asarray(dew_f, dtype=float)
+    wind_mph = np.asarray(wind_ms, dtype=float) * 2.2369362920544
+    relative_humidity = calc_relative_humidity(temperature, dew_point)
+
+    apparent = temperature.copy()
+
+    wind_chill = (
+        35.74
+        + (0.6215 * temperature)
+        - (35.75 * np.power(wind_mph, 0.16))
+        + (0.4275 * temperature * np.power(wind_mph, 0.16))
+    )
+    wind_chill_mask = (temperature <= 50.0) & (wind_mph >= 3.0)
+    apparent = np.where(wind_chill_mask, wind_chill, apparent)
+
+    simple_heat_index = (
+        0.5
+        * (
+            temperature
+            + 61.0
+            + ((temperature - 68.0) * 1.2)
+            + (relative_humidity * 0.094)
+        )
+    )
+    rothfusz_heat_index = (
+        -42.379
+        + (2.04901523 * temperature)
+        + (10.14333127 * relative_humidity)
+        - (0.22475541 * temperature * relative_humidity)
+        - (0.00683783 * temperature * temperature)
+        - (0.05481717 * relative_humidity * relative_humidity)
+        + (0.00122874 * temperature * temperature * relative_humidity)
+        + (0.00085282 * temperature * relative_humidity * relative_humidity)
+        - (
+            0.00000199
+            * temperature
+            * temperature
+            * relative_humidity
+            * relative_humidity
+        )
+    )
+    heat_index = np.where(
+        simple_heat_index > 80.0,
+        rothfusz_heat_index,
+        simple_heat_index,
+    )
+    low_humidity_mask = (
+        (relative_humidity < 13.0)
+        & (temperature >= 80.0)
+        & (temperature <= 112.0)
+    )
+    low_humidity_adjustment = (
+        ((13.0 - relative_humidity) / 4.0)
+        * np.sqrt(
+            np.maximum(
+                0.0,
+                (17.0 - np.abs(temperature - 95.0)) / 17.0,
+            )
+        )
+    )
+    heat_index = np.where(
+        low_humidity_mask,
+        heat_index - low_humidity_adjustment,
+        heat_index,
+    )
+
+    high_humidity_mask = (
+        (relative_humidity > 85.0)
+        & (temperature >= 80.0)
+        & (temperature <= 87.0)
+    )
+    high_humidity_adjustment = (
+        ((relative_humidity - 85.0) / 10.0)
+        * ((87.0 - temperature) / 5.0)
+    )
+    heat_index = np.where(
+        high_humidity_mask,
+        heat_index + high_humidity_adjustment,
+        heat_index,
+    )
+    apparent = np.where(temperature >= 80.0, heat_index, apparent)
+    return np.ma.masked_invalid(apparent)
+
+
+def _calculate_apparent_temperature(
+    grib_path: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Calculate a single feels-like field from temperature, dew point, and wind."""
+    temp_array, lat, lon, _ = _extract_dataset(grib_path, "t2m")
+    dew_array, _, _, _ = _extract_dataset(grib_path, "d2m")
+    wind_array, _, _, _ = _extract_dataset(grib_path, "si10")
+
+    temp_f = _fahrenheit(
+        np.asarray(getattr(temp_array, "values", temp_array), dtype=float)
+    )
+    dew_f = _fahrenheit(
+        np.asarray(getattr(dew_array, "values", dew_array), dtype=float)
+    )
+    wind_ms = np.asarray(getattr(wind_array, "values", wind_array), dtype=float)
+
+    apparent = _calculate_apparent_temperature_values(temp_f, dew_f, wind_ms)
+    return apparent, lat, lon
+
+
 def _load_rtma_product_grid(
     cache_root: str,
     source: RtmaSource,
@@ -816,6 +954,22 @@ def _load_rtma_product_grid(
             )
 
         data = np.ma.masked_invalid(cur - prev)
+        timestamp = _serialize_timestamp(valid_time) or source.valid_time.isoformat()
+        return (
+            data,
+            np.asarray(latitude, dtype=float),
+            np.asarray(longitude, dtype=float),
+            timestamp,
+        )
+
+    if config.get("kind") == "derived":
+        if product == "apparent_temperature":
+            data, latitude, longitude = _calculate_apparent_temperature(grib_path)
+        else:
+            raise ValueError(f"Unknown derived product: {product}")
+
+        # Extract valid_time from one of the variables
+        _, _, _, valid_time = _extract_dataset(grib_path, config["vars"][0])
         timestamp = _serialize_timestamp(valid_time) or source.valid_time.isoformat()
         return (
             data,
@@ -927,7 +1081,7 @@ def ensure_rtma_city_geojson(
     cities = _load_city_points(cities_path)
     city_points = _sample_city_values(data, latitude, longitude, cities)
 
-    if product == "temperature":
+    if product in {"temperature", "apparent_temperature"}:
         for point in city_points:
             point["value"] = _format_display_value(product, float(point["value"]))
 
@@ -1171,8 +1325,12 @@ def _render_rtma_png_standalone(
     config = get_product_config(product)
 
     # Extract data (same as matplotlib version)
+    source_timestamp = None
     if (
-        product == "temperature_change_24h"
+        (
+            product == "temperature_change_24h"
+            or config.get("kind") == "derived"
+        )
         and cache_root is not None
         and source is not None
         and region is not None
@@ -1265,7 +1423,7 @@ def _render_rtma_png_standalone(
         "vmin": config["vmin"],
         "vmax": config["vmax"],
         "legend": build_rtma_legend(config),
-        "timestamp": source_timestamp if product == "temperature_change_24h" and source is not None else _serialize_timestamp(valid_time),
+        "timestamp": source_timestamp or _serialize_timestamp(valid_time),
     }
     with open(out_path.replace(".png", "_meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f)

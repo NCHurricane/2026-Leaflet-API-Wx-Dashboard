@@ -9,10 +9,65 @@ from fastapi import HTTPException
 from app_core.paths import CACHE_ROOT
 
 
+def _latest_item_issue_iso(items: list[dict]) -> str | None:
+    issue_times = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        issue_time = item.get("issue_utc")
+        if not isinstance(issue_time, datetime):
+            continue
+        if issue_time.tzinfo is None:
+            issue_time = issue_time.replace(tzinfo=timezone.utc)
+        issue_times.append(issue_time)
+    if not issue_times:
+        return None
+    return max(issue_times).astimezone(timezone.utc).isoformat()
+
+
+def _latest_report_iso(
+    rows: list[dict],
+    report_date_utc: datetime | None,
+) -> str | None:
+    if report_date_utc is None:
+        return None
+    timestamps = []
+    report_date = report_date_utc.astimezone(timezone.utc).date()
+    for row in rows:
+        raw_time = str(row.get("time") or "").strip().replace(":", "")
+        if not raw_time.isdigit() or len(raw_time) not in {3, 4}:
+            continue
+        raw_time = raw_time.zfill(4)
+        hour = int(raw_time[:2])
+        minute = int(raw_time[2:])
+        if hour > 23 or minute > 59:
+            continue
+        timestamps.append(
+            datetime(
+                report_date.year,
+                report_date.month,
+                report_date.day,
+                hour,
+                minute,
+                tzinfo=timezone.utc,
+            )
+        )
+    if not timestamps:
+        return None
+    return max(timestamps).isoformat()
+
+
 def get_spc_outlook(day: int = 1, hazard: str = "cat") -> dict:
     """Return SPC outlook GeoJSON from worker cache."""
     hazard_lower = hazard.strip().lower()
-    is_fire = hazard_lower in {"windrh", "dryt"}
+    is_fire = hazard_lower in {
+        "windrh",
+        "dryt",
+        "windrhcat",
+        "windrhprob",
+        "drytcat",
+        "drytprob",
+    }
     cache_name = f"fire_{day}_{hazard_lower}" if is_fire else f"{day}_{hazard_lower}"
     cache_file = os.path.join(CACHE_ROOT, "spc", f"{cache_name}.geojson")
 
@@ -43,6 +98,28 @@ def get_spc_outlook(day: int = 1, hazard: str = "cat") -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
     data["count"] = len(data.get("features") or [])
+    if is_fire:
+        try:
+            from spc.spc_utils import fetch_fire_outlook_modal_details
+
+            data["_outlook_detail"] = fetch_fire_outlook_modal_details(day, hazard)
+        except Exception:
+            data["_outlook_detail"] = {
+                "text": "",
+                "impacts": [],
+                "source_url": "",
+            }
+    else:
+        try:
+            from spc.spc_utils import fetch_outlook_modal_details
+
+            data["_outlook_detail"] = fetch_outlook_modal_details(day, hazard)
+        except Exception:
+            data["_outlook_detail"] = {
+                "text": "",
+                "impacts": [],
+                "source_url": "",
+            }
     return data
 
 
@@ -109,6 +186,7 @@ def get_spc_reports(
         "features": features,
         "count": len(features),
         "_source": source,
+        "_updated": _latest_report_iso(rows or [], report_date_utc),
         "report_day": day_key,
         "report_mode": (report_mode or "filtered").strip().lower(),
         "report_type": (report_type or "all").strip().lower(),
@@ -138,10 +216,12 @@ def get_spc_active(
             raise HTTPException(status_code=503, detail=f"SPC MDs unavailable: {exc}")
 
         features = []
+        included_items = []
         for md in items or []:
             polygon = md.get("polygon") or []
             if len(polygon) < 3:
                 continue
+            included_items.append(md)
 
             issue_iso = md.get("issue_utc")
             expire_iso = md.get("expire_utc")
@@ -176,6 +256,7 @@ def get_spc_active(
             "features": features,
             "count": len(features),
             "_source": source,
+            "_updated": _latest_item_issue_iso(included_items),
             "product": "mds",
         }
 
@@ -216,6 +297,7 @@ def get_spc_active(
         county_geoms = getattr(CensusCounties, "_fips_map", {}) or {}
 
     features = []
+    included_items = []
     for watch in items or []:
         watch_type = str(watch.get("type") or watch.get("title") or "Watch")
         watch_type_lc = watch_type.lower()
@@ -223,6 +305,7 @@ def get_spc_active(
         is_svr = "severe thunderstorm" in watch_type_lc
         if (is_tor and not include_tor) or (is_svr and not include_svr):
             continue
+        included_items.append(watch)
 
         issue_iso = watch.get("issue_utc")
         expire_iso = watch.get("expire_utc")
@@ -231,6 +314,7 @@ def get_spc_active(
 
         base_props = {
             "id": str(watch.get("id") or ""),
+            "watch_number": str(watch.get("id") or ""),
             "event": watch_type,
             "headline": watch.get("label") or watch.get("title") or watch_type,
             "short_label": watch.get("short_label") or "",
@@ -239,6 +323,7 @@ def get_spc_active(
             "expires": expire_iso,
             "source_url": watch.get("detail_url") or "",
             "watch_type": watch_type,
+            "watch_mode": watch_mode_key,
             "county_fips": watch.get("county_fips") or [],
             "probabilities": watch.get("probabilities") or {},
             "severity": "Severe",
@@ -296,6 +381,7 @@ def get_spc_active(
         "features": features,
         "count": len(features),
         "_source": source,
+        "_updated": _latest_item_issue_iso(included_items),
         "product": "watches",
         "watch_mode": watch_mode_key,
     }

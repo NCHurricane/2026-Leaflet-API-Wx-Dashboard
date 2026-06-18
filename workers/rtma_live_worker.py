@@ -9,8 +9,14 @@ on-demand when user requests animation.
 """
 
 import os
+import sys
 import time as _time
 from datetime import timezone
+
+# Add project root to path for both module and direct execution
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from config.rtma_config import RTMA_STREAMS
 from workers._freshness import is_cache_fresh, mark_run_complete

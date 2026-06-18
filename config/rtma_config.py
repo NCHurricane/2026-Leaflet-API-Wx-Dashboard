@@ -27,6 +27,7 @@ RTMA_UI_PRODUCTS: list[str] = [
     "wind_direction",
     "visibility",
     "total_cloud_cover",
+    "apparent_temperature",
 ]
 
 

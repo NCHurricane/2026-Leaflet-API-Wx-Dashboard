@@ -129,6 +129,56 @@
                 outline: none;
             }
 
+            /* Product Navigation Bar */
+            .product-nav {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                padding: 10px 14px;
+                background: #0c1538;
+                border-bottom: 2px solid var(--wx-line);
+                align-items: center;
+            }
+
+            .product-nav-link {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 8px 12px;
+                color: var(--wx-text);
+                text-decoration: none;
+                font-size: 0.9rem;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.02em;
+                border: 2px solid transparent;
+                border-radius: 6px;
+                transition: all 0.2s ease;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+
+            .product-nav-link:hover {
+                background: rgba(34, 232, 255, 0.08);
+                border-color: rgba(34, 232, 255, 0.3);
+                color: #b7d2df;
+            }
+
+            .product-nav-link:focus-visible {
+                outline: 2px solid var(--wx-cyan);
+                outline-offset: 2px;
+            }
+
+            .product-nav-link.is-active {
+                background: rgba(34, 232, 255, 0.15);
+                border-color: var(--wx-cyan);
+                color: var(--wx-cyan);
+            }
+
+            .product-nav-link i {
+                font-size: 1.1em;
+            }
+
             body.wx-standalone-product .weather-header {
                 grid-template-columns: minmax(0, 1fr);
             }
@@ -1644,8 +1694,8 @@
                 color: #dce8f1 !important;
                 border-top-left-radius: 6px;
                 z-index: 550 !important;
-                bottom: 4rem !important;
-                right: 1rem !important;
+                /* bottom: 4rem !important;
+                right: 1rem !important; */
             }
 
             .leaflet-control-attribution a {
@@ -3700,6 +3750,7 @@
                 background: rgba(15, 23, 42, 0.48);
                 padding: 6px 8px;
                 min-width: 0;
+                grid-column: 1 / -1;
             }
 
             .wx-tropical-metric span {
@@ -3999,40 +4050,165 @@
                 font-size: 0.7rem;
                 color: #94a3b8;
             }
+
+            .wx-spc-outlook-tabs {
+                display: flex;
+                gap: 6px;
+                padding: 8px 12px 0;
+                border-top: 1px solid rgba(148, 163, 184, 0.2);
+            }
+
+            .wx-spc-outlook-tab {
+                padding: 5px 12px;
+                border: 1px solid #475569;
+                border-radius: 5px 5px 0 0;
+                background: rgba(15, 23, 42, 0.78);
+                color: #cbd5e1;
+                font: inherit;
+                font-weight: 700;
+                cursor: pointer;
+            }
+
+            .wx-spc-outlook-tab:hover,
+            .wx-spc-outlook-tab:focus-visible {
+                color: #fff;
+                border-color: #94a3b8;
+            }
+
+            .wx-spc-outlook-tab.is-active {
+                color: #fef08a;
+                border-color: #fbbf24;
+                background: rgba(251, 191, 36, 0.14);
+            }
+
+            .wx-spc-outlook-scroll {
+                max-height: 48vh;
+            }
+
+            .wx-spc-outlook-table-wrap {
+                padding-bottom: 4px;
+                max-width: 100%;
+                overflow-x: hidden;
+            }
+
+            .wx-spc-outlook-table {
+                width: 100%;
+                max-width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-size: clamp(0.62rem, 0.65vw, 0.72rem);
+            }
+
+            .wx-spc-outlook-table th,
+            .wx-spc-outlook-table td {
+                padding: 6px 5px;
+                border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+                text-align: left;
+                vertical-align: top;
+                overflow-wrap: anywhere;
+            }
+
+            .wx-spc-outlook-table th {
+                position: sticky;
+                top: 0;
+                background: #0f172a;
+                color: #fbbf24;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+                line-height: 1.2;
+                white-space: normal;
+            }
+
+            .wx-spc-outlook-table th:nth-child(1),
+            .wx-spc-outlook-table td:nth-child(1) {
+                width: 18%;
+            }
+
+            .wx-spc-outlook-table th:nth-child(2),
+            .wx-spc-outlook-table td:nth-child(2) {
+                width: 20%;
+            }
+
+            .wx-spc-outlook-table th:nth-child(3),
+            .wx-spc-outlook-table td:nth-child(3) {
+                width: 20%;
+            }
+
+            .wx-spc-outlook-table th:nth-child(4),
+            .wx-spc-outlook-table td:nth-child(4) {
+                width: 42%;
+            }
+
+            .wx-spc-outlook-table th:nth-child(1) {
+                white-space: nowrap;
+            }
+
+            .wx-spc-outlook-table td:nth-child(1),
+            .wx-spc-outlook-table td:nth-child(2),
+            .wx-spc-outlook-table td:nth-child(3) {
+                white-space: normal;
+            }
+
+            .wx-spc-outlook-table tr.is-selected td {
+                background: rgba(251, 191, 36, 0.16);
+                color: #fef3c7;
+            }
+
+            .wx-spc-outlook-empty {
+                color: #94a3b8;
+                font-style: italic;
+            }
         </style>
     </head>
 
     <body>
         <header class="weather-header">
             <div class="weather-header-left">
-                <img src="img/nchurricane_logo.png" class="banner-logo" alt="NCHurricane.com Logo">
                 <h1><a href="index.html">Weather Graphics Dashboard 2026</a></h1>
             </div>
             <div class="weather-header-right">
-                <div class="weather-top-types">
-                    <label class="weather-type-pill"><span>Current</span><input id="weather-type-current"
-                            type="checkbox" checked></label>
-                    <label class="weather-type-pill"><span>Alerts</span><input id="weather-type-alerts"
-                            type="checkbox"></label>
-                    <label class="weather-type-pill"><span>Radar</span><input id="weather-type-radar"
-                            type="checkbox"></label>
-                    <label class="weather-type-pill"><span>Satellite</span><input id="weather-type-satellite"
-                            type="checkbox"></label>
-                    <label class="weather-type-pill"><span>SPC</span><input id="weather-type-spc"
-                            type="checkbox"></label>
-                    <label class="weather-type-pill"><span>RTMA</span><input id="weather-type-rtma"
-                            type="checkbox"></label>
-                    <label class="weather-type-pill"><span>MRMS</span><input id="weather-type-mrms"
-                            type="checkbox"></label>
-                    <label class="weather-type-pill"><span>Drought</span><input id="weather-type-drought"
-                            type="checkbox"></label>
-                    <label class="weather-type-pill"><span>Tropical</span><input id="weather-type-tropical"
-                            type="checkbox"></label>
-                    <button id="weather-test-new-alert" class="weather-top-test-btn" type="button">Test New
-                        Alert</button>
-                </div>
+                <button id="weather-test-new-alert" class="weather-top-test-btn" type="button">Test New Alert</button>
             </div>
         </header>
+
+        <nav class="product-nav">
+            <a href="/surface" class="product-nav-link" data-product="current" title="Current Conditions">
+                <i class="fas fa-cloud"></i>
+                <span>Current</span>
+            </a>
+            <a href="/alerts" class="product-nav-link" data-product="alerts" title="Weather Alerts">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>Alerts</span>
+            </a>
+            <a href="/radar" class="product-nav-link" data-product="radar" title="Radar">
+                <i class="fas fa-radio"></i>
+                <span>Radar</span>
+            </a>
+            <a href="/satellite" class="product-nav-link" data-product="satellite" title="Satellite">
+                <i class="fas fa-satellite"></i>
+                <span>Satellite</span>
+            </a>
+            <a href="/spc" class="product-nav-link" data-product="spc" title="Storm Prediction Center">
+                <i class="fas fa-chart-bar"></i>
+                <span>SPC</span>
+            </a>
+            <a href="/rtma" class="product-nav-link" data-product="rtma" title="Real-Time Mesoscale Analysis">
+                <i class="fas fa-thermometer-half"></i>
+                <span>RTMA</span>
+            </a>
+            <a href="/mrms" class="product-nav-link" data-product="mrms" title="Multi-Radar Multi-Sensor">
+                <i class="fas fa-cloud-rain"></i>
+                <span>MRMS</span>
+            </a>
+            <a href="/drought" class="product-nav-link" data-product="drought" title="Drought Monitor">
+                <i class="fas fa-water"></i>
+                <span>Drought</span>
+            </a>
+            <a href="/tropical" class="product-nav-link" data-product="tropical" title="Tropical Systems">
+                <i class="fas fa-wind"></i>
+                <span>Tropical</span>
+            </a>
+        </nav>
 
         <div class="weather-shell">
             <div class="weather-main">
@@ -4624,6 +4800,14 @@
                                     <div class="wx-check-row rtma-product-row">
                                         <span>Total Cloud Cover</span>
                                         <input class="weather-rtma-product" type="checkbox" value="total_cloud_cover">
+                                    </div>
+                                </div>
+                                <div class="rtma-sub-group">
+                                    <span class="rtma-sub-group-label">Derived Fields</span>
+                                    <div class="wx-check-row rtma-product-row">
+                                        <span>Feels Like</span>
+                                        <input class="weather-rtma-product" type="checkbox"
+                                            value="apparent_temperature">
                                     </div>
                                 </div>
                             </div>
@@ -5349,9 +5533,9 @@
                     <div id="adv-scrub-mode" class="adv-scrub-mode" role="group"
                         aria-label="Scrub mode" hidden>
                         <button type="button" data-scrub-mode="advisory"
-                            title="Step through forecast advisories">All Data</button>
+                            title="Step through forecast advisories">Advisory</button>
                         <button type="button" data-scrub-mode="besttrack"
-                            title="Step through best-track points">Track Only</button>
+                            title="Step through best-track points">Best Track</button>
                     </div>
                     <button id="adv-scrub-first" type="button" title="First advisory">&#9198;</button>
                     <button id="adv-scrub-prev" type="button" title="Previous advisory">&#9664;</button>
@@ -5374,8 +5558,6 @@
         </div>
 
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-        <script
-            src="https://cdn.jsdelivr.net/npm/leaflet.layergroup.collision@0.1.6/dist/leaflet.layergroup.collision.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
         <script src="js/shared.js?v=20260526a"></script>
@@ -5384,7 +5566,23 @@
         <script src="js/product-app-context.js?v=20260616a"></script>
         <script src="js/alerts-engine.js?v=20260616a"></script>
         <script src="js/alerts-page.js?v=20260616a"></script>
-        <script src="js/weather.js?v=20260605l"></script>
+        <script src="js/satellite-engine.js?v=20260616a"></script>
+        <script src="js/satellite-page.js?v=20260616a"></script>
+        <script src="js/radar-engine.js?v=20260616a"></script>
+        <script src="js/radar-page.js?v=20260616a"></script>
+        <script src="js/drought-engine.js?v=20260617a"></script>
+        <script src="js/drought-page.js?v=20260617a"></script>
+        <script src="js/surface-engine.js?v=20260617a"></script>
+        <script src="js/surface-page.js?v=20260617a"></script>
+        <script src="js/mrms-engine.js?v=20260617a"></script>
+        <script src="js/mrms-page.js?v=20260617a"></script>
+        <script src="js/rtma-engine.js?v=20260617a"></script>
+        <script src="js/rtma-page.js?v=20260617a"></script>
+        <script src="js/spc-engine.js?v=20260617a"></script>
+        <script src="js/spc-page.js?v=20260617a"></script>
+        <script src="js/tropical-engine.js?v=20260617d"></script>
+        <script src="js/tropical-page.js?v=20260618d"></script>
+        <script src="js/weather.js?v=20260618d"></script>
         <script>initNav('weather');</script>
     </body>
 

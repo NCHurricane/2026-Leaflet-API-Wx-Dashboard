@@ -488,7 +488,6 @@
             loadArchiveAlerts,
             loadLiveAlerts,
             refreshDisplayLayer,
-            sliceAlertsIntoFrames,
         });
     }
 

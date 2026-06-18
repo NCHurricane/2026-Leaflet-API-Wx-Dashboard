@@ -136,8 +136,9 @@ HTML asset wiring:
 
 - `weather.html` links `css/shared.css`, Leaflet CSS, Font Awesome CSS, and
   favicon.
-- `weather.html` loads Leaflet, leaflet collision plugin, topojson-client,
-  tz-lookup, `js/shared.js`, `js/radar-site-locations.js`, and `js/weather.js`.
+- `weather.html` loads Leaflet, topojson-client, tz-lookup, `js/shared.js`,
+  `js/radar-site-locations.js`, product engine/page modules, and
+  `js/weather.js`.
 - `index.html` links `css/shared.css`.
 
 API consumer counts:

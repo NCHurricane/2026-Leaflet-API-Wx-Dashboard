@@ -34,34 +34,34 @@ def read_alerts_page():
 
 @router.get("/spc")
 def read_spc_page():
-    return serve_page("weather.html")
+    return serve_product_shell_page("spc")
 
 
 @router.get("/surface")
 def read_surface_page():
-    return serve_page("weather.html")
+    return serve_product_shell_page("surface")
 
 
 @router.get("/drought")
 def read_drought_page():
-    return serve_page("weather.html")
+    return serve_product_shell_page("drought")
 
 
 @router.get("/satellite")
 def read_satellite_page():
-    return serve_page("weather.html")
+    return serve_product_shell_page("satellite")
 
 
 @router.get("/radar")
 def read_radar_standalone_page():
-    return serve_page("weather.html")
+    return serve_product_shell_page("radar")
 
 
 @router.get("/mrms")
 def read_mrms_page():
-    return serve_page("weather.html")
+    return serve_product_shell_page("mrms")
 
 
 @router.get("/rtma")
 def read_rtma_page():
-    return serve_page("weather.html")
+    return serve_product_shell_page("rtma")

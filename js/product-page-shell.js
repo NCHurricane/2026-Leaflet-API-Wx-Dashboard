@@ -63,6 +63,7 @@
             labels = {},
             bodyClass = 'wx-standalone-product',
             getElementById = (id) => document.getElementById(id),
+            querySelectorAll = (sel) => document.querySelectorAll(sel),
         } = options;
         const entry = productPageEntry(productType);
         const productLabel = entry?.label || labels[productType] || 'Weather';
@@ -76,6 +77,17 @@
             el.defaultChecked = type === productType;
             el.checked = el.defaultChecked;
             el.disabled = type !== productType;
+        });
+
+        // Highlight active product in navigation bar
+        const navLinks = querySelectorAll('.product-nav-link');
+        navLinks.forEach((link) => {
+            const linkProduct = link.getAttribute('data-product');
+            if (linkProduct === productType) {
+                link.classList.add('is-active');
+            } else {
+                link.classList.remove('is-active');
+            }
         });
 
         return productType;

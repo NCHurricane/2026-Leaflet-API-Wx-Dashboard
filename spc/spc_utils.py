@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from urllib.parse import urljoin
 from dateutil import tz
 
 import cartopy.crs as ccrs
@@ -392,6 +393,130 @@ def fetch_outlook_geojson(day: int, hazard: str):
     return payload, "NWS SPC GeoJSON"
 
 
+def _outlook_detail_page_url(day: int) -> str:
+    if day in (1, 2, 3):
+        return f"{SPC_BASE}/products/outlook/day{day}otlk.html"
+    if day in (4, 5, 6, 7, 8):
+        return f"{SPC_BASE}/products/exper/day4-8/"
+    raise ValueError("day must be between 1 and 8")
+
+
+def _extract_outlook_bulletin(page_html: str, day: int) -> str:
+    pre_blocks = re.findall(
+        r"<pre\b[^>]*>(.*?)</pre>",
+        str(page_html or ""),
+        re.IGNORECASE | re.DOTALL,
+    )
+    if day <= 3:
+        heading = re.compile(
+            rf"\bDay\s+{day}\s+(?:Convective|Severe Thunderstorm)\s+Outlook\b",
+            re.IGNORECASE,
+        )
+    else:
+        heading = re.compile(r"\bDay\s+4-8\s+Convective Outlook\b", re.IGNORECASE)
+
+    for block in pre_blocks:
+        cleaned = _clean_spc_bulletin_text(block)
+        if heading.search(cleaned):
+            return cleaned
+    return ""
+
+
+def _outlook_impacts_table_url(page_html: str, page_url: str, day: int, hazard: str):
+    hazard_key = (hazard or "cat").strip().lower()
+    if hazard_key.startswith("cig"):
+        hazard_key = hazard_key[3:]
+
+    if day in (1, 2):
+        suffix = "" if hazard_key == "cat" else hazard_key
+        prefix = f"ac{day}{suffix}_"
+    elif day == 3:
+        suffix = "prob" if hazard_key == "prob" else ""
+        prefix = f"ac3{suffix}_"
+    else:
+        return None
+
+    links = re.findall(
+        r"""["']([^"']+_SItable\.html)["']""",
+        str(page_html or ""),
+        re.IGNORECASE,
+    )
+    for link in links:
+        basename = link.rsplit("/", 1)[-1].lower()
+        if basename.startswith(prefix.lower()):
+            return urljoin(page_url, link)
+    return None
+
+
+def _parse_outlook_impacts_table(table_html: str) -> list[dict]:
+    rows = []
+    for row_html in re.findall(
+        r"<tr\b[^>]*>(.*?)</tr>",
+        str(table_html or ""),
+        re.IGNORECASE | re.DOTALL,
+    ):
+        cells = [
+            _clean_spc_text(cell)
+            for cell in re.findall(
+                r"<td\b[^>]*>(.*?)</td>",
+                row_html,
+                re.IGNORECASE | re.DOTALL,
+            )
+        ]
+        if len(cells) < 4 or "risk" in cells[0].lower():
+            continue
+        centers = [
+            center.strip(" .")
+            for center in re.split(r"\.{3,}", cells[3])
+            if center.strip(" .")
+        ]
+        rows.append(
+            {
+                "risk": cells[0],
+                "area_sq_mi": cells[1],
+                "population": cells[2],
+                "population_centers": centers,
+            }
+        )
+    return rows
+
+
+def fetch_outlook_modal_details(day: int, hazard: str, ttl_seconds: int = 300):
+    hazard_key = (hazard or "cat").strip().lower()
+    if hazard_key.startswith("cig"):
+        hazard_key = hazard_key[3:]
+    page_url = _outlook_detail_page_url(day)
+    page_html = _cached_text_custom(
+        "spc_outlook_detail",
+        f"day{day}",
+        page_url,
+        ttl_seconds=ttl_seconds,
+        timeout=_IEM_TEXT_TIMEOUT_SECONDS,
+        retries=_IEM_TEXT_RETRIES,
+    )
+    detail = {
+        "text": _extract_outlook_bulletin(page_html, day),
+        "impacts": [],
+        "source_url": page_url,
+    }
+
+    table_url = _outlook_impacts_table_url(page_html, page_url, day, hazard_key)
+    if table_url:
+        try:
+            table_html = _cached_text_custom(
+                "spc_outlook_impacts",
+                f"day{day}:{hazard_key}",
+                table_url,
+                ttl_seconds=ttl_seconds,
+                timeout=_IEM_TEXT_TIMEOUT_SECONDS,
+                retries=_IEM_TEXT_RETRIES,
+            )
+            detail["impacts"] = _parse_outlook_impacts_table(table_html)
+        except Exception:
+            detail["impacts"] = []
+    return detail
+
+
 def fetch_cig_overlay_geojson(day: int, hazard: str):
     # CIG overlays not available from original SPC GeoJSON source
     return None, "CIG overlays unavailable"
@@ -423,6 +548,63 @@ def fetch_fire_wx_geojson(day: int, hazard: str):
     url = _fire_wx_url(day, hazard)
     payload = _request_json(url)
     return payload, "SPC Fire Wx GeoJSON"
+
+
+def _fire_outlook_page_url(day: int) -> str:
+    if day in (1, 2):
+        return f"{SPC_BASE}/products/fire_wx/fwdy{day}.html"
+    if day in range(3, 9):
+        return f"{SPC_BASE}/products/exper/fire_wx/"
+    raise ValueError("Fire weather outlooks require day 1-8")
+
+
+def _extract_fire_outlook_bulletin(page_html: str, day: int) -> str:
+    heading = (
+        re.compile(rf"\bDay\s+{day}\s+Fire Weather Outlook\b", re.IGNORECASE)
+        if day <= 2
+        else re.compile(r"\bDay\s+3-8\s+Fire Weather Outlook\b", re.IGNORECASE)
+    )
+    for block in re.findall(
+        r"<pre\b[^>]*>(.*?)</pre>",
+        str(page_html or ""),
+        re.IGNORECASE | re.DOTALL,
+    ):
+        cleaned = _clean_spc_bulletin_text(block)
+        if heading.search(cleaned):
+            return cleaned
+    return ""
+
+
+def _extract_embedded_impacts_table(page_html: str) -> list[dict]:
+    for table_html in re.findall(
+        r"<table\b[^>]*>(.*?)</table>",
+        str(page_html or ""),
+        re.IGNORECASE | re.DOTALL,
+    ):
+        normalized = _clean_spc_text(table_html).lower()
+        if "area (sq. mi.)" not in normalized or "population centers" not in normalized:
+            continue
+        rows = _parse_outlook_impacts_table(f"<table>{table_html}</table>")
+        if rows:
+            return rows
+    return []
+
+
+def fetch_fire_outlook_modal_details(day: int, hazard: str, ttl_seconds: int = 300):
+    page_url = _fire_outlook_page_url(day)
+    page_html = _cached_text_custom(
+        "spc_fire_outlook_detail",
+        f"day{day}",
+        page_url,
+        ttl_seconds=ttl_seconds,
+        timeout=_IEM_TEXT_TIMEOUT_SECONDS,
+        retries=_IEM_TEXT_RETRIES,
+    )
+    return {
+        "text": _extract_fire_outlook_bulletin(page_html, day),
+        "impacts": _extract_embedded_impacts_table(page_html) if day <= 3 else [],
+        "source_url": page_url,
+    }
 
 
 def _significant_overlay_url(day: int, hazard: str) -> Optional[str]:
@@ -549,8 +731,6 @@ def _parse_watch_window_from_wou(wou_text: str):
 def _parse_watch_probability_table(wwp_text: str):
     text = str(wwp_text or "")
     probabilities = {}
-    if "PROBABILITY TABLE" not in text.upper():
-        return probabilities
 
     patterns = {
         "tor2": r"PROB\s+OF\s+2\s+OR\s+MORE\s+TORNADOES\s*:\s*([^\n\r]+)",
@@ -568,6 +748,97 @@ def _parse_watch_probability_table(wwp_text: str):
             probabilities[key] = str(match.group(1)).strip()
 
     return probabilities
+
+
+def _parse_watch_probability_page(probability_html: str):
+    text = _clean_spc_text(probability_html)
+    probabilities = {}
+    patterns = {
+        "tor2": r"Probability of 2 or more tornadoes\s+(.+?\(\s*\d+%\s*\))",
+        "tor_strong": (
+            r"Probability of 1 or more strong \(EF2-EF5\) tornadoes"
+            r"\s+(.+?\(\s*\d+%\s*\))"
+        ),
+        "wind10": (
+            r"Probability of 10 or more severe wind events"
+            r"\s+(.+?\(\s*\d+%\s*\))"
+        ),
+        "wind65": (
+            r"Probability of 1 or more wind events > 65 knots"
+            r"\s+(.+?\(\s*\d+%\s*\))"
+        ),
+        "hail10": (
+            r"Probability of 10 or more severe hail events"
+            r"\s+(.+?\(\s*\d+%\s*\))"
+        ),
+        "hail2": (
+            r"Probability of 1 or more hailstones > 2 inches"
+            r"\s+(.+?\(\s*\d+%\s*\))"
+        ),
+        "combined6": (
+            r"Probability of 6 or more combined severe hail/wind events"
+            r"\s+(.+?\(\s*(?:>?\s*)?\d+%\s*\))"
+        ),
+    }
+    for key, pattern in patterns.items():
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            probabilities[key] = re.sub(r"\s+", " ", match.group(1)).strip()
+    return probabilities
+
+
+def _extract_watch_public_text(detail_html: str, watch_id: str) -> str:
+    pre_blocks = re.findall(
+        r"<pre\b[^>]*>(.*?)</pre>",
+        str(detail_html or ""),
+        re.IGNORECASE | re.DOTALL,
+    )
+    watch_number = str(int(watch_id)) if str(watch_id).isdigit() else str(watch_id)
+    header_pattern = re.compile(
+        rf"(?:Severe\s+Thunderstorm|Tornado)\s+Watch\s+Number\s+0*"
+        rf"{re.escape(watch_number)}\b",
+        re.IGNORECASE,
+    )
+    for block in pre_blocks:
+        cleaned = _clean_spc_bulletin_text(block)
+        if header_pattern.search(cleaned):
+            return cleaned
+    return ""
+
+
+def _fetch_watch_modal_details(watch_id: str, ttl_seconds: int = 90):
+    detail_url = f"{SPC_BASE}/products/watch/ww{watch_id}.html"
+    probability_url = f"{SPC_BASE}/products/watch/ww{watch_id}_prob.html"
+    full_text = ""
+    probabilities = {}
+
+    try:
+        detail_html = _cached_text_custom(
+            "spc_watch_detail",
+            watch_id,
+            detail_url,
+            ttl_seconds=ttl_seconds,
+            timeout=_IEM_TEXT_TIMEOUT_SECONDS,
+            retries=_IEM_TEXT_RETRIES,
+        )
+        full_text = _extract_watch_public_text(detail_html, watch_id)
+    except Exception:
+        pass
+
+    try:
+        probability_html = _cached_text_custom(
+            "spc_watch_probability",
+            watch_id,
+            probability_url,
+            ttl_seconds=ttl_seconds,
+            timeout=_IEM_TEXT_TIMEOUT_SECONDS,
+            retries=_IEM_TEXT_RETRIES,
+        )
+        probabilities = _parse_watch_probability_page(probability_html)
+    except Exception:
+        pass
+
+    return full_text, probabilities
 
 
 def _watch_probability_hud_lines(probabilities: dict):
@@ -1115,6 +1386,35 @@ def fetch_active_watch_items(ttl_seconds: int = 90, with_counties: bool = False)
                 "detail_url": detail_url,
             }
         )
+
+    if items:
+        def _fetch_modal_details(item: dict) -> tuple:
+            full_text, probabilities = _fetch_watch_modal_details(
+                item["id"],
+                ttl_seconds=ttl_seconds,
+            )
+            return item["id"], full_text, probabilities
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {
+                pool.submit(_fetch_modal_details, item): item["id"]
+                for item in items
+            }
+            details_by_id = {}
+            for future in as_completed(futures):
+                try:
+                    watch_id_key, full_text, probabilities = future.result()
+                except Exception:
+                    continue
+                details_by_id[watch_id_key] = {
+                    "full_text": full_text,
+                    "probabilities": probabilities,
+                }
+
+        for item in items:
+            details = details_by_id.get(item["id"], {})
+            item["full_text"] = details.get("full_text") or ""
+            item["probabilities"] = details.get("probabilities") or {}
 
     if with_counties and items:
         # Fetch all WOU texts in parallel; map watch_id -> fips list.

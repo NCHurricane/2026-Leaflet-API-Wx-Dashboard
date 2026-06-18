@@ -17,12 +17,18 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Add project root to path for both module and direct execution
+project_root = str(Path(__file__).resolve().parent.parent)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 from typing import Any
 
 from workers._freshness import mark_run_complete
