@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date prepared: 2026-06-17 (updated 2026-06-18 — Phase 16 extraction complete)
+Date prepared: 2026-06-17 (updated 2026-06-18 — Phase 16/17 complete; Unified Nav + CSS extraction done)
 
 Start in:
 
@@ -179,12 +179,9 @@ Next agenda:
    - Final all-page browser smoke pass completed successfully.
    - Keep generic archive mode, polling, progress, and shared scrubber infrastructure in weather.js.
    - Re-run node syntax checks and stale-reference searches after cleanup.
-5. **Known blocker: Unified Navigation** — Product pages are split but have no cross-product navigation. Users cannot switch between /tropical, /alerts, /surface, etc. Add a consistent nav (top bar or product selector). Deferred pending design decision.
+5. **Unified Navigation (DONE 2026-06-18)** — Prominent top nav bar added to weather.html: Home (→ /weather.html) plus 9 product links (Current→/surface, Alerts, Radar, Satellite, SPC, RTMA, MRMS, Drought, Tropical) with Font Awesome icons and always-visible labels. Active product gets a cyan border/background via product-page-shell.js (matches data-product to standaloneProductType()). The old weather-type-* checkboxes are retained hidden (display:none) because weather.js sidebar event listeners depend on them; nav-link clicks uncheck all types, check the target, dispatch a change event, then navigate. Note: the uncheck-first step is required — checking a new type without unchecking the prior one produced a backend "flex scanner internal error" crash on product switch. Verified all products load with correct sidebars, no server crashes.
 
-6. **Planned: CSS Extraction** (post-Phase 17) — Extract `<style>` block from weather.html into separate stylesheets:
-   - `css/global.css` — dashboard shell, map, common UI (buttons, panels, tabs)
-   - `css/tropical.css`, `css/alerts.css`, `css/surface.css`, etc. — product-specific rules
-   - Link sheets in weather.html and product pages as needed. Deferred until product code stabilizes.
+6. **CSS Extraction (DONE 2026-06-18)** — Per-product split was evaluated and intentionally NOT pursued: the ~4150-line style block is not partitioned by product (tropical/spc/alerts rules are scattered and interleaved with shared generic rules like .wx-accordion-*/.wx-archive-*), so carving per-product sheets risked cascade regressions for organizational-only benefit. Instead the entire inline `<style>` block was lifted verbatim (no rule reordering) into `css/dashboard.css` and linked in `<head>`. weather.html dropped 5605→1456 lines. Functional win (CSS out of HTML, independently cacheable) is banked. If a future split is wanted, only carve clearly-prefixed self-contained clusters and audit cross-product selector usage first.
 7. Keep /weather.html working for future product combination plans until explicitly approved for retirement.
 
 Before making code changes, restate the proposed step and ask for confirmation if the request could change scope.
