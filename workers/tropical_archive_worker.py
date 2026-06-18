@@ -231,6 +231,21 @@ def _parse_int(token: str, missing: int) -> int | None:
     return None if value == missing else value
 
 
+def _parse_btk_coord(token: str) -> float | None:
+    """Parse an ATCF b-deck coordinate (tenths of a degree, e.g. ``252N`` → 25.2)."""
+    token = token.strip()
+    if len(token) < 2:
+        return None
+    hemi = token[-1].upper()
+    if hemi not in ("N", "S", "E", "W"):
+        return None
+    try:
+        value = int(token[:-1]) / 10.0
+    except ValueError:
+        return None
+    return -value if hemi in ("S", "W") else value
+
+
 def parse_hurdat2(path: Path) -> Iterator[dict[str, Any]]:
     """Yield one storm dict per HURDAT2 record group.
 
@@ -291,6 +306,92 @@ def parse_hurdat2(path: Path) -> Iterator[dict[str, Any]]:
             "landfall": landfall,
             "rows": rows,
         }
+
+
+# ── Current-season ATCF best-track (b-deck) ─────────────────────────────────
+# HURDAT2 is only published after a season closes, so the in-progress season is
+# sourced from NHC's live ATCF best-track ("b-deck") files. parse_atcf_btk emits
+# the same storm dict shape as parse_hurdat2 so the whole catalog/payload pipeline
+# is reused unchanged.
+_ATCF_BTK_INDEX_URL = "https://ftp.nhc.noaa.gov/atcf/btk/"
+# Numbered cyclones use 01–49; 70+ are internal/test/invest (e.g. 90L) designations.
+_ATCF_MAX_STORM_NUM = 49
+_ATCF_BTK_SOURCE = "NHC Best Track (preliminary)"
+
+
+def _discover_btk_files(year: int) -> list[str]:
+    """List current-season b-deck filenames for AL/EP/CP numbered cyclones."""
+    listing = _request_text(_ATCF_BTK_INDEX_URL)
+    pattern = re.compile(rf"b(al|ep|cp)(\d{{2}}){year}\.dat", re.IGNORECASE)
+    names: set[str] = set()
+    for match in pattern.finditer(listing):
+        if int(match.group(2)) <= _ATCF_MAX_STORM_NUM:
+            names.add(match.group(0).lower())
+    return sorted(names)
+
+
+def parse_atcf_btk(text: str) -> dict[str, Any] | None:
+    """Parse one b-deck file into the parse_hurdat2 storm dict shape.
+
+    b-deck rows repeat each synoptic time once per wind-radii threshold (34/50/64
+    kt); only the first row per timestamp carries the fix we need. Returns ``None``
+    when the file has no usable BEST rows.
+    """
+    atcf_id: str | None = None
+    name = "UNNAMED"
+    by_ts: dict[datetime, dict[str, Any]] = {}
+    for line in text.splitlines():
+        cells = [c.strip() for c in line.split(",")]
+        if len(cells) < 11:
+            continue
+        basin = cells[0].upper()
+        if basin not in _BASIN_NAMES or cells[4].upper() != "BEST":
+            continue
+        try:
+            ts = datetime.strptime(cells[2], "%Y%m%d%H").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if atcf_id is None:
+            atcf_id = f"{basin}{cells[1]}{ts.year}"
+        # Storm name lives near the end of best-track rows (ATCF column 28).
+        if len(cells) > 27 and cells[27]:
+            candidate = cells[27].strip().upper()
+            if candidate and candidate not in ("INVEST", "NONAME", "UNKNOWN", "GENESIS"):
+                name = candidate
+        if ts in by_ts:
+            continue
+        by_ts[ts] = {
+            "ts": ts,
+            "status": cells[10].strip().upper(),
+            "lat": _parse_btk_coord(cells[6]),
+            "lon": _parse_btk_coord(cells[7]),
+            "wind_kt": _parse_int(cells[8], 0),
+            "pres_mb": _parse_int(cells[9], 0),
+            "record_id": "",
+        }
+    if not atcf_id or not by_ts:
+        return None
+    rows = [by_ts[t] for t in sorted(by_ts)]
+    return {
+        "atcf_id": atcf_id,
+        "name": name or "UNNAMED",
+        "year": int(atcf_id[-4:]),
+        "basin": atcf_id[:2],
+        "landfall": False,
+        "rows": rows,
+    }
+
+
+def parse_current_season_btk(year: int) -> Iterator[dict[str, Any]]:
+    """Yield current-season storm dicts from NHC's live ATCF b-deck files."""
+    for filename in _discover_btk_files(year):
+        try:
+            storm = parse_atcf_btk(_request_text(_ATCF_BTK_INDEX_URL + filename))
+        except Exception as exc:  # one bad file must not drop the rest of the season
+            print(f"[tropical_archive_worker] b-deck {filename} skipped: {exc}")
+            continue
+        if storm:
+            yield storm
 
 
 # ── Payload assembly ────────────────────────────────────────────────────────
@@ -381,16 +482,16 @@ def _feature_collection(features: list[dict]) -> dict[str, Any]:
     return {"type": "FeatureCollection", "features": features}
 
 
-def _gis_layer(features: list[dict], rel_path: str) -> dict[str, Any]:
+def _gis_layer(features: list[dict], rel_path: str, source: str = "HURDAT2") -> dict[str, Any]:
     return {
         "cache_path": rel_path,
         "feature_count": len(features),
-        "source_path": "HURDAT2",
+        "source_path": source,
         "geojson": _feature_collection(features),
     }
 
 
-def build_storm_payload(storm: dict[str, Any]) -> dict[str, Any]:
+def build_storm_payload(storm: dict[str, Any], source: str = "HURDAT2") -> dict[str, Any]:
     """Emit the live storm.json shape for one archived storm."""
     atcf = storm["atcf_id"]
     rows = storm["rows"]
@@ -432,12 +533,12 @@ def build_storm_payload(storm: dict[str, Any]) -> dict[str, Any]:
         "graphics": [],
         "gis_assets": [],
         "gis_layers": {
-            "best_track_line": _gis_layer(line_features, rel),
-            "best_track_points": _gis_layer(point_features, rel),
+            "best_track_line": _gis_layer(line_features, rel, source),
+            "best_track_points": _gis_layer(point_features, rel, source),
         },
         "updated": end_ts.isoformat(timespec="seconds").replace("+00:00", "Z"),
         "cached_at": _utc_now_iso(),
-        "source": "HURDAT2",
+        "source": source,
         "startDate": start_ts.date().isoformat(),
         "endDate": end_ts.date().isoformat(),
     }
@@ -840,6 +941,28 @@ def run_archive_worker(
                 json.dumps(payload, ensure_ascii=False), encoding="utf-8"
             )
             storm_count += 1
+
+    # Fold in the in-progress season from NHC's live ATCF b-decks (HURDAT2 lags a
+    # year). Isolated so a network hiccup never breaks the historical archive.
+    current_year = datetime.now(timezone.utc).year
+    try:
+        for storm in parse_current_season_btk(current_year):
+            year = str(storm["year"])
+            catalog.setdefault(storm["basin"], {}).setdefault(year, []).append(
+                _catalog_entry(storm)
+            )
+            storm_dir = STORMS_DIR / storm["atcf_id"]
+            storm_dir.mkdir(parents=True, exist_ok=True)
+            (storm_dir / "storm.json").write_text(
+                json.dumps(
+                    build_storm_payload(storm, source=_ATCF_BTK_SOURCE),
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            storm_count += 1
+    except Exception as exc:  # current-season fetch is best-effort
+        print(f"[tropical_archive_worker] current-season b-decks skipped: {exc}")
 
     # Stable basin order (AL, EP, CP) for a predictable dropdown.
     ordered = {b: catalog[b] for b in ("AL", "EP", "CP") if b in catalog}
