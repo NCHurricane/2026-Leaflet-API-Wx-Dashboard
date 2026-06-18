@@ -937,6 +937,13 @@
     let _stormTrackPlacesDataPromise = null;
     let _stormTrackPlacesComputeSeq = 0;
     let _stormTrackPlaceRows = [];
+    const _STORM_TRACK_PLACE_TYPES = [
+        { key: 'city', label: 'Cities' },
+        { key: 'town', label: 'Towns' },
+        { key: 'village', label: 'Villages' },
+        { key: 'hamlet', label: 'Hamlets' },
+    ];
+    const _stormTrackPlaceTypeFilter = new Set(_STORM_TRACK_PLACE_TYPES.map((t) => t.key));
     let _stormTrackLastCorridorLatLngs = [];
     let _stormTrackOutlineLayer = null;
     // ── Radar Speed Calibrator state ─────────────────────────────────────────
@@ -1905,18 +1912,31 @@
     async function _loadStormTrackPlacesData() {
         if (_stormTrackPlacesDataPromise) return _stormTrackPlacesDataPromise;
         _stormTrackPlacesDataPromise = (async () => {
-            const paths = ['data/place-town.ndjson', 'data/place-village.ndjson', 'data/place-hamlet.ndjson'];
-            const urls = paths.map((p) => apiUrl(p));
+            // Categorize by source file, not by each record's heterogeneous OSM
+            // `type` (city records are tagged "administrative", etc.).
+            const sources = [
+                { path: 'data/place_city.ndjson', category: 'city' },
+                { path: 'data/place-town.ndjson', category: 'town' },
+                { path: 'data/place-village.ndjson', category: 'village' },
+                { path: 'data/place-hamlet.ndjson', category: 'hamlet' },
+            ];
+            const urls = sources.map((s) => apiUrl(s.path));
             const responses = await Promise.all(urls.map((u) => fetch(u, { cache: 'force-cache' })));
             const texts = await Promise.all(responses.map(async (resp, idx) => {
                 if (!resp.ok) {
-                    const path = paths[idx] || 'places file';
+                    const path = sources[idx]?.path || 'places file';
                     throw new Error(`Failed loading ${path} (${resp.status}).`);
                 }
                 return resp.text();
             }));
             const merged = [];
-            for (const txt of texts) merged.push(..._parseNdjsonPlaces(txt));
+            texts.forEach((txt, idx) => {
+                const category = sources[idx].category;
+                for (const rec of _parseNdjsonPlaces(txt)) {
+                    rec.type = category;
+                    merged.push(rec);
+                }
+            });
             return merged;
         })().catch((err) => {
             _stormTrackPlacesDataPromise = null;
@@ -2022,7 +2042,15 @@
             return;
         }
 
-        const listItems = rows.map((r) => {
+        const knownTypes = new Set(_STORM_TRACK_PLACE_TYPES.map((t) => t.key));
+        const visible = rows.filter((r) => !knownTypes.has(r.type) || _stormTrackPlaceTypeFilter.has(r.type));
+
+        const filterBar = _STORM_TRACK_PLACE_TYPES.map((t) => {
+            const active = _stormTrackPlaceTypeFilter.has(t.key);
+            return `<button type="button" class="wx-stormtrack-filter${active ? ' is-active' : ''}" data-place-type="${t.key}" aria-pressed="${active}">${t.label}</button>`;
+        }).join('');
+
+        const listItems = visible.map((r) => {
             const state = r.state ? `, ${r.state}` : '';
             return [
                 '<li>',
@@ -2031,7 +2059,24 @@
                 '</li>',
             ].join('');
         }).join('');
-        body.innerHTML = `<ol class="wx-stormtrack-places-list">${listItems}</ol>`;
+
+        const listHtml = visible.length
+            ? `<ol class="wx-stormtrack-places-list">${listItems}</ol>`
+            : '<div class="wx-stormtrack-empty">No places match the selected types.</div>';
+        body.innerHTML = `<div class="wx-stormtrack-filters">${filterBar}</div>${listHtml}`;
+
+        body.querySelectorAll('.wx-stormtrack-filter').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const key = btn.getAttribute('data-place-type');
+                if (!key) return;
+                if (_stormTrackPlaceTypeFilter.has(key)) {
+                    _stormTrackPlaceTypeFilter.delete(key);
+                } else {
+                    _stormTrackPlaceTypeFilter.add(key);
+                }
+                _renderStormTrackPlacesRows(_stormTrackPlaceRows);
+            });
+        });
     }
 
     async function _computeStormTrackPlaceRows(motion, activeBearing, minsAhead, corridorLatLngs) {
@@ -2059,6 +2104,7 @@
                 arrivalMins: mins,
                 arrivalLabel: `${_formatStormTrackArrivalMs(arrivalMs, tz)} (+${Math.round(mins)}m)`,
                 population: place.population,
+                type: place.type,
             });
         }
 

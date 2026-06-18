@@ -686,6 +686,7 @@ body.wx-standalone-product .weather-header-right {
     user-select: none;
     padding: 8px 12px 7px;
     min-height: 44px;
+    flex: 0 0 auto;
     border-bottom: 1px solid rgba(148, 163, 184, 0.35);
     font-size: 1.1rem;
     font-weight: 800;
@@ -751,6 +752,47 @@ body.wx-standalone-product .weather-header-right {
 .wx-stormtrack-places-body {
     overflow: auto;
     padding: 6px 8px 8px;
+}
+
+.wx-stormtrack-filters {
+    position: sticky;
+    top: -6px;
+    z-index: 1;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 4px;
+    margin: -6px -8px 6px;
+    padding: 6px 8px;
+    background: rgba(4, 14, 30, 0.95);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.wx-stormtrack-filter {
+    flex: 1 1 0;
+    min-width: 0;
+    border: 1px solid rgba(125, 211, 252, 0.35);
+    background: rgba(15, 23, 42, 0.55);
+    color: #94a3b8;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 3px 6px;
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.wx-stormtrack-filter:hover {
+    color: #cbd5e1;
+    border-color: rgba(186, 230, 253, 0.6);
+}
+
+.wx-stormtrack-filter.is-active {
+    background: rgba(34, 232, 255, 0.18);
+    border-color: var(--wx-cyan);
+    color: var(--wx-cyan);
 }
 
 .wx-stormtrack-places-list {
