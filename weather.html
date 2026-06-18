@@ -4169,6 +4169,18 @@
             <div class="weather-header-right">
                 <button id="weather-test-new-alert" class="weather-top-test-btn" type="button">Test New Alert</button>
             </div>
+            <!-- Hidden product type inputs for event handling. Needed by weather.js sidebar logic. -->
+            <div style="display: none;">
+                <input id="weather-type-current" type="checkbox">
+                <input id="weather-type-alerts" type="checkbox">
+                <input id="weather-type-radar" type="checkbox">
+                <input id="weather-type-satellite" type="checkbox">
+                <input id="weather-type-spc" type="checkbox">
+                <input id="weather-type-rtma" type="checkbox">
+                <input id="weather-type-mrms" type="checkbox">
+                <input id="weather-type-drought" type="checkbox">
+                <input id="weather-type-tropical" type="checkbox">
+            </div>
         </header>
 
         <nav class="product-nav">
@@ -4177,7 +4189,7 @@
                 <span>Home</span>
             </a>
             <a href="/surface" class="product-nav-link" data-product="current" title="Current Conditions">
-                <i class="fas fa-cloud"></i>
+                <i class="fas fa-thermometer"></i>
                 <span>Current</span>
             </a>
             <a href="/alerts" class="product-nav-link" data-product="alerts" title="Weather Alerts">
@@ -4185,7 +4197,7 @@
                 <span>Alerts</span>
             </a>
             <a href="/radar" class="product-nav-link" data-product="radar" title="Radar">
-                <i class="fas fa-radio"></i>
+                <i class="fas fa-satellite-dish"></i>
                 <span>Radar</span>
             </a>
             <a href="/satellite" class="product-nav-link" data-product="satellite" title="Satellite">
@@ -4193,7 +4205,7 @@
                 <span>Satellite</span>
             </a>
             <a href="/spc" class="product-nav-link" data-product="spc" title="Storm Prediction Center">
-                <i class="fas fa-chart-bar"></i>
+                <i class="fas fa-cloud-bolt"></i>
                 <span>SPC</span>
             </a>
             <a href="/rtma" class="product-nav-link" data-product="rtma" title="Real-Time Mesoscale Analysis">
@@ -4205,11 +4217,11 @@
                 <span>MRMS</span>
             </a>
             <a href="/drought" class="product-nav-link" data-product="drought" title="Drought Monitor">
-                <i class="fas fa-water"></i>
+                <i class="fas fa-sun-plant-wilt"></i>
                 <span>Drought</span>
             </a>
             <a href="/tropical" class="product-nav-link" data-product="tropical" title="Tropical Systems">
-                <i class="fas fa-wind"></i>
+                <i class="fas fa-hurricane"></i>
                 <span>Tropical</span>
             </a>
         </nav>
