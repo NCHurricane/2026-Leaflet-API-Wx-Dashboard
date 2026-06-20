@@ -7,6 +7,13 @@
       "runtimeArgs": ["main.py"],
       "port": 8000,
       "autoPort": false
+    },
+    {
+      "name": "dashboard-preview",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8011"],
+      "port": 8011,
+      "autoPort": false
     }
   ]
 }

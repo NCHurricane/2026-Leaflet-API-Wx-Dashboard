@@ -31,6 +31,7 @@ from routes.satellite_v2 import router as satellite_v2_router
 from routes.spc import router as spc_router
 from routes.surface import router as surface_router
 from routes.tropical import router as tropical_router
+from routes.wpc import router as wpc_router
 from services.rtma_service import get_rtma_data
 
 # --- IMPORT YOUR UTILITIES ---
@@ -51,6 +52,7 @@ app.include_router(create_overlays_router(rtma_bootstrap=get_rtma_data))
 app.include_router(archive_router)
 app.include_router(radar_router)
 app.include_router(tropical_router)
+app.include_router(wpc_router)
 
 
 @app.on_event("startup")

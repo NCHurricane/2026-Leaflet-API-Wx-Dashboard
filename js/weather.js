@@ -22,6 +22,8 @@
     const _spcPageController = window.NCHSpcPage || null;
     const _tropicalEngineFactory = window.NCHTropicalEngine || null;
     const _tropicalPageController = window.NCHTropicalPage || null;
+    const _wpcEngineFactory = window.NCHWpcEngine || null;
+    const _wpcPageController = window.NCHWpcPage || null;
     const _standaloneProductType = _productPageShell?.standaloneProductType() || null;
     let _alertsEngine = null;
     let _satelliteEngine = null;
@@ -32,6 +34,7 @@
     let _surfaceEngine = null;
     let _spcEngine = null;
     let _tropicalEngine = null;
+    let _wpcEngine = null;
 
     function _isStandaloneProductPage(type = _standaloneProductType) {
         return _productPageShell?.isStandaloneProductPage(type) || !!type;
@@ -872,6 +875,8 @@
     let _rtmaPointsKey = null;
     let mrmsOverlay = null;
     let droughtLayer = null;
+    let wpcLayer = null;
+    let _wpcRequestSeq = 0;
     let tropicalOutlookLayer = null;
     let graticuleLayer = null;
     let _tropicalStorms = [];
@@ -2630,11 +2635,13 @@
     function _buildNewAlertDetailHtml(feat, index, total) {
         const p = feat?.properties || {};
         const baseEvent = p.event || 'Alert';
+        const isWpcMpd = /mesoscale precipitation discussion/i.test(String(baseEvent));
+        const isWpcForecast = !!p.wpc_forecast;
         const isSpcWatch = /(?:tornado|severe thunderstorm)\s+watch/i.test(
             String(p.watch_type || baseEvent || ''),
         );
         const event = isSpcWatch ? _spcWatchTitle(p) : baseEvent;
-        const color = ALERT_COLORS[baseEvent] || ALERT_DEFAULT;
+        const color = p.color || ALERT_COLORS[baseEvent] || ALERT_DEFAULT;
         const badges = [p.severity, p.urgency, p.certainty]
             .filter(Boolean)
             .map((b) => `<span class="wx-nad-badge">${_escapeHtml(String(b))}</span>`)
@@ -2643,7 +2650,7 @@
         const expRel = _relExpires(p?.expires);
         const senderName = String(p.senderName || '').trim();
         const issuedLine = [
-            sent ? `Issued ${_escapeHtml(sent)}` : '',
+            sent ? `${isWpcForecast ? 'Updated' : 'Issued'} ${_escapeHtml(sent)}` : '',
             expires ? `until ${_escapeHtml(expires)}` : '',
             senderName ? `by ${_escapeHtml(senderName)}` : '',
         ].filter(Boolean).join(' ');
@@ -2653,7 +2660,7 @@
         const mdPeak = _extractSpcMdPeakChips(p.description);
         const descriptionForBody = mdPeak.cleanedText || String(p.description || '');
         const { intro, locations } = _splitDescriptionSections(descriptionForBody);
-        const isSpcMd = /mesoscale discussion/i.test(String(p.event || ''));
+        const isSpcMd = /mesoscale discussion/i.test(String(p.event || '')) || isWpcMpd;
         const descHtml = isSpcMd ? _renderSpcMdBodyHtml(intro) : _formatTextBlock(intro);
         const locHtml = locations ? _formatLocationsImpacted(locations) : '';
         const instrHtml = _formatTextBlock(p.instruction || '');
@@ -2668,14 +2675,33 @@
             renderChipGroup('Threat Details', threatChips),
             renderChipGroup('Most Probable Peak', mdPeak.chips),
             renderChipGroup('Watch Probabilities', watchProbabilityChips),
+            isWpcMpd
+                ? renderChipGroup('Operational Areas', [
+                    p.wfo ? { label: 'WFOs', value: p.wfo } : null,
+                    p.rfc ? { label: 'RFCs', value: p.rfc } : null,
+                ].filter(Boolean))
+                : '',
+            isWpcForecast
+                ? renderChipGroup('Forecast Details', [
+                    p.wpc_metric_value
+                        ? { label: p.wpc_metric_label || 'Category', value: p.wpc_metric_value }
+                        : null,
+                    p.wpc_day ? { label: 'Forecast Day', value: `Day ${p.wpc_day}` } : null,
+                ].filter(Boolean))
+                : '',
         ].filter(Boolean).join('');
         const fullUrl = _alertExternalUrl(feat);
+        const fullLinkLabel = isWpcMpd
+            ? 'View Full WPC Discussion'
+            : (isWpcForecast
+                ? 'View WPC Discussion'
+                : (isSpcWatch ? 'View Full SPC Watch Text' : 'View Full NWS Alert Text'));
         const linkHtml = fullUrl
-            ? `<a class="wx-nad-fulllink" href="${_escapeHtml(fullUrl)}" target="_blank" rel="noopener noreferrer">${isSpcWatch ? 'View Full SPC Watch Text' : 'View Full NWS Alert Text'}</a>`
+            ? `<a class="wx-nad-fulllink" href="${_escapeHtml(fullUrl)}" target="_blank" rel="noopener noreferrer">${fullLinkLabel}</a>`
             : '';
         const showZoomLink = map.getZoom() < 9;
         const zoomLinkHtml = showZoomLink
-            ? `<button type="button" class="wx-nad-zoomlink" data-nad-zoom="1">Zoom to Alert</button>`
+            ? `<button type="button" class="wx-nad-zoomlink" data-nad-zoom="1">Zoom to ${isWpcForecast ? 'Area' : 'Alert'}</button>`
             : '';
         const navDisabled = total <= 1;
         const counter = total > 1 ? `<span class="wx-nad-counter">${index + 1} / ${total}</span>` : '';
@@ -2822,6 +2848,11 @@
             features = Array.isArray(options.features) && options.features.length
                 ? options.features
                 : [sourceFeat];
+            const sourceId = sourceFeat?.id || sourceFeat?.properties?.id;
+            startIdx = features.findIndex(
+                (feature) => (feature?.id || feature?.properties?.id) === sourceId,
+            );
+            if (startIdx < 0) startIdx = 0;
         }
 
         const panel = document.createElement('div');
@@ -2971,9 +3002,12 @@
         return `<strong>${_escapeHtml(event)}${magnitude}</strong>${when}${where}${remarks}`;
     }
 
-    function _openSpcTextDetail(latlng, feat) {
+    function _openSpcTextDetail(latlng, feat, features = null) {
         if (!latlng || !feat) return;
-        _openNewAlertDetail(latlng, feat, { useAlertStack: false });
+        _openNewAlertDetail(latlng, feat, {
+            useAlertStack: false,
+            features: Array.isArray(features) && features.length ? features : undefined,
+        });
     }
 
     function _spcOutlookRiskKey(value) {
@@ -3159,8 +3193,9 @@
         box.innerHTML = html;
     }
 
-    function swatch(color, label) {
-        return `<div class="legend-row"><span class="legend-swatch" style="background:${color}"></span>${label}</div>`;
+    function swatch(color, label, swatchModifier = '') {
+        const modifier = swatchModifier ? ` ${swatchModifier}` : '';
+        return `<div class="legend-item"><span class="legend-swatch${modifier}" style="background:${color}"></span><span class="legend-text">${label}</span></div>`;
     }
 
     function escapeHtml(value) {
@@ -3175,9 +3210,9 @@
     function renderMrmsLegendTitle(legend) {
         const title = escapeHtml(legend?.title || 'MRMS');
         const stat = legend?.stat
-            ? `<span class="mrms-legend-stat">${escapeHtml(legend.stat.label)}: ${escapeHtml(legend.stat.text)}</span>`
+            ? `<span class="legend-text mrms-legend-stat">${escapeHtml(legend.stat.label)}: ${escapeHtml(legend.stat.text)}</span>`
             : '';
-        return `<div class="mrms-legend-head"><h4>${title}</h4>${stat}</div>`;
+        return `<div class="mrms-legend-head"><h4 class="legend-title">${title}</h4>${stat}</div>`;
     }
 
     function renderMrmsScaleLegend(legend) {
@@ -3187,10 +3222,10 @@
             .map((item) => `<span class="mrms-legend-segment" style="background:${item.color}"></span>`)
             .join('');
         const labels = scale
-            .map((item) => `<span class="mrms-legend-tick">${escapeHtml(item.label)}</span>`)
+            .map((item) => `<span class="legend-text mrms-legend-tick">${escapeHtml(item.label)}</span>`)
             .join('');
         const units = legend?.display_units
-            ? `<div class="mrms-legend-units">${escapeHtml(legend.display_units)}</div>`
+            ? `<div class="legend-text mrms-legend-units">${escapeHtml(legend.display_units)}</div>`
             : '';
         return `<div class="mrms-legend-scale">${units}<div class="mrms-legend-scale-bar">${segments}</div><div class="mrms-legend-scale-labels">${labels}</div></div>`;
     }
@@ -3199,9 +3234,11 @@
         const items = Array.isArray(legend?.items) ? legend.items : [];
         if (!items.length) return '';
         const isPrecipType = String(legend?.title || '').toLowerCase().includes('surface precipitation type');
-        const colClass = Number(legend?.columns) === 3 || isPrecipType
-            ? 'legend-grid legend-grid-3'
-            : 'legend-grid';
+        const colClass = isPrecipType
+            ? 'legend-grid legend-grid-6'
+            : Number(legend?.columns) === 3
+                ? 'legend-grid legend-grid-3'
+                : 'legend-grid';
         return `<div class="${colClass}">${items.map((item) => swatch(item.color, escapeHtml(item.label))).join('')}</div>`;
     }
 
@@ -3240,13 +3277,7 @@
         const events = Object.keys(counts).sort((a, b) => a.localeCompare(b));
         if (!events.length) { setLegend(null); return; }
         const rows = events.map((e) => swatch(ALERT_COLORS[e] || ALERT_DEFAULT, `${e} (${counts[e]})`)).join('');
-        const colClass = events.length > 20 ? 'legend-grid legend-grid-6'
-            : events.length > 16 ? 'legend-grid legend-grid-5'
-                : events.length > 12 ? 'legend-grid legend-grid-4'
-                    : events.length > 8 ? 'legend-grid legend-grid-3'
-                        : events.length > 4 ? 'legend-grid' : '';
-        const wrap = colClass ? `<div class="${colClass}">${rows}</div>` : rows;
-        setLegend('<h4>Alerts In View</h4>' + wrap);
+        setLegend('<h4 class="legend-title">Alerts In View</h4><div class="legend-grid legend-grid-6">' + rows + '</div>');
     }
 
     function buildSpcCatLegend() {
@@ -3254,16 +3285,16 @@
             ['#ff66ff', 'High'], ['#ff4f4f', 'Moderate'], ['#ff9d2e', 'Enhanced'],
             ['#f5dd72', 'Slight'], ['#69bb6d', 'Marginal'], ['#b5dcb3', 'General Thunderstorms'],
         ].map(([c, l]) => swatch(c, l)).join('');
-        setLegend('<h4>SPC Categorical</h4><div class="legend-grid-2">' + items + '</div>');
+        setLegend('<h4 class="legend-title">SPC Categorical</h4><div class="legend-grid legend-grid-6">' + items + '</div>');
     }
 
     function buildSpcFireLegend(hazard) {
         if (hazard === 'dryt') {
             const rows = [swatch('#FF8080', 'Scattered Dry T-Storm'), swatch('#FFBF80', 'Isolated Dry T-Storm')].join('');
-            setLegend('<h4>SPC Fire Wx (Dry T-Storm)</h4>' + rows);
+            setLegend('<h4 class="legend-title">SPC Fire Wx (Dry T-Storm)</h4><div class="legend-grid legend-grid-3">' + rows + '</div>');
         } else {
             const rows = [swatch('#FF80FF', 'Extremely Critical'), swatch('#FF8080', 'Critical'), swatch('#FFBF80', 'Elevated')].join('');
-            setLegend('<h4>SPC Fire Wx (Wind/RH)</h4>' + rows);
+            setLegend('<h4 class="legend-title">SPC Fire Wx (Wind/RH)</h4><div class="legend-grid legend-grid-3">' + rows + '</div>');
         }
     }
 
@@ -3276,11 +3307,11 @@
             const label = labels[t] || t;
             const faClass = _SPC_REPORT_FA_ICON[t];
             if (faClass) {
-                return `<div class="legend-row"><i class="${faClass}" style="color:${color};font-size:14px;width:16px;text-align:center;flex-shrink:0;"></i>&nbsp;${label}</div>`;
+                return `<div class="legend-item"><i class="legend-swatch is-icon ${faClass}" style="color:${color};font-size:14px;text-align:center;"></i><span class="legend-text">${label}</span></div>`;
             }
             return swatch(color, label);
         }).join('');
-        setLegend('<h4>SPC Storm Reports</h4>' + rows);
+        setLegend('<h4 class="legend-title">SPC Storm Reports</h4><div class="legend-grid legend-grid-3">' + rows + '</div>');
     }
 
     function buildSpcWatchesLegend(features = _spcWatchFeatures) {
@@ -3315,7 +3346,7 @@
             setLegend(null);
             return;
         }
-        setLegend(`<h4>Watches In View</h4>${rows}`);
+        setLegend(`<h4 class="legend-title">Watches In View</h4>${rows}`);
     }
 
     function buildRadarSiteMarkerLegend() {
@@ -3333,16 +3364,11 @@
             ['#facc15', 'Configured/Unknown'],
             ['#64748b', 'Unconfigured'],
         ].map(([c, l]) =>
-            `<span style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><span class="legend-swatch" style="background:${c};border-radius:50%;"></span>${l}</span>`
+            `<div class="legend-item"><span class="legend-swatch" style="background:${c};border-radius:50%;"></span><span class="legend-text">${l}</span></div>`
         ).join('');
-        const statusSection = `<div class="legend-row" style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:4px;border-radius:50%;">${statusItems}</div>`;
+        const statusSection = `<div class="legend-grid legend-grid-6">${statusItems}</div>`;
 
-        // Marker symbol legend
-        const markerSection = `<div class="legend-row" style="margin-top:4px;display:flex;gap:16px;">
-            <div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:17px;height:17px;background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2220%22 viewBox=%220 0 14 14%22%3E%3Cpolygon points=%227,1 8.65,5.01 13,5.15 9.82,7.74 10.97,12.09 7,9.66 3.03,12.09 4.18,7.74 1,5.15 5.35,5.01%22 fill=%22%2322c55e%22 stroke=%22%2316a34a%22 stroke-width=%220.9%22/%3E%3C/svg%3E');background-size:contain;background-repeat:no-repeat;"></span><span>Configured/Pre-warmed Site</span></div>
-        </div>`;
-
-        setLegend(`<h4>Radar Sites (CONUS)</h4>${statusSection}${markerSection}`);
+        setLegend(`<h4 class="legend-title">Radar Sites (CONUS)</h4>${statusSection}`);
     }
 
     async function _fetchRadarColortable(palKey) {
@@ -3383,14 +3409,16 @@
 
         // Tick labels: show every other entry to avoid crowding
         const tickEntries = entries.filter((_, i) => i % 2 === 0 || i === entries.length - 1);
-        const labelsHtml = `<div style="display:flex;justify-content:space-between;font-size:10px;color:#666;margin-top:3px;">`
-            + tickEntries.map(e => `<span>${e.label}</span>`).join('')
+        const labelsHtml = `<div class="surface-colorbar-ticks">`
+            + tickEntries.map(e => `<span class="legend-text surface-colorbar-tick">${escapeHtml(e.label)}</span>`).join('')
             + `</div>`;
 
-        const html = `<h4>${title}</h4>
-            <div style="height:20px;border:1px solid rgba(0,0,0,0.2);border-radius:2px;background:${gradient};margin-bottom:2px;"></div>
-            ${labelsHtml}
-            <div style="text-align:right;font-size:10px;color:#888;margin-top:2px;">${units}</div>`;
+        const html = `<h4 class="legend-title">${title}</h4>
+            <div class="surface-colorbar">
+                <div class="surface-colorbar-bar" style="background:${gradient};"></div>
+                ${labelsHtml}
+                <div class="legend-text surface-colorbar-label">${units}</div>
+            </div>`;
         setLegend(html);
     }
 
@@ -3429,39 +3457,161 @@
             const simpleRows = activeCats
                 .map((dm) => swatch(_DROUGHT_COLORS[dm], _DROUGHT_LABELS[dm]))
                 .join('');
-            setLegend('<h4>U.S. Drought Monitor</h4>' + simpleRows);
+            setLegend('<h4 class="legend-title">U.S. Drought Monitor</h4><div class="legend-grid legend-grid-5">' + simpleRows + '</div>');
             return;
         }
 
         const cumulative = stateStats?.cumulative || {};
         const individual = stateStats?.individual || {};
-        const rows = cats.map((dm) => {
-            const cumKey = dm === 4 ? 'D4' : `D${dm}-D4`;
-            const indKey = `D${dm}`;
-            const cumVal = _formatDroughtPct(cumulative[cumKey]);
-            const indVal = _formatDroughtPct(individual[indKey]);
-            const enabled = activeCats.includes(dm);
-            return `
-                <div class="drought-legend-row${enabled ? '' : ' is-disabled'}">
-                    <div class="drought-legend-level"><span class="legend-swatch" style="background:${_DROUGHT_COLORS[dm]}"></span>${_DROUGHT_LABELS[dm]}</div>
-                    <div class="drought-legend-value">${cumKey}: ${cumVal}</div>
-                    <div class="drought-legend-value">${indKey}: ${indVal}</div>
-                </div>
-            `;
+        const headers = cats.map((dm) => (
+            `<div class="drought-legend-cell is-header${activeCats.includes(dm) ? '' : ' is-disabled'}">D${dm}</div>`
+        )).join('');
+        const levels = cats.map((dm) => (
+            `<div class="drought-legend-cell is-level${activeCats.includes(dm) ? '' : ' is-disabled'}">`
+            + `<span class="legend-swatch" style="background:${_DROUGHT_COLORS[dm]}"></span>`
+            + `${_DROUGHT_LABELS[dm]}</div>`
+        )).join('');
+        const cumulativeValues = cats.map((dm) => {
+            const key = dm === 4 ? 'D4' : `D${dm}-D4`;
+            return `<div class="drought-legend-cell is-value">${_formatDroughtPct(cumulative[key])}</div>`;
         }).join('');
+        const individualValues = cats.map((dm) => (
+            `<div class="drought-legend-cell is-value">${_formatDroughtPct(individual[`D${dm}`])}</div>`
+        )).join('');
 
         const dsci = Number(stateStats?.dsci);
         const dsciText = Number.isFinite(dsci) ? dsci.toFixed(1) : '—';
         const subtitle = `<div class="drought-legend-subtitle">${escapeHtml(stateCode)} stats for ${escapeHtml(_activeDroughtDate || '')}</div>`;
 
         setLegend(
-            '<h4>U.S. Drought Monitor</h4>'
+            '<h4 class="legend-title">U.S. Drought Monitor</h4>'
             + subtitle
-            + '<div class="drought-legend-head">'
-            + '<div>Level</div><div>Cumulative</div><div>Individual</div>'
+            + '<div class="drought-legend-matrix">'
+            + '<div class="drought-legend-cell is-label"></div>' + headers
+            + '<div class="drought-legend-cell is-label">Level</div>' + levels
+            + '<div class="drought-legend-cell is-label">Cumulative</div>' + cumulativeValues
+            + '<div class="drought-legend-cell is-label">Individual</div>' + individualValues
             + '</div>'
-            + rows
             + `<div class="drought-legend-dsci"><span>DSCI</span><span>${dsciText}</span></div>`,
+        );
+    }
+
+    // WPC Excessive Rainfall Outlook — mirrors config/wpc_config.py ERO tables.
+    const _WPC_ERO_COLORS = { MRGL: '#00FF00', SLGT: '#FFFF00', MDT: '#EE2C2C', HIGH: '#FF00FF' };
+    const _WPC_ERO_LABELS = {
+        MRGL: 'Marginal (≥5%)',
+        SLGT: 'Slight (≥15%)',
+        MDT: 'Moderate (≥40%)',
+        HIGH: 'High (≥70%)',
+    };
+    const _WPC_ERO_ORDER = ['MRGL', 'SLGT', 'MDT', 'HIGH'];
+    const _WPC_WINTER_PROBABILITIES = [
+        [10, '#00C5F1'],
+        [40, '#008A00'],
+        [70, '#FF0000'],
+    ];
+    const _WPC_FOP_CATEGORIES = [
+        ['POSSIBLE', '#FFFF00', 'Possible'],
+        ['LIKELY', '#FFAA00', 'Likely'],
+        ['OCCURRING', '#E60000', 'Occurring'],
+    ];
+    const _WPC_MPD_CATEGORIES = [
+        ['LIKELY', '#E60000', 'Flash Flooding Likely'],
+        ['POSSIBLE', '#F59E0B', 'Flash Flooding Possible'],
+        ['UNLIKELY', '#64748B', 'Flash Flooding Unlikely'],
+    ];
+
+    function buildWpcLegend({ group, day, label, features }) {
+        if (group === 'mpd') {
+            const present = new Set(
+                (features || []).map((feature) => feature.properties?.category),
+            );
+            const rows = _WPC_MPD_CATEGORIES.map(([category, color, categoryLabel]) => {
+                const row = swatch(color, categoryLabel);
+                return present.size && !present.has(category)
+                    ? row.replace('legend-item', 'legend-item is-disabled')
+                    : row;
+            }).join('');
+            setLegend(
+                `<h4 class="legend-title">${label || 'Active Mesoscale Precipitation Discussions'}</h4>`
+                + `<div class="legend-flow">${rows}</div>`,
+            );
+            return;
+        }
+
+        if (group === 'fop') {
+            const featureColors = new Map(
+                (features || []).map((feature) => [
+                    String(feature.properties?.category || '').toUpperCase(),
+                    feature.properties?.color,
+                ]),
+            );
+            const rows = _WPC_FOP_CATEGORIES.map(([category, fallbackColor, categoryLabel]) => (
+                swatch(featureColors.get(category) || fallbackColor, categoryLabel)
+            )).join('');
+            setLegend(
+                `<h4 class="legend-title">${label || '5-Day River Flood Outlook'}</h4>`
+                + `<div class="legend-flow">${rows}</div>`,
+            );
+            return;
+        }
+
+        if (group === 'winter') {
+            const featureColors = new Map(
+                (features || []).map((feature) => [
+                    Number(feature.properties?.probability),
+                    feature.properties?.color,
+                ]),
+            );
+            const rows = _WPC_WINTER_PROBABILITIES.map(([probability, fallbackColor]) => (
+                swatch(
+                    featureColors.get(probability) || fallbackColor,
+                    `≥ ${probability}%`,
+                )
+            )).join('');
+            setLegend(
+                `<h4 class="legend-title">${label || `WPC Winter Weather — Day ${day}`}</h4>`
+                + `<div class="legend-flow">${rows}</div>`,
+            );
+            return;
+        }
+
+        if (group === 'qpf') {
+            const bins = new Map();
+            (features || []).forEach((feature) => {
+                const properties = feature.properties || {};
+                const threshold = Number(properties.threshold);
+                if (!Number.isFinite(threshold)) return;
+                bins.set(threshold, {
+                    color: properties.color || '#888888',
+                    label: properties.label || `≥ ${threshold} in`,
+                });
+            });
+            const rows = [...bins.entries()]
+                .sort(([a], [b]) => a - b)
+                .map(([, bin]) => swatch(bin.color, bin.label))
+                .join('');
+            setLegend(
+                `<h4 class="legend-title">${label || `WPC QPF — Day ${day}`}</h4>`
+                + `<div class="legend-flow">${rows}</div>`,
+            );
+            return;
+        }
+
+        const present = new Set(
+            (features || [])
+                .map((feature) => String(feature.properties?.category || '').toUpperCase())
+                .filter((category) => _WPC_ERO_ORDER.includes(category)),
+        );
+        const rows = _WPC_ERO_ORDER.map((category) => {
+            const row = swatch(_WPC_ERO_COLORS[category], _WPC_ERO_LABELS[category]);
+            return present.size && !present.has(category)
+                ? row.replace('legend-item', 'legend-item is-disabled')
+                : row;
+        }).join('');
+        setLegend(
+            `<h4 class="legend-title">${label || `WPC Excessive Rainfall — Day ${day}`}</h4>`
+            + `<div class="legend-flow">${rows}</div>`,
         );
     }
 
@@ -3532,8 +3682,9 @@
     const _SPC_HAZARD_CIG_LEVELS = { torn: 3, hail: 2, wind: 3 };
 
     function _spcInlineSwatch(color, label) {
-        return `<span class="legend-row" style="margin:0 6px 0 0;">`
-            + `<span class="legend-swatch" style="background:${color}"></span>${label}</span>`;
+        return `<span class="legend-item">`
+            + `<span class="legend-swatch" style="background:${color}"></span>`
+            + `<span class="legend-text">${label}</span></span>`;
     }
 
     // Small inline swatch rendering the SVG hatch pattern used on the map, so
@@ -3566,7 +3717,7 @@
             + `<defs>${patternBody}</defs>`
             + `<rect width="${size}" height="${size}" fill="url(#${patternId})"/>`
             + `</svg>`;
-        return `<span class="legend-row" style="margin:0 6px 0 0;">${svg}&nbsp;${label}</span>`;
+        return `<span class="spc-cig-item">${svg}${label}</span>`;
     }
 
     function buildSpcProbLegend(hazard, day = null) {
@@ -3601,12 +3752,12 @@
             .map((lvl) => _spcHatchSwatch(lvl, String(lvl)))
             .join('');
 
-        let html = `<h4>SPC ${title}</h4>`;
-        html += `<div style="font-weight:600;font-size:0.66rem;margin:2px 0 2px;">Probability</div>`;
-        html += `<div style="display:flex;flex-wrap:wrap;">${probRow}</div>`;
+        let html = `<h4 class="legend-title">SPC ${title}</h4>`;
+        html += `<div class="legend-text legend-section-label">Probability</div>`;
+        html += `<div class="legend-inline">${probRow}</div>`;
         if (intensityRow) {
-            html += `<div style="font-weight:600;font-size:0.66rem;margin:6px 0 2px;">Intensity</div>`;
-            html += `<div style="display:flex;flex-wrap:wrap;">${intensityRow}</div>`;
+            html += `<div class="legend-text legend-section-label">Intensity</div>`;
+            html += `<div class="legend-inline">${intensityRow}</div>`;
         }
         setLegend(html);
     }
@@ -3627,6 +3778,7 @@
         mrms: { ts: null, source: null, label: null },
         drought: { ts: null, source: null, label: null },
         tropical: { ts: null, source: null, label: null },
+        wpc: { ts: null, source: null, label: null },
     };
     const _timestampSourceByType = {
         global: { provenance: null, ts: null },
@@ -3637,6 +3789,7 @@
         mrms: { provenance: null, ts: null },
         drought: { provenance: null, ts: null },
         tropical: { provenance: null, ts: null },
+        wpc: { provenance: null, ts: null },
     };
     let _reliabilityTickerStarted = false;
     const _LIVE_DATA_STALE_MS = 90 * 60 * 1000;
@@ -3660,6 +3813,7 @@
         if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length) return 'alerts';
         if (_isTypeEnabled('drought')) return 'drought';
         if (_isTypeEnabled('tropical')) return 'tropical';
+        if (_isTypeEnabled('wpc')) return 'wpc';
         if (_isTypeEnabled('current') && _activeSurfaceProduct()) return 'surface';
         return 'global';
     }
@@ -5581,7 +5735,7 @@
     }
 
     function _updateTypeSections() {
-        ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'].forEach((type) => {
+        ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'].forEach((type) => {
             const section = byId(`wx-section-${type}`);
             if (section) section.style.display = _isTypeEnabled(type) ? '' : 'none';
         });
@@ -5616,6 +5770,7 @@
         mrms: 'MRMS',
         drought: 'Drought',
         tropical: 'Tropical',
+        wpc: 'WPC',
     };
 
     function _updateActiveTabName() {
@@ -5628,7 +5783,7 @@
     }
 
     function _updateRightSidebarGroups() {
-        const groups = ['current', 'alerts', 'spc', 'mrms', 'rtma', 'drought'];
+        const groups = ['current', 'alerts', 'spc', 'mrms', 'rtma', 'drought', 'wpc'];
         let anyVisible = false;
         groups.forEach((type) => {
             const panel = byId(`wx-side-group-${type}`);
@@ -5775,7 +5930,7 @@
     // Initialized lazily on first use by detecting the currently-checked tab.
     let _activeTabType = null;
     function _detectInitialActiveTabType() {
-        const candidates = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'];
+        const candidates = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'];
         for (const t of candidates) {
             if (byId(`weather-type-${t}`)?.checked) return t;
         }
@@ -5850,6 +6005,13 @@
                 droughtLayer = null;
                 break;
 
+            case 'wpc':
+                _wpcRequestSeq += 1;
+                if (wpcLayer && map.hasLayer(wpcLayer)) map.removeLayer(wpcLayer);
+                wpcLayer = null;
+                setMapEmptyMessage(null);
+                break;
+
             case 'tropical':
                 _tropicalRequestSeq += 1;
                 _clearTropicalLayer();
@@ -5893,7 +6055,7 @@
     }
 
     function _activeWeatherType() {
-        const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'];
+        const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'];
         return allTypes.find((type) => _isTypeEnabled(type)) || '';
     }
 
@@ -6044,15 +6206,6 @@
         };
     }
 
-    function _radarSiteStarIcon(siteId) {
-        const c = _radarSiteStatusColors(siteId, true);
-        // 5-pointed star, 15×15 px (~5% larger), outer r=6, inner r=2.4, centred at (7,7)
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 14 14">`
-            + `<polygon points="7,1 8.65,5.01 13,5.15 9.82,7.74 10.97,12.09 7,9.66 3.03,12.09 4.18,7.74 1,5.15 5.35,5.01"`
-            + ` fill="${c.fill}" stroke="${c.stroke}" stroke-width="0.9"/></svg>`;
-        return L.divIcon({ html: svg, iconSize: [21, 21], iconAnchor: [8, 8], className: '' });
-    }
-
     function _radarSiteTooltipContent(siteId) {
         const s = _radarSiteStatusMap.get(siteId);
         if (!s) return siteId;
@@ -6131,9 +6284,10 @@
                 const siteId = String(site?.site || '').toUpperCase();
                 if (!Number.isFinite(lat) || !Number.isFinite(lon) || !siteId) return;
                 _radarSiteCoords.set(siteId, [lat, lon]);
-                const marker = site.configured
-                    ? L.marker([lat, lon], { icon: _radarSiteStarIcon(siteId), pane: 'radar-sites' })
-                    : L.circleMarker([lat, lon], _radarSiteMarkerStyle(siteId, false));
+                const marker = L.circleMarker(
+                    [lat, lon],
+                    _radarSiteMarkerStyle(siteId, !!site.configured),
+                );
                 marker.bindTooltip(_radarSiteTooltipContent(siteId), {
                     direction: 'top',
                     className: 'city-name-label',
@@ -8294,6 +8448,7 @@
         const mrmsEnabled = _isTypeEnabled('mrms') && !!_activeMrmsProduct();
 
         const droughtEnabled = _isTypeEnabled('drought');
+        const wpcEnabled = _isTypeEnabled('wpc');
         const tropicalEnabled = _isTypeEnabled('tropical');
 
         // Clear legend at the start to ensure old legend doesn't persist when switching products
@@ -8315,6 +8470,11 @@
         if (!rtmaEnabled) { _rtmaSecondaryPoints = []; _rtmaSecondaryUnits = ''; }
         if (!mrmsEnabled && mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
         if (!droughtEnabled && droughtLayer && map.hasLayer(droughtLayer)) { map.removeLayer(droughtLayer); droughtLayer = null; }
+        if (!wpcEnabled) {
+            if (wpcLayer && map.hasLayer(wpcLayer)) map.removeLayer(wpcLayer);
+            wpcLayer = null;
+            setMapEmptyMessage(null);
+        }
         if (!tropicalEnabled) {
             _clearTropicalLayer();
             _closeOutlookDetail();
@@ -8367,6 +8527,9 @@
         }
         if (droughtEnabled) {
             _droughtEngine?.loadDroughtLayer();
+        }
+        if (wpcEnabled) {
+            _wpcEngine?.loadWpcLayer();
         }
         if (tropicalEnabled) {
             _tropicalEngine?.loadStorms();
@@ -9062,10 +9225,10 @@
         if (_tropicalMapViewMode !== 'system') return;
         const items = TROPICAL_CATEGORY_ORDER.map((key) => {
             const cat = TROPICAL_CATEGORIES[key];
-            const glyph = `<svg viewBox="0 0 16 16" width="14" height="14" fill="${cat.color}" class="wx-tc-legend-glyph" aria-hidden="true">${_TROPICAL_ICON_PATHS[cat.icon]}</svg>`;
-            return `<div class="legend-row">${glyph}${escapeHtml(cat.label)}</div>`;
+            const glyph = `<svg viewBox="0 0 16 16" fill="${cat.color}" class="legend-swatch is-icon wx-tc-legend-glyph" aria-hidden="true">${_TROPICAL_ICON_PATHS[cat.icon]}</svg>`;
+            return `<div class="legend-item">${glyph}<span class="legend-text">${escapeHtml(cat.label)}</span></div>`;
         }).join('');
-        setLegend('<h4>Tropical Cyclone Intensity</h4><div class="legend-grid legend-grid-3">' + items + '</div>');
+        setLegend('<h4 class="legend-title">Tropical Cyclone Intensity</h4><div class="legend-grid legend-grid-6">' + items + '</div>');
     }
 
     // Hatched oval swatch matching the GTWO formation-area fill (diagonal lines in `color`).
@@ -9073,7 +9236,7 @@
         const w = 30;
         const h = 16;
         const patternId = `legend-hatch-outlook-${key}`;
-        return `<svg width="${w}" height="${h}" style="vertical-align:middle;filter:drop-shadow(0 0 1.2px rgba(0,0,0,0.7));" aria-hidden="true">`
+        return `<svg width="${w}" height="${h}" class="legend-swatch is-outlook" style="filter:drop-shadow(0 0 1.2px rgba(0,0,0,0.7));" aria-hidden="true">`
             + `<defs><pattern id="${patternId}" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">`
             + `<line x1="0" y1="0" x2="0" y2="6" stroke="${color}" stroke-width="3"/></pattern></defs>`
             + `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2 - 1}" ry="${h / 2 - 1}" `
@@ -9086,13 +9249,12 @@
             ['#ff8c00', 'medium', '40-60%'],
             ['#e60000', 'high', '&gt; 60%'],
         ].map(([color, key, label]) => (
-            `<div class="legend-row">${_tropicalOutlookHatchSwatch(color, key)}&nbsp;${label}</div>`
+            `<div class="legend-item">${_tropicalOutlookHatchSwatch(color, key)}<span class="legend-text">${label}</span></div>`
         )).join('');
-        const xGlyph = `<svg viewBox="0 0 16 16" width="14" height="14" fill="#9ca3af" class="wx-tc-legend-glyph" aria-hidden="true">${_TROPICAL_ICON_PATHS['x-circle']}</svg>`;
-        const notExpected = `<div class="legend-row">${xGlyph}&nbsp;Development not expected</div>`;
-        setLegend('<h4>7-Day Cyclone Formation Chance</h4>'
-            + '<div class="legend-grid legend-grid-3">' + chance + '</div>'
-            + '<div class="legend-grid">' + notExpected + '</div>');
+        const xGlyph = `<svg viewBox="0 0 16 16" fill="#9ca3af" class="legend-swatch is-icon wx-tc-legend-glyph" aria-hidden="true">${_TROPICAL_ICON_PATHS['x-circle']}</svg>`;
+        const notExpected = `<div class="legend-item">${xGlyph}<span class="legend-text">Development not expected</span></div>`;
+        setLegend('<h4 class="legend-title">7-Day Cyclone Formation Chance</h4>'
+            + '<div class="legend-grid legend-grid-4">' + chance + notExpected + '</div>');
     }
 
     function _renderPeakSurgeLegend() {
@@ -9106,11 +9268,8 @@
             ['purple', '10-15 ft'],
             ['purple', '15-20 ft'],
         ];
-        const rows = ranges.map(([color, label]) => {
-            const swatch = `<div style="width:20px;height:14px;background-color:${color};border:1px solid #999;display:inline-block;margin-right:6px;vertical-align:middle;"></div>`;
-            return `<div class="legend-row">${swatch}${escapeHtml(label)}</div>`;
-        }).join('');
-        setLegend('<h4>Peak Storm Surge Forecast</h4><div class="legend-grid">' + rows + '</div>');
+        const rows = ranges.map(([color, label]) => swatch(color, escapeHtml(label), 'is-wide')).join('');
+        setLegend('<h4 class="legend-title">Peak Storm Surge Forecast</h4><div class="legend-grid legend-grid-8">' + rows + '</div>');
     }
 
     function _renderWatchesWarningsLegend() {
@@ -9120,11 +9279,8 @@
             ['#B22222', 'Tropical Storm Warning'],
             ['#F08080', 'Tropical Storm Watch'],
         ];
-        const rows = events.map(([color, label]) => {
-            const swatch = `<div style="width:20px;height:14px;background-color:${color};border:1px solid #999;display:inline-block;margin-right:6px;vertical-align:middle;"></div>`;
-            return `<div class="legend-row">${swatch}${escapeHtml(label)}</div>`;
-        }).join('');
-        setLegend('<h4>Watches & Warnings</h4><div class="legend-grid">' + rows + '</div>');
+        const rows = events.map(([color, label]) => swatch(color, escapeHtml(label), 'is-wide')).join('');
+        setLegend('<h4 class="legend-title">Watches & Warnings</h4><div class="legend-grid legend-grid-4">' + rows + '</div>');
     }
 
     function _renderWindRadiiLegend() {
@@ -9133,11 +9289,8 @@
             ['#6cc343', '50 kt (Tropical Storm)'],
             ['#ffc309', '64 kt (Category 1)'],
         ];
-        const rows = radii.map(([color, label]) => {
-            const swatch = `<div style="width:20px;height:14px;background-color:${color};border:1px solid #999;display:inline-block;margin-right:6px;vertical-align:middle;"></div>`;
-            return `<div class="legend-row">${swatch}${escapeHtml(label)}</div>`;
-        }).join('');
-        setLegend('<h4>Wind Radii</h4><div class="legend-grid">' + rows + '</div>');
+        const rows = radii.map(([color, label]) => swatch(color, escapeHtml(label), 'is-wide')).join('');
+        setLegend('<h4 class="legend-title">Wind Radii</h4><div class="legend-grid legend-grid-3">' + rows + '</div>');
     }
 
     function _renderInitialWindExtentLegend() {
@@ -9146,11 +9299,8 @@
             ['#fb923c', '50 kt wind extent'],
             ['#ef4444', '64 kt wind extent'],
         ];
-        const rows = windFields.map(([color, label]) => {
-            const swatch = `<div style="width:20px;height:14px;background-color:${color};border:1px solid #999;display:inline-block;margin-right:6px;vertical-align:middle;"></div>`;
-            return `<div class="legend-row">${swatch}${escapeHtml(label)}</div>`;
-        }).join('');
-        setLegend('<h4>Initial Wind Extent</h4><div class="legend-grid">' + rows + '</div>');
+        const rows = windFields.map(([color, label]) => swatch(color, escapeHtml(label), 'is-wide')).join('');
+        setLegend('<h4 class="legend-title">Initial Wind Extent</h4><div class="legend-grid legend-grid-3">' + rows + '</div>');
     }
 
     function _renderStormSurgeWWLegend() {
@@ -9158,11 +9308,8 @@
             ['#B524F7', 'Storm Surge Warning'],
             ['#DB7FF7', 'Storm Surge Watch'],
         ];
-        const rows = events.map(([color, label]) => {
-            const swatch = `<div style="width:20px;height:14px;background-color:${color};border:1px solid #999;display:inline-block;margin-right:6px;vertical-align:middle;"></div>`;
-            return `<div class="legend-row">${swatch}${escapeHtml(label)}</div>`;
-        }).join('');
-        setLegend('<h4>Storm Surge Watches & Warnings</h4><div class="legend-grid">' + rows + '</div>');
+        const rows = events.map(([color, label]) => swatch(color, escapeHtml(label), 'is-wide')).join('');
+        setLegend('<h4 class="legend-title">Storm Surge Watches & Warnings</h4><div class="legend-grid">' + rows + '</div>');
     }
 
     function _tropicalGisGeoJson(data, layerId) {
@@ -10415,15 +10562,15 @@
                 : [Number(item?.value), item?.label ?? item?.value])
             .filter(([value]) => Number.isFinite(value));
         const tickHtml = normalizedTicks.map(([value, label]) => (
-            `<span>${escapeHtml(label ?? _formatSurfaceTick(value))}</span>`
+            `<span class="legend-text surface-colorbar-tick">${escapeHtml(label ?? _formatSurfaceTick(value))}</span>`
         )).join('');
 
         return (
-            `<h4>${escapeHtml(title)}</h4>` +
+            `<h4 class="legend-title">${escapeHtml(title)}</h4>` +
             `<div class="surface-colorbar">` +
             `<div class="surface-colorbar-bar" style="background: linear-gradient(to right, ${gradient});"></div>` +
             `<div class="surface-colorbar-ticks">${tickHtml}</div>` +
-            `<div class="surface-colorbar-label">${escapeHtml(axisLabel)}</div>` +
+            `<div class="legend-text surface-colorbar-label">${escapeHtml(axisLabel)}</div>` +
             `</div>`
         );
     }
@@ -10593,9 +10740,9 @@
             return;
         }
         const range = Number.isFinite(Number(data?.vmin)) && Number.isFinite(Number(data?.vmax))
-            ? `<div class="mrms-legend-units">${escapeHtml(String(data.vmin))} to ${escapeHtml(String(data.vmax))} ${units}</div>`
+            ? `<div class="legend-text mrms-legend-units">${escapeHtml(String(data.vmin))} to ${escapeHtml(String(data.vmax))} ${units}</div>`
             : '';
-        setLegend(`<div class="mrms-legend-head"><h4>${title}</h4></div>${range}`);
+        setLegend(`<div class="mrms-legend-head"><h4 class="legend-title">${title}</h4></div>${range}`);
     }
 
     function _rtmaStaleThresholdMs(stream, product) {
@@ -11577,7 +11724,7 @@
                 swatch('#b0d4f0', `≤ ${data.vmin} ${data.units}`),
                 swatch('#ff4f4f', `≥ ${data.vmax} ${data.units}`),
             ].join('');
-            setLegend(`<h4>${escapeHtml(data.full_name)}</h4>${rows}`);
+            setLegend(`<h4 class="legend-title">${escapeHtml(data.full_name)}</h4>${rows}`);
             return;
         }
 
@@ -12391,7 +12538,7 @@
                 className: 'city-name-tag',
                 html: `<span>${_escapeHtml(cityName)}</span>`,
                 iconSize: [width, height],
-                iconAnchor: [Math.round(width / 2), Math.round(height / 2)],
+                iconAnchor: [Math.round(width / 2 -20), Math.round(height / 2 -25)],
             }),
         });
     }
@@ -12630,10 +12777,10 @@
         _originalRenderSurfaceMarkers(filtered);
     };
 
-    ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'].forEach((type) => {
+    ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'].forEach((type) => {
         byId(`weather-type-${type}`)?.addEventListener('change', (e) => {
             // Enforce single active weather type for all tabs
-            const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'];
+            const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'];
             // Capture previous tab BEFORE uncheck loop runs (otherwise the DOM
             // state would already reflect the new selection).
             if (_activeTabType === null) _activeTabType = _detectInitialActiveTabType();
@@ -12667,7 +12814,7 @@
                 } else {
                     fitRegion(byId('weather-region')?.value || 'CONUS');
                 }
-                if (['radar', 'satellite', 'rtma', 'drought', 'tropical'].includes(type)) {
+                if (['radar', 'satellite', 'rtma', 'drought', 'tropical', 'wpc'].includes(type)) {
                     _setViewerTimestamp(null);
                 }
                 if (type === 'satellite') {
@@ -12761,6 +12908,16 @@
     byId('weather-opacity-surface-values')?.addEventListener('input', (e) => applySurfaceValueOpacity(e.target.value));
     byId('weather-opacity-surface-gradient')?.addEventListener('input', (e) => applySurfaceGradientOpacity(e.target.value));
     byId('weather-opacity-mrms')?.addEventListener('input', (e) => applyMrmsOpacity(e.target.value));
+    byId('weather-opacity-wpc')?.addEventListener('input', (e) => {
+        const opacity = parseFloat(e.target.value);
+        if (wpcLayer) {
+            if (typeof wpcLayer.setOpacity === 'function') {
+                wpcLayer.setOpacity(opacity);
+            } else if (typeof wpcLayer.eachLayer === 'function') {
+                wpcLayer.eachLayer((l) => l.setStyle({ fillOpacity: opacity, opacity: 0.9 }));
+            }
+        }
+    });
 
 
     byId('weather-gradient-blur')?.addEventListener('input', () => {
@@ -13116,7 +13273,7 @@
         // background tabs to silently load data (e.g. MRMS PrecipFlag firing
         // on a "Current" tab load because the user had MRMS active before
         // refreshing).
-        const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical'];
+        const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'];
         _configureStandaloneProductPage(allTypes);
         allTypes.forEach((t) => {
             const el = byId(`weather-type-${t}`);
@@ -13279,6 +13436,14 @@
                 loadDroughtLayer: () => _droughtEngine?.loadDroughtLayer(),
             });
             _droughtPageController.wireControls?.();
+        }
+
+        if (_wpcPageController?.configureWpcPage) {
+            _wpcPageController.configureWpcPage({
+                isTypeEnabled: _isTypeEnabled,
+                loadWpcLayer: () => _wpcEngine?.loadWpcLayer(),
+            });
+            _wpcPageController.wireControls?.();
         }
 
         if (_mrmsPageController?.configureMrmsPage) {
@@ -13691,6 +13856,36 @@
         });
         if (droughtContext && _droughtEngineFactory?.createDroughtEngine) {
             _droughtEngine = _droughtEngineFactory.createDroughtEngine(droughtContext);
+        }
+
+        const wpcContext = _productAppContexts?.registerProductContext('wpc', {
+            apiUrl,
+            activeWpcDay: () => _wpcPageController?.activeWpcDay?.()
+                ?? (parseInt(byId('weather-wpc-day')?.value ?? '1', 10) || 1),
+            activeWpcGroup: () => _wpcPageController?.activeWpcGroup?.() ?? 'ero',
+            activeWpcProduct: () => _wpcPageController?.activeWpcProduct?.() ?? '',
+            buildWpcLegend,
+            closeWpcDetail: _closeNewAlertDetail,
+            getWpcLayer: () => wpcLayer,
+            setWpcLayer: (layer) => { wpcLayer = layer; },
+            getWpcOpacity: () => parseFloat(byId('weather-opacity-wpc')?.value ?? 0.55),
+            nextWpcRequestSeq: () => (_wpcRequestSeq += 1),
+            getWpcRequestSeq: () => _wpcRequestSeq,
+            isTypeEnabled: _isTypeEnabled,
+            leaflet: L,
+            map,
+            resolveTimestampMs: _resolveDataTimestampMs,
+            openWpcDetail: _openSpcTextDetail,
+            setLegend,
+            setMapEmptyMessage,
+            setReliability: _setReliability,
+            setTimestampSource: _setTimestampSource,
+            setViewerTimestamp: _setViewerTimestamp,
+            updateWpcCatalog: (catalog) => _wpcPageController?.updateWpcCatalog?.(catalog),
+        });
+        if (wpcContext && _wpcEngineFactory?.createWpcEngine) {
+            _wpcEngine = _wpcEngineFactory.createWpcEngine(wpcContext);
+            _wpcEngine.loadWpcCatalog();
         }
 
         const mrmsContext = _productAppContexts?.registerProductContext('mrms', {

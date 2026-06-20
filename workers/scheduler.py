@@ -54,6 +54,7 @@ def start_scheduler() -> None:
 
     from workers.alerts_worker import run_alerts_worker
     from workers.spc_worker import run_spc_worker
+    from workers.wpc_worker import run_wpc_worker
     from workers.tropical_worker import run_tropical_worker
     from workers.tropical_archive_worker import refresh_current_season
     from workers.mrms_worker import run_mrms_worker
@@ -91,6 +92,15 @@ def start_scheduler() -> None:
         max_instances=1,
         misfire_grace_time=300,
         next_run_time=now + timedelta(seconds=10),
+    )
+    _scheduler.add_job(
+        run_wpc_worker,
+        "interval",
+        minutes=30,
+        id="wpc_worker",
+        max_instances=1,
+        misfire_grace_time=300,
+        next_run_time=now + timedelta(seconds=15),
     )
     # Keep the in-progress season in the Archive browser fresh from ATCF b-decks.
     # HURDAT2 only publishes after a season closes, so the full archive build is

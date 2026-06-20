@@ -1,0 +1,128 @@
+(function () {
+    'use strict';
+
+    const SPEED_STEPS = [0.5, 1, 2, 4];
+    const BASE_INTERVAL_MS = 1000;
+    const LOOP_HOLD_MULTIPLIER = 2;
+
+    function createScrubber(containerEl, options) {
+        const onFrame = (options && options.onFrame) || function () {};
+
+        let frames = [];
+        let currentIndex = 0;
+        let playing = false;
+        let playTimer = null;
+        let speedIndex = 1;
+
+        containerEl.innerHTML = [
+            '<div class="nch-scrubber">',
+            '  <div class="nch-scrubber-controls">',
+            '    <button class="nch-scrubber-btn" data-scrub="back" title="Previous frame">&#9664;</button>',
+            '    <button class="nch-scrubber-btn" data-scrub="play" title="Play/Pause">&#9654;</button>',
+            '    <button class="nch-scrubber-btn" data-scrub="fwd" title="Next frame">&#9654;&#9654;</button>',
+            '    <div class="nch-scrubber-speed">',
+            '      <button class="nch-scrubber-btn nch-scrubber-speed-btn" data-scrub="slower" title="Slower">&minus;</button>',
+            '      <span class="nch-scrubber-speed-label">1x</span>',
+            '      <button class="nch-scrubber-btn nch-scrubber-speed-btn" data-scrub="faster" title="Faster">+</button>',
+            '    </div>',
+            '  </div>',
+            '  <input class="nch-scrubber-slider" type="range" min="0" max="0" value="0" step="1">',
+            '  <div class="nch-scrubber-info">',
+            '    <span class="nch-scrubber-timestamp">--</span>',
+            '    <span class="nch-scrubber-frame-count"></span>',
+            '  </div>',
+            '</div>',
+        ].join('');
+
+        const els = {
+            play:       containerEl.querySelector('[data-scrub="play"]'),
+            back:       containerEl.querySelector('[data-scrub="back"]'),
+            fwd:        containerEl.querySelector('[data-scrub="fwd"]'),
+            slower:     containerEl.querySelector('[data-scrub="slower"]'),
+            faster:     containerEl.querySelector('[data-scrub="faster"]'),
+            speedLabel: containerEl.querySelector('.nch-scrubber-speed-label'),
+            slider:     containerEl.querySelector('.nch-scrubber-slider'),
+            timestamp:  containerEl.querySelector('.nch-scrubber-timestamp'),
+            frameCount: containerEl.querySelector('.nch-scrubber-frame-count'),
+        };
+
+        function _interval() {
+            return Math.round(BASE_INTERVAL_MS / SPEED_STEPS[speedIndex]);
+        }
+
+        function _updateUI() {
+            const count = frames.length;
+            els.slider.max   = Math.max(0, count - 1);
+            els.slider.value = currentIndex;
+            els.frameCount.textContent = count ? `${currentIndex + 1} / ${count}` : '';
+            els.timestamp.textContent  = count ? (frames[currentIndex].label || '--') : '--';
+            els.play.textContent = playing ? '⏸' : '▶';
+        }
+
+        function _goTo(index) {
+            if (!frames.length) return;
+            currentIndex = Math.max(0, Math.min(frames.length - 1, index));
+            _updateUI();
+            onFrame(frames[currentIndex], currentIndex);
+        }
+
+        function _stopPlay() {
+            if (playTimer) { clearTimeout(playTimer); playTimer = null; }
+            playing = false;
+            if (els.play) els.play.textContent = '▶';
+        }
+
+        function _tick() {
+            if (!playing || !frames.length) return;
+            const next = currentIndex + 1;
+            if (next >= frames.length) {
+                _goTo(0);
+                playTimer = setTimeout(_tick, _interval() * LOOP_HOLD_MULTIPLIER);
+            } else {
+                _goTo(next);
+                playTimer = setTimeout(_tick, _interval());
+            }
+        }
+
+        function _startPlay() {
+            if (playing || frames.length < 2) return;
+            playing = true;
+            if (els.play) els.play.textContent = '⏸';
+            playTimer = setTimeout(_tick, _interval());
+        }
+
+        els.play.addEventListener('click', function () {
+            if (playing) _stopPlay(); else _startPlay();
+        });
+        els.back.addEventListener('click', function () { _stopPlay(); _goTo(currentIndex - 1); });
+        els.fwd.addEventListener('click',  function () { _stopPlay(); _goTo(currentIndex + 1); });
+        els.slower.addEventListener('click', function () {
+            speedIndex = Math.max(0, speedIndex - 1);
+            els.speedLabel.textContent = SPEED_STEPS[speedIndex] + 'x';
+        });
+        els.faster.addEventListener('click', function () {
+            speedIndex = Math.min(SPEED_STEPS.length - 1, speedIndex + 1);
+            els.speedLabel.textContent = SPEED_STEPS[speedIndex] + 'x';
+        });
+        els.slider.addEventListener('input', function () {
+            _stopPlay();
+            _goTo(Number(els.slider.value));
+        });
+
+        return Object.freeze({
+            setFrames: function (newFrames) {
+                _stopPlay();
+                frames = Array.isArray(newFrames) ? newFrames : [];
+                currentIndex = 0;
+                _updateUI();
+                if (frames.length) onFrame(frames[0], 0);
+            },
+            goTo:    _goTo,
+            play:    _startPlay,
+            pause:   _stopPlay,
+            destroy: function () { _stopPlay(); containerEl.innerHTML = ''; },
+        });
+    }
+
+    window.NCHScrubber = Object.freeze({ createScrubber: createScrubber });
+}());
