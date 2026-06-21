@@ -3233,13 +3233,7 @@
     function renderMrmsCategoricalLegend(legend) {
         const items = Array.isArray(legend?.items) ? legend.items : [];
         if (!items.length) return '';
-        const isPrecipType = String(legend?.title || '').toLowerCase().includes('surface precipitation type');
-        const colClass = isPrecipType
-            ? 'legend-grid legend-grid-6'
-            : Number(legend?.columns) === 3
-                ? 'legend-grid legend-grid-3'
-                : 'legend-grid';
-        return `<div class="${colClass}">${items.map((item) => swatch(item.color, escapeHtml(item.label))).join('')}</div>`;
+        return `<div class="legend-flow">${items.map((item) => swatch(item.color, escapeHtml(item.label))).join('')}</div>`;
     }
 
     // Center-of-map "no data" overlay used when an SPC (or similar) layer
@@ -3277,7 +3271,7 @@
         const events = Object.keys(counts).sort((a, b) => a.localeCompare(b));
         if (!events.length) { setLegend(null); return; }
         const rows = events.map((e) => swatch(ALERT_COLORS[e] || ALERT_DEFAULT, `${e} (${counts[e]})`)).join('');
-        setLegend('<h4 class="legend-title">Alerts In View</h4><div class="legend-grid legend-grid-6">' + rows + '</div>');
+        setLegend('<h4 class="legend-title">Alerts In View</h4><div class="legend-flow">' + rows + '</div>');
     }
 
     function buildSpcCatLegend() {
@@ -3285,16 +3279,16 @@
             ['#ff66ff', 'High'], ['#ff4f4f', 'Moderate'], ['#ff9d2e', 'Enhanced'],
             ['#f5dd72', 'Slight'], ['#69bb6d', 'Marginal'], ['#b5dcb3', 'General Thunderstorms'],
         ].map(([c, l]) => swatch(c, l)).join('');
-        setLegend('<h4 class="legend-title">SPC Categorical</h4><div class="legend-grid legend-grid-6">' + items + '</div>');
+        setLegend('<h4 class="legend-title">SPC Categorical</h4><div class="legend-flow">' + items + '</div>');
     }
 
     function buildSpcFireLegend(hazard) {
         if (hazard === 'dryt') {
             const rows = [swatch('#FF8080', 'Scattered Dry T-Storm'), swatch('#FFBF80', 'Isolated Dry T-Storm')].join('');
-            setLegend('<h4 class="legend-title">SPC Fire Wx (Dry T-Storm)</h4><div class="legend-grid legend-grid-3">' + rows + '</div>');
+            setLegend('<h4 class="legend-title">SPC Fire Wx (Dry T-Storm)</h4><div class="legend-flow">' + rows + '</div>');
         } else {
             const rows = [swatch('#FF80FF', 'Extremely Critical'), swatch('#FF8080', 'Critical'), swatch('#FFBF80', 'Elevated')].join('');
-            setLegend('<h4 class="legend-title">SPC Fire Wx (Wind/RH)</h4><div class="legend-grid legend-grid-3">' + rows + '</div>');
+            setLegend('<h4 class="legend-title">SPC Fire Wx (Wind/RH)</h4><div class="legend-flow">' + rows + '</div>');
         }
     }
 
@@ -3311,7 +3305,7 @@
             }
             return swatch(color, label);
         }).join('');
-        setLegend('<h4 class="legend-title">SPC Storm Reports</h4><div class="legend-grid legend-grid-3">' + rows + '</div>');
+        setLegend('<h4 class="legend-title">SPC Storm Reports</h4><div class="legend-flow">' + rows + '</div>');
     }
 
     function buildSpcWatchesLegend(features = _spcWatchFeatures) {
@@ -3346,7 +3340,7 @@
             setLegend(null);
             return;
         }
-        setLegend(`<h4 class="legend-title">Watches In View</h4>${rows}`);
+        setLegend(`<h4 class="legend-title">Watches In View</h4><div class="legend-flow">${rows}</div>`);
     }
 
     function buildRadarSiteMarkerLegend() {
@@ -3366,7 +3360,7 @@
         ].map(([c, l]) =>
             `<div class="legend-item"><span class="legend-swatch" style="background:${c};border-radius:50%;"></span><span class="legend-text">${l}</span></div>`
         ).join('');
-        const statusSection = `<div class="legend-grid legend-grid-6">${statusItems}</div>`;
+        const statusSection = `<div class="legend-flow">${statusItems}</div>`;
 
         setLegend(`<h4 class="legend-title">Radar Sites (CONUS)</h4>${statusSection}`);
     }
@@ -3457,7 +3451,7 @@
             const simpleRows = activeCats
                 .map((dm) => swatch(_DROUGHT_COLORS[dm], _DROUGHT_LABELS[dm]))
                 .join('');
-            setLegend('<h4 class="legend-title">U.S. Drought Monitor</h4><div class="legend-grid legend-grid-5">' + simpleRows + '</div>');
+            setLegend('<h4 class="legend-title">U.S. Drought Monitor</h4><div class="legend-flow">' + simpleRows + '</div>');
             return;
         }
 
@@ -9228,7 +9222,7 @@
             const glyph = `<svg viewBox="0 0 16 16" fill="${cat.color}" class="legend-swatch is-icon wx-tc-legend-glyph" aria-hidden="true">${_TROPICAL_ICON_PATHS[cat.icon]}</svg>`;
             return `<div class="legend-item">${glyph}<span class="legend-text">${escapeHtml(cat.label)}</span></div>`;
         }).join('');
-        setLegend('<h4 class="legend-title">Tropical Cyclone Intensity</h4><div class="legend-grid legend-grid-6">' + items + '</div>');
+        setLegend('<h4 class="legend-title">Tropical Cyclone Intensity</h4><div class="legend-flow">' + items + '</div>');
     }
 
     // Hatched oval swatch matching the GTWO formation-area fill (diagonal lines in `color`).
@@ -9254,7 +9248,7 @@
         const xGlyph = `<svg viewBox="0 0 16 16" fill="#9ca3af" class="legend-swatch is-icon wx-tc-legend-glyph" aria-hidden="true">${_TROPICAL_ICON_PATHS['x-circle']}</svg>`;
         const notExpected = `<div class="legend-item">${xGlyph}<span class="legend-text">Development not expected</span></div>`;
         setLegend('<h4 class="legend-title">7-Day Cyclone Formation Chance</h4>'
-            + '<div class="legend-grid legend-grid-4">' + chance + notExpected + '</div>');
+            + '<div class="legend-flow">' + chance + notExpected + '</div>');
     }
 
     function _renderPeakSurgeLegend() {
@@ -9269,7 +9263,7 @@
             ['purple', '15-20 ft'],
         ];
         const rows = ranges.map(([color, label]) => swatch(color, escapeHtml(label), 'is-wide')).join('');
-        setLegend('<h4 class="legend-title">Peak Storm Surge Forecast</h4><div class="legend-grid legend-grid-8">' + rows + '</div>');
+        setLegend('<h4 class="legend-title">Peak Storm Surge Forecast</h4><div class="legend-flow">' + rows + '</div>');
     }
 
     function _renderWatchesWarningsLegend() {
@@ -9280,7 +9274,7 @@
             ['#F08080', 'Tropical Storm Watch'],
         ];
         const rows = events.map(([color, label]) => swatch(color, escapeHtml(label), 'is-wide')).join('');
-        setLegend('<h4 class="legend-title">Watches & Warnings</h4><div class="legend-grid legend-grid-4">' + rows + '</div>');
+        setLegend('<h4 class="legend-title">Watches & Warnings</h4><div class="legend-flow">' + rows + '</div>');
     }
 
     function _renderWindRadiiLegend() {
@@ -9290,7 +9284,7 @@
             ['#ffc309', '64 kt (Category 1)'],
         ];
         const rows = radii.map(([color, label]) => swatch(color, escapeHtml(label), 'is-wide')).join('');
-        setLegend('<h4 class="legend-title">Wind Radii</h4><div class="legend-grid legend-grid-3">' + rows + '</div>');
+        setLegend('<h4 class="legend-title">Wind Radii</h4><div class="legend-flow">' + rows + '</div>');
     }
 
     function _renderInitialWindExtentLegend() {
@@ -9300,7 +9294,7 @@
             ['#ef4444', '64 kt wind extent'],
         ];
         const rows = windFields.map(([color, label]) => swatch(color, escapeHtml(label), 'is-wide')).join('');
-        setLegend('<h4 class="legend-title">Initial Wind Extent</h4><div class="legend-grid legend-grid-3">' + rows + '</div>');
+        setLegend('<h4 class="legend-title">Initial Wind Extent</h4><div class="legend-flow">' + rows + '</div>');
     }
 
     function _renderStormSurgeWWLegend() {
@@ -9309,7 +9303,7 @@
             ['#DB7FF7', 'Storm Surge Watch'],
         ];
         const rows = events.map(([color, label]) => swatch(color, escapeHtml(label), 'is-wide')).join('');
-        setLegend('<h4 class="legend-title">Storm Surge Watches & Warnings</h4><div class="legend-grid">' + rows + '</div>');
+        setLegend('<h4 class="legend-title">Storm Surge Watches & Warnings</h4><div class="legend-flow">' + rows + '</div>');
     }
 
     function _tropicalGisGeoJson(data, layerId) {
@@ -11724,7 +11718,7 @@
                 swatch('#b0d4f0', `≤ ${data.vmin} ${data.units}`),
                 swatch('#ff4f4f', `≥ ${data.vmax} ${data.units}`),
             ].join('');
-            setLegend(`<h4 class="legend-title">${escapeHtml(data.full_name)}</h4>${rows}`);
+            setLegend(`<h4 class="legend-title">${escapeHtml(data.full_name)}</h4><div class="legend-flow">${rows}</div>`);
             return;
         }
 
