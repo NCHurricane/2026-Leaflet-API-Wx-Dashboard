@@ -9,7 +9,7 @@ from fastapi import HTTPException
 
 from app_core.paths import BASE_DIR, CACHE_ROOT
 from config.geo_config import STATE_BOUNDS
-from config.rtma_config import RTMA_STREAM_MAX_HOURS, clamp_stream_hours
+from config.rtma_config import RTMA_CITIES_FILE, RTMA_STREAM_MAX_HOURS, clamp_stream_hours
 
 
 def get_rtma_points(
@@ -46,6 +46,10 @@ def get_rtma_points(
         bounds_values = (float(south), float(west), float(north), float(east))
     else:
         bounds_values = None
+    cities_path = os.path.join(BASE_DIR, "data", RTMA_CITIES_FILE)
+    if not os.path.exists(cities_path):
+        raise HTTPException(status_code=500, detail=f"Missing data/{RTMA_CITIES_FILE}")
+    cities_size = os.path.getsize(cities_path)
 
     def _read_points_from_cache(path: str) -> list[dict]:
         try:
@@ -102,6 +106,7 @@ def get_rtma_points(
             )
         return points
 
+    stale_cached_payload = None
     try:
         product_cfg = get_product_config(product)
         if source_data_key:
@@ -123,7 +128,7 @@ def get_rtma_points(
                     except Exception:
                         meta = None
                 points = _read_points_from_cache(cached_geojson_path)
-                return {
+                stale_cached_payload = {
                     "points": points,
                     "units": product_cfg.get("units", ""),
                     "full_name": product_cfg.get("label", product),
@@ -139,6 +144,11 @@ def get_rtma_points(
                     "stream": stream,
                     "product": product,
                 }
+                if (
+                    (meta or {}).get("cities_file") == RTMA_CITIES_FILE
+                    and (meta or {}).get("cities_size") == cities_size
+                ):
+                    return stale_cached_payload
 
             source = resolve_rtma_source_by_data_key(
                 region_key,
@@ -152,11 +162,9 @@ def get_rtma_points(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except FileNotFoundError as exc:
+        if stale_cached_payload is not None:
+            return stale_cached_payload
         raise HTTPException(status_code=503, detail=str(exc))
-
-    cities_path = os.path.join(BASE_DIR, "data", "us-cities.json")
-    if not os.path.exists(cities_path):
-        raise HTTPException(status_code=500, detail="Missing data/us-cities.json")
 
     geojson_path = None
     meta = None

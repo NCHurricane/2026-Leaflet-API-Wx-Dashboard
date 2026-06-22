@@ -280,7 +280,11 @@
             return;
         }
         // Weather density sliders are formatted by weather.js in km based on zoom.
-        if (input.id === 'weather-obs-density' || input.id === 'weather-cities-density') {
+        if (
+            input.id === 'weather-obs-density'
+            || input.id === 'weather-rtma-obs-density'
+            || input.id === 'weather-cities-density'
+        ) {
             return;
         }
         const label = getLabelForInput(input.id);

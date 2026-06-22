@@ -11,6 +11,7 @@ from functools import lru_cache
 import cfgrib
 import numpy as np
 import requests
+from config.geo_config import STATE_BOUNDS
 from config.surface_config import TEMPERATURE_GRADIENT_ANCHORS
 from surface.surface_utils import (
     calc_relative_humidity,
@@ -351,6 +352,22 @@ def _load_city_points(cities_path: str) -> list[dict]:
             }
         )
     return out
+
+
+def _filter_city_points_for_region(cities: list[dict], region: str) -> list[dict]:
+    bounds = STATE_BOUNDS.get(region.upper())
+    if not bounds:
+        return cities
+    west, east, south, north = bounds
+    return [
+        city
+        for city in cities
+        if south <= city["lat"] <= north and west <= city["lon"] <= east
+    ]
+
+
+def _cities_cache_signature(cities_path: str) -> tuple[str, int]:
+    return os.path.basename(cities_path), os.path.getsize(cities_path)
 
 
 def _nearest_index_1d(grid: np.ndarray, values: np.ndarray) -> np.ndarray:
@@ -1013,6 +1030,7 @@ def rtma_city_geojson_is_cached(
     region: str,
     stream: str,
     product: str,
+    cities_path: str,
     source_data_key: str | None = None,
 ) -> bool:
     """Cheap check mirroring ensure_rtma_city_geojson's cache guard, without
@@ -1030,9 +1048,12 @@ def rtma_city_geojson_is_cached(
     try:
         with open(meta_path, "r", encoding="utf-8") as handle:
             meta = json.load(handle)
+        cities_file, cities_size = _cities_cache_signature(cities_path)
         return (
             meta.get("source_data_key") == source.data_key
             and meta.get("source_url") == source.url
+            and meta.get("cities_file") == cities_file
+            and meta.get("cities_size") == cities_size
         )
     except Exception:
         return False
@@ -1056,6 +1077,7 @@ def ensure_rtma_city_geojson(
         out_name = f"{product}.geojson"
     out_path = os.path.join(product_dir, out_name)
     meta_path = out_path.replace(".geojson", "_meta.json")
+    cities_file, cities_size = _cities_cache_signature(cities_path)
 
     if os.path.exists(out_path) and os.path.exists(meta_path):
         try:
@@ -1064,6 +1086,8 @@ def ensure_rtma_city_geojson(
             if (
                 meta.get("source_data_key") == source.data_key
                 and meta.get("source_url") == source.url
+                and meta.get("cities_file") == cities_file
+                and meta.get("cities_size") == cities_size
             ):
                 return out_path, meta
         except Exception:
@@ -1078,7 +1102,7 @@ def ensure_rtma_city_geojson(
         product,
     )
 
-    cities = _load_city_points(cities_path)
+    cities = _filter_city_points_for_region(_load_city_points(cities_path), region)
     city_points = _sample_city_values(data, latitude, longitude, cities)
 
     if product in {"temperature", "apparent_temperature"}:
@@ -1116,6 +1140,8 @@ def ensure_rtma_city_geojson(
         "units": config["units"],
         "timestamp": source_timestamp,
         "feature_count": len(points_compact),
+        "cities_file": cities_file,
+        "cities_size": cities_size,
     }
     tmp_meta = f"{meta_path}.part"
     with open(tmp_meta, "w", encoding="utf-8") as handle:

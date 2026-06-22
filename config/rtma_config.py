@@ -16,6 +16,8 @@ RTMA_STREAMS: tuple[str, ...] = tuple(RTMA_STREAM_MAX_HOURS.keys())
 
 RTMA_WORKER_REGIONS: tuple[str, ...] = ("CONUS", "AK", "HI", "PR")
 
+RTMA_CITIES_FILE = "us-cities-all.json"
+
 # Keep this list aligned to available RTMA UI products.
 RTMA_UI_PRODUCTS: list[str] = [
     "temperature",

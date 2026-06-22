@@ -9,7 +9,7 @@
         <link rel="stylesheet" href="css/shared.css">
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
-        <link rel="stylesheet" href="css/dashboard.css?v=20260619b">
+        <link rel="stylesheet" href="css/dashboard.css?v=20260620a">
     </head>
 
     <body>
@@ -325,6 +325,24 @@
                             <div class="wx-block wx-small">Alert Count:
                                 <span id="weather-alerts-count"></span>
                             </div>
+                            <hr class="wx-divider">
+                            <div class="wx-block wx-small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Local Storm Reports <span id="weather-alerts-lsr-count" style="font-weight:400;color:#94a3b8;">(0)</span></div>
+                            <div class="wx-check-row"><span>All Reports</span><input id="weather-lsr-all" type="checkbox"></div>
+                            <div class="wx-check-row"><span>Tornado / Waterspout / Funnel</span><input class="weather-lsr-category" type="checkbox" value="tornado"></div>
+                            <div class="wx-check-row"><span>Hail</span><input class="weather-lsr-category" type="checkbox" value="hail"></div>
+                            <div class="wx-check-row"><span>Wind</span><input class="weather-lsr-category" type="checkbox" value="wind"></div>
+                            <div class="wx-check-row"><span>Flash Flood / Flood</span><input class="weather-lsr-category" type="checkbox" value="flood"></div>
+                            <div class="wx-check-row"><span>Heavy Rain</span><input class="weather-lsr-category" type="checkbox" value="rain"></div>
+                            <div class="wx-check-row"><span>Winter Weather</span><input class="weather-lsr-category" type="checkbox" value="winter"></div>
+                            <div class="wx-check-row"><span>Fire / Smoke</span><input class="weather-lsr-category" type="checkbox" value="fire"></div>
+                            <div class="wx-check-row"><span>Heat</span><input class="weather-lsr-category" type="checkbox" value="heat"></div>
+                            <div class="wx-check-row"><span>Other</span><input class="weather-lsr-category" type="checkbox" value="other"></div>
+                            <div class="wx-block wx-small" style="font-weight:600;color:#94a3b8;margin-top:6px;">Time Window</div>
+                            <div class="wx-archive-presets" id="weather-lsr-hours-row">
+                                <button class="wx-preset-btn" type="button" data-lsr-hours="6">6 hr</button>
+                                <button class="wx-preset-btn" type="button" data-lsr-hours="12">12 hr</button>
+                                <button class="wx-preset-btn active" type="button" data-lsr-hours="24">24 hr</button>
+                            </div>
                             <div class="wx-block">
                                 <button id="weather-refresh-alerts" type="button">Refresh</button>
                             </div>
@@ -614,7 +632,7 @@
                             <div class="wx-obs-density-head" style="margin-bottom:4px;">
                                 <label for="weather-rtma-obs-density">Station Density</label>
                             </div>
-                            <input id="weather-rtma-obs-density" type="range" min="0.01" max="1" step="0.005"
+                            <input id="weather-rtma-obs-density" type="range" min="0.01" max="2" step="0.005"
                                 value="0.25">
                             <div class="rtma-sub-panel">
                                 <div class="rtma-sub-group">
@@ -1552,7 +1570,7 @@
         <script src="js/radar-site-locations.js?v=20260504c"></script>
         <script src="js/product-page-shell.js?v=20260616a"></script>
         <script src="js/product-app-context.js?v=20260616a"></script>
-        <script src="js/alerts-engine.js?v=20260616a"></script>
+        <script src="js/alerts-engine.js?v=20260621a"></script>
         <script src="js/alerts-page.js?v=20260616a"></script>
         <script src="js/satellite-engine.js?v=20260616a"></script>
         <script src="js/satellite-page.js?v=20260616a"></script>
@@ -1573,7 +1591,7 @@
         <script src="js/scrubber.js?v=20260619a"></script>
         <script src="js/wpc-engine.js?v=20260618j"></script>
         <script src="js/wpc-page.js?v=20260619f"></script>
-        <script src="js/weather.js?v=20260618p"></script>
+        <script src="js/weather.js?v=20260621a"></script>
         <script>initNav('weather');</script>
     </body>
 

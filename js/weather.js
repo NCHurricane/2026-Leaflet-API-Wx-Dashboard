@@ -798,6 +798,7 @@
 
     // ── Layer state ──────────────────────────────────────────────────────────
     let alertsLayer = null;
+    let localStormReportsLayer = null;
     let spcLayer = null;
     let _spcWatchFeatures = [];
     let surfaceLayer = null;
@@ -915,6 +916,7 @@
     let _citiesData = null;
     let _citiesDensity = 1;
     let _surfaceDensity = 1;
+    let _rtmaDensity = 1;
     let _gradientBlurScale = 0;
     const CITY_LABEL_CHAR_PX = 5.2;
     const CITY_LABEL_HEIGHT_PX = 11;
@@ -1504,6 +1506,13 @@
         const prevLayer = alertsLayer;
         alertsLayer = nextLayer || null;
         if (alertsLayer) alertsLayer.addTo(map);
+        if (prevLayer && map.hasLayer(prevLayer)) map.removeLayer(prevLayer);
+    }
+
+    function _swapLocalStormReportsLayer(nextLayer) {
+        const prevLayer = localStormReportsLayer;
+        localStormReportsLayer = nextLayer || null;
+        if (localStormReportsLayer) localStormReportsLayer.addTo(map);
         if (prevLayer && map.hasLayer(prevLayer)) map.removeLayer(prevLayer);
     }
 
@@ -2961,10 +2970,10 @@
         return 'other';
     }
 
-    // FA icon class for tornado/wind; null = use circleMarker
     const _SPC_REPORT_FA_ICON = {
         torn: 'fa-solid fa-tornado',
         wind: 'fa-solid fa-wind',
+        hail: 'fa-solid fa-caret-up',
     };
 
     function _spcReportMarker(feat, latlng) {
@@ -3193,6 +3202,8 @@
         box.innerHTML = html;
     }
 
+    const setLsrLegend = setLegend;
+
     function swatch(color, label, swatchModifier = '') {
         const modifier = swatchModifier ? ` ${swatchModifier}` : '';
         return `<div class="legend-item"><span class="legend-swatch${modifier}" style="background:${color}"></span><span class="legend-text">${label}</span></div>`;
@@ -3271,7 +3282,7 @@
         const events = Object.keys(counts).sort((a, b) => a.localeCompare(b));
         if (!events.length) { setLegend(null); return; }
         const rows = events.map((e) => swatch(ALERT_COLORS[e] || ALERT_DEFAULT, `${e} (${counts[e]})`)).join('');
-        setLegend('<h4 class="legend-title">Alerts In View</h4><div class="legend-flow">' + rows + '</div>');
+        setLegend('<h4 class="legend-title">Alerts In View</h4><div class="legend-grid legend-grid-6">' + rows + '</div>');
     }
 
     function buildSpcCatLegend() {
@@ -5807,6 +5818,9 @@
     function _clearAllMapLayers() {
         _stopSatelliteScrubPlay();
         if (alertsLayer && map.hasLayer(alertsLayer)) map.removeLayer(alertsLayer);
+        if (localStormReportsLayer && map.hasLayer(localStormReportsLayer)) {
+            map.removeLayer(localStormReportsLayer);
+        }
 
         if (spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
         if (surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
@@ -5824,6 +5838,7 @@
         droughtLayer = null;
         tropicalOutlookLayer = null;
         alertsLayer = null;
+        localStormReportsLayer = null;
         spcLayer = null;
         _spcWatchFeatures = [];
         surfaceLayer = null;
@@ -5985,7 +6000,11 @@
 
             case 'alerts':
                 if (alertsLayer && map.hasLayer(alertsLayer)) map.removeLayer(alertsLayer);
+                if (localStormReportsLayer && map.hasLayer(localStormReportsLayer)) {
+                    map.removeLayer(localStormReportsLayer);
+                }
                 alertsLayer = null;
+                localStormReportsLayer = null;
                 break;
 
             case 'spc':
@@ -8433,6 +8452,7 @@
     function refreshActiveLayers() {
         if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length || _satelliteScrubMode) return;
         const alertsEnabled = _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0;
+        const lsrEnabled = _isTypeEnabled('alerts') && !!document.querySelectorAll('.weather-lsr-category:checked').length > 0;
         const spcEnabled = _isTypeEnabled('spc') && byId('weather-show-spc')?.checked;
         const surfaceProduct = _activeSurfaceProduct();
         const surfaceEnabled = _isTypeEnabled('current') && !!surfaceProduct;
@@ -8449,6 +8469,10 @@
         setLegend(null);
 
         if (!alertsEnabled && alertsLayer && map.hasLayer(alertsLayer)) map.removeLayer(alertsLayer);
+        if (!lsrEnabled && localStormReportsLayer && map.hasLayer(localStormReportsLayer)) {
+            map.removeLayer(localStormReportsLayer);
+            localStormReportsLayer = null;
+        }
         if (!alertsEnabled) _clearAlertRadarTiles();
         else if (!_alertRadarTileLayer) _addAlertRadarTiles();
         if (!spcEnabled && spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
@@ -8488,6 +8512,9 @@
 
         if (alertsEnabled) {
             _alertsEngine?.loadLiveAlerts();
+        }
+        if (lsrEnabled) {
+            _alertsEngine?.loadLocalStormReports();
         }
         if (spcEnabled) {
             refreshSpc();
@@ -9849,6 +9876,16 @@
         return 150;
     }
 
+    // RTMA's slider tops out at 2, so these base values yield the configured
+    // far-right minimum spacing after division by _rtmaDensity.
+    function _rtmaBaseDistKm(zoom) {
+        if (zoom >= 9) return 10;
+        if (zoom === 8) return 20;
+        if (zoom === 7) return 60;
+        if (zoom >= 5) return 200;
+        return 400;
+    }
+
     // City labels need heavier thinning than station plots at the same zoom.
     function _baseCityDistKm(zoom) {
         if (zoom >= 9) return 1;
@@ -10601,8 +10638,7 @@
             _renderSurfaceMarkers(_surfaceStations);
         }
         if (_isTypeEnabled('rtma')) {
-            const key = `${_activeRtmaRegion()}|${_activeRtmaStream()}|${_activeRtmaProduct()}`;
-            if (_rtmaPointsAll.length && _rtmaPointsKey === key) _renderRtmaPoints();
+            if (_rtmaPointsAll.length) _renderRtmaPoints();
             else _scheduleRtmaPointsLoad();
         }
         // Swap display geometry when crossing the zoom-bucket threshold (low ↔ high).
@@ -10862,9 +10898,11 @@
         // ── Always load value-point markers (dynamic, not baked into raster) ──
 
         try {
+            const boundsQuery = _rtmaPointsBoundsQuery();
             const url = apiUrl(
                 `/api/data/rtma/points?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
                 + (pointsSourceDataKey ? `&source_data_key=${encodeURIComponent(pointsSourceDataKey)}` : '')
+                + boundsQuery
             );
             const resp = await fetch(url);
             if (!resp.ok) {
@@ -10913,6 +10951,26 @@
         }
     }
 
+    function _rtmaPointsBoundsQuery() {
+        const bounds = map.getBounds();
+        return (
+            `&south=${bounds.getSouth().toFixed(4)}` +
+            `&west=${bounds.getWest().toFixed(4)}` +
+            `&north=${bounds.getNorth().toFixed(4)}` +
+            `&east=${bounds.getEast().toFixed(4)}`
+        );
+    }
+
+    function _rtmaPointsViewportKey() {
+        const bounds = map.getBounds();
+        return [
+            bounds.getSouth().toFixed(2),
+            bounds.getWest().toFixed(2),
+            bounds.getNorth().toFixed(2),
+            bounds.getEast().toFixed(2),
+        ].join(',');
+    }
+
     function _scheduleRtmaPointsLoad(delayMs = RTMA_POINTS_DEBOUNCE_MS, forceReload = false) {
         if (_rtmaPointsDebounceTimer) clearTimeout(_rtmaPointsDebounceTimer);
         _rtmaPointsDebounceTimer = setTimeout(() => {
@@ -10924,8 +10982,7 @@
     function _thinRtmaPoints(points) {
         if (!Array.isArray(points) || !points.length) return [];
         const zoom = map.getZoom();
-        const region = (byId('weather-region')?.value || '').toUpperCase();
-        const minDistKm = _baseDistKm(zoom, region) / _surfaceDensity;
+        const minDistKm = _rtmaBaseDistKm(zoom) / _rtmaDensity;
         const bounds = map.getBounds();
         const inView = points.filter((p) => bounds.contains([p.lat, p.lon]));
         return _filterByMinDistKm(inView, p => p.lat, p => p.lon, minDistKm);
@@ -10990,7 +11047,7 @@
         const product = _activeRtmaProduct();
         if (!region || !stream || !product) return;
 
-        const queryKey = `${region}|${stream}|${product}`;
+        const queryKey = `${region}|${stream}|${product}|${_rtmaPointsViewportKey()}`;
         const now = Date.now();
 
         if (!forceReload && _rtmaPointsKey === queryKey && _rtmaPointsAll.length) {
@@ -11015,6 +11072,7 @@
             _rtmaPointsInFlightKey = queryKey;
             const url = apiUrl(
                 `/api/data/rtma/points?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
+                + _rtmaPointsBoundsQuery()
             );
             const resp = await fetch(url);
             if (!resp.ok) {
@@ -11048,6 +11106,7 @@
         try {
             const url = apiUrl(
                 `/api/data/rtma/points?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
+                + _rtmaPointsBoundsQuery()
             );
             const resp = await fetch(url);
             if (!resp.ok) return;
@@ -11334,14 +11393,16 @@
         const region = frame.region || _activeRtmaRegion();
         const stream = frame.stream || _activeRtmaStream();
         const product = frame.product || _activeRtmaProduct();
-        const cacheKey = `${region}|${stream}|${product}|${frame.source_data_key || frame.frame_key}`;
+        const viewportKey = _rtmaPointsViewportKey();
+        const cacheKey = `${region}|${stream}|${product}|${frame.source_data_key || frame.frame_key}|${viewportKey}`;
         const existing = _rtmaScrubFrameCache.get(cacheKey);
         if (existing) return existing;
 
         const pointsUrl = apiUrl(
             `/api/data/rtma/points?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}` +
             `&product=${encodeURIComponent(product)}` +
-            (frame.source_data_key ? `&source_data_key=${encodeURIComponent(frame.source_data_key)}` : '')
+            (frame.source_data_key ? `&source_data_key=${encodeURIComponent(frame.source_data_key)}` : '') +
+            _rtmaPointsBoundsQuery()
         );
 
         // ── Try pre-rendered overlay first (instant — no GRIB parsing) ────────
@@ -11800,7 +11861,7 @@
     }
 
     function _setActivePreset(value) {
-        const btns = document.querySelectorAll('.wx-preset-btn');
+        const btns = document.querySelectorAll('.wx-preset-btn:not([data-lsr-hours])');
         btns.forEach((btn) => {
             btn.classList.toggle('active', btn.dataset.hours === value);
         });
@@ -12150,7 +12211,7 @@
     byId('archive-load-btn')?.addEventListener('click', loadArchive);
 
     // Preset buttons
-    document.querySelectorAll('.wx-preset-btn').forEach((btn) => {
+    document.querySelectorAll('.wx-preset-btn:not([data-lsr-hours])').forEach((btn) => {
         btn.addEventListener('click', () => {
             const hours = btn.dataset.hours;
             if (hours === 'custom') {
@@ -12473,17 +12534,23 @@
         if (!Number.isFinite(raw)) return;
         const clamped = Math.max(0.01, Math.min(1, raw));
         const primary = byId('weather-obs-density');
-        const rtma = byId('weather-rtma-obs-density');
         if (primary) primary.value = String(clamped);
-        if (rtma) rtma.value = String(clamped);
         _surfaceDensity = clamped;
         _updateObsDensityLabel();
         if (_surfaceStations?.length) {
             _renderSurfaceMarkers(_surfaceStations);
         }
+    }
+
+    function _setRtmaDensity(rawValue) {
+        const raw = parseFloat(String(rawValue));
+        if (!Number.isFinite(raw)) return;
+        _rtmaDensity = Math.max(0.01, Math.min(2, raw));
+        const slider = byId('weather-rtma-obs-density');
+        if (slider) slider.value = String(_rtmaDensity);
+        _updateObsDensityLabel();
         if (_isTypeEnabled('rtma')) {
-            const key = `${_activeRtmaRegion()}|${_activeRtmaStream()}|${_activeRtmaProduct()}`;
-            if (_rtmaPointsAll.length && _rtmaPointsKey === key) _renderRtmaPoints();
+            if (_rtmaPointsAll.length) _renderRtmaPoints();
             else _scheduleRtmaPointsLoad();
         }
     }
@@ -12495,19 +12562,23 @@
     }
 
     function _updateObsDensityLabel() {
-        const labels = [
-            document.querySelector('label[for="weather-obs-density"]'),
-            document.querySelector('label[for="weather-rtma-obs-density"]'),
-        ].filter(Boolean);
-        if (!labels.length) return;
         const zoom = map?.getZoom() ?? 5;
         const region = (byId('weather-region')?.value || '').toUpperCase();
-        const distKm = Math.round(_baseDistKm(zoom, region) / _surfaceDensity);
-        labels.forEach((label) => {
+        const surfaceLabel = document.querySelector('label[for="weather-obs-density"]');
+        const rtmaLabel = document.querySelector('label[for="weather-rtma-obs-density"]');
+        if (surfaceLabel) {
+            const distKm = Math.round(_baseDistKm(zoom, region) / _surfaceDensity);
+            const baseLabel = surfaceLabel.dataset.baseLabel || 'Station Density';
+            surfaceLabel.dataset.baseLabel = baseLabel;
+            surfaceLabel.textContent = `${baseLabel} (${distKm} km)`;
+        }
+        if (rtmaLabel) {
+            const distKm = Math.round(_rtmaBaseDistKm(zoom) / _rtmaDensity);
+            const label = rtmaLabel;
             const baseLabel = label.dataset.baseLabel || 'Station Density';
             label.dataset.baseLabel = baseLabel;
             label.textContent = `${baseLabel} (${distKm} km)`;
-        });
+        }
     }
 
     function _escapeHtml(text) {
@@ -12926,7 +12997,7 @@
         _setObsDensity(e.target.value);
     });
     byId('weather-rtma-obs-density')?.addEventListener('input', (e) => {
-        _setObsDensity(e.target.value);
+        _setRtmaDensity(e.target.value);
     });
     byId('weather-rtma-gradient-opacity')?.addEventListener('input', (e) => {
         rtmaGradientOpacity = parseFloat(e.target.value);
@@ -12934,6 +13005,44 @@
     });
     byId('weather-refresh-alerts')?.addEventListener('click', () => {
         _alertsEngine?.loadLiveAlerts();
+        _alertsEngine?.loadLocalStormReports();
+    });
+
+    const _lsrAllEl = byId('weather-lsr-all');
+    function _syncLsrMasterToggle() {
+        const cats = [...document.querySelectorAll('.weather-lsr-category')];
+        const n = cats.filter((c) => c.checked).length;
+        if (_lsrAllEl) {
+            _lsrAllEl.indeterminate = n > 0 && n < cats.length;
+            _lsrAllEl.checked = n === cats.length;
+        }
+    }
+    document.querySelectorAll('.weather-lsr-category').forEach((el) => {
+        el.addEventListener('change', () => {
+            _syncLsrMasterToggle();
+            _alertsEngine?.loadLocalStormReports();
+        });
+    });
+    _lsrAllEl?.addEventListener('change', () => {
+        const checked = _lsrAllEl.checked;
+        document.querySelectorAll('.weather-lsr-category').forEach((el) => { el.checked = checked; });
+        _alertsEngine?.loadLocalStormReports();
+    });
+
+    function _getLsrHours() {
+        return parseInt(
+            document.querySelector('#weather-lsr-hours-row [data-lsr-hours].active')
+                ?.dataset.lsrHours ?? '24',
+            10,
+        );
+    }
+    document.querySelectorAll('#weather-lsr-hours-row [data-lsr-hours]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#weather-lsr-hours-row [data-lsr-hours]')
+                .forEach((b) => b.classList.remove('active'));
+            btn.classList.add('active');
+            _alertsEngine?.loadLocalStormReports();
+        });
     });
 
     byId('wx-stormtrack-start')?.addEventListener('click', () => {
@@ -12999,6 +13108,9 @@
         if (!document.hidden && !_archiveMode && !_rtmaScrubFrames.length && !_mrmsScrubFrames.length) {
             if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length) {
                 _alertsEngine?.loadLiveAlerts();
+            }
+            if (_isTypeEnabled('alerts') && document.querySelectorAll('.weather-lsr-category:checked').length > 0) {
+                _alertsEngine?.loadLocalStormReports({ silentStatus: true });
             }
             if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) {
                 const supplemental = _spcSupplementalSelections();
@@ -13154,6 +13266,9 @@
         if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0 && _allAlertFeatures.length) {
             buildAlertsLegend(_allAlertFeatures);
         }
+        if (_isTypeEnabled('alerts') && document.querySelectorAll('.weather-lsr-category:checked').length > 0) {
+            _alertsEngine?.loadLocalStormReports({ silentStatus: true });
+        }
         if (
             _isTypeEnabled('spc')
             && byId('weather-show-spc')?.checked
@@ -13161,6 +13276,13 @@
             && _spcWatchFeatures.length
         ) {
             buildSpcWatchesLegend();
+        }
+        if (_isTypeEnabled('rtma') && byId('weather-rtma-show-values')?.checked) {
+            if (_rtmaScrubFrames.length) {
+                _renderRtmaScrubFrame(_rtmaScrubFrameIndex);
+            } else {
+                _scheduleRtmaPointsLoad(0, true);
+            }
         }
         if (_satelliteScrubMode && _satelliteFrames.length && _isTypeEnabled('satellite')) {
             _scheduleSatelliteTilePrefetch(350);
@@ -13196,6 +13318,12 @@
         }
 
         _setRtmaScrubberStatus(`${_satelliteFrameIndex + 1} / ${_satelliteFrames.length} frames.`);
+    });
+
+    map.on('zoomend', () => {
+        if (_isTypeEnabled('alerts') && document.querySelectorAll('.weather-lsr-category:checked').length > 0) {
+            _alertsEngine?.rerenderLsrAtZoom(map.getZoom());
+        }
     });
 
     // Close active alerts pager when the user pans/zooms the map.
@@ -13278,6 +13406,12 @@
         document.querySelectorAll('.mrms-product-check').forEach((cb) => { cb.checked = cb.defaultChecked; });
         // Same for RTMA stream/product checkboxes.
         document.querySelectorAll('.weather-rtma-stream, .weather-rtma-product').forEach((cb) => { cb.checked = cb.defaultChecked; });
+        // Surface startup also depends on the default product being active.
+        // Restore both product and gradient controls before the first refresh
+        // so browser-restored form state cannot suppress initial initialization.
+        document.querySelectorAll('.weather-surface-product, .weather-surface-gradient').forEach((cb) => {
+            cb.checked = cb.defaultChecked;
+        });
         if (_standaloneProductType === 'spc') {
             _resetTabControlsToDefaults('spc', { silent: true });
         }
@@ -13298,9 +13432,10 @@
         _citiesDensity = _readCitiesDensity();
         _updateCitiesDensityLabel();
         _surfaceDensity = _readObsDensity();
-        if (byId('weather-rtma-obs-density')) {
-            byId('weather-rtma-obs-density').value = String(_surfaceDensity);
-        }
+        _rtmaDensity = Math.max(
+            0.01,
+            Math.min(2, parseFloat(byId('weather-rtma-obs-density')?.value || '0.25'))
+        );
         _updateObsDensityLabel();
         _gradientBlurScale = _readGradientBlurScale();
         _updateGradientBlurLabel();
@@ -13323,6 +13458,13 @@
         }
         _updateSpcReportFilterState();
         refreshActiveLayers();
+        if (
+            _standaloneProductType === 'rtma'
+            && _activeRtmaStream()
+            && _activeRtmaProduct()
+        ) {
+            loadRtmaScrubberFrames();
+        }
         if (_standaloneProductType === 'satellite' && !_satelliteScrubMode) {
             _setSatelliteLookbackHours(_recommendedSatelliteLookbackHours());
             _satelliteEngine?.loadScrubberFrames();
@@ -13575,6 +13717,7 @@
             buildAlertsLayer: _buildAlertsLayer,
             buildAlertsLegend,
             buildAlertsUrl: _buildAlertsUrl,
+            escapeHtml: _escapeHtml,
             fetchFn: (url, options) => fetch(url, options),
             filterAlertsByCategories: _filterAlertsByCategories,
             leaflet: L,
@@ -13589,11 +13732,26 @@
             }),
             getAlertsOpacity: () => alertsOpacity,
             getCheckedCategories: _getCheckedAlertCategories,
+            getZoom: () => map.getZoom(),
+            getMapBounds: () => {
+                const bounds = map.getBounds();
+                return {
+                    west: bounds.getWest(),
+                    east: bounds.getEast(),
+                    south: bounds.getSouth(),
+                    north: bounds.getNorth(),
+                };
+            },
             getRegionValue: () => byId('weather-region')?.value,
             isCurrentRequestSeq: (requestSeq) => requestSeq === _alertsRequestSeq,
             isArchiveMode: () => _archiveMode,
             isStormTrackDrawMode: () => _stormTrackDrawMode,
             isTypeEnabled: _isTypeEnabled,
+            isLsrEnabled: () => document.querySelectorAll('.weather-lsr-category:checked').length > 0,
+            getCheckedLsrCategories: () => new Set(
+                [...document.querySelectorAll('.weather-lsr-category:checked')].map((el) => el.value)
+            ),
+            getLsrHours: _getLsrHours,
             hasMrmsScrubFrames: () => _mrmsScrubFrames.length > 0,
             hasRtmaScrubFrames: () => _rtmaScrubFrames.length > 0,
             makeThrottledHoverHandler: _makeThrottledHoverHandler,
@@ -13628,6 +13786,11 @@
                 const countEl = byId('weather-alerts-count');
                 if (countEl) countEl.textContent = `${count} active alert(s)`;
             },
+            setLsrCount: (count) => {
+                const countEl = byId('weather-alerts-lsr-count');
+                if (countEl) countEl.textContent = count > 0 ? `(${count})` : '(0)';
+            },
+            setLsrLegend,
             setArchiveProgress: _setArchiveProgress,
             setRegionAlertLocationState: _setRegionAlertLocationState,
             setLegend,
@@ -13640,6 +13803,7 @@
             staleNoteForTimestamp: _staleNoteForTimestamp,
             stripInactiveAlerts: _stripInactiveAlerts,
             swapAlertsLayer: _swapAlertsLayer,
+            swapLsrLayer: _swapLocalStormReportsLayer,
         });
         if (alertsContext && _alertsEngineFactory?.createAlertsEngine) {
             _alertsEngine = _alertsEngineFactory.createAlertsEngine(alertsContext);
@@ -14235,8 +14399,12 @@
         if (document.hidden) return;
         if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length) return;
         if (!_isTypeEnabled('alerts')) return;
-        if (!_getCheckedAlertCategories().length) return;
-        _alertsEngine?.loadLiveAlerts();
+        if (_getCheckedAlertCategories().length) {
+            _alertsEngine?.loadLiveAlerts();
+        }
+        if (document.querySelectorAll('.weather-lsr-category:checked').length > 0) {
+            _alertsEngine?.loadLocalStormReports({ silentStatus: true });
+        }
     }, ALERTS_AUTO_REFRESH_MS);
 
     // Keep active SPC MD/watch overlays current so newly issued items appear

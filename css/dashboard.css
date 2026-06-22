@@ -888,6 +888,20 @@ body.wx-standalone-product .weather-header-right {
     width: 100%;
 }
 
+.wx-alert-observed-group {
+    margin-top: 12px;
+    padding: 10px;
+    border: 1px solid #2563eb;
+    border-left: 4px solid #38bdf8;
+    border-radius: 6px;
+    background: rgba(14, 116, 144, 0.12);
+}
+
+.wx-alert-observed-group h4 {
+    margin: 0 0 6px;
+    color: #67e8f9;
+}
+
 #weather-alerts-opts>.wx-check-row,
 #weather-alerts-filter-options>.wx-check-row,
 #wx-section-alerts .wx-block>.wx-check-row {
@@ -1286,6 +1300,12 @@ body.wx-standalone-product .weather-header-right {
     color: var(--wx-muted);
 }
 
+.wx-divider {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    margin: 8px 0;
+}
+
 .wx-alert-list {
     margin-top: 6px;
     max-height: 140px;
@@ -1558,7 +1578,7 @@ body.wx-standalone-product .weather-header-right {
 
 .legend-flow {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 4px 12px;
     width: 100%;
 }

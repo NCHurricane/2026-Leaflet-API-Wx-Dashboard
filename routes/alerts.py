@@ -4,7 +4,11 @@ from typing import Optional
 
 from fastapi import APIRouter
 
-from services.alerts_service import get_alert_polygons, get_alerts_data
+from services.alerts_service import (
+    get_alert_polygons,
+    get_alerts_data,
+    get_local_storm_reports,
+)
 
 router = APIRouter()
 
@@ -27,6 +31,23 @@ def get_data_alerts(
         east=east,
         south=south,
         north=north,
+    )
+
+
+@router.get("/api/data/alerts/lsr")
+def get_data_local_storm_reports(
+    west: Optional[float] = None,
+    east: Optional[float] = None,
+    south: Optional[float] = None,
+    north: Optional[float] = None,
+    hours: Optional[int] = None,
+):
+    return get_local_storm_reports(
+        west=west,
+        east=east,
+        south=south,
+        north=north,
+        hours=hours,
     )
 
 

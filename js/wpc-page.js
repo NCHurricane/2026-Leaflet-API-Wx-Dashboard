@@ -388,7 +388,7 @@
 
     window.NCHProductPageShell?.registerProductPageEntry('wpc', {
         label: 'WPC',
-        title: 'WPC Excessive Rainfall — NCHurricane Dashboard',
+        title: 'WPC - NCHurricane Dashboard',
         controller: window.NCHWpcPage,
     });
 }());

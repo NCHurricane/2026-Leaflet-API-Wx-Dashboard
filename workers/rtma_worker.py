@@ -33,6 +33,7 @@ if project_root not in sys.path:
 
 from config.geo_config import STATE_BOUNDS
 from config.rtma_config import (
+    RTMA_CITIES_FILE,
     RTMA_STREAMS,
     RTMA_UI_PRODUCTS,
     RTMA_WORKER_REGIONS,
@@ -211,10 +212,10 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cache_root = os.path.join(repo_root, "cache")
-    cities_path = os.path.join(repo_root, "data", "us-cities.json")
+    cities_path = os.path.join(repo_root, "data", RTMA_CITIES_FILE)
 
     if not os.path.exists(cities_path):
-        print("[rtma_worker] Missing data/us-cities.json - aborting")
+        print(f"[rtma_worker] Missing data/{RTMA_CITIES_FILE} - aborting")
         return
 
     all_product_keys = [p for p in _PRELOAD_PRODUCTS if p in PRODUCTS]
@@ -298,6 +299,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                             region,
                             stream,
                             p,
+                            cities_path,
                             source_data_key=source.data_key,
                         )
                     ]

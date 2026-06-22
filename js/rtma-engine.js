@@ -105,9 +105,16 @@
             }
 
             try {
+                const bounds = context.getMapBounds();
+                const boundsQuery =
+                    `&south=${Number(bounds.south).toFixed(4)}` +
+                    `&west=${Number(bounds.west).toFixed(4)}` +
+                    `&north=${Number(bounds.north).toFixed(4)}` +
+                    `&east=${Number(bounds.east).toFixed(4)}`;
                 const url = context.apiUrl(
                     `/api/data/rtma/points?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}` +
-                    (pointsSourceDataKey ? `&source_data_key=${encodeURIComponent(pointsSourceDataKey)}` : '')
+                    (pointsSourceDataKey ? `&source_data_key=${encodeURIComponent(pointsSourceDataKey)}` : '') +
+                    boundsQuery
                 );
                 const resp = await fetch(url);
                 if (!resp.ok) {

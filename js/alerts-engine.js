@@ -13,12 +13,261 @@
         const hasRtmaScrubFrames = requireContextFunction(context, 'hasRtmaScrubFrames');
         const isTypeEnabled = requireContextFunction(context, 'isTypeEnabled');
         const getCheckedCategories = requireContextFunction(context, 'getCheckedCategories');
+        const isLsrEnabled = requireContextFunction(context, 'isLsrEnabled');
+        let lsrRequestSeq = 0;
+        let _lsrCurrentFeatures = null;
 
         function canApplyLiveResponse() {
             return !isArchiveMode()
                 && !hasRtmaScrubFrames()
                 && isTypeEnabled('alerts')
                 && getCheckedCategories().length > 0;
+        }
+
+        const LSR_CATEGORY_COLORS = {
+            tornado: '#ef4444',
+            hail: '#22c55e',
+            wind: '#f59e0b',
+            flood: '#1d4ed8',
+            rain: '#38bdf8',
+            winter: '#a78bfa',
+            fire: '#f97316',
+            heat: '#fbbf24',
+            other: '#94a3b8',
+        };
+
+        const LSR_CATEGORY_FA_ICON = {
+            tornado: 'fa-solid fa-tornado',
+            hail: 'fa-solid fa-caret-up',
+            wind: 'fa-solid fa-wind',
+            flood: 'fa-solid fa-house-flood-water',
+            rain: 'fa-solid fa-cloud-showers-water',
+            winter: 'fa-solid fa-snowflake',
+            fire: 'fa-solid fa-fire',
+            heat: 'fa-solid fa-temperature-arrow-up',
+        };
+
+        function lsrCategory(eventText) {
+            const event = String(eventText || '').toLowerCase();
+            if (event.includes('torn') || event.includes('funnel') || event.includes('waterspout')) return 'tornado';
+            if (event.includes('hail')) return 'hail';
+            if (event.includes('wind') || event.includes('wnd') || event.includes('downburst')) return 'wind';
+            // winter before flood/rain to catch "freezing rain", "ice storm" etc.
+            if (event.includes('snow') || event.includes('blizzard') || event.includes('ice') || event.includes('sleet') || event.includes('freez') || event.includes('winter')) return 'winter';
+            if (event.includes('flood')) return 'flood';
+            if (event.includes('rain')) return 'rain';
+            if (event.includes('fire') || event.includes('smoke') || event.includes('wildfire')) return 'fire';
+            if (event.includes('heat')) return 'heat';
+            return 'other';
+        }
+
+        function lsrColor(eventText) {
+            return LSR_CATEGORY_COLORS[lsrCategory(eventText)];
+        }
+
+        function lsrSizeAtZoom(zoom) {
+            const extra = Math.max(0, (zoom ?? 7) - 7);
+            return Math.round(16 * Math.pow(1.1, extra));
+        }
+
+        function lsrMarker(feature, latlng, leaflet, zoom) {
+            const cat = lsrCategory(feature?.properties?.event);
+            const color = LSR_CATEGORY_COLORS[cat] || LSR_CATEGORY_COLORS.other;
+            const faClass = LSR_CATEGORY_FA_ICON[cat];
+            const size = lsrSizeAtZoom(zoom);
+            if (faClass) {
+                const half = Math.round(size / 2);
+                return leaflet.marker(latlng, {
+                    icon: leaflet.divIcon({
+                        className: '',
+                        html: `<i class="${faClass}" style="color:${color};font-size:${size}px;-webkit-text-stroke:0.5px #08111d;text-shadow:0 0 3px rgba(0,0,0,0.7);"></i>`,
+                        iconSize: [size, size],
+                        iconAnchor: [half, half],
+                        popupAnchor: [0, -(half + 2)],
+                    }),
+                });
+            }
+            const radius = Math.round(6 * Math.pow(1.1, Math.max(0, (zoom ?? 7) - 7)));
+            return leaflet.circleMarker(latlng, {
+                radius,
+                color: '#08111d',
+                weight: 1.5,
+                fillColor: color,
+                fillOpacity: 0.95,
+                opacity: 1,
+            });
+        }
+
+        function lsrTooltip(feature) {
+            const props = feature?.properties || {};
+            const esc = context.escapeHtml;
+            const event = esc(props.event || 'Local Storm Report');
+            const mag = props.magnitude_label ? ` (${esc(props.magnitude_label)})` : '';
+            const place = [props.location, props.state].filter(Boolean).map(esc).join(', ');
+            const when = props.time
+                ? esc(new Date(props.time).toLocaleString(undefined, {
+                    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                }))
+                : '';
+            const office = props.wfo_id ? esc(props.wfo_id) : '';
+            const meta = [when, office].filter(Boolean).join(' · ');
+            return `<strong>${event}${mag}</strong>${place ? `<br>${place}` : ''}${meta ? `<br>${meta}` : ''}`;
+        }
+
+        const LSR_CATEGORY_LABELS = {
+            tornado: 'Tornado / Waterspout',
+            hail: 'Hail',
+            wind: 'Wind',
+            flood: 'Flash Flood / Flood',
+            rain: 'Heavy Rain',
+            winter: 'Winter Weather',
+            fire: 'Fire / Smoke',
+            heat: 'Heat',
+            other: 'Other',
+        };
+
+        function buildLsrLegendHtml(checkedCategories) {
+            const rows = Object.entries(LSR_CATEGORY_LABELS)
+                .filter(([cat]) => checkedCategories.has(cat))
+                .map(([cat, label]) => {
+                    const color = LSR_CATEGORY_COLORS[cat];
+                    const faClass = LSR_CATEGORY_FA_ICON[cat];
+                    if (faClass) {
+                        return `<div class="legend-item"><i class="legend-swatch is-icon ${faClass}" style="color:${color};font-size:14px;text-align:center;"></i><span class="legend-text">${label}</span></div>`;
+                    }
+                    return `<div class="legend-item"><span class="legend-swatch" style="background:${color}"></span><span class="legend-text">${label}</span></div>`;
+                })
+                .join('');
+            return `<h4 class="legend-title">Local Storm Reports</h4><div class="legend-flow">${rows}</div>`;
+        }
+
+        function buildLsrLayer(features, leaflet, zoom) {
+            return leaflet.geoJSON(
+                { type: 'FeatureCollection', features },
+                {
+                    pointToLayer: (feature, latlng) => lsrMarker(feature, latlng, leaflet, zoom),
+                    onEachFeature: (feature, marker) => {
+                        marker.bindPopup(lsrPopup(feature));
+                        marker.bindTooltip(lsrTooltip(feature), {
+                            sticky: true,
+                            opacity: 0.9,
+                            className: 'wx-alert-hover-tip',
+                        });
+                    },
+                },
+            );
+        }
+
+        function rerenderLsrAtZoom(zoom) {
+            if (!_lsrCurrentFeatures) return;
+            const { leaflet, swapLsrLayer } = context;
+            if (!leaflet?.geoJSON || typeof swapLsrLayer !== 'function') return;
+            swapLsrLayer(buildLsrLayer(_lsrCurrentFeatures, leaflet, zoom));
+        }
+
+        function lsrPopup(feature) {
+            const props = feature?.properties || {};
+            const escapeHtml = context.escapeHtml;
+            const event = escapeHtml(props.event || 'Local Storm Report');
+            const magnitude = props.magnitude_label
+                ? ` (${escapeHtml(props.magnitude_label)})`
+                : '';
+            const place = [props.location, props.state].filter(Boolean).join(', ');
+            const when = props.time
+                ? `<br><em>Time:</em> ${escapeHtml(new Date(props.time).toLocaleString())}`
+                : '';
+            const where = place ? `<br><em>Location:</em> ${escapeHtml(place)}` : '';
+            const office = props.wfo_id
+                ? `<br><em>Office:</em> ${escapeHtml(props.wfo_id)}`
+                : '';
+            const remarks = props.remarks
+                ? `<br><small>${escapeHtml(props.remarks)}</small>`
+                : '';
+            return `<strong>${event}${magnitude}</strong>${when}${where}${office}${remarks}`;
+        }
+
+        async function loadLocalStormReports(options = {}) {
+            const {
+                apiUrl,
+                escapeHtml,
+                fetchFn = fetch,
+                getCheckedLsrCategories,
+                getMapBounds,
+                leaflet,
+                setLsrCount,
+                setStatus,
+                swapLsrLayer,
+            } = context;
+            [
+                apiUrl,
+                escapeHtml,
+                getCheckedLsrCategories,
+                getMapBounds,
+                setLsrCount,
+                setStatus,
+                swapLsrLayer,
+            ].forEach((fn) => {
+                if (typeof fn !== 'function') throw new Error('Alerts LSR context is incomplete.');
+            });
+            if (!leaflet?.geoJSON || !leaflet?.circleMarker) {
+                throw new Error('Alerts LSR Leaflet context is incomplete.');
+            }
+
+            const checkedCategories = getCheckedLsrCategories();
+            if (!isTypeEnabled('alerts') || !isLsrEnabled() || !checkedCategories.size) {
+                lsrRequestSeq += 1;
+                _lsrCurrentFeatures = null;
+                swapLsrLayer(null);
+                setLsrCount(0);
+                context.setLsrLegend?.(null);
+                return;
+            }
+
+            const requestSeq = ++lsrRequestSeq;
+            const bounds = getMapBounds();
+            const hours = context.getLsrHours?.() ?? 24;
+            const params = new URLSearchParams({
+                west: Number(bounds.west).toFixed(4),
+                east: Number(bounds.east).toFixed(4),
+                south: Number(bounds.south).toFixed(4),
+                north: Number(bounds.north).toFixed(4),
+                hours: String(hours),
+            });
+            if (!options.silentStatus) setStatus('Loading Local Storm Reports...');
+
+            try {
+                const resp = await fetchFn(apiUrl(`/api/data/alerts/lsr?${params.toString()}`), {
+                    cache: 'no-store',
+                });
+                if (!resp.ok) {
+                    const payload = await resp.json().catch(() => ({}));
+                    throw new Error(payload.detail || `HTTP ${resp.status}`);
+                }
+                const data = await resp.json();
+                if (
+                    requestSeq !== lsrRequestSeq
+                    || !isTypeEnabled('alerts')
+                    || !isLsrEnabled()
+                ) return;
+
+                const allFeatures = Array.isArray(data.features) ? data.features : [];
+                const features = allFeatures.filter(
+                    (f) => checkedCategories.has(lsrCategory(f?.properties?.event))
+                );
+                _lsrCurrentFeatures = features;
+                const zoom = context.getZoom?.() ?? 7;
+                swapLsrLayer(buildLsrLayer(features, leaflet, zoom));
+                setLsrCount(features.length);
+                context.setLsrLegend?.(buildLsrLegendHtml(checkedCategories));
+                if (!options.silentStatus) {
+                    const stale = data._stale ? ' (cached)' : '';
+                    setStatus(`${features.length} Local Storm Report(s) in view${stale}.`);
+                }
+            } catch (err) {
+                if (requestSeq !== lsrRequestSeq) return;
+                console.error('[alerts lsr] Load error:', err);
+                if (!options.silentStatus) setStatus(`Local Storm Reports error: ${err.message}`);
+            }
         }
 
         async function loadLiveAlerts(options = {}) {
@@ -487,7 +736,9 @@
             canApplyLiveResponse,
             loadArchiveAlerts,
             loadLiveAlerts,
+            loadLocalStormReports,
             refreshDisplayLayer,
+            rerenderLsrAtZoom,
         });
     }
 

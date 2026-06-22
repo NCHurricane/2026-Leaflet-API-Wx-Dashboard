@@ -5,8 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
+import urllib.parse
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -20,6 +25,160 @@ from config.alerts_config import (
     HAZARD_CATEGORIES,
     HAZARD_CATEGORY_ALIASES,
 )
+
+_LSR_QUERY_URL = (
+    "https://mapservices.weather.noaa.gov/vector/rest/services/"
+    "obs/nws_local_storm_reports/MapServer/0/query"
+)
+_LSR_CACHE_TTL_SECONDS = 5 * 60
+_LSR_CACHE_MAX_ENTRIES = 24
+_LSR_CACHE: dict[tuple, tuple[float, dict]] = {}
+_LSR_CACHE_LOCK = Lock()
+
+
+def _lsr_iso_time(value) -> Optional[str]:
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value / 1000.0, tz=timezone.utc).isoformat()
+        except (ValueError, OSError, OverflowError):
+            return None
+    text = str(value or "").strip()
+    return text or None
+
+
+def _normalize_lsr_feature(feature: dict) -> Optional[dict]:
+    geometry = feature.get("geometry")
+    if not geometry:
+        return None
+    props = feature.get("properties") or {}
+    object_id = props.get("objectid")
+    magnitude = str(props.get("magnitude") or "").strip()
+    units = str(props.get("units") or "").strip()
+    return {
+        "type": "Feature",
+        "id": f"lsr-{object_id}" if object_id is not None else None,
+        "geometry": geometry,
+        "properties": {
+            "event": str(props.get("descript") or "Local Storm Report").strip(),
+            "time": _lsr_iso_time(props.get("lsr_validtime"))
+            or str(props.get("valid_time") or "").strip()
+            or None,
+            "location": str(props.get("loc_desc") or "").strip(),
+            "state": str(props.get("state") or "").strip(),
+            "magnitude": magnitude,
+            "units": units,
+            "magnitude_label": " ".join(part for part in (magnitude, units) if part),
+            "remarks": str(props.get("remarks") or "").strip(),
+            "wfo_id": str(props.get("wfo_id") or "").strip(),
+            "wfo": str(props.get("wfo") or "").strip(),
+            "source": "NOAA/NWS Local Storm Reports",
+        },
+    }
+
+
+def get_local_storm_reports(
+    *,
+    west: Optional[float] = None,
+    east: Optional[float] = None,
+    south: Optional[float] = None,
+    north: Optional[float] = None,
+    hours: Optional[int] = None,
+) -> dict:
+    bounds = None
+    if None not in {west, east, south, north}:
+        try:
+            w, e = sorted((float(west), float(east)))
+            s, n = sorted((float(south), float(north)))
+            bounds = (w, e, s, n)
+        except (TypeError, ValueError):
+            bounds = None
+
+    window_hours = max(1, min(int(hours), 72)) if hours is not None else 24
+    bounds_part = tuple(round(value, 2) for value in bounds) if bounds else ("national",)
+    cache_key = (*bounds_part, window_hours)
+    now = time.monotonic()
+    with _LSR_CACHE_LOCK:
+        cached = _LSR_CACHE.get(cache_key)
+        if cached and now - cached[0] < _LSR_CACHE_TTL_SECONDS:
+            return cached[1]
+
+    cutoff_ms = int(
+        (datetime.now(timezone.utc) - timedelta(hours=window_hours)).timestamp() * 1000
+    )
+    features: list[dict] = []
+    offset = 0
+    page_size = 1000
+    while True:
+        params = {
+            "where": "1=1",
+            "outFields": (
+                "objectid,wfo_id,wfo,lsr_validtime,descript,loc_desc,state,"
+                "magnitude,units,remarks,valid_time"
+            ),
+            "returnGeometry": "true",
+            "outSR": "4326",
+            "resultOffset": str(offset),
+            "resultRecordCount": str(page_size),
+            "f": "geojson",
+        }
+        if bounds:
+            w, e, s, n = bounds
+            params.update(
+                {
+                    "geometry": f"{w},{s},{e},{n}",
+                    "geometryType": "esriGeometryEnvelope",
+                    "inSR": "4326",
+                    "spatialRel": "esriSpatialRelIntersects",
+                }
+            )
+
+        req = urllib.request.Request(
+            f"{_LSR_QUERY_URL}?{urllib.parse.urlencode(params)}",
+            headers={"User-Agent": "NCHurricane Dashboard/2026 (+https://nchurricane.com)"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=20) as response:
+                page = json.load(response)
+        except Exception as exc:
+            if cached:
+                stale_payload = dict(cached[1])
+                stale_payload["_stale"] = True
+                stale_payload["_error"] = str(exc)
+                return stale_payload
+            raise HTTPException(
+                status_code=503,
+                detail=f"NOAA Local Storm Reports unavailable: {exc}",
+            )
+
+        page_features = page.get("features") or []
+        features.extend(page_features)
+        if len(page_features) < page_size:
+            break
+        offset += len(page_features)
+        if offset >= 10000:
+            break
+
+    normalized: list[dict] = []
+    for feature in features:
+        valid_ms = (feature.get("properties") or {}).get("lsr_validtime")
+        if isinstance(valid_ms, (int, float)) and valid_ms < cutoff_ms:
+            continue
+        if (n := _normalize_lsr_feature(feature)) is not None:
+            normalized.append(n)
+    payload = {
+        "type": "FeatureCollection",
+        "features": normalized,
+        "count": len(normalized),
+        "_source": "NOAA/NWS Local Storm Reports MapServer",
+        "_updated": datetime.now(timezone.utc).isoformat(),
+        "_window_hours": window_hours,
+    }
+    with _LSR_CACHE_LOCK:
+        if len(_LSR_CACHE) >= _LSR_CACHE_MAX_ENTRIES:
+            oldest_key = min(_LSR_CACHE, key=lambda key: _LSR_CACHE[key][0])
+            _LSR_CACHE.pop(oldest_key, None)
+        _LSR_CACHE[cache_key] = (now, payload)
+    return payload
 
 
 def enrich_alert_features_geometry(features: list[dict]) -> None:
