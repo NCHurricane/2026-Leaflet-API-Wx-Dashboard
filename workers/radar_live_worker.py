@@ -123,21 +123,21 @@ def _parse_dt_from_filename(path: Path) -> datetime | None:
 
 # Per-product maximum range (km) for MetPy-decoded Level III products, used to
 # compute gate spacing from the decoded gate count. Sourced from MetPy's
-# prod_spec_map (metpy/io/nexrad.py).
+# prod_spec_map (metpy/io/nexrad.py). Only products Py-ART cannot read are here;
+# precipitation rate (DPR/176) and storm-total accumulation (DTA/172) are read
+# natively by Py-ART and do not need the MetPy fallback.
 _METPY_PRODUCT_MAX_RANGE_KM = {
     134: 460.0,  # High Resolution VIL (DVL)
     135: 345.0,  # Enhanced Echo Tops (EET)
-    172: 230.0,  # Digital Storm Total Accumulation (NRR equivalent)
-    176: 230.0,  # Digital Instantaneous Precipitation Rate (DPR)
 }
 
 
 def _read_level3_with_metpy(file_path: str):
     """Decode a Level III product with MetPy and build a Py-ART Radar object.
 
-    Used for digital products Py-ART cannot read natively (VIL, Echo Tops,
-    storm-total precip). MetPy's product mappers apply the documented
-    scale/offset calibration to convert raw byte codes to physical values.
+    Used for digital products Py-ART cannot read natively (VIL, Echo Tops).
+    MetPy's product mappers apply the documented scale/offset calibration to
+    convert raw codes to physical values.
     """
     import numpy as np
     import pyart
@@ -157,8 +157,10 @@ def _read_level3_with_metpy(file_path: str):
     data = np.ma.masked_invalid(np.asarray(mapped, dtype=float))
 
     nrays, ngates = data.shape
-    max_range_km = _METPY_PRODUCT_MAX_RANGE_KM.get(prod_code, 230.0)
+    max_range_km = _METPY_PRODUCT_MAX_RANGE_KM[prod_code]
     gate_width_m = (max_range_km * 1000.0) / ngates
+    first_gate_m = 0.0
+    azimuths = np.asarray(block["start_az"], dtype=float)
 
     radar = pyart.testing.make_empty_ppi_radar(ngates, nrays, 1)
     # Set the volume time so frame timestamps are correct; otherwise Py-ART's
@@ -169,8 +171,8 @@ def _read_level3_with_metpy(file_path: str):
             "%Y-%m-%dT%H:%M:%SZ"
         )
         radar.time["data"] = np.zeros(nrays, dtype=float)
-    radar.range["data"] = np.arange(ngates, dtype=float) * gate_width_m
-    radar.azimuth["data"] = np.asarray(block["start_az"], dtype=float)
+    radar.range["data"] = first_gate_m + np.arange(ngates, dtype=float) * gate_width_m
+    radar.azimuth["data"] = azimuths
     radar.elevation["data"] = np.zeros(nrays, dtype=float)
     radar.fixed_angle["data"] = np.array([0.0])
     radar.latitude["data"] = np.array([float(level3.lat)])
