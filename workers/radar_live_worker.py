@@ -121,11 +121,88 @@ def _parse_dt_from_filename(path: Path) -> datetime | None:
         return None
 
 
+# Per-product maximum range (km) for MetPy-decoded Level III products, used to
+# compute gate spacing from the decoded gate count. Sourced from MetPy's
+# prod_spec_map (metpy/io/nexrad.py).
+_METPY_PRODUCT_MAX_RANGE_KM = {
+    134: 460.0,  # High Resolution VIL (DVL)
+    135: 345.0,  # Enhanced Echo Tops (EET)
+    172: 230.0,  # Digital Storm Total Accumulation (NRR equivalent)
+    176: 230.0,  # Digital Instantaneous Precipitation Rate (DPR)
+}
+
+
+def _read_level3_with_metpy(file_path: str):
+    """Decode a Level III product with MetPy and build a Py-ART Radar object.
+
+    Used for digital products Py-ART cannot read natively (VIL, Echo Tops,
+    storm-total precip). MetPy's product mappers apply the documented
+    scale/offset calibration to convert raw byte codes to physical values.
+    """
+    import numpy as np
+    import pyart
+    from metpy.io import Level3File
+
+    level3 = Level3File(file_path)
+    prod_code = int(getattr(level3.prod_desc, "prod_code", 0))
+    if prod_code not in _METPY_PRODUCT_MAX_RANGE_KM:
+        raise ValueError(
+            f"MetPy decode unsupported for Level III product {prod_code}"
+        )
+    block = level3.sym_block[0][0]
+    raw = np.array(block["data"])
+    mapped = level3.map_data(raw)
+    if isinstance(mapped, tuple):  # Echo Tops returns (data, topped_flag)
+        mapped = mapped[0]
+    data = np.ma.masked_invalid(np.asarray(mapped, dtype=float))
+
+    nrays, ngates = data.shape
+    max_range_km = _METPY_PRODUCT_MAX_RANGE_KM.get(prod_code, 230.0)
+    gate_width_m = (max_range_km * 1000.0) / ngates
+
+    radar = pyart.testing.make_empty_ppi_radar(ngates, nrays, 1)
+    # Set the volume time so frame timestamps are correct; otherwise Py-ART's
+    # empty-radar default (1989-01-01) makes every frame collide on one key.
+    vol_time = level3.metadata.get("vol_time") or level3.metadata.get("prod_time")
+    if vol_time is not None:
+        radar.time["units"] = "seconds since " + vol_time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        radar.time["data"] = np.zeros(nrays, dtype=float)
+    radar.range["data"] = np.arange(ngates, dtype=float) * gate_width_m
+    radar.azimuth["data"] = np.asarray(block["start_az"], dtype=float)
+    radar.elevation["data"] = np.zeros(nrays, dtype=float)
+    radar.fixed_angle["data"] = np.array([0.0])
+    radar.latitude["data"] = np.array([float(level3.lat)])
+    radar.longitude["data"] = np.array([float(level3.lon)])
+    radar.altitude["data"] = np.array([float(getattr(level3, "height", 0.0) or 0.0)])
+    radar.sweep_start_ray_index["data"] = np.array([0])
+    radar.sweep_end_ray_index["data"] = np.array([nrays - 1])
+    radar.fields["reflectivity"] = {
+        "data": data,
+        "units": "",
+        "long_name": f"Level III product {prod_code}",
+    }
+    return radar
+
+
+def _pyart_radar_has_fields(radar) -> bool:
+    """True when Py-ART produced at least one usable data field.
+
+    Py-ART can "succeed" on some digital Level III products yet return a radar
+    with no fields, in which case the MetPy decoder should be used instead.
+    """
+    return bool(getattr(radar, "fields", None))
+
+
 def _read_level3_file(file_path: str):
     import pyart
 
     try:
-        return pyart.io.read_nexrad_level3(file_path)
+        radar = pyart.io.read_nexrad_level3(file_path)
+        if _pyart_radar_has_fields(radar):
+            return radar
+        return _read_level3_with_metpy(file_path)
     except (NotImplementedError, ValueError, AssertionError):
         with open(file_path, "rb") as fh:
             raw = fh.read()
@@ -135,14 +212,19 @@ def _read_level3_file(file_path: str):
             if zlib_start != -1:
                 break
         if zlib_start == -1:
-            raise
+            return _read_level3_with_metpy(file_path)
         decompressor = zlib.decompressobj()
         header_block = decompressor.decompress(raw[zlib_start:])
         full_nids = header_block + decompressor.unused_data
         temp_path = Path(file_path).with_suffix(".nids")
         temp_path.write_bytes(full_nids)
         try:
-            return pyart.io.read_nexrad_level3(str(temp_path))
+            radar = pyart.io.read_nexrad_level3(str(temp_path))
+            if _pyart_radar_has_fields(radar):
+                return radar
+            return _read_level3_with_metpy(file_path)
+        except (NotImplementedError, ValueError, AssertionError):
+            return _read_level3_with_metpy(file_path)
         finally:
             try:
                 temp_path.unlink(missing_ok=True)

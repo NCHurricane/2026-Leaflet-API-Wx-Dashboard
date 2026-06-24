@@ -4,6 +4,7 @@ Matches the color schemes from Gibson Ridge Software.
 """
 
 import matplotlib.colors as mcolors
+import numpy as np
 
 
 def _from_breakpoints(name, vmin, vmax, breaks, colors):
@@ -306,7 +307,7 @@ def create_grs_precip_total_cmap():
 def create_grs_hca_style():
     """
     Hydrometeor Classification style (categorical classes).
-    Returns cmap, norm, ticks, labels.
+    Returns cmap, norm, ticks, labels (for external use).
     """
     labels = [
         "Biological",
@@ -341,6 +342,36 @@ def create_grs_hca_style():
     return cmap, norm, ticks, labels
 
 
+def create_grs_hca_cmap():
+    """Hydrometeor Classification colormap (discrete category bands).
+
+    NWS HCA encodes 14 classes as values 10-140 (steps of 10). The colormap
+    spans [0, 1] with one distinct color per class so the render's vmin/vmax
+    (0-150) maps each category to its own band.
+    """
+    colors = [
+        (0 / 255, 0 / 255, 0 / 255),          # 0   below threshold (ND)
+        (170 / 255, 170 / 255, 170 / 255),    # 10  Biological
+        (120 / 255, 120 / 255, 120 / 255),    # 20  Ground Clutter
+        (140 / 255, 200 / 255, 255 / 255),    # 30  Ice Crystals
+        (90 / 255, 150 / 255, 255 / 255),     # 40  Dry Snow
+        (0 / 255, 230 / 255, 230 / 255),      # 50  Wet Snow
+        (0 / 255, 200 / 255, 0 / 255),        # 60  Light/Mod Rain
+        (255 / 255, 255 / 255, 0 / 255),      # 70  Heavy Rain
+        (255 / 255, 150 / 255, 0 / 255),      # 80  Big Drops
+        (255 / 255, 100 / 255, 255 / 255),    # 90  Graupel
+        (255 / 255, 0 / 255, 0 / 255),        # 100 Hail/Rain
+        (180 / 255, 0 / 255, 0 / 255),        # 110 Large Hail
+        (120 / 255, 0 / 255, 0 / 255),        # 120 Giant Hail
+        (255 / 255, 255 / 255, 255 / 255),    # 130 (spare)
+        (200 / 255, 200 / 255, 200 / 255),    # 140 Unknown
+    ]
+    positions = np.linspace(0.0, 1.0, len(colors))
+    return mcolors.LinearSegmentedColormap.from_list(
+        "ROC_HCA", list(zip(positions, colors)), N=256
+    )
+
+
 # Convenience dictionary for easy lookup
 GRS_COLORMAPS = {
     "CC": create_grs_cc_cmap,
@@ -355,5 +386,5 @@ GRS_COLORMAPS = {
     "PRECIP": create_grs_precip_cmap,
     "DPA": create_grs_dpa_cmap,
     "PRECIP_TOTAL": create_grs_precip_total_cmap,
-    "HCA": create_grs_hca_style,
+    "HCA": create_grs_hca_cmap,
 }
