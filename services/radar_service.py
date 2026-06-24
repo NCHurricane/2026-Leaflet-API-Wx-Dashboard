@@ -466,6 +466,11 @@ def _radar_live_filter_stale_latest_meta(
 _RADAR_COLORTABLE_PRODUCTS: dict[str, tuple[float, float]] = {
     "BR": (-30.0, 90.0),
     "BV": (-120.0, 120.0),
+    "HCA": (0.0, 150.0),        # L3_N0H Hydrometeor Classification
+    "DPA": (0.0, 8.0),          # L3_DPR Digital Precipitation Rate
+    "PRECIP_TOTAL": (0.0, 20.0), # L3_DTA Storm Total Precipitation
+    "ET": (0.0, 70.0),          # L3_EET Echo Tops
+    "VIL": (0.0, 80.0),         # L3_DVL Vertically Integrated Liquid
 }
 
 
