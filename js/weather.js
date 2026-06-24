@@ -3394,12 +3394,13 @@
         if (!product) { setLegend(null); return; }
 
         const selectedOption = byId('weather-radar-product')?.selectedOptions?.[0];
-        const palKey = String(selectedOption?.dataset?.palette || 'BR').toUpperCase();
         const title = selectedOption?.textContent || product;
 
+        // Fetch by product key so the endpoint resolves vmin/vmax/palette from
+        // the backend catalog. (Palette names alone can't supply value ranges.)
         let ct;
         try {
-            ct = await _fetchRadarColortable(palKey);
+            ct = await _fetchRadarColortable(String(product).toUpperCase());
         } catch (_err) {
             // Silently skip legend if API unavailable
             return;
