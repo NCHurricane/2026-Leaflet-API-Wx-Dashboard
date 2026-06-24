@@ -206,6 +206,41 @@ def create_grs_sw_cmap():
     return _from_breakpoints("ROC_SW", 0, 30, breaks, colors)
 
 
+def create_grs_kdp_cmap():
+    """Specific Differential Phase colormap (-2 to +8 degrees/km)."""
+    breaks = [-2, -1, -0.5, 0, 0.5, 1, 2, 3, 5, 8]
+    colors = [
+        (85, 0, 120),
+        (70, 55, 180),
+        (45, 110, 225),
+        (220, 220, 220),
+        (80, 210, 160),
+        (40, 200, 70),
+        (230, 220, 0),
+        (255, 155, 0),
+        (230, 55, 0),
+        (160, 0, 90),
+    ]
+    return _from_breakpoints("ROC_KDP", -2, 8, breaks, colors)
+
+
+def create_grs_phi_cmap():
+    """Differential Phase colormap (-180 to +180 degrees)."""
+    breaks = [-180, -135, -90, -45, 0, 45, 90, 135, 180]
+    colors = [
+        (90, 0, 130),
+        (40, 55, 190),
+        (20, 145, 230),
+        (35, 210, 170),
+        (235, 235, 235),
+        (220, 220, 20),
+        (255, 145, 0),
+        (220, 35, 35),
+        (150, 0, 90),
+    ]
+    return _from_breakpoints("ROC_PHI", -180, 180, breaks, colors)
+
+
 def create_grs_precip_cmap():
     """
     One-hour precipitation colormap (0 to 4 in/hr equivalent scale).
@@ -315,6 +350,8 @@ GRS_COLORMAPS = {
     "VIL": create_grs_vil_cmap,
     "ET": create_grs_et_cmap,
     "SW": create_grs_sw_cmap,
+    "KDP": create_grs_kdp_cmap,
+    "PHI": create_grs_phi_cmap,
     "PRECIP": create_grs_precip_cmap,
     "DPA": create_grs_dpa_cmap,
     "PRECIP_TOTAL": create_grs_precip_total_cmap,

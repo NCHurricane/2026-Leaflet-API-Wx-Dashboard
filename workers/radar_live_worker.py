@@ -202,10 +202,17 @@ def _frame_dt_from_radar_file_lazy(file_path: Path) -> datetime | None:
 
 
 def _field_for_product(
-    level: str, product_code: str, available_fields: list[str]
+    level: str,
+    product_code: str,
+    available_fields: list[str],
+    product_cfg: dict | None = None,
 ) -> str | None:
     if not available_fields:
         return None
+    configured_fields = list((product_cfg or {}).get("field_names") or [])
+    for field_name in configured_fields:
+        if field_name in available_fields:
+            return field_name
     if str(level) == "Level 2":
         l2_map = {
             "REF": "reflectivity",
@@ -224,6 +231,53 @@ def _field_for_product(
             if "velocity" in candidate.lower():
                 return candidate
     return available_fields[0]
+
+
+def _source_product_code(product_code: str, product_cfg: dict | None = None) -> str:
+    configured = str((product_cfg or {}).get("source_product") or "").strip().upper()
+    return configured or str(product_code or "").strip().upper()
+
+
+def _ensure_derived_field(
+    radar,
+    field_name: str,
+    product_cfg: dict | None = None,
+) -> str:
+    render_cfg = product_cfg or {}
+    derived_field = str(render_cfg.get("derived_field") or "").strip().lower()
+    if derived_field != "storm_relative_velocity":
+        return field_name
+    if field_name not in getattr(radar, "fields", {}):
+        return field_name
+
+    source_field = radar.fields[field_name]
+    source_data = np.ma.array(source_field.get("data"))
+    if source_data.ndim != 2:
+        return field_name
+    source_data = np.ma.masked_where(
+        ~np.isfinite(source_data) | (np.abs(source_data) >= 999.0),
+        source_data,
+    )
+
+    azimuths = np.asarray(getattr(radar, "azimuth", {}).get("data", []), dtype=float)
+    if azimuths.size != source_data.shape[0]:
+        return field_name
+
+    speed_kt = float(render_cfg.get("storm_motion_speed_kt", 0.0) or 0.0)
+    to_degrees = float(render_cfg.get("storm_motion_to_degrees", 0.0) or 0.0)
+    speed_ms = speed_kt / 1.94384449
+    radial_component_ms = speed_ms * np.cos(np.deg2rad(azimuths - to_degrees))
+    derived_data = source_data - radial_component_ms[:, np.newaxis]
+
+    derived_name = "storm_relative_velocity"
+    radar.fields[derived_name] = {
+        **source_field,
+        "data": np.ma.array(derived_data, copy=False),
+        "standard_name": "storm_relative_velocity",
+        "long_name": "Storm-relative velocity",
+        "units": source_field.get("units", "meters_per_second"),
+    }
+    return derived_name
 
 
 def _best_sweep(radar, field_name: str) -> int:
@@ -247,6 +301,74 @@ def _best_sweep(radar, field_name: str) -> int:
         return best_idx
     except Exception:
         return 0
+
+
+def _fixed_angles(radar) -> list[float]:
+    try:
+        raw = getattr(radar, "fixed_angle", {}).get("data")
+        if raw is None:
+            return []
+        return [round(float(value), 1) for value in np.asarray(raw).tolist()]
+    except Exception:
+        return []
+
+
+def _select_sweep(
+    radar, field_name: str, requested_elevation: str = "auto"
+) -> tuple[int, list[float], float | None]:
+    fixed_angles = _fixed_angles(radar)
+    available = sorted(set(fixed_angles))
+    if str(requested_elevation or "auto").lower() == "auto" or not fixed_angles:
+        sweep = _best_sweep(radar, field_name)
+    else:
+        target = float(requested_elevation)
+        sweep = min(
+            range(len(fixed_angles)),
+            key=lambda index: abs(fixed_angles[index] - target),
+        )
+    selected = fixed_angles[sweep] if 0 <= sweep < len(fixed_angles) else None
+    return sweep, available, selected
+
+
+def _radar_cache_product_key(
+    product_key: str, elevation: str, product_cfg: dict | None = None
+) -> str:
+    product_id = str(product_key or "").strip().upper()
+    cache_variant = str((product_cfg or {}).get("cache_variant") or "").strip().upper()
+    if cache_variant:
+        product_id = f"{product_id}__{cache_variant}"
+    if not product_id.startswith("L2_"):
+        return product_id
+    suffix = "AUTO" if elevation == "auto" else elevation.replace(".", "P")
+    return f"{product_id}__ELEV_{suffix}"
+
+
+def _prepare_field_data(field_data, product_code: str, product_cfg: dict | None):
+    render_cfg = product_cfg or {}
+    data = np.ma.array(field_data)
+    value_scale = float(render_cfg.get("value_scale", 1.0))
+    if value_scale != 1.0:
+        data = data * value_scale
+
+    mask_strategy = str(render_cfg.get("mask") or "").lower()
+    is_velocity = mask_strategy == "velocity" or product_code in {
+        "N0G",
+        "N0U",
+        "N1U",
+        "N0S",
+        "NVW",
+        "VEL",
+    }
+    if is_velocity:
+        invalid = ~np.isfinite(data) | (np.abs(data) >= 999.0)
+    elif mask_strategy == "nonnegative":
+        invalid = ~np.isfinite(data) | (data < 0.0)
+    elif mask_strategy == "finite":
+        invalid = ~np.isfinite(data)
+    else:
+        invalid = ~np.isfinite(data) | (data <= -31.5)
+
+    return np.ma.masked_where(invalid, data)
 
 
 def _discovery_index_path(site: str, level_code: str, product_key: str) -> Path:
@@ -372,6 +494,8 @@ def _render_overlay_png(
     bounds: list[float],
     out_path: Path,
     product_code: str,
+    product_cfg: dict | None = None,
+    sweep: int | None = None,
     profile: bool = False,
 ) -> bool:
     from config.radar_config import LIVE_RADAR_FIGURE_SIZE_INCHES, LIVE_RADAR_RENDER_DPI
@@ -403,31 +527,29 @@ def _render_overlay_png(
 
         # Ensure no-data/under-threshold bins render transparent so the overlay
         # does not appear as an opaque square when composited in Leaflet.
-        field_data = np.ma.array(radar.fields[field_name].get("data"))
-
-        is_velocity = product_code in {"N0G", "N0U", "N1U", "N0S", "NVW", "VEL"}
-        if is_velocity:
-            # Velocity no-data bins are typically encoded near the extremes.
-            invalid = ~np.isfinite(field_data) | (np.abs(field_data) >= 999.0)
-        else:
-            # Level 3 reflectivity often uses -32 dBZ for no-echo/no-data. Treat
-            # these bins as transparent, and keep meaningful echoes visible.
-            invalid = ~np.isfinite(field_data) | (field_data <= -31.5)
-
-        radar.fields[field_name]["data"] = np.ma.masked_where(invalid, field_data)
+        render_cfg = product_cfg or {}
+        is_velocity = (
+            str(render_cfg.get("mask") or "").lower() == "velocity"
+            or product_code in {"N0G", "N0U", "N1U", "N0S", "NVW", "VEL"}
+        )
+        radar.fields[field_name]["data"] = _prepare_field_data(
+            radar.fields[field_name].get("data"),
+            product_code,
+            render_cfg,
+        )
         t_mask = time.time() if profile else None
 
         display = pyart.graph.RadarMapDisplay(radar)
         from config.radar_colortable_utils import get_radar_colortable as _get_ct
 
-        _pal_key = "BV" if is_velocity else "BR"
-        _vmin = -120.0 if is_velocity else -30.0
-        _vmax = 120.0 if is_velocity else 90.0
+        _pal_key = str(render_cfg.get("palette") or ("BV" if is_velocity else "BR"))
+        _vmin = float(render_cfg.get("vmin", -120.0 if is_velocity else -30.0))
+        _vmax = float(render_cfg.get("vmax", 120.0 if is_velocity else 90.0))
         _ct = _get_ct(_pal_key, _vmin, _vmax)
         cmap = _ct["cmap"]
         vmin = _vmin
         vmax = _vmax
-        sweep = _best_sweep(radar, field_name)
+        sweep = _best_sweep(radar, field_name) if sweep is None else int(sweep)
         t_sweep = time.time() if profile else None
 
         display.plot_ppi_map(
@@ -493,7 +615,9 @@ def _render_single_frame_worker(
     product_code: str,
     bounds: list[float],
     temp_render_path: str,
-) -> tuple[bool, str, str]:
+    product_cfg: dict,
+    elevation: str,
+) -> tuple[bool, str, str, list[float], float | None]:
     """Worker function for parallel frame rendering. Returns (success, source_key, frame_key or error)."""
     try:
         src_file = Path(src_file_path)
@@ -501,33 +625,52 @@ def _render_single_frame_worker(
 
         radar = _read_radar(level, str(src_file))
         available_fields = list(getattr(radar, "fields", {}).keys())
-        field_name = _field_for_product(level, product_code, available_fields)
+        field_name = _field_for_product(
+            level, product_code, available_fields, product_cfg
+        )
         if not field_name:
-            return (False, source_key, "no_field")
+            return (False, source_key, "no_field", [], None)
+        field_name = _ensure_derived_field(radar, field_name, product_cfg)
 
         frame_dt = _frame_dt_from_radar(radar, src_file)
         if frame_dt is None:
-            return (False, source_key, "no_timestamp")
+            return (False, source_key, "no_timestamp", [], None)
 
         frame_key = frame_key_from_datetime(frame_dt)
+        sweep, available_elevations, selected_elevation = _select_sweep(
+            radar, field_name, elevation
+        )
         success = _render_overlay_png(
             radar=radar,
             field_name=field_name,
             bounds=bounds,
             out_path=Path(temp_render_path),
             product_code=product_code,
+            product_cfg=product_cfg,
+            sweep=sweep,
             profile=False,
         )
 
         if success:
-            return (True, source_key, frame_key)
+            return (
+                True,
+                source_key,
+                frame_key,
+                available_elevations,
+                selected_elevation,
+            )
         else:
-            return (False, source_key, "render_failed")
+            return (False, source_key, "render_failed", [], None)
     except Exception as exc:
-        return (False, src_file_path, f"error: {type(exc).__name__}")
+        return (False, src_file_path, f"error: {type(exc).__name__}", [], None)
 
 
-def _units_for_product(product_key: str, product_code: str) -> str:
+def _units_for_product(
+    product_key: str, product_code: str, product_cfg: dict | None = None
+) -> str:
+    configured_units = str((product_cfg or {}).get("units") or "").strip()
+    if configured_units:
+        return configured_units
     token = (str(product_key).upper(), str(product_code).upper())
     if any("VEL" in item for item in token) or token[1] in {
         "N0G",
@@ -556,12 +699,15 @@ def _render_site_product(
     latest_only: bool = False,
     newest_first: bool = False,
     max_render_frames: int | None = None,
+    elevation: str = "auto",
 ) -> int:
     """Render and cache frames for one site/product. Returns number of frames cached."""
     level = str(product_cfg.get("level") or "Level 3")
     level_code = _level_code(level)
     product_code = str(product_cfg.get("product") or "N0B").upper()
+    source_product_code = _source_product_code(product_code, product_cfg)
     product_label = str(product_cfg.get("label") or product_key)
+    cache_product_key = _radar_cache_product_key(product_key, elevation, product_cfg)
 
     provider = "aws"
     kwargs = {}
@@ -571,7 +717,7 @@ def _render_site_product(
     data_dir, total_files, _downloaded = radar_data_utils.download_radar_data(
         level,
         site,
-        product_code,
+        source_product_code,
         float(LIVE_RADAR_LOOKBACK_HOURS),
         str(_RADAR_ROOT),
         latest_only=latest_only,
@@ -617,7 +763,7 @@ def _render_site_product(
 
     # Load dedup tracking for this product.
     processed_keys = radar_read_processed_keys(
-        str(_CACHE_ROOT), site, level_code, product_key
+        str(_CACHE_ROOT), site, level_code, cache_product_key
     )
 
     from config.radar_config import LIVE_RADAR_PARALLEL_WORKERS
@@ -651,8 +797,20 @@ def _render_site_product(
                 read_failures += 1
                 continue
             frame_key = frame_key_from_datetime(frame_dt)
-            temp_render_path = str(_TMP_RENDER_ROOT / f"{site}_{product_key}_{frame_key}.png")
-            work_items.append((str(src_file), level, product_code, bounds, temp_render_path))
+            temp_render_path = str(
+                _TMP_RENDER_ROOT / f"{site}_{cache_product_key}_{frame_key}.png"
+            )
+            work_items.append(
+                (
+                    str(src_file),
+                    level,
+                    product_code,
+                    bounds,
+                    temp_render_path,
+                    product_cfg,
+                    elevation,
+                )
+            )
 
         # Render in parallel
         with multiprocessing.Pool(processes=num_workers) as pool:
@@ -660,20 +818,32 @@ def _render_site_product(
 
         # Process results
         frame_data = {}
-        for success, source_key, result_info in results:
+        for success, source_key, result_info, available_elevations, selected_elevation in results:
             if success:
                 frame_key = result_info
-                temp_render_path = str(_TMP_RENDER_ROOT / f"{site}_{product_key}_{frame_key}.png")
-                frame_data[source_key] = (frame_key, temp_render_path)
+                temp_render_path = str(
+                    _TMP_RENDER_ROOT / f"{site}_{cache_product_key}_{frame_key}.png"
+                )
+                frame_data[source_key] = (
+                    frame_key,
+                    temp_render_path,
+                    available_elevations,
+                    selected_elevation,
+                )
             else:
                 read_failures += 1
 
         # Copy files and update index (must be done serially)
-        for source_key, (frame_key, temp_render_path) in frame_data.items():
+        for source_key, (
+            frame_key,
+            temp_render_path,
+            available_elevations,
+            selected_elevation,
+        ) in frame_data.items():
             try:
                 dest_image = Path(
                     radar_overlay_image_path(
-                        str(_CACHE_ROOT), site, level_code, product_key, frame_key
+                        str(_CACHE_ROOT), site, level_code, cache_product_key, frame_key
                     )
                 )
                 dest_image.parent.mkdir(parents=True, exist_ok=True)
@@ -684,11 +854,13 @@ def _render_site_product(
                     str(_CACHE_ROOT),
                     site,
                     level_code,
-                    product_key,
+                    cache_product_key,
                     frame_key,
                     bounds=bounds,
                     full_name=product_label,
-                    units=_units_for_product(product_key, product_code),
+                    units=_units_for_product(product_key, product_code, product_cfg),
+                    available_elevations=available_elevations,
+                    selected_elevation=selected_elevation,
                 )
                 cached += 1
             except Exception as exc:
@@ -714,16 +886,24 @@ def _render_site_product(
                 continue
 
             available_fields = list(getattr(radar, "fields", {}).keys())
-            field_name = _field_for_product(level, product_code, available_fields)
+            field_name = _field_for_product(
+                level, product_code, available_fields, product_cfg
+            )
             if not field_name:
                 continue
+            field_name = _ensure_derived_field(radar, field_name, product_cfg)
 
             frame_dt = _frame_dt_from_radar(radar, src_file)
             if frame_dt is None:
                 continue
 
             frame_key = frame_key_from_datetime(frame_dt)
-            temp_render = _TMP_RENDER_ROOT / f"{site}_{product_key}_{frame_key}.png"
+            temp_render = (
+                _TMP_RENDER_ROOT / f"{site}_{cache_product_key}_{frame_key}.png"
+            )
+            sweep, available_elevations, selected_elevation = _select_sweep(
+                radar, field_name, elevation
+            )
 
             should_profile = profile_first_frame and latest_only
             if not _render_overlay_png(
@@ -732,6 +912,8 @@ def _render_site_product(
                 bounds=bounds,
                 out_path=temp_render,
                 product_code=product_code,
+                product_cfg=product_cfg,
+                sweep=sweep,
                 profile=should_profile,
             ):
                 continue
@@ -739,7 +921,7 @@ def _render_site_product(
             t_copy_start = time.time()
             dest_image = Path(
                 radar_overlay_image_path(
-                    str(_CACHE_ROOT), site, level_code, product_key, frame_key
+                    str(_CACHE_ROOT), site, level_code, cache_product_key, frame_key
                 )
             )
             dest_image.parent.mkdir(parents=True, exist_ok=True)
@@ -752,11 +934,13 @@ def _render_site_product(
                 str(_CACHE_ROOT),
                 site,
                 level_code,
-                product_key,
+                cache_product_key,
                 frame_key,
                 bounds=bounds,
                 full_name=product_label,
-                units=_units_for_product(product_key, product_code),
+                units=_units_for_product(product_key, product_code, product_cfg),
+                available_elevations=available_elevations,
+                selected_elevation=selected_elevation,
             )
             t_index = time.time() - t_index_start
 
@@ -782,9 +966,11 @@ def _render_site_product(
         )
 
     radar_write_processed_keys(
-        str(_CACHE_ROOT), site, level_code, product_key, processed_keys, keep_n
+        str(_CACHE_ROOT), site, level_code, cache_product_key, processed_keys, keep_n
     )
-    radar_prune_frames(str(_CACHE_ROOT), site, level_code, product_key, keep_n=keep_n)
+    radar_prune_frames(
+        str(_CACHE_ROOT), site, level_code, cache_product_key, keep_n=keep_n
+    )
     return cached
 
 
@@ -834,6 +1020,7 @@ def run_radar_live_site_product(
     latest_only: bool = False,
     newest_first: bool = False,
     max_render_frames: int | None = None,
+    elevation: str = "auto",
 ) -> int:
     """Render and cache frames for a single live radar site/product pair.
 
@@ -864,6 +1051,7 @@ def run_radar_live_site_product(
         latest_only=latest_only,
         newest_first=newest_first,
         max_render_frames=max_render_frames,
+        elevation=elevation,
     )
     if cached > 0:
         mark_run_complete("radar_live")

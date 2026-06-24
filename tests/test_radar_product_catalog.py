@@ -1,0 +1,256 @@
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import numpy as np
+
+from cache.overlay_cache_utils import radar_list_frames, radar_update_index
+from config.radar_config import LIVE_RADAR_PRODUCTS
+from services.radar_service import (
+    _radar_live_catalog,
+    _radar_live_product_metadata,
+    get_radar_colortable_data,
+    normalize_radar_elevation,
+    radar_cache_product_key,
+)
+from workers.radar_live_worker import (
+    _ensure_derived_field,
+    _field_for_product,
+    _prepare_field_data,
+    _select_sweep,
+    _source_product_code,
+)
+
+
+class RadarProductCatalogTests(unittest.TestCase):
+    def test_supported_live_products_have_required_metadata(self):
+        self.assertEqual(
+            list(LIVE_RADAR_PRODUCTS),
+            [
+                "L2_REF",
+                "L2_VEL",
+                "L2_SRV",
+                "L2_SW",
+                "L2_ZDR",
+                "L2_RHO",
+                "L2_KDP",
+                "L2_PHI",
+                "L3_N0B",
+                "L3_N0G",
+                "L3_N0S",
+                "L3_N0X",
+                "L3_N0C",
+                "L3_N0K",
+            ],
+        )
+        self.assertNotIn("L3_DTA", LIVE_RADAR_PRODUCTS)
+
+        required = {
+            "level",
+            "product",
+            "label",
+            "field_names",
+            "palette",
+            "units",
+            "vmin",
+            "vmax",
+            "mask",
+            "value_scale",
+            "capabilities",
+        }
+        for product_id, metadata in LIVE_RADAR_PRODUCTS.items():
+            with self.subTest(product_id=product_id):
+                self.assertTrue(required.issubset(metadata))
+                self.assertLess(metadata["vmin"], metadata["vmax"])
+                expected_elevation = product_id.startswith("L2_")
+                self.assertEqual(
+                    metadata["capabilities"]["elevation_selection"],
+                    expected_elevation,
+                )
+
+    def test_service_catalog_uses_config_catalog(self):
+        self.assertEqual(_radar_live_catalog(), LIVE_RADAR_PRODUCTS)
+        self.assertEqual(
+            _radar_live_product_metadata("l3_n0g")["palette"],
+            "BV",
+        )
+
+    def test_colortable_accepts_catalog_product_id(self):
+        data = get_radar_colortable_data("L3_N0G")
+        self.assertEqual(data["product"], "L3_N0G")
+        self.assertEqual(data["palette"], "BV")
+        self.assertEqual(data["vmin"], -120.0)
+        self.assertEqual(data["vmax"], 120.0)
+        self.assertTrue(data["entries"])
+
+    def test_all_catalog_palettes_generate_legends(self):
+        for product_id, metadata in LIVE_RADAR_PRODUCTS.items():
+            with self.subTest(product_id=product_id):
+                data = get_radar_colortable_data(product_id)
+                self.assertEqual(data["palette"], metadata["palette"])
+                self.assertEqual(data["vmin"], metadata["vmin"])
+                self.assertEqual(data["vmax"], metadata["vmax"])
+                self.assertTrue(data["entries"])
+
+    def test_level_two_field_selection_uses_catalog(self):
+        metadata = LIVE_RADAR_PRODUCTS["L2_ZDR"]
+        selected = _field_for_product(
+            metadata["level"],
+            metadata["product"],
+            ["reflectivity", "corrected_differential_reflectivity"],
+            metadata,
+        )
+        self.assertEqual(selected, "corrected_differential_reflectivity")
+
+    def test_level_two_storm_relative_velocity_uses_velocity_source(self):
+        metadata = LIVE_RADAR_PRODUCTS["L2_SRV"]
+        self.assertEqual(_source_product_code(metadata["product"], metadata), "VEL")
+        self.assertEqual(metadata["palette"], "SRV")
+        self.assertEqual(metadata["units"], "kt")
+        self.assertEqual(metadata["derived_field"], "storm_relative_velocity")
+        self.assertEqual(
+            radar_cache_product_key("L2_SRV", "0.5"),
+            "L2_SRV__MOTION_25KT_TO045_V1__ELEV_0P5",
+        )
+        selected = _field_for_product(
+            metadata["level"],
+            metadata["product"],
+            ["reflectivity", "velocity"],
+            metadata,
+        )
+        self.assertEqual(selected, "velocity")
+
+    def test_level_two_storm_relative_velocity_derives_field(self):
+        class FakeRadar:
+            azimuth = {"data": np.array([45.0, 225.0])}
+            fields = {
+                "velocity": {
+                    "data": np.ma.array([[10.0, -999.0], [10.0, 10.0]]),
+                    "units": "meters_per_second",
+                }
+            }
+
+        metadata = {
+            **LIVE_RADAR_PRODUCTS["L2_SRV"],
+            "storm_motion_speed_kt": 1.94384449,
+            "storm_motion_to_degrees": 45.0,
+        }
+        field_name = _ensure_derived_field(FakeRadar, "velocity", metadata)
+        self.assertEqual(field_name, "storm_relative_velocity")
+        derived = FakeRadar.fields[field_name]["data"]
+        self.assertAlmostEqual(float(derived[0, 0]), 9.0)
+        self.assertTrue(bool(derived.mask[0, 1]))
+        self.assertAlmostEqual(float(derived[1, 0]), 11.0)
+
+    def test_level_three_dual_pol_field_selection_uses_catalog(self):
+        expected = {
+            "L3_N0S": "velocity",
+            "L3_N0X": "differential_reflectivity",
+            "L3_N0C": "cross_correlation_ratio",
+            "L3_N0K": "specific_differential_phase",
+        }
+        for product_id, field_name in expected.items():
+            metadata = LIVE_RADAR_PRODUCTS[product_id]
+            with self.subTest(product_id=product_id):
+                selected = _field_for_product(
+                    metadata["level"],
+                    metadata["product"],
+                    ["reflectivity", field_name],
+                    metadata,
+                )
+                self.assertEqual(selected, field_name)
+
+    def test_storm_relative_velocity_uses_custom_palette(self):
+        metadata = LIVE_RADAR_PRODUCTS["L3_N0S"]
+        self.assertEqual(metadata["palette"], "SRV")
+        self.assertEqual(metadata["units"], "kt")
+        self.assertEqual(metadata["value_scale"], 1.0)
+        self.assertEqual(
+            radar_cache_product_key("L3_N0S", "auto"),
+            "L3_N0S__SRV_KNOTS_V2",
+        )
+        data = get_radar_colortable_data("L3_N0S")
+        self.assertEqual(data["palette"], "SRV")
+        self.assertEqual(data["vmin"], -100.0)
+        self.assertEqual(data["vmax"], 160.0)
+        self.assertTrue(data["entries"])
+
+    def test_velocity_and_spectrum_width_convert_to_knots(self):
+        velocity = _prepare_field_data(
+            np.ma.array([-10.0, 0.0, 10.0]),
+            "VEL",
+            LIVE_RADAR_PRODUCTS["L2_VEL"],
+        )
+        self.assertAlmostEqual(float(velocity[2]), 19.4384449)
+
+        spectrum_width = _prepare_field_data(
+            np.ma.array([-1.0, 5.0, np.nan]),
+            "SW",
+            LIVE_RADAR_PRODUCTS["L2_SW"],
+        )
+        self.assertTrue(bool(spectrum_width.mask[0]))
+        self.assertAlmostEqual(float(spectrum_width[1]), 9.71922245)
+        self.assertTrue(bool(spectrum_width.mask[2]))
+
+    def test_elevation_normalization_and_cache_keys(self):
+        self.assertEqual(normalize_radar_elevation("L2_REF", None), "auto")
+        self.assertEqual(normalize_radar_elevation("L2_REF", "0.54"), "0.5")
+        self.assertEqual(normalize_radar_elevation("L3_N0B", "1.5"), "auto")
+        self.assertEqual(
+            radar_cache_product_key("L2_REF", "auto"),
+            "L2_REF__ELEV_AUTO",
+        )
+        self.assertEqual(
+            radar_cache_product_key("L2_REF", "1.5"),
+            "L2_REF__ELEV_1P5",
+        )
+        self.assertEqual(radar_cache_product_key("L3_N0B", "auto"), "L3_N0B")
+
+    def test_nearest_elevation_sweep_selection(self):
+        class FakeRadar:
+            fixed_angle = {"data": np.array([0.5, 1.5, 2.4])}
+            nsweeps = 3
+            fields = {"reflectivity": {"data": np.ma.ones(6)}}
+
+            @staticmethod
+            def get_slice(index):
+                return slice(index * 2, index * 2 + 2)
+
+        sweep, available, selected = _select_sweep(
+            FakeRadar(), "reflectivity", "1.8"
+        )
+        self.assertEqual(sweep, 1)
+        self.assertEqual(available, [0.5, 1.5, 2.4])
+        self.assertEqual(selected, 1.5)
+
+    def test_radar_cache_preserves_elevation_metadata(self):
+        with TemporaryDirectory() as temp_dir:
+            frame_key = "20260621_120000"
+            product_key = "L2_REF__ELEV_1P5"
+            image_path = (
+                Path(temp_dir)
+                / "radar"
+                / "live"
+                / "KMHX"
+                / "L2"
+                / product_key
+                / f"{frame_key}.png"
+            )
+            image_path.parent.mkdir(parents=True)
+            image_path.write_bytes(b"png")
+            radar_update_index(
+                temp_dir,
+                "KMHX",
+                "L2",
+                product_key,
+                frame_key,
+                available_elevations=[0.5, 1.5, 2.4],
+                selected_elevation=1.5,
+            )
+            frames = radar_list_frames(temp_dir, "KMHX", "L2", product_key)
+            self.assertEqual(frames[0]["available_elevations"], [0.5, 1.5, 2.4])
+            self.assertEqual(frames[0]["selected_elevation"], 1.5)
+
+
+if __name__ == "__main__":
+    unittest.main()

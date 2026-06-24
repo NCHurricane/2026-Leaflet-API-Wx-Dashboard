@@ -60,11 +60,23 @@ def get_radar_live_sites():
 
 @router.get("/api/radar/live/latest")
 def get_radar_live_latest(
-    site: str = "KMHX", product: str = "L3_N0B", force: bool = False
+    site: str = "KMHX",
+    product: str = "L3_N0B",
+    elevation: str = "auto",
+    force: bool = False,
 ):
-    return get_radar_live_latest_data(site=site, product=product, force=force)
+    return get_radar_live_latest_data(
+        site=site, product=product, elevation=elevation, force=force
+    )
 
 
 @router.get("/api/radar/live/frames")
-def get_radar_live_frames(site: str = "KMHX", product: str = "L3_N0B", hours: int = 2):
-    return get_radar_live_frames_data(site=site, product=product, hours=hours)
+def get_radar_live_frames(
+    site: str = "KMHX",
+    product: str = "L3_N0B",
+    elevation: str = "auto",
+    hours: int = 2,
+):
+    return get_radar_live_frames_data(
+        site=site, product=product, elevation=elevation, hours=hours
+    )

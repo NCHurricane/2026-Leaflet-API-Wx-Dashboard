@@ -143,6 +143,40 @@ def _radar_live_catalog():
     return dict(LIVE_RADAR_PRODUCTS)
 
 
+def _radar_live_product_metadata(product_key: str) -> dict:
+    product_id = str(product_key or "").strip().upper()
+    return dict(_radar_live_catalog().get(product_id) or {})
+
+
+def normalize_radar_elevation(product_key: str, elevation: str | float | None) -> str:
+    product_id = str(product_key or "").strip().upper()
+    if not product_id.startswith("L2_"):
+        return "auto"
+    value = str(elevation or "auto").strip().lower()
+    if not value or value == "auto":
+        return "auto"
+    try:
+        angle = float(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Elevation must be 'auto' or a number.") from exc
+    if angle < 0.0 or angle > 90.0:
+        raise HTTPException(status_code=422, detail="Elevation must be between 0 and 90 degrees.")
+    return f"{angle:.1f}"
+
+
+def radar_cache_product_key(product_key: str, elevation: str) -> str:
+    product_id = str(product_key or "").strip().upper()
+    cache_variant = str(
+        _radar_live_product_metadata(product_id).get("cache_variant") or ""
+    ).strip().upper()
+    if cache_variant:
+        product_id = f"{product_id}__{cache_variant}"
+    if not product_id.startswith("L2_"):
+        return product_id
+    suffix = "AUTO" if elevation == "auto" else elevation.replace(".", "P")
+    return f"{product_id}__ELEV_{suffix}"
+
+
 def _radar_live_sites():
     from config.radar_config import LIVE_RADAR_SITES
 
@@ -249,6 +283,7 @@ def _radar_live_render_on_demand(
     backfill_history: bool = True,
     newest_first: bool = False,
     max_render_frames: int | None = None,
+    elevation: str = "auto",
 ) -> int:
     from workers.radar_live_worker import run_radar_live_site_product
 
@@ -265,6 +300,7 @@ def _radar_live_render_on_demand(
                 latest_only=latest_only,
                 newest_first=newest_first,
                 max_render_frames=max_render_frames,
+                elevation=elevation,
             )
         )
 
@@ -284,6 +320,7 @@ def _radar_live_render_on_demand(
                     product_id,
                     force=True,
                     latest_only=False,
+                    elevation=elevation,
                 )
         except Exception as exc:
             print(
@@ -296,13 +333,19 @@ def _radar_live_render_on_demand(
     return cached
 
 
-def _radar_live_render_in_background(site_id: str, product_key: str) -> bool:
+def _radar_live_render_in_background(
+    site_id: str, product_key: str, elevation: str = "auto"
+) -> bool:
     """Fill the live radar frame window in the background."""
     return spawn_live_render_thread(
-        ("radar_live", site_id, product_key),
-        f"radar-{site_id}-{product_key}",
+        ("radar_live", site_id, product_key, elevation),
+        f"radar-{site_id}-{product_key}-{elevation}",
         lambda: _radar_live_render_on_demand(
-            site_id, product_key, latest_only=False, backfill_history=False
+            site_id,
+            product_key,
+            latest_only=False,
+            backfill_history=False,
+            elevation=elevation,
         ),
     )
 
@@ -361,20 +404,35 @@ _RADAR_COLORTABLE_PRODUCTS: dict[str, tuple[float, float]] = {
 
 def get_radar_colortable_data(product: str = "BR") -> dict:
     """Return the legend color entries for a radar product colortable."""
-    product = product.upper()
-    if product not in _RADAR_COLORTABLE_PRODUCTS:
+    product_id = product.upper()
+    product_metadata = _radar_live_product_metadata(product_id)
+    palette = str(product_metadata.get("palette") or product_id).upper()
+    if product_metadata:
+        vmin = float(product_metadata["vmin"])
+        vmax = float(product_metadata["vmax"])
+    elif palette in _RADAR_COLORTABLE_PRODUCTS:
+        vmin, vmax = _RADAR_COLORTABLE_PRODUCTS[palette]
+    else:
         raise HTTPException(
             status_code=404,
-            detail=f"No colortable for product '{product}'. Valid: {list(_RADAR_COLORTABLE_PRODUCTS)}",
+            detail=(
+                f"No colortable for product '{product_id}'. "
+                f"Valid palettes: {list(_RADAR_COLORTABLE_PRODUCTS)}"
+            ),
         )
-    vmin, vmax = _RADAR_COLORTABLE_PRODUCTS[product]
     try:
         from config.radar_colortable_utils import get_legend_json
 
-        entries = get_legend_json(product, vmin, vmax)
+        entries = get_legend_json(palette, vmin, vmax)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    return {"product": product, "vmin": vmin, "vmax": vmax, "entries": entries}
+    return {
+        "product": product_id,
+        "palette": palette,
+        "vmin": vmin,
+        "vmax": vmax,
+        "entries": entries,
+    }
 
 
 _RADAR_FRAME_LAYERS = {
@@ -490,7 +548,10 @@ def get_radar_live_sites_data() -> dict:
 
 
 def get_radar_live_latest_data(
-    site: str = "KMHX", product: str = "L3_N0B", force: bool = False
+    site: str = "KMHX",
+    product: str = "L3_N0B",
+    elevation: str = "auto",
+    force: bool = False,
 ) -> dict:
     """Return latest live radar frame from cache."""
     from cache.overlay_cache_utils import radar_read_latest_frame
@@ -501,6 +562,8 @@ def get_radar_live_latest_data(
 
     site_id = normalize_radar_site_id(site)
     product_key = str(product or "L3_N0B").strip().upper()
+    elevation_key = normalize_radar_elevation(product_key, elevation)
+    cache_product_key = radar_cache_product_key(product_key, elevation_key)
     configured = _radar_live_is_configured(site_id, product_key)
     level_code = "L2" if product_key.startswith("L2_") else "L3"
     freshness_hours = max(0.25, float(LIVE_RADAR_LOOKBACK_HOURS or 3.0))
@@ -517,7 +580,7 @@ def get_radar_live_latest_data(
         )
 
     meta = _radar_live_filter_stale_latest_meta(
-        radar_read_latest_frame(CACHE_ROOT, site_id, level_code, product_key),
+        radar_read_latest_frame(CACHE_ROOT, site_id, level_code, cache_product_key),
         max_age_hours=freshness_hours,
     )
     fallback_cached = 0
@@ -535,6 +598,7 @@ def get_radar_live_latest_data(
                 product_key,
                 latest_only=True,
                 backfill_history=True,
+                elevation=elevation_key,
             )
         except Exception as exc:
             print(
@@ -542,7 +606,7 @@ def get_radar_live_latest_data(
                 f"{type(exc).__name__}: {exc}"
             )
         meta = _radar_live_filter_stale_latest_meta(
-            radar_read_latest_frame(CACHE_ROOT, site_id, level_code, product_key),
+            radar_read_latest_frame(CACHE_ROOT, site_id, level_code, cache_product_key),
             max_age_hours=freshness_hours,
         )
 
@@ -553,6 +617,7 @@ def get_radar_live_latest_data(
                 product_key,
                 latest_only=True,
                 backfill_history=True,
+                elevation=elevation_key,
             )
         except Exception as exc:
             print(
@@ -560,7 +625,7 @@ def get_radar_live_latest_data(
                 f"{type(exc).__name__}: {exc}"
             )
         meta = _radar_live_filter_stale_latest_meta(
-            radar_read_latest_frame(CACHE_ROOT, site_id, level_code, product_key),
+            radar_read_latest_frame(CACHE_ROOT, site_id, level_code, cache_product_key),
             max_age_hours=freshness_hours,
         )
 
@@ -575,6 +640,7 @@ def get_radar_live_latest_data(
                     backfill_history=True,
                     newest_first=True,
                     max_render_frames=1,
+                    elevation=elevation_key,
                 ),
             )
         except Exception as exc:
@@ -583,7 +649,7 @@ def get_radar_live_latest_data(
                 f"{type(exc).__name__}: {exc}"
             )
         meta = _radar_live_filter_stale_latest_meta(
-            radar_read_latest_frame(CACHE_ROOT, site_id, level_code, product_key),
+            radar_read_latest_frame(CACHE_ROOT, site_id, level_code, cache_product_key),
             max_age_hours=freshness_hours,
         )
     if not meta:
@@ -611,7 +677,16 @@ def get_radar_live_latest_data(
         "configured": configured,
         "site": site_id,
         "product": product_key,
+        "product_capabilities": _radar_live_product_metadata(product_key).get(
+            "capabilities", {}
+        ),
+        "provider": "NODD-AWS",
+        "network": "NEXRAD",
         "timestamp": meta.get("timestamp"),
+        "source_timestamp": meta.get("timestamp"),
+        "available_elevations": meta.get("available_elevations") or [],
+        "selected_elevation": meta.get("selected_elevation"),
+        "requested_elevation": elevation_key,
         "source_data_key": meta.get("source_data_key", ""),
         "image_url": image_url,
         "bounds": meta.get("bounds"),
@@ -621,7 +696,10 @@ def get_radar_live_latest_data(
 
 
 def get_radar_live_frames_data(
-    site: str = "KMHX", product: str = "L3_N0B", hours: int = 2
+    site: str = "KMHX",
+    product: str = "L3_N0B",
+    elevation: str = "auto",
+    hours: int = 2,
 ) -> dict:
     """Return live radar frames list for scrubber playback."""
     from cache.overlay_cache_utils import radar_list_frames
@@ -632,6 +710,8 @@ def get_radar_live_frames_data(
 
     site_id = normalize_radar_site_id(site)
     product_key = str(product or "L3_N0B").strip().upper()
+    elevation_key = normalize_radar_elevation(product_key, elevation)
+    cache_product_key = radar_cache_product_key(product_key, elevation_key)
     configured = _radar_live_is_configured(site_id, product_key)
     level_code = "L2" if product_key.startswith("L2_") else "L3"
 
@@ -671,6 +751,7 @@ def get_radar_live_frames_data(
                 backfill_history=False,
                 newest_first=True,
                 max_render_frames=OVERLAY_EMPTY_CACHE_SYNC_FRAMES,
+                elevation=elevation_key,
             )
         except Exception as exc:
             print(
@@ -680,15 +761,17 @@ def get_radar_live_frames_data(
             return 0
 
     cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours or 2)))
-    frames = radar_list_frames(CACHE_ROOT, site_id, level_code, product_key)
+    frames = radar_list_frames(CACHE_ROOT, site_id, level_code, cache_product_key)
     fallback_cached = 0
     refreshing = False
 
     if not frames:
         fallback_cached = _render_newest_sync()
-        frames = radar_list_frames(CACHE_ROOT, site_id, level_code, product_key)
+        frames = radar_list_frames(CACHE_ROOT, site_id, level_code, cache_product_key)
         if frames:
-            refreshing = _radar_live_render_in_background(site_id, product_key)
+            refreshing = _radar_live_render_in_background(
+                site_id, product_key, elevation_key
+            )
 
     filtered = _within(frames, cutoff_dt) if frames else []
 
@@ -696,13 +779,17 @@ def get_radar_live_frames_data(
         grace_min = OVERLAY_STALE_SERVE_WINDOW_MIN.get("radar_live", 15)
         filtered = _within(frames, cutoff_dt - timedelta(minutes=grace_min))
         if filtered:
-            refreshing = _radar_live_render_in_background(site_id, product_key)
+            refreshing = _radar_live_render_in_background(
+                site_id, product_key, elevation_key
+            )
         else:
             fallback_cached = max(fallback_cached, _render_newest_sync())
-            frames = radar_list_frames(CACHE_ROOT, site_id, level_code, product_key)
+            frames = radar_list_frames(CACHE_ROOT, site_id, level_code, cache_product_key)
             filtered = _within(frames, cutoff_dt)
             if filtered:
-                refreshing = _radar_live_render_in_background(site_id, product_key)
+                refreshing = _radar_live_render_in_background(
+                    site_id, product_key, elevation_key
+                )
 
     return {
         "status": "success",
@@ -710,6 +797,18 @@ def get_radar_live_frames_data(
         "configured": configured,
         "site": site_id,
         "product": product_key,
+        "product_capabilities": _radar_live_product_metadata(product_key).get(
+            "capabilities", {}
+        ),
+        "provider": "NODD-AWS",
+        "network": "NEXRAD",
+        "available_elevations": (
+            filtered[-1].get("available_elevations") if filtered else []
+        ) or [],
+        "selected_elevation": (
+            filtered[-1].get("selected_elevation") if filtered else None
+        ),
+        "requested_elevation": elevation_key,
         "frame_count": len(filtered),
         "refreshing": refreshing,
         "frames": filtered,

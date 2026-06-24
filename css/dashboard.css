@@ -1148,6 +1148,49 @@ body.wx-standalone-product .weather-header-right {
     color: #f8fafc;
 }
 
+.radar-elevation-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 8px;
+}
+
+.radar-elevation-pill {
+    display: inline-block;
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    margin: 0;
+    padding: 4px 10px;
+    border: 1px solid #000;
+    border-radius: 6px;
+    background: rgba(51, 65, 85, 0.4);
+    color: #64748b;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.radar-elevation-pill:hover {
+    color: #cbd5e1;
+}
+
+.radar-elevation-pill[aria-checked="true"] {
+    background: var(--select);
+    color: var(--highlight);
+}
+
+.radar-elevation-pill:focus-visible {
+    outline: 2px solid #7dd3fc;
+    outline-offset: 1px;
+}
+
+.radar-elevation-native-control {
+    display: none;
+}
+
 /* WPC sub-tabs row */
 .wpc-subtabs {
     display: flex;

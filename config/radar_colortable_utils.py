@@ -21,6 +21,15 @@ _COLORTABLE_DIR = Path(__file__).parent / "radar_colortables"
 _PAL_FILENAMES: dict[str, str] = {
     "BR": "RadarScope_BR.pal",
     "BV": "BV_grl3v2.pal",
+    "SRV": "SRRadarLoopsSRvelo.pal",
+}
+
+_GENERATED_UNITS: dict[str, str] = {
+    "CC": "RATIO",
+    "ZDR": "DB",
+    "SW": "KTS",
+    "KDP": "DEG/KM",
+    "PHI": "DEG",
 }
 
 
@@ -63,7 +72,7 @@ def _parse_pal(path: Path) -> dict:
     # Re-join lines that were soft-wrapped (continuation lines start with a
     # digit or sign and do NOT start with a keyword).
     _keywords = re.compile(
-        r"^(color|nd|rf|product|units|step|scale):?\b", re.I)
+        r"^(color|solidcolor|nd|rf|product|units|step|scale):?\b", re.I)
     joined: list[str] = []
     for line in raw_lines:
         if joined and not _keywords.match(line):
@@ -100,7 +109,7 @@ def _parse_pal(path: Path) -> dict:
             nums = _extract_ints(rest, count=3)
             if nums:
                 meta["rf"] = tuple(nums)
-        elif key == "COLOR" and rest:
+        elif key in {"COLOR", "SOLIDCOLOR"} and rest:
             entry = _parse_color_entry(rest)
             if entry is not None:
                 meta["color_entries"].append(entry)
@@ -256,16 +265,22 @@ def get_radar_colortable(
         return _CACHE[cache_key]
 
     pal_filename = _PAL_FILENAMES.get(pal_key)
-    if not pal_filename:
-        raise FileNotFoundError(
-            f"No .pal filename mapping for product key: {pal_key!r}"
-        )
-    pal_path = _COLORTABLE_DIR / pal_filename
-    if not pal_path.exists():
-        raise FileNotFoundError(f"Colortable not found: {pal_path}")
+    if pal_filename:
+        pal_path = _COLORTABLE_DIR / pal_filename
+        if not pal_path.exists():
+            raise FileNotFoundError(f"Colortable not found: {pal_path}")
+        parsed = _parse_pal(pal_path)
+        cmap = _build_colormap(parsed, vmin, vmax, name=f"GRS_{pal_key}")
+    else:
+        from radar.radar_colormaps import GRS_COLORMAPS
 
-    parsed = _parse_pal(pal_path)
-    cmap = _build_colormap(parsed, vmin, vmax, name=f"GRS_{pal_key}")
+        factory = GRS_COLORMAPS.get(pal_key)
+        if not factory:
+            raise FileNotFoundError(
+                f"No colortable mapping for product key: {pal_key!r}"
+            )
+        cmap = factory()
+        parsed = {"units": _GENERATED_UNITS.get(pal_key, "")}
     cmap.set_bad((0, 0, 0, 0))
     cmap.set_under((0, 0, 0, 0))
     legend = _build_legend(parsed, cmap, vmin, vmax)

@@ -3388,9 +3388,9 @@
     async function buildRadarProductLegend(product) {
         if (!product) { setLegend(null); return; }
 
-        const isVelocity = /vel|n0u|n1u|n0g|n0s|nvw/i.test(product);
-        const palKey = isVelocity ? 'BV' : 'BR';
-        const title = isVelocity ? 'Base Velocity' : 'Base Reflectivity';
+        const selectedOption = byId('weather-radar-product')?.selectedOptions?.[0];
+        const palKey = String(selectedOption?.dataset?.palette || 'BR').toUpperCase();
+        const title = selectedOption?.textContent || product;
 
         let ct;
         try {
@@ -3401,7 +3401,7 @@
         }
 
         const entries = ct.entries || [];
-        const units = isVelocity ? 'kts' : 'dBZ';
+        const units = selectedOption?.dataset?.units || '';
         const vmin = ct.vmin;
         const vmax = ct.vmax;
 
@@ -6058,6 +6058,13 @@
         return String(byId('weather-radar-product')?.value || 'L3_N0B').trim().toUpperCase();
     }
 
+    function _activeRadarElevation() {
+        if (_radarPageController?.activeElevation) {
+            return _radarPageController.activeElevation();
+        }
+        return String(byId('weather-radar-elevation')?.value || 'auto').trim().toLowerCase();
+    }
+
     function _setRadarStatus(message) {
         if (_radarPageController?.setStatus) {
             _radarPageController.setStatus(message);
@@ -6263,6 +6270,9 @@
             }
 
             const sites = Array.isArray(data?.sites) ? data.sites : [];
+            const products = data?.products && typeof data.products === 'object'
+                ? data.products
+                : {};
             _radarSiteCoords.clear();
             const configuredMap = new Map();
             sites.forEach((site) => {
@@ -6288,6 +6298,40 @@
                 });
                 if (keepValue && added.has(keepValue)) select.value = keepValue;
             }
+
+            const productSelect = byId('weather-radar-product');
+            if (productSelect) {
+                const keepProduct = _activeRadarProduct();
+                productSelect.innerHTML = '';
+                const productGroups = new Map();
+                Object.entries(products).forEach(([productId, product]) => {
+                    const level = String(product?.level || 'Other');
+                    if (!productGroups.has(level)) {
+                        const group = document.createElement('optgroup');
+                        group.label = level;
+                        productGroups.set(level, group);
+                        productSelect.appendChild(group);
+                    }
+                    const option = document.createElement('option');
+                    option.value = String(productId).toUpperCase();
+                    option.textContent = String(product?.label || productId);
+                    option.dataset.palette = String(product?.palette || 'BR');
+                    option.dataset.units = String(product?.units || '');
+                    option.dataset.elevationSelection = String(
+                        !!product?.capabilities?.elevation_selection,
+                    );
+                    productGroups.get(level).appendChild(option);
+                });
+                const availableProducts = new Set(
+                    Array.from(productSelect.options, (option) => option.value),
+                );
+                productSelect.value = availableProducts.has(keepProduct)
+                    ? keepProduct
+                    : availableProducts.has('L3_N0B')
+                        ? 'L3_N0B'
+                        : productSelect.options[0]?.value || '';
+            }
+            _radarPageController?.syncElevationControl?.();
 
             const layer = _ensureRadarSiteLayer();
             layer.clearLayers();
@@ -6575,7 +6619,12 @@
                 return;
             }
             try {
-                const params = new URLSearchParams({ site, product, hours: '3' });
+                const params = new URLSearchParams({
+                    site,
+                    product,
+                    elevation: _activeRadarElevation(),
+                    hours: '3',
+                });
                 const resp = await fetch(apiUrl(`/api/radar/live/frames?${params.toString()}`), { cache: 'no-store' });
                 if (resp.ok) {
                     const data = await resp.json();
@@ -6652,6 +6701,15 @@
         return _resolveDataTimestampMs(frame?.timestamp);
     }
 
+    function _radarScrubFrameIdentity(frame) {
+        return String(
+            frame?.frame_key
+            || frame?.source_data_key
+            || frame?.timestamp
+            || '',
+        );
+    }
+
     function _normalizeRadarScrubFrames(rawFrames, site, product) {
         const normalized = (Array.isArray(rawFrames) ? rawFrames : [])
             .filter((f) => f && f.image_url && Array.isArray(f.bounds) && f.bounds.length === 4)
@@ -6672,10 +6730,11 @@
 
     function _radarCurrentScrubContextKey(productOverride = null) {
         const product = String(productOverride || _activeRadarProduct() || '').toUpperCase();
+        const elevation = _activeRadarElevation();
         const sites = _radarMultiSites.size > 1
             ? [..._radarMultiSites].map((s) => String(s || '').toUpperCase()).filter(Boolean).sort()
             : [String(_activeRadarSite() || '').toUpperCase()].filter(Boolean);
-        return `${product}|${sites.join(',')}`;
+        return `${product}|${elevation}|${sites.join(',')}`;
     }
 
     async function _renderRadarScrubFrame(index) {
@@ -7073,22 +7132,30 @@
             const radarSlider = document.querySelector('#radar-animate-slider');
             const maxHours = Math.max(1, Math.round(radarSlider ? Number(radarSlider.value) : 1));
 
-            const params = new URLSearchParams({ site, product, hours: String(maxHours) });
+            const params = new URLSearchParams({
+                site,
+                product,
+                elevation: _activeRadarElevation(),
+                hours: String(maxHours),
+            });
             const resp = await fetch(apiUrl(`/api/radar/live/frames?${params.toString()}`), { cache: 'no-store' });
             if (!resp.ok) return 0;
             const data = await resp.json();
             if (!_isTypeEnabled('radar')) return 0;
+            _radarPageController?.updateElevationOptions?.(data);
 
             const newFrames = _normalizeRadarScrubFrames(data.frames, site, product);
 
             if (!newFrames.length) return 0;
 
-            const existingKeys = new Set(_radarScrubFrames.map((f) => f.frame_key));
-            const appended = newFrames.filter((f) => !existingKeys.has(f.frame_key));
+            const existingKeys = new Set(_radarScrubFrames.map(_radarScrubFrameIdentity));
+            const appended = newFrames.filter(
+                (frame) => !existingKeys.has(_radarScrubFrameIdentity(frame)),
+            );
             if (!appended.length) return 0;
 
             if (!_radarScrubFrames.length) {
-                _radarScrubFrames = appended;
+                _radarScrubFrames = newFrames;
                 _radarScrubFrameIndex = 0;
                 _updateRtmaScrubberUi();
                 _setScrubberControlsEnabled(true);
@@ -7099,14 +7166,22 @@
                 return appended.length;
             }
 
-            // Append new frames at the tail, drop the same count from the head.
-            const combined = [..._radarScrubFrames, ...appended];
-            const dropped = Math.min(appended.length, _radarScrubFrames.length);
-            const trimmed = combined.slice(dropped);
-
-            // Keep scrub index stable — shift back by number of dropped frames.
-            _radarScrubFrameIndex = Math.max(0, _radarScrubFrameIndex - dropped);
-            _radarScrubFrames = trimmed;
+            // The API frame list is authoritative and timestamp-sorted. During
+            // history backfill, newly discovered frames may be older than every
+            // frame already loaded, so appending and shifting the numeric index
+            // can replay part of the animation. Preserve the displayed frame by
+            // identity instead.
+            const activeFrame = _radarScrubFrames[_radarScrubFrameIndex];
+            const activeKey = _radarScrubFrameIdentity(activeFrame);
+            _radarScrubFrames = newFrames;
+            const preservedIndex = activeKey
+                ? _radarScrubFrames.findIndex(
+                    (frame) => _radarScrubFrameIdentity(frame) === activeKey,
+                )
+                : -1;
+            _radarScrubFrameIndex = preservedIndex >= 0
+                ? preservedIndex
+                : Math.min(_radarScrubFrameIndex, _radarScrubFrames.length - 1);
 
             _updateRtmaScrubberUi();
             _setScrubberControlsEnabled(true);
@@ -13896,8 +13971,9 @@
             _satelliteEngine = _satelliteEngineFactory.createSatelliteEngine(satelliteContext);
         }
 
-        const radarContext = _productAppContexts?.registerProductContext('radar', {
-            activeProduct: _activeRadarProduct,
+            const radarContext = _productAppContexts?.registerProductContext('radar', {
+                activeElevation: _activeRadarElevation,
+                activeProduct: _activeRadarProduct,
             activeSite: _activeRadarSite,
             apiUrl,
             buildProductLegend: buildRadarProductLegend,
@@ -13978,8 +14054,11 @@
             stopScrubWarmPoll: _stopRadarScrubWarmPoll,
             syncSiteLayerVisibility: _syncRadarSiteLayerVisibility,
             updateNextUpdateCountdown: _updateRadarNextUpdateCountdown,
-            updateRtmaScrubberUi: _updateRtmaScrubberUi,
-        });
+                updateRtmaScrubberUi: _updateRtmaScrubberUi,
+                updateElevationOptions: (data) => {
+                    _radarPageController?.updateElevationOptions?.(data);
+                },
+            });
         if (radarContext && _radarEngineFactory?.createRadarEngine) {
             _radarEngine = _radarEngineFactory.createRadarEngine(radarContext);
         }

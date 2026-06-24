@@ -16,6 +16,79 @@
         return String(byId('weather-radar-product')?.value || 'L3_N0B').trim().toUpperCase();
     }
 
+    function activeElevation() {
+        return String(byId('weather-radar-elevation')?.value || 'auto').trim().toLowerCase();
+    }
+
+    function syncElevationControl() {
+        const productOption = byId('weather-radar-product')?.selectedOptions?.[0];
+        const enabled = productOption?.dataset?.elevationSelection === 'true';
+        const wrap = byId('wx-radar-elevation-wrap');
+        if (wrap) wrap.style.display = enabled ? '' : 'none';
+        if (!enabled) {
+            const select = byId('weather-radar-elevation');
+            if (select) select.value = 'auto';
+        }
+        syncElevationPills();
+    }
+
+    function syncElevationPills() {
+        const selected = activeElevation();
+        byId('weather-radar-elevation-pills')
+            ?.querySelectorAll('.radar-elevation-pill')
+            .forEach((button) => {
+                const active = button.dataset.elevation === selected;
+                button.setAttribute('aria-checked', active ? 'true' : 'false');
+                button.tabIndex = active ? 0 : -1;
+            });
+    }
+
+    function renderElevationPills() {
+        const select = byId('weather-radar-elevation');
+        const pills = byId('weather-radar-elevation-pills');
+        if (!select || !pills) return;
+        pills.innerHTML = '';
+        Array.from(select.options).forEach((option) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'radar-elevation-pill';
+            button.dataset.elevation = option.value;
+            button.setAttribute('role', 'radio');
+            button.setAttribute('aria-checked', 'false');
+            button.textContent = option.textContent;
+            button.addEventListener('click', () => {
+                if (select.value === option.value) return;
+                select.value = option.value;
+                syncElevationPills();
+                pageContext?.loadUnified?.();
+            });
+            pills.appendChild(button);
+        });
+        syncElevationPills();
+    }
+
+    function updateElevationOptions(data) {
+        const select = byId('weather-radar-elevation');
+        if (!select) return;
+        const requested = String(data?.requested_elevation || activeElevation() || 'auto');
+        const elevations = Array.isArray(data?.available_elevations)
+            ? data.available_elevations
+            : [];
+        select.innerHTML = '<option value="auto">Auto</option>';
+        elevations.forEach((elevation) => {
+            const value = Number(elevation).toFixed(1);
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = `${value}°`;
+            select.appendChild(option);
+        });
+        select.value = Array.from(select.options).some((option) => option.value === requested)
+            ? requested
+            : 'auto';
+        renderElevationPills();
+        syncElevationControl();
+    }
+
     function setStatus(message) {
         const el = byId('weather-radar-status');
         if (el) el.textContent = message || '';
@@ -144,6 +217,10 @@
         });
 
         byId('weather-radar-product')?.addEventListener('change', () => {
+            const elevation = byId('weather-radar-elevation');
+            if (elevation) elevation.value = 'auto';
+            renderElevationPills();
+            syncElevationControl();
             pageContext?.loadUnified?.();
         });
 
@@ -173,12 +250,16 @@
     }
 
     window.NCHRadarPage = Object.freeze({
+        activeElevation,
         activeProduct,
         activeSite,
         configureRadarPage,
         radarLookbackHours,
         renderScrubFrame,
         setStatus,
+        renderElevationPills,
+        syncElevationControl,
+        updateElevationOptions,
         updateLookbackDisplay,
         wireControls,
     });

@@ -12,6 +12,49 @@ Implement enhancements in bounded phases:
 
 Marine and Fire/Smoke remain ranked backlog items.
 
+## Implementation Status
+
+### Phase 1A complete: authoritative live-radar catalog
+
+- The backend catalog now owns the currently supported live product labels,
+  fields, palettes, units, ranges, masks, capabilities, and cache IDs.
+- The Radar product selector is populated from the backend catalog.
+- The unsupported static `L3_DTA` option was removed.
+- Live Radar responses now advertise provider, network, product capabilities,
+  source timestamp, and elevation metadata placeholders.
+- Remaining Phase 1 work: expand the catalog, correct and validate all Level III
+  mappings, add Level II elevation selection, and add product-specific
+  rendering for the additional product families.
+
+### Phase 1B complete: Level II product catalog expansion
+
+- Added spectrum width, differential reflectivity, correlation coefficient,
+  specific differential phase, and differential phase.
+- Added reachable product-specific palettes and legends for all Level II
+  products.
+- Added native-field masking and value scaling, including meters-per-second to
+  knots conversion for velocity and spectrum width.
+- Remaining Level II work: elevation discovery, `auto` selection, explicit
+  nearest-angle selection, and response metadata populated from each volume.
+
+### Phase 1C complete: Level II elevation selection
+
+- Added an `auto`/explicit elevation selector for Level II products.
+- Each rendered volume records available angles and the selected angle.
+- Explicit requests use the nearest available sweep for each volume.
+- Level II cache paths are isolated by requested elevation so products and
+  angles cannot overwrite each other.
+
+### Phase 1D1 complete: initial Level III expansion
+
+- Added storm-relative velocity (`N0S`), differential reflectivity (`N0X`),
+  correlation coefficient (`N0C`), and specific differential phase (`N0K`).
+- Corrected stale Level III mnemonic labels in the repository catalog.
+- Verified each product against current NOAA open-data samples and Py-ART field
+  decoding before exposing it.
+- Remaining Level III work: hydrometeor classification, digital precipitation
+  rate, storm-total precipitation, echo tops, and VIL.
+
 ## Implementation Changes
 
 ### 1. Radar foundation and NEXRAD products

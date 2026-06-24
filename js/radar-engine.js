@@ -13,6 +13,7 @@
         const isTypeEnabled = requireContextFunction(context, 'isTypeEnabled');
         const activeSite = requireContextFunction(context, 'activeSite');
         const activeProduct = requireContextFunction(context, 'activeProduct');
+        const activeElevation = requireContextFunction(context, 'activeElevation');
         const hasMultiSites = requireContextFunction(context, 'hasMultiSites');
         const multiSitesHas = requireContextFunction(context, 'multiSitesHas');
         const isCurrentLiveRequestSeq = requireContextFunction(context, 'isCurrentLiveRequestSeq');
@@ -28,6 +29,7 @@
         async function loadLiveLatest() {
             const site = activeSite();
             const product = activeProduct();
+            const elevation = activeElevation();
             const siteConfigured = context.isSiteConfigured(site);
             const requestSeq = context.nextLiveRequestSeq();
             if (context.hasLatestRetryForOtherSelection(site, product)) {
@@ -53,7 +55,7 @@
             context.setGlobalStatus(`Loading radar site ${site} (${product})...`);
 
             try {
-                const params = new URLSearchParams({ site, product });
+                const params = new URLSearchParams({ site, product, elevation });
                 if (!siteConfigured) params.set('force', '1');
                 const resp = await context.fetchFn(context.apiUrl(`/api/radar/live/latest?${params.toString()}`), {
                     cache: 'no-store',
@@ -76,6 +78,7 @@
                 if (typeof data?.configured === 'boolean') {
                     context.setSiteConfigured(site, data.configured);
                 }
+                context.updateElevationOptions(data);
 
                 const imageUrl = data?.image_url;
                 const bounds = Array.isArray(data?.bounds) ? data.bounds : null;
@@ -128,6 +131,7 @@
             const loadSeq = context.nextScrubLoadSeq();
             const site = activeSite();
             const product = activeProduct();
+            const elevation = activeElevation();
             const contextKey = context.currentScrubContextKey(product);
             if (!site) {
                 context.setArchiveScrubber(true);
@@ -153,7 +157,12 @@
             const maxHours = context.radarLookbackHours();
 
             try {
-                const params = new URLSearchParams({ site, product, hours: String(maxHours) });
+                const params = new URLSearchParams({
+                    site,
+                    product,
+                    elevation,
+                    hours: String(maxHours),
+                });
                 const resp = await context.fetchFn(context.apiUrl(`/api/radar/live/frames?${params.toString()}`), {
                     cache: 'no-store',
                 });
@@ -165,6 +174,7 @@
                 }
 
                 const data = await resp.json();
+                context.updateElevationOptions(data);
                 const frames = context.normalizeScrubFrames(data.frames, site, product);
                 context.setScrubFrames(frames);
 

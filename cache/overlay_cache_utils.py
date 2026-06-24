@@ -179,6 +179,8 @@ def _frame_response(dir_path: str, url_dir: str, frame_key: str, entry: dict):
         "legend": entry.get("legend"),
         "vmin": entry.get("vmin"),
         "vmax": entry.get("vmax"),
+        "available_elevations": entry.get("available_elevations") or [],
+        "selected_elevation": entry.get("selected_elevation"),
         "render": {"type": "image", "image_url": image_url},
     }
 
@@ -414,6 +416,8 @@ def radar_update_index(
     vmax=None,
     timestamp=None,
     data_key=None,
+    available_elevations=None,
+    selected_elevation=None,
 ) -> None:
     """Record (or refresh) one radar frame's metadata in the site/product index."""
     _update_index(
@@ -428,6 +432,8 @@ def radar_update_index(
             "vmax": vmax,
             "timestamp": timestamp,
             "data_key": data_key,
+            "available_elevations": available_elevations,
+            "selected_elevation": selected_elevation,
         },
     )
 

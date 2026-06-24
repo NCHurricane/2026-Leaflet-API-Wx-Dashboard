@@ -9,7 +9,7 @@
         <link rel="stylesheet" href="css/shared.css">
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
-        <link rel="stylesheet" href="css/dashboard.css?v=20260620a">
+        <link rel="stylesheet" href="css/dashboard.css?v=20260622a">
     </head>
 
     <body>
@@ -521,11 +521,17 @@
                             <label for="weather-radar-product">Product</label>
                             <div class="wx-radar-select" id="wx-radar-select">
                                 <select id="weather-radar-product" class="wx-sidebar-select">
-                                    <option value="L2_REF">L2 Reflectivity</option>
-                                    <option value="L2_VEL">L2 Velocity</option>
-                                    <option value="L3_N0B" selected>L3 Reflectivity</option>
-                                    <option value="L3_N0G">L3 Velocity</option>
-                                    <option value="L3_DTA">L3 Storm Total Precip</option>
+                                    <option value="L3_N0B" selected>Loading radar products...</option>
+                                </select>
+                            </div>
+                            <div id="wx-radar-elevation-wrap" style="display:none;">
+                                <label>Elevation</label>
+                                <div id="weather-radar-elevation-pills" class="radar-elevation-pills"
+                                    role="radiogroup" aria-label="Radar elevation angle"></div>
+                                <select id="weather-radar-elevation"
+                                    class="wx-sidebar-select radar-elevation-native-control"
+                                    aria-hidden="true" tabindex="-1">
+                                    <option value="auto" selected>Auto</option>
                                 </select>
                             </div>
                             <div class="wx-radar-action-row">
