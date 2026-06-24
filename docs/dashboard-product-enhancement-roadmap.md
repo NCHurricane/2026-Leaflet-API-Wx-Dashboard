@@ -89,13 +89,22 @@ Marine and Fire/Smoke remain ranked backlog items.
 
 ### Phase 1F complete: Remaining Level III products and standardized products API
 
-- Added 5 remaining Level III products to the catalog:
-  - L3_N0H: Hydrometeor Classification (HCA palette, 0–10 categories)
-  - L3_DPR: Digital Precipitation Rate (DPA palette, 0–8 in/hr)
-  - L3_NRR: Storm Total Precipitation (PRECIP_TOTAL palette, 0–20 in)
-  - L3_NET: Echo Tops (ET palette, 0–70 kft)
-  - L3_DVL: Vertically Integrated Liquid (VIL palette, 0–80 kg/m²)
-- All products integrated with specialized color palettes and Py-ART field mappings.
+- Added 5 remaining Level III products to the catalog (all verified live):
+  - L3_N0H: Hydrometeor Classification (HCA palette; field
+    `radar_echo_classification`, categories 10–140, vmax 150)
+  - L3_DPR: Digital Precipitation Rate (DPA palette, 0–8 in/hr; product 176)
+  - L3_DTA: Storm Total Precipitation (PRECIP_TOTAL palette, 0–20 in;
+    product 172 — replaces the non-viable NRR/197)
+  - L3_EET: Echo Tops (ET palette, 0–70 kft; product 135)
+  - L3_DVL: Vertically Integrated Liquid (VIL palette, 0–80 kg/m²; product 134)
+- Added a MetPy fallback decoder in the radar worker for digital Level III
+  products Py-ART cannot read (it either raises or returns empty fields).
+  MetPy decodes + calibrates EET and DVL; a Py-ART Radar object is built so the
+  existing render pipeline is unchanged. N0H, DPR, and DTA are read natively by
+  Py-ART once the correct product codes and field names are used.
+- Removed L2_KDP: NEXRAD Level 2 has no native KDP (it is derived from PHIDP at
+  ~8s/volume, too costly for the live worker). KDP remains available via L3_N0K
+  (NWS-computed). Catalog is now 18 products (7 Level II + 11 Level III).
 - Implemented standardized `/api/{service}/products` endpoints across all pages:
   - `/api/radar/products` → 19 Level II & III products
   - `/api/wpc/products` → product groups (QPF, ERO, Winter, etc.)
@@ -109,9 +118,9 @@ Marine and Fire/Smoke remain ranked backlog items.
 - Archived manual storm-motion controls for L2_SRV (NST cell selection provides
   sufficient dynamic control).
 
-**Phase 1 complete:** All radar products (19 total), live catalog, elevation
-selection, NST storm tracks, selected-cell SRV, and standardized API endpoints
-are implemented and ready for browser smoke testing.
+**Phase 1 complete:** All radar products (18 total), live catalog, elevation
+selection, NST storm tracks, selected-cell SRV, MetPy fallback decoder, and
+standardized API endpoints are implemented and verified live.
 
 ## Implementation Changes
 
