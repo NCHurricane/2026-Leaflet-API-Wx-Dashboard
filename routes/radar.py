@@ -7,6 +7,7 @@ from services.radar_service import (
     get_radar_colortable_data,
     get_radar_live_frames_data,
     get_radar_live_latest_data,
+    get_radar_live_products_data,
     get_radar_live_sites_data,
     get_radar_site_locations_data,
     get_radar_sites_data,
@@ -14,6 +15,7 @@ from services.radar_service import (
     get_radar_tiles_freshness_data,
     head_radar_alert_tile,
 )
+from services.radar_nst_service import get_radar_storm_tracks_data
 
 router = APIRouter()
 
@@ -53,6 +55,11 @@ def get_radar_status():
     return get_radar_status_data()
 
 
+@router.get("/api/radar/products")
+def get_radar_products():
+    return get_radar_live_products_data()
+
+
 @router.get("/api/radar/live/sites")
 def get_radar_live_sites():
     return get_radar_live_sites_data()
@@ -64,9 +71,20 @@ def get_radar_live_latest(
     product: str = "L3_N0B",
     elevation: str = "auto",
     force: bool = False,
+    storm_motion_speed_kt: str | None = None,
+    storm_motion_to_degrees: str | None = None,
+    storm_motion_source: str | None = None,
+    storm_cell_id: str | None = None,
 ):
     return get_radar_live_latest_data(
-        site=site, product=product, elevation=elevation, force=force
+        site=site,
+        product=product,
+        elevation=elevation,
+        force=force,
+        storm_motion_speed_kt=storm_motion_speed_kt,
+        storm_motion_to_degrees=storm_motion_to_degrees,
+        storm_motion_source=storm_motion_source,
+        storm_cell_id=storm_cell_id,
     )
 
 
@@ -76,7 +94,30 @@ def get_radar_live_frames(
     product: str = "L3_N0B",
     elevation: str = "auto",
     hours: int = 2,
+    storm_motion_speed_kt: str | None = None,
+    storm_motion_to_degrees: str | None = None,
+    storm_motion_source: str | None = None,
+    storm_cell_id: str | None = None,
 ):
     return get_radar_live_frames_data(
-        site=site, product=product, elevation=elevation, hours=hours
+        site=site,
+        product=product,
+        elevation=elevation,
+        hours=hours,
+        storm_motion_speed_kt=storm_motion_speed_kt,
+        storm_motion_to_degrees=storm_motion_to_degrees,
+        storm_motion_source=storm_motion_source,
+        storm_cell_id=storm_cell_id,
+    )
+
+
+@router.get("/api/radar/live/storm-tracks")
+def get_radar_live_storm_tracks(
+    site: str = "KMHX",
+    timestamp: str | None = None,
+    hours: float = 2,
+    force: bool = False,
+):
+    return get_radar_storm_tracks_data(
+        site=site, timestamp=timestamp, hours=hours, force=force
     )

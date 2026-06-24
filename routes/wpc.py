@@ -12,6 +12,11 @@ def get_data_wpc(group: str = "ero", day: int = 1, product: str | None = None):
     return get_wpc_layer(group=group, day=day, product_id=product)
 
 
+@router.get("/api/wpc/products")
+def get_wpc_products():
+    return get_wpc_catalog()
+
+
 @router.get("/api/data/wpc/catalog")
 def get_data_wpc_catalog():
     return get_wpc_catalog()

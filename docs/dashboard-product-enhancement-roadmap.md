@@ -55,6 +55,64 @@ Marine and Fire/Smoke remain ranked backlog items.
 - Remaining Level III work: hydrometeor classification, digital precipitation
   rate, storm-total precipitation, echo tops, and VIL.
 
+### Phase 1D2 complete: storm-relative velocity correction and Level II SRV
+
+- Added the custom `SRRadarLoopsSRvelo.pal` palette and parser support for
+  GR-style `SolidColor` palette rows.
+- Corrected Level III `N0S` rendering so decoded product-56 velocity bins are
+  treated as knots instead of being scaled a second time from meters per second.
+- Added cache-version isolation for corrected `N0S` frames so stale pre-fix
+  overlays are not reused.
+- Added `L2_SRV`, a higher-resolution Level II-derived storm-relative velocity
+  product based on Level II velocity.
+- `L2_SRV` initially supports a fixed fallback storm motion, with motion values
+  carried through product metadata, worker rendering, and cache keys.
+
+### Phase 1E complete: NST storm tracks and selected-cell SRV
+
+- Added a Level III `NST/58` storm-track parser for the alphanumeric Storm
+  Tracking Information product.
+- Added `/api/radar/live/storm-tracks` to fetch and parse NST cells for a radar
+  site and optional target radar-frame timestamp.
+- Added a `Storm Tracks (NST)` Radar overlay showing clickable storm-cell
+  markers and forecast track lines.
+- Clicking an NST cell records its motion vector and, when `L2_SRV` is active,
+  reloads SRV using that selected cell's speed and motion direction.
+- Selected-cell SRV cache keys are isolated by rounded speed, direction, source,
+  cell ID, and elevation, for example
+  `L2_SRV__NST_CELL_B0_039KT_TO272_V1__ELEV_0P5`.
+- The Radar status line now identifies when SRV is using a selected NST cell.
+- Storm-track visibility can be toggled without invalidating the active
+  cell-relative SRV animation context.
+- Radar image overlay replacement now tracks and removes older radar image
+  overlays so cell-relative SRV reloads do not leave stale overlays underneath.
+
+### Phase 1F complete: Remaining Level III products and standardized products API
+
+- Added 5 remaining Level III products to the catalog:
+  - L3_N0H: Hydrometeor Classification (HCA palette, 0–10 categories)
+  - L3_DPR: Digital Precipitation Rate (DPA palette, 0–8 in/hr)
+  - L3_NRR: Storm Total Precipitation (PRECIP_TOTAL palette, 0–20 in)
+  - L3_NET: Echo Tops (ET palette, 0–70 kft)
+  - L3_DVL: Vertically Integrated Liquid (VIL palette, 0–80 kg/m²)
+- All products integrated with specialized color palettes and Py-ART field mappings.
+- Implemented standardized `/api/{service}/products` endpoints across all pages:
+  - `/api/radar/products` → 19 Level II & III products
+  - `/api/wpc/products` → product groups (QPF, ERO, Winter, etc.)
+  - `/api/rtma/products` → UI products + streams
+  - `/api/mrms/products` → products + sub-products + groups
+  - `/api/satellite/products` → catalog metadata
+  - `/api/tropical/products` → data types + basins
+  - `/api/spc/products` → hazards + reports + days
+  - `/api/drought/products` → USDM + data types
+  - `/api/surface/products` → surface observation fields
+- Archived manual storm-motion controls for L2_SRV (NST cell selection provides
+  sufficient dynamic control).
+
+**Phase 1 complete:** All radar products (19 total), live catalog, elevation
+selection, NST storm tracks, selected-cell SRV, and standardized API endpoints
+are implemented and ready for browser smoke testing.
+
 ## Implementation Changes
 
 ### 1. Radar foundation and NEXRAD products
@@ -65,7 +123,8 @@ Marine and Fire/Smoke remain ranked backlog items.
   UI/backend mismatch.
 - Support these initial products:
   - Level II: reflectivity, velocity, spectrum width, ZDR, correlation
-    coefficient, KDP, and differential phase.
+    coefficient, KDP, differential phase, and Level II-derived storm-relative
+    velocity.
   - Level III: reflectivity, velocity, storm-relative velocity, ZDR,
     correlation coefficient, KDP, hydrometeor classification, digital
     precipitation rate, storm-total precipitation, echo tops, and VIL.
@@ -75,6 +134,9 @@ Marine and Fire/Smoke remain ranked backlog items.
   instead of treating every non-velocity product as reflectivity.
 - Extend Radar API responses with product capabilities, available elevations,
   selected elevation, provider, network, and source timestamp.
+- Use Level III `NST/58` Storm Tracking Information as a clickable storm-motion
+  source for `L2_SRV`.
+- Keep SRV fallback behavior when NST is unavailable or contains no cells.
 
 ### 2. Satellite products and lightning
 
@@ -150,8 +212,14 @@ imagery.
 
 - Unit-test every radar code, label, unit, palette, field mapping, and elevation
   selection.
+- Unit-test SRV storm-motion validation, selected-cell cache keys, and NST table
+  parsing.
 - Render fixture volumes for each supported Level II and III family.
 - Verify no product appears in the UI unless the backend advertises it.
+- Verify NST markers/tracks align with radar-relative azimuth/range on real
+  samples.
+- Verify `L2_SRV` selected-cell animation keeps playing when the Storm Tracks
+  overlay is toggled off.
 - Test satellite platform/product compatibility and GLM one-/five-minute
   aggregation.
 - Use recorded provider fixtures for Himawari, Meteosat, ECCC, DWD, BOM, USGS,

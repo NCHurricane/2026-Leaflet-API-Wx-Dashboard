@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import json
 import os
+import re
 import threading
 
 from fastapi import HTTPException
@@ -164,10 +165,68 @@ def normalize_radar_elevation(product_key: str, elevation: str | float | None) -
     return f"{angle:.1f}"
 
 
-def radar_cache_product_key(product_key: str, elevation: str) -> str:
+def normalize_radar_srv_motion(
+    product_key: str,
+    storm_motion_speed_kt: str | float | None = None,
+    storm_motion_to_degrees: str | float | None = None,
+    storm_motion_source: str | None = None,
+    storm_cell_id: str | None = None,
+) -> dict | None:
+    product_id = str(product_key or "").strip().upper()
+    if product_id != "L2_SRV":
+        return None
+    if storm_motion_speed_kt in (None, "") or storm_motion_to_degrees in (None, ""):
+        return None
+    try:
+        speed = round(float(storm_motion_speed_kt))
+        direction = round(float(storm_motion_to_degrees)) % 360
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Storm motion speed/direction must be numeric.",
+        ) from exc
+    if speed < 0 or speed > 150:
+        raise HTTPException(
+            status_code=422,
+            detail="Storm motion speed must be between 0 and 150 kt.",
+        )
+    source = str(storm_motion_source or "manual").strip().upper()
+    source = re.sub(r"[^A-Z0-9]+", "_", source).strip("_")[:12] or "MANUAL"
+    cell = str(storm_cell_id or "").strip().upper()
+    cell = re.sub(r"[^A-Z0-9]+", "_", cell).strip("_")[:12]
+    variant_parts = [source]
+    if cell:
+        variant_parts.append(f"CELL_{cell}")
+    variant_parts.append(f"{speed:03d}KT_TO{direction:03d}")
+    variant_parts.append("V1")
+    return {
+        "speed_kt": float(speed),
+        "motion_to_degrees": float(direction),
+        "source": source,
+        "cell_id": cell,
+        "cache_variant": "_".join(variant_parts).lower(),
+    }
+
+
+def _radar_product_metadata_with_motion(product_key: str, motion: dict | None) -> dict:
+    metadata = _radar_live_product_metadata(product_key)
+    if not motion:
+        return metadata
+    metadata["storm_motion_speed_kt"] = float(motion["speed_kt"])
+    metadata["storm_motion_to_degrees"] = float(motion["motion_to_degrees"])
+    metadata["cache_variant"] = motion["cache_variant"]
+    metadata["motion_source"] = motion.get("source")
+    metadata["storm_cell_id"] = motion.get("cell_id")
+    return metadata
+
+
+def radar_cache_product_key(
+    product_key: str, elevation: str, motion: dict | None = None
+) -> str:
     product_id = str(product_key or "").strip().upper()
     cache_variant = str(
-        _radar_live_product_metadata(product_id).get("cache_variant") or ""
+        _radar_product_metadata_with_motion(product_id, motion).get("cache_variant")
+        or ""
     ).strip().upper()
     if cache_variant:
         product_id = f"{product_id}__{cache_variant}"
@@ -284,6 +343,7 @@ def _radar_live_render_on_demand(
     newest_first: bool = False,
     max_render_frames: int | None = None,
     elevation: str = "auto",
+    motion: dict | None = None,
 ) -> int:
     from workers.radar_live_worker import run_radar_live_site_product
 
@@ -301,6 +361,7 @@ def _radar_live_render_on_demand(
                 newest_first=newest_first,
                 max_render_frames=max_render_frames,
                 elevation=elevation,
+                storm_motion=motion,
             )
         )
 
@@ -321,6 +382,7 @@ def _radar_live_render_on_demand(
                     force=True,
                     latest_only=False,
                     elevation=elevation,
+                    storm_motion=motion,
                 )
         except Exception as exc:
             print(
@@ -334,18 +396,23 @@ def _radar_live_render_on_demand(
 
 
 def _radar_live_render_in_background(
-    site_id: str, product_key: str, elevation: str = "auto"
+    site_id: str,
+    product_key: str,
+    elevation: str = "auto",
+    motion: dict | None = None,
 ) -> bool:
     """Fill the live radar frame window in the background."""
+    motion_key = str((motion or {}).get("cache_variant") or "default")
     return spawn_live_render_thread(
-        ("radar_live", site_id, product_key, elevation),
-        f"radar-{site_id}-{product_key}-{elevation}",
+        ("radar_live", site_id, product_key, elevation, motion_key),
+        f"radar-{site_id}-{product_key}-{elevation}-{motion_key}",
         lambda: _radar_live_render_on_demand(
             site_id,
             product_key,
             latest_only=False,
             backfill_history=False,
             elevation=elevation,
+            motion=motion,
         ),
     )
 
@@ -547,11 +614,29 @@ def get_radar_live_sites_data() -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+def get_radar_live_products_data() -> dict:
+    """Return the complete live radar products catalog."""
+    try:
+        catalog = _radar_live_catalog()
+        return {
+            "status": "success",
+            "products": catalog,
+            "count": len(catalog),
+        }
+    except Exception as exc:
+        print(f"Radar products endpoint error: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 def get_radar_live_latest_data(
     site: str = "KMHX",
     product: str = "L3_N0B",
     elevation: str = "auto",
     force: bool = False,
+    storm_motion_speed_kt: str | float | None = None,
+    storm_motion_to_degrees: str | float | None = None,
+    storm_motion_source: str | None = None,
+    storm_cell_id: str | None = None,
 ) -> dict:
     """Return latest live radar frame from cache."""
     from cache.overlay_cache_utils import radar_read_latest_frame
@@ -563,7 +648,14 @@ def get_radar_live_latest_data(
     site_id = normalize_radar_site_id(site)
     product_key = str(product or "L3_N0B").strip().upper()
     elevation_key = normalize_radar_elevation(product_key, elevation)
-    cache_product_key = radar_cache_product_key(product_key, elevation_key)
+    motion = normalize_radar_srv_motion(
+        product_key,
+        storm_motion_speed_kt,
+        storm_motion_to_degrees,
+        storm_motion_source,
+        storm_cell_id,
+    )
+    cache_product_key = radar_cache_product_key(product_key, elevation_key, motion)
     configured = _radar_live_is_configured(site_id, product_key)
     level_code = "L2" if product_key.startswith("L2_") else "L3"
     freshness_hours = max(0.25, float(LIVE_RADAR_LOOKBACK_HOURS or 3.0))
@@ -599,6 +691,7 @@ def get_radar_live_latest_data(
                 latest_only=True,
                 backfill_history=True,
                 elevation=elevation_key,
+                motion=motion,
             )
         except Exception as exc:
             print(
@@ -618,6 +711,7 @@ def get_radar_live_latest_data(
                 latest_only=True,
                 backfill_history=True,
                 elevation=elevation_key,
+                motion=motion,
             )
         except Exception as exc:
             print(
@@ -641,6 +735,7 @@ def get_radar_live_latest_data(
                     newest_first=True,
                     max_render_frames=1,
                     elevation=elevation_key,
+                    motion=motion,
                 ),
             )
         except Exception as exc:
@@ -687,6 +782,7 @@ def get_radar_live_latest_data(
         "available_elevations": meta.get("available_elevations") or [],
         "selected_elevation": meta.get("selected_elevation"),
         "requested_elevation": elevation_key,
+        "storm_motion": motion,
         "source_data_key": meta.get("source_data_key", ""),
         "image_url": image_url,
         "bounds": meta.get("bounds"),
@@ -700,6 +796,10 @@ def get_radar_live_frames_data(
     product: str = "L3_N0B",
     elevation: str = "auto",
     hours: int = 2,
+    storm_motion_speed_kt: str | float | None = None,
+    storm_motion_to_degrees: str | float | None = None,
+    storm_motion_source: str | None = None,
+    storm_cell_id: str | None = None,
 ) -> dict:
     """Return live radar frames list for scrubber playback."""
     from cache.overlay_cache_utils import radar_list_frames
@@ -711,7 +811,14 @@ def get_radar_live_frames_data(
     site_id = normalize_radar_site_id(site)
     product_key = str(product or "L3_N0B").strip().upper()
     elevation_key = normalize_radar_elevation(product_key, elevation)
-    cache_product_key = radar_cache_product_key(product_key, elevation_key)
+    motion = normalize_radar_srv_motion(
+        product_key,
+        storm_motion_speed_kt,
+        storm_motion_to_degrees,
+        storm_motion_source,
+        storm_cell_id,
+    )
+    cache_product_key = radar_cache_product_key(product_key, elevation_key, motion)
     configured = _radar_live_is_configured(site_id, product_key)
     level_code = "L2" if product_key.startswith("L2_") else "L3"
 
@@ -752,6 +859,7 @@ def get_radar_live_frames_data(
                 newest_first=True,
                 max_render_frames=OVERLAY_EMPTY_CACHE_SYNC_FRAMES,
                 elevation=elevation_key,
+                motion=motion,
             )
         except Exception as exc:
             print(
@@ -770,7 +878,7 @@ def get_radar_live_frames_data(
         frames = radar_list_frames(CACHE_ROOT, site_id, level_code, cache_product_key)
         if frames:
             refreshing = _radar_live_render_in_background(
-                site_id, product_key, elevation_key
+                site_id, product_key, elevation_key, motion
             )
 
     filtered = _within(frames, cutoff_dt) if frames else []
@@ -780,7 +888,7 @@ def get_radar_live_frames_data(
         filtered = _within(frames, cutoff_dt - timedelta(minutes=grace_min))
         if filtered:
             refreshing = _radar_live_render_in_background(
-                site_id, product_key, elevation_key
+                site_id, product_key, elevation_key, motion
             )
         else:
             fallback_cached = max(fallback_cached, _render_newest_sync())
@@ -788,7 +896,7 @@ def get_radar_live_frames_data(
             filtered = _within(frames, cutoff_dt)
             if filtered:
                 refreshing = _radar_live_render_in_background(
-                    site_id, product_key, elevation_key
+                    site_id, product_key, elevation_key, motion
                 )
 
     return {
@@ -809,6 +917,7 @@ def get_radar_live_frames_data(
             filtered[-1].get("selected_elevation") if filtered else None
         ),
         "requested_elevation": elevation_key,
+        "storm_motion": motion,
         "frame_count": len(filtered),
         "refreshing": refreshing,
         "frames": filtered,

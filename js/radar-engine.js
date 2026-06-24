@@ -26,6 +26,18 @@
             return activeSite() === site;
         }
 
+        function stormMotionLabel(data) {
+            const motion = data?.storm_motion;
+            const speed = Number(motion?.speed_kt);
+            const direction = Number(motion?.motion_to_degrees);
+            if (!Number.isFinite(speed) || !Number.isFinite(direction)) return '';
+            const cell = String(motion?.cell_id || '').trim();
+            const source = String(motion?.source || '').trim() || 'motion';
+            return cell
+                ? ` — SRV ${source} cell ${cell}: ${Math.round(speed)} kt toward ${Math.round(direction)}°`
+                : ` — SRV ${source}: ${Math.round(speed)} kt toward ${Math.round(direction)}°`;
+        }
+
         async function loadLiveLatest() {
             const site = activeSite();
             const product = activeProduct();
@@ -56,6 +68,7 @@
 
             try {
                 const params = new URLSearchParams({ site, product, elevation });
+                context.appendSrvMotionParams?.(params);
                 if (!siteConfigured) params.set('force', '1');
                 const resp = await context.fetchFn(context.apiUrl(`/api/radar/live/latest?${params.toString()}`), {
                     cache: 'no-store',
@@ -90,6 +103,7 @@
 
                 if (!isCurrentLiveRequestSeq(requestSeq) || !canApplyResponse(site, product)) return;
                 context.clearLatestRetry();
+                context.loadStormTracks?.(data?.timestamp);
 
                 const timestampMs = context.resolveDataTimestampMs(data?.timestamp);
                 context.setViewerTimestamp(timestampMs);
@@ -98,8 +112,9 @@
                 context.setTimestampSource('radar', 'radar_live_latest', timestampMs);
 
                 const provider = String(data?.source || 'live_cache').replaceAll('_', ' ');
-                context.setRadarStatus(`${site} ${product} live radar loaded.`);
-                context.setGlobalStatus(`${site} ${product} ${context.formatValidTimeLabel(timestampMs)} (${provider}).`);
+                const motionLabel = stormMotionLabel(data);
+                context.setRadarStatus(`${site} ${product} live radar loaded${motionLabel}.`);
+                context.setGlobalStatus(`${site} ${product} ${context.formatValidTimeLabel(timestampMs)} (${provider})${motionLabel}.`);
 
                 if (data.history_filling) {
                     context.startHistoryPoll(site, product);
@@ -163,6 +178,7 @@
                     elevation,
                     hours: String(maxHours),
                 });
+                context.appendSrvMotionParams?.(params);
                 const resp = await context.fetchFn(context.apiUrl(`/api/radar/live/frames?${params.toString()}`), {
                     cache: 'no-store',
                 });
@@ -193,8 +209,9 @@
 
                 context.setArchiveProgress(false);
                 context.setScrubberControlsEnabled(true);
-                context.setRtmaScrubberStatus(`${frames.length} radar frames loaded (${site} ${product}, ${maxHours}h window).`);
-                context.setRadarStatus(`${site} ${product} radar animation loaded.`);
+                const motionLabel = stormMotionLabel(data);
+                context.setRtmaScrubberStatus(`${frames.length} radar frames loaded (${site} ${product}, ${maxHours}h window)${motionLabel}.`);
+                context.setRadarStatus(`${site} ${product} radar animation loaded${motionLabel}.`);
                 context.showAutoUpdateRow(true);
                 context.updateNextUpdateCountdown();
                 await context.renderScrubFrame(frames.length - 1);

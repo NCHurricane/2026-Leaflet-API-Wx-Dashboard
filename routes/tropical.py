@@ -15,6 +15,20 @@ from services.tropical_service import (
 router = APIRouter()
 
 
+@router.get("/api/tropical/products")
+def get_tropical_products():
+    return {
+        "status": "success",
+        "products": [
+            "active_storms",
+            "archive_catalog",
+            "basin_feeds",
+        ],
+        "basins": ["ATLANTIC", "PACIFIC", "WORLD"],
+        "count": 3,
+    }
+
+
 @router.get("/api/tropical/storms")
 def get_tropical_storms(basin: str = "WORLD", force: bool = False):
     return get_tropical_storms_data(basin=basin, force=force)

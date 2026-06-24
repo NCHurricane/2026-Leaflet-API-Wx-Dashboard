@@ -10,6 +10,7 @@ from services.radar_service import (
     _radar_live_catalog,
     _radar_live_product_metadata,
     get_radar_colortable_data,
+    normalize_radar_srv_motion,
     normalize_radar_elevation,
     radar_cache_product_key,
 )
@@ -19,6 +20,7 @@ from workers.radar_live_worker import (
     _prepare_field_data,
     _select_sweep,
     _source_product_code,
+    _product_cfg_with_storm_motion,
 )
 
 
@@ -119,6 +121,29 @@ class RadarProductCatalogTests(unittest.TestCase):
             metadata,
         )
         self.assertEqual(selected, "velocity")
+
+    def test_level_two_storm_relative_velocity_selected_cell_cache_key(self):
+        motion = normalize_radar_srv_motion(
+            "L2_SRV",
+            storm_motion_speed_kt="39.2",
+            storm_motion_to_degrees="272.4",
+            storm_motion_source="NST",
+            storm_cell_id="B0",
+        )
+        self.assertEqual(motion["speed_kt"], 39.0)
+        self.assertEqual(motion["motion_to_degrees"], 272.0)
+        self.assertEqual(motion["source"], "NST")
+        self.assertEqual(motion["cell_id"], "B0")
+        self.assertEqual(
+            radar_cache_product_key("L2_SRV", "0.5", motion),
+            "L2_SRV__NST_CELL_B0_039KT_TO272_V1__ELEV_0P5",
+        )
+        cfg = _product_cfg_with_storm_motion(
+            "L2_SRV", LIVE_RADAR_PRODUCTS["L2_SRV"], motion
+        )
+        self.assertEqual(cfg["storm_motion_speed_kt"], 39.0)
+        self.assertEqual(cfg["storm_motion_to_degrees"], 272.0)
+        self.assertEqual(cfg["cache_variant"], "nst_cell_b0_039kt_to272_v1")
 
     def test_level_two_storm_relative_velocity_derives_field(self):
         class FakeRadar:

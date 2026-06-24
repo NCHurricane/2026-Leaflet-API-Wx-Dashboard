@@ -3,12 +3,22 @@
 from fastapi import APIRouter
 
 from services.surface_service import (
+    SURFACE_PRODUCTS,
     get_colormap_data,
     get_surface_data,
     get_surface_gradient,
 )
 
 router = APIRouter()
+
+
+@router.get("/api/surface/products")
+def get_surface_products():
+    return {
+        "status": "success",
+        "products": SURFACE_PRODUCTS,
+        "count": len(SURFACE_PRODUCTS),
+    }
 
 
 @router.get("/api/data/surface")

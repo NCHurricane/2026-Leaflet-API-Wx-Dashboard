@@ -343,6 +343,20 @@ def _radar_cache_product_key(
     return f"{product_id}__ELEV_{suffix}"
 
 
+def _product_cfg_with_storm_motion(
+    product_key: str, product_cfg: dict, storm_motion: dict | None = None
+) -> dict:
+    if str(product_key or "").strip().upper() != "L2_SRV" or not storm_motion:
+        return product_cfg
+    cfg = dict(product_cfg)
+    cfg["storm_motion_speed_kt"] = float(storm_motion["speed_kt"])
+    cfg["storm_motion_to_degrees"] = float(storm_motion["motion_to_degrees"])
+    cfg["cache_variant"] = str(storm_motion["cache_variant"])
+    cfg["motion_source"] = storm_motion.get("source")
+    cfg["storm_cell_id"] = storm_motion.get("cell_id")
+    return cfg
+
+
 def _prepare_field_data(field_data, product_code: str, product_cfg: dict | None):
     render_cfg = product_cfg or {}
     data = np.ma.array(field_data)
@@ -1021,6 +1035,7 @@ def run_radar_live_site_product(
     newest_first: bool = False,
     max_render_frames: int | None = None,
     elevation: str = "auto",
+    storm_motion: dict | None = None,
 ) -> int:
     """Render and cache frames for a single live radar site/product pair.
 
@@ -1037,6 +1052,9 @@ def run_radar_live_site_product(
     product_cfg = LIVE_RADAR_PRODUCTS.get(normalized_product)
     if not product_cfg:
         raise ValueError(f"Unknown live radar product: {normalized_product}")
+    product_cfg = _product_cfg_with_storm_motion(
+        normalized_product, product_cfg, storm_motion
+    )
 
     if not force and is_cache_fresh("radar_live", _FRESH_WINDOW_SEC):
         return 0

@@ -576,6 +576,26 @@ body.wx-standalone-product .weather-header-right {
 
 .wx-radar-action-row button {
     flex: 1 1 0;
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 5px 6px;
+    cursor: pointer;
+}
+
+.wx-radar-action-row button:hover {
+    background: #334155;
+}
+
+.wx-radar-action-row button.active {
+    border-color: #22e8ff;
+    color: #22e8ff;
+    box-shadow: 0 0 0 1px rgba(34, 232, 255, 0.35) inset;
 }
 
 .wx-gradient-label {
@@ -606,6 +626,46 @@ body.wx-standalone-product .weather-header-right {
 
 #weather-alerts-opts {
     margin-top: 4px;
+}
+
+#wx-alerts-auto-update {
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 5px 6px;
+    cursor: pointer;
+}
+
+#wx-alerts-auto-update:hover {
+    background: #334155;
+}
+
+#wx-alerts-auto-update.active {
+    border-color: #22e8ff;
+    color: #22e8ff;
+    box-shadow: 0 0 0 1px rgba(34, 232, 255, 0.35) inset;
+}
+
+#weather-refresh-alerts {
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 5px 6px;
+    cursor: pointer;
+}
+
+#weather-refresh-alerts:hover {
+    background: #334155;
 }
 
 .wx-stormtrack-tools {

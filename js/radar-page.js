@@ -175,6 +175,7 @@
             pageContext.setTimestampSource('radar', 'radar_live_frames', timestampMs);
             pageContext.setScrubberStatus(`${frameIndex + 1} / ${frames.length} frames.`);
             pageContext.setGlobalStatus(`Radar scrub ${pageContext.formatValidTimeLabel(timestampMs)}.`);
+            pageContext.loadStormTracks?.(frame?.timestamp);
         } catch (err) {
             if (!pageContext.isCurrentScrubRenderSeq(renderSeq)) return;
             pageContext.setGlobalStatus(`Radar scrubber error: ${err.message}`);
@@ -192,6 +193,7 @@
         }
 
         byId('weather-radar-site')?.addEventListener('change', () => {
+            pageContext?.clearSelectedStormCell?.();
             if (pageContext?.hasMultiSites?.()) {
                 pageContext.clearMultiSiteOverlays?.();
                 pageContext.clearMultiSites?.();
@@ -217,6 +219,7 @@
         });
 
         byId('weather-radar-product')?.addEventListener('change', () => {
+            pageContext?.clearSelectedStormCell?.();
             const elevation = byId('weather-radar-elevation');
             if (elevation) elevation.value = 'auto';
             renderElevationPills();
@@ -230,6 +233,10 @@
                 if (byId('weather-radar-show-sites')?.checked) pageContext?.buildSiteMarkerLegend?.();
                 else pageContext?.setLegend?.(null);
             }
+        });
+
+        byId('weather-radar-show-storm-tracks')?.addEventListener('change', () => {
+            pageContext?.loadStormTracks?.();
         });
 
         byId('weather-refresh-radar')?.addEventListener('click', () => {

@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from config.rtma_config import RTMA_UI_PRODUCTS, RTMA_STREAMS
 from services.rtma_service import (
     get_rtma_data,
     get_rtma_frames,
@@ -10,6 +11,16 @@ from services.rtma_service import (
 )
 
 router = APIRouter()
+
+
+@router.get("/api/rtma/products")
+def get_rtma_products():
+    return {
+        "status": "success",
+        "products": RTMA_UI_PRODUCTS,
+        "streams": list(RTMA_STREAMS),
+        "count": len(RTMA_UI_PRODUCTS),
+    }
 
 
 @router.get("/api/data/rtma/points")

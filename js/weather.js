@@ -803,6 +803,7 @@
     let _spcWatchFeatures = [];
     let surfaceLayer = null;
     let radarLiveOverlay = null;
+    const _radarLiveImageOverlays = new Set();
     let satelliteOverlay = null;
     let _satelliteFrames = [];
     let _satelliteFrameIndex = 0;
@@ -843,12 +844,15 @@
     const _satelliteLegendCache = new Map();
     let radarSiteLayer = null;
     let radarSiteHighlightLayer = null;
+    let radarStormTracksLayer = null;
     let radarBackdropLayer = null;
     let _radarSitesLoaded = false;
     let _radarSiteConfiguredMap = new Map();
     let _radarSiteStatusMap = new Map();
     let _radarSiteRequestSeq = 0;
     let _radarLiveRequestSeq = 0;
+    let _radarStormTracksRequestSeq = 0;
+    let _selectedRadarStormCell = null;
     const _radarColortableCache = new Map();
     const _radarMultiSites = new Set();     // siteIds selected via Shift+click
     let _radarScrubFrames = [];
@@ -1032,6 +1036,7 @@
     const RADAR_AUTO_REFRESH_MS = 3 * 60 * 1000; // 3 minutes
     const SATELLITE_AUTO_REFRESH_MS = 5 * 60 * 1000;
     const SATELLITE_ANIMATE_AUTO_REFRESH_MS = SATELLITE_AUTO_REFRESH_MS;
+    const ALERTS_AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
     const RADAR_MULTI_SITE_MAX = 5;
     const IEM_RADAR_OVERLAY_REFRESH_MS = 5 * 60 * 1000;
     const RTMA_STREAM_MAX_HOURS = {
@@ -5842,6 +5847,7 @@
         spcLayer = null;
         _spcWatchFeatures = [];
         surfaceLayer = null;
+        _radarLiveImageOverlays.clear();
         radarLiveOverlay = null;
         satelliteOverlay = null;
         _clearSatelliteLayerPool();
@@ -5961,7 +5967,7 @@
                 _radarScrubFrames = [];
                 _radarScrubFrameIndex = 0;
                 if (radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
-                radarLiveOverlay = null;
+                _setRadarLiveOverlay(null);
                 _syncRadarSiteLayerVisibility();
                 setLegend(null);
                 _showRadarLookbackSlider(false);
@@ -5999,6 +6005,7 @@
                 break;
 
             case 'alerts':
+                _stopAlertsAutoRefresh();
                 if (alertsLayer && map.hasLayer(alertsLayer)) map.removeLayer(alertsLayer);
                 if (localStormReportsLayer && map.hasLayer(localStormReportsLayer)) {
                     map.removeLayer(localStormReportsLayer);
@@ -6096,6 +6103,185 @@
         return radarSiteHighlightLayer;
     }
 
+    function _ensureRadarStormTracksLayer() {
+        if (!radarStormTracksLayer) radarStormTracksLayer = L.layerGroup();
+        return radarStormTracksLayer;
+    }
+
+    function _isRadarStormTracksEnabled() {
+        return !!byId('weather-radar-show-storm-tracks')?.checked;
+    }
+
+    function _clearRadarStormTracksLayer({ clearSelection = false } = {}) {
+        _radarStormTracksRequestSeq += 1;
+        if (clearSelection) _selectedRadarStormCell = null;
+        if (radarStormTracksLayer) {
+            radarStormTracksLayer.clearLayers();
+            if (map.hasLayer(radarStormTracksLayer)) map.removeLayer(radarStormTracksLayer);
+        }
+    }
+
+    function _clearSelectedRadarStormCell() {
+        _selectedRadarStormCell = null;
+    }
+
+    function _activeRadarSrvMotion() {
+        if (_activeRadarProduct() !== 'L2_SRV') return null;
+        const cell = _selectedRadarStormCell;
+        if (!cell || String(cell.site || '').toUpperCase() !== _activeRadarSite()) return null;
+        const speed = Math.round(Number(cell.speed_kt));
+        const direction = ((Math.round(Number(cell.motion_to_degrees)) % 360) + 360) % 360;
+        if (!Number.isFinite(speed) || !Number.isFinite(direction)) return null;
+        return {
+            speed_kt: speed,
+            motion_to_degrees: direction,
+            source: 'NST',
+            cell_id: String(cell.cell_id || '').trim().toUpperCase(),
+        };
+    }
+
+    function _appendRadarSrvMotionParams(params) {
+        const motion = _activeRadarSrvMotion();
+        if (!motion) return;
+        params.set('storm_motion_speed_kt', String(motion.speed_kt));
+        params.set('storm_motion_to_degrees', String(motion.motion_to_degrees));
+        params.set('storm_motion_source', motion.source);
+        if (motion.cell_id) params.set('storm_cell_id', motion.cell_id);
+    }
+
+    function _radarSrvMotionContextKey() {
+        const motion = _activeRadarSrvMotion();
+        if (!motion) return 'default';
+        return `${motion.source}:${motion.cell_id || 'cell'}:${motion.speed_kt}:to${motion.motion_to_degrees}`;
+    }
+
+    function _radarStormTrackPopup(properties) {
+        const cellId = String(properties?.cell_id || '').trim() || 'Cell';
+        const speed = Number(properties?.speed_kt);
+        const direction = Number(properties?.motion_to_degrees);
+        const range = Number(properties?.current_range_nm);
+        const azimuth = Number(properties?.current_azimuth_deg);
+        const parts = [`<strong>NST Cell ${_escapeHtml(cellId)}</strong>`];
+        if (Number.isFinite(speed) && Number.isFinite(direction)) {
+            parts.push(`Motion: ${Math.round(speed)} kt toward ${Math.round(direction)}°`);
+        }
+        if (Number.isFinite(azimuth) && Number.isFinite(range)) {
+            parts.push(`Position: ${Math.round(azimuth)}° / ${Math.round(range)} nm`);
+        }
+        if (properties?.timestamp) {
+            parts.push(_escapeHtml(_formatValidTimeLabel(_resolveDataTimestampMs(properties.timestamp))));
+        }
+        return parts.join('<br>');
+    }
+
+    function _renderRadarStormTracks(data) {
+        const layer = _ensureRadarStormTracksLayer();
+        layer.clearLayers();
+        const features = data?.feature_collection?.features;
+        if (!Array.isArray(features) || !features.length) {
+            if (map.hasLayer(layer)) map.removeLayer(layer);
+            return 0;
+        }
+
+        features.forEach((feature) => {
+            const props = feature?.properties || {};
+            const geometry = feature?.geometry || {};
+            if (geometry.type === 'LineString' && Array.isArray(geometry.coordinates)) {
+                const latlngs = geometry.coordinates
+                    .map((coord) => Array.isArray(coord) && coord.length >= 2
+                        ? [Number(coord[1]), Number(coord[0])]
+                        : null)
+                    .filter((coord) => coord && Number.isFinite(coord[0]) && Number.isFinite(coord[1]));
+                if (latlngs.length < 2) return;
+                L.polyline(latlngs, {
+                    pane: 'radar-sites',
+                    color: '#facc15',
+                    weight: 2,
+                    opacity: 0.85,
+                    dashArray: '5 4',
+                    interactive: false,
+                }).addTo(layer);
+                return;
+            }
+            if (geometry.type !== 'Point' || !Array.isArray(geometry.coordinates)) return;
+            const lon = Number(geometry.coordinates[0]);
+            const lat = Number(geometry.coordinates[1]);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+            const marker = L.circleMarker([lat, lon], {
+                pane: 'radar-sites',
+                radius: 7,
+                color: '#facc15',
+                weight: 2,
+                fillColor: '#111827',
+                fillOpacity: 0.88,
+            });
+            marker.bindTooltip(`NST ${props.cell_id || ''}`, {
+                direction: 'top',
+                className: 'city-name-label',
+            });
+            marker.bindPopup(_radarStormTrackPopup(props));
+            marker.on('click', () => {
+                _selectedRadarStormCell = {
+                    site: props.site || _activeRadarSite(),
+                    cell_id: props.cell_id || '',
+                    speed_kt: props.speed_kt,
+                    motion_to_degrees: props.motion_to_degrees,
+                    timestamp: props.timestamp || data?.timestamp || '',
+                };
+                const speed = Number(_selectedRadarStormCell.speed_kt);
+                const direction = Number(_selectedRadarStormCell.motion_to_degrees);
+                if (Number.isFinite(speed) && Number.isFinite(direction)) {
+                    setStatus(`Selected NST cell ${_selectedRadarStormCell.cell_id}: ${Math.round(speed)} kt toward ${Math.round(direction)}°.`);
+                    if (_activeRadarProduct() === 'L2_SRV') {
+                        _loadRadarUnified();
+                    }
+                }
+            });
+            marker.addTo(layer);
+        });
+
+        if (_isTypeEnabled('radar') && _isRadarStormTracksEnabled() && !map.hasLayer(layer)) {
+            layer.addTo(map);
+        }
+        if (typeof layer.bringToFront === 'function') layer.bringToFront();
+        return layer.getLayers().length;
+    }
+
+    async function _loadRadarStormTracks(timestamp = null) {
+        if (!_isTypeEnabled('radar') || !_isRadarStormTracksEnabled()) {
+            _clearRadarStormTracksLayer();
+            return;
+        }
+        const site = _activeRadarSite();
+        if (!site) {
+            _clearRadarStormTracksLayer();
+            return;
+        }
+        const requestSeq = ++_radarStormTracksRequestSeq;
+        try {
+            const params = new URLSearchParams({
+                site,
+                hours: String(Math.max(1, _radarPageController?.radarLookbackHours?.() || 2)),
+            });
+            if (timestamp) params.set('timestamp', String(timestamp));
+            const resp = await fetch(apiUrl(`/api/radar/live/storm-tracks?${params.toString()}`), {
+                cache: 'no-store',
+            });
+            if (requestSeq !== _radarStormTracksRequestSeq || !_isTypeEnabled('radar')) return;
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if (requestSeq !== _radarStormTracksRequestSeq || _activeRadarSite() !== site) return;
+            const rendered = _renderRadarStormTracks(data);
+            if (!rendered) {
+                _setRadarStatus(`${site} radar loaded. No NST storm cells found.`);
+            }
+        } catch (err) {
+            if (requestSeq !== _radarStormTracksRequestSeq) return;
+            _clearRadarStormTracksLayer();
+            _setRadarStatus(`NST storm tracks unavailable for ${site}.`);
+        }
+    }
+
     function _selectedRadarSites() {
         if (_radarMultiSites.size > 0) return [..._radarMultiSites];
         const site = _activeRadarSite();
@@ -6188,6 +6374,14 @@
             map.removeLayer(layer);
             if (map.hasLayer(highlightLayer)) map.removeLayer(highlightLayer);
         }
+        _syncStormTracksVisibility();
+    }
+
+    function _syncStormTracksVisibility() {
+        const stormTracksRow = document.querySelector('input[id="weather-radar-show-storm-tracks"]')?.closest('.wx-check-row');
+        if (!stormTracksRow) return;
+        const hasSite = !!_activeRadarSite();
+        stormTracksRow.style.display = hasSite ? '' : 'none';
     }
 
     function _radarSiteStatusClass(siteId) {
@@ -6458,8 +6652,26 @@
 
     function _clearRadarLiveLayers() {
         if (radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
+        _radarLiveImageOverlays.forEach((overlay) => {
+            if (overlay && map.hasLayer(overlay)) map.removeLayer(overlay);
+        });
+        _radarLiveImageOverlays.forEach((overlay) => {
+            if (overlay && map.hasLayer(overlay)) map.removeLayer(overlay);
+        });
+        _radarLiveImageOverlays.clear();
         radarLiveOverlay = null;
+        _clearRadarStormTracksLayer({ clearSelection: true });
         _radarMultiSites.clear();
+    }
+
+    function _setRadarLiveOverlay(overlay) {
+        if (overlay) _radarLiveImageOverlays.add(overlay);
+        _radarLiveImageOverlays.forEach((trackedOverlay) => {
+            if (!trackedOverlay || trackedOverlay === overlay) return;
+            if (map.hasLayer(trackedOverlay)) map.removeLayer(trackedOverlay);
+            _radarLiveImageOverlays.delete(trackedOverlay);
+        });
+        radarLiveOverlay = overlay || null;
     }
 
     function _clearRadarLoadedOverlaysOnly() {
@@ -6556,7 +6768,7 @@
             map.removeLayer(oldOverlay);
         }
 
-        radarLiveOverlay = newOverlay;
+        _setRadarLiveOverlay(newOverlay);
     }
 
     // Legacy "Animate" button is gone in unified mode; these two functions are
@@ -6625,6 +6837,7 @@
                     elevation: _activeRadarElevation(),
                     hours: '3',
                 });
+                _appendRadarSrvMotionParams(params);
                 const resp = await fetch(apiUrl(`/api/radar/live/frames?${params.toString()}`), { cache: 'no-store' });
                 if (resp.ok) {
                     const data = await resp.json();
@@ -6731,10 +6944,11 @@
     function _radarCurrentScrubContextKey(productOverride = null) {
         const product = String(productOverride || _activeRadarProduct() || '').toUpperCase();
         const elevation = _activeRadarElevation();
+        const motion = _radarSrvMotionContextKey();
         const sites = _radarMultiSites.size > 1
             ? [..._radarMultiSites].map((s) => String(s || '').toUpperCase()).filter(Boolean).sort()
             : [String(_activeRadarSite() || '').toUpperCase()].filter(Boolean);
-        return `${product}|${elevation}|${sites.join(',')}`;
+        return `${product}|${elevation}|${motion}|${sites.join(',')}`;
     }
 
     async function _renderRadarScrubFrame(index) {
@@ -6748,7 +6962,7 @@
     let _radarAutoUpdateStatusTimer = null;
 
     function _isRadarAutoUpdateEnabled() {
-        return !!byId('wx-radar-auto-update')?.checked;
+        return byId('wx-radar-auto-update')?.classList?.contains('active') || false;
     }
 
     function _setRadarAutoUpdateStatus(msg, clearAfterMs = 0) {
@@ -7138,6 +7352,7 @@
                 elevation: _activeRadarElevation(),
                 hours: String(maxHours),
             });
+            _appendRadarSrvMotionParams(params);
             const resp = await fetch(apiUrl(`/api/radar/live/frames?${params.toString()}`), { cache: 'no-store' });
             if (!resp.ok) return 0;
             const data = await resp.json();
@@ -7266,6 +7481,34 @@
 
     function _stopMrmsAutoRefresh() {
         if (_mrmsAutoRefreshTimer) { clearInterval(_mrmsAutoRefreshTimer); _mrmsAutoRefreshTimer = null; }
+    }
+
+    // ── Alerts auto-refresh ──────────────────────────────────────────────────
+    let _alertsAutoRefreshTimer = null;
+
+    function _isAlertsAutoUpdateEnabled() {
+        return byId('wx-alerts-auto-update')?.classList?.contains('active') || false;
+    }
+
+    async function _alertsAutoRefreshTick() {
+        if (!_isTypeEnabled('alerts')) return;
+        if (document.hidden) return;
+        if (!_isAlertsAutoUpdateEnabled()) return;
+
+        try {
+            await _refreshAlertsDisplayLayer();
+        } catch (_) {
+            // Silent fail, logged in _refreshAlertsDisplayLayer
+        }
+    }
+
+    function _startAlertsAutoRefresh() {
+        if (_alertsAutoRefreshTimer) return;
+        _alertsAutoRefreshTimer = setInterval(() => { _alertsAutoRefreshTick(); }, ALERTS_AUTO_REFRESH_MS);
+    }
+
+    function _stopAlertsAutoRefresh() {
+        if (_alertsAutoRefreshTimer) { clearInterval(_alertsAutoRefreshTimer); _alertsAutoRefreshTimer = null; }
     }
 
     // ── RTMA auto-refresh ───────────────────────────────────────────────────
@@ -8557,6 +8800,7 @@
         if (!radarEnabled && radarBackdropLayer && map.hasLayer(radarBackdropLayer)) map.removeLayer(radarBackdropLayer);
         if (!radarEnabled && radarSiteLayer && map.hasLayer(radarSiteLayer)) map.removeLayer(radarSiteLayer);
         if (!radarEnabled && radarSiteHighlightLayer && map.hasLayer(radarSiteHighlightLayer)) map.removeLayer(radarSiteHighlightLayer);
+        if (!radarEnabled && radarStormTracksLayer && map.hasLayer(radarStormTracksLayer)) map.removeLayer(radarStormTracksLayer);
         if (!rtmaEnabled && rtmaOverlay && map.hasLayer(rtmaOverlay)) map.removeLayer(rtmaOverlay);
         if (!rtmaEnabled && rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) { map.removeLayer(rtmaGradientLayer); rtmaGradientLayer = null; }
         if (!rtmaEnabled && rtmaPointLayer && map.hasLayer(rtmaPointLayer)) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
@@ -13083,6 +13327,10 @@
         _alertsEngine?.loadLocalStormReports();
     });
 
+    byId('weather-radar-site')?.addEventListener('change', () => {
+        _syncStormTracksVisibility();
+    });
+
     const _lsrAllEl = byId('weather-lsr-all');
     function _syncLsrMasterToggle() {
         const cats = [...document.querySelectorAll('.weather-lsr-category')];
@@ -13519,12 +13767,18 @@
         _syncRtmaProductForStream();
         _loadRadarSites();
         _startRadarAutoRefresh();
-        byId('wx-radar-auto-update')?.addEventListener('change', () => {
-            if (byId('wx-radar-auto-update')?.checked) {
-                _setRadarAutoUpdateStatus('');
-                _restartRadarAutoRefreshInterval();
-            }
+        byId('wx-radar-auto-update')?.classList.add('active');
+        byId('wx-radar-auto-update')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            const btn = byId('wx-radar-auto-update');
+            btn?.classList.toggle('active');
             _updateRadarNextUpdateCountdown();
+        });
+        _startAlertsAutoRefresh();
+        byId('wx-alerts-auto-update')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            const btn = byId('wx-alerts-auto-update');
+            btn?.classList.toggle('active');
         });
         _syncRightSidebarLayers();
         _setViewerTimestamp(null);
@@ -13550,6 +13804,7 @@
     function _registerProductAppContexts() {
         if (_radarPageController?.configureRadarPage) {
             _radarPageController.configureRadarPage({
+                clearSelectedStormCell: _clearSelectedRadarStormCell,
                 bringSitesAboveOverlays: _bringRadarSitesAboveRadarOverlays,
                 buildSiteMarkerLegend: buildRadarSiteMarkerLegend,
                 clearLoadedOverlaysOnly: _clearRadarLoadedOverlaysOnly,
@@ -13567,6 +13822,7 @@
                 ),
                 isTypeEnabled: _isTypeEnabled,
                 leaflet: L,
+                loadStormTracks: _loadRadarStormTracks,
                 loadScrubberFrames: () => _radarEngine?.loadScrubberFrames(),
                 loadUnified: _loadRadarUnified,
                 map,
@@ -13579,7 +13835,7 @@
                 setActiveWeatherType: _setActiveWeatherType,
                 setGlobalStatus: setStatus,
                 setLegend,
-                setLiveOverlay: (overlay) => { radarLiveOverlay = overlay; },
+                setLiveOverlay: _setRadarLiveOverlay,
                 setRegionRadarSiteSelectedState: _setRegionRadarSiteSelectedState,
                 setReliability: _setReliability,
                 setScrubFrameIndex: (index) => { _radarScrubFrameIndex = index; },
@@ -13975,6 +14231,7 @@
                 activeElevation: _activeRadarElevation,
                 activeProduct: _activeRadarProduct,
             activeSite: _activeRadarSite,
+            appendSrvMotionParams: _appendRadarSrvMotionParams,
             apiUrl,
             buildProductLegend: buildRadarProductLegend,
             buildSiteMarkerLegend: buildRadarSiteMarkerLegend,
@@ -14001,6 +14258,7 @@
             isCurrentScrubLoadSeq: (loadSeq) => loadSeq === _radarScrubLoadSeq,
             isSiteConfigured: (site) => (_radarSiteConfiguredMap.has(site) ? !!_radarSiteConfiguredMap.get(site) : true),
             isTypeEnabled: _isTypeEnabled,
+            loadStormTracks: _loadRadarStormTracks,
             multiSitesHas: (site) => _radarMultiSites.has(site),
             nextLiveRequestSeq: () => {
                 _radarLiveRequestSeq += 1;
@@ -14473,7 +14731,7 @@
     }
 
     // ── Auto-refresh alerts every 30s to match the OS-task backend cadence ──
-    const ALERTS_AUTO_REFRESH_MS = 30_000;
+    const ALERTS_LIVE_AUTO_REFRESH_MS = 30_000;
     setInterval(() => {
         if (document.hidden) return;
         if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length) return;
@@ -14484,7 +14742,7 @@
         if (document.querySelectorAll('.weather-lsr-category:checked').length > 0) {
             _alertsEngine?.loadLocalStormReports({ silentStatus: true });
         }
-    }, ALERTS_AUTO_REFRESH_MS);
+    }, ALERTS_LIVE_AUTO_REFRESH_MS);
 
     // Keep active SPC MD/watch overlays current so newly issued items appear
     // and expired products are removed without a manual refresh.

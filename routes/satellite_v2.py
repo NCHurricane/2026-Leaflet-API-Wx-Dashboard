@@ -23,6 +23,12 @@ _TRANSPARENT_PNG_1X1 = (
 )
 
 
+@router.get("/api/satellite/products")
+def get_satellite_products():
+    """Alias for /api/satellite-v2/catalog for consistent naming."""
+    return get_satellite_v2_catalog()
+
+
 @router.get("/api/satellite-v2/catalog")
 def get_satellite_v2_catalog(
     sat_id: str = SATELLITE_V2_DEFAULT_SAT_ID,

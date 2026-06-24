@@ -7,6 +7,20 @@ from services.spc_service import get_spc_active, get_spc_outlook, get_spc_report
 router = APIRouter()
 
 
+@router.get("/api/spc/products")
+def get_spc_products():
+    return {
+        "status": "success",
+        "products": {
+            "outlooks": ["cat", "fire", "wind", "hail", "tornado"],
+            "watches": ["tornado", "severe", "fire"],
+            "reports": ["tornado", "hail", "wind", "fire"],
+        },
+        "days": [1, 2, 3],
+        "count": 3,
+    }
+
+
 @router.get("/api/data/spc")
 def get_data_spc(day: int = 1, hazard: str = "cat"):
     return get_spc_outlook(day=day, hazard=hazard)

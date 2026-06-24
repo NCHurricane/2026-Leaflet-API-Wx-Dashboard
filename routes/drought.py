@@ -11,6 +11,22 @@ from services.drought_service import (
 router = APIRouter()
 
 
+@router.get("/api/drought/products")
+def get_drought_products():
+    return {
+        "status": "success",
+        "products": [
+            "USDM (US Drought Monitor)",
+        ],
+        "data_types": [
+            "geojson",
+            "state_statistics",
+            "dates",
+        ],
+        "count": 1,
+    }
+
+
 @router.get("/api/data/drought/dates")
 def get_drought_dates():
     return get_drought_dates_payload()
