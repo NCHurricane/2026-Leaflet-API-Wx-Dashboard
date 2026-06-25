@@ -1,0 +1,18 @@
+Product: VISIBILITY
+Units: MI
+Step:  
+
+
+Color4:  0    127  127  127   0
+Color: 0.5    255  255  255
+Color:   1      0   46  255
+Color:   2     20  129  255
+Color:   3     35  172  235
+Color:   4      0  226  230
+Color:   5     84  226    0
+Color:  10    170  255    0
+Color:  15    255  255    0
+Color:  20    255  204    0
+Color:  30    255  153    0
+Color:  40    255   67    0
+Color:  50    255   99  255

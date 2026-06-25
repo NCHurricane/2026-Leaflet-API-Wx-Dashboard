@@ -1,0 +1,22 @@
+Product: EET
+Units:   KFT
+Step:    1
+
+SolidColor4:	 0	  0	  0	  0	  0
+
+SolidColor:		 1	 76	 76	 76
+SolidColor:		 7	  0	166	191
+SolidColor:		13	  0	123	190
+SolidColor:		19	  0	 95	146
+SolidColor:		25	 27	  0	 98
+SolidColor:		30	  0	191	 96
+SolidColor:		37	  0	134	 12
+SolidColor:		43	  0	180	 17
+SolidColor:		49	195	129	 12
+SolidColor:		55	194	189	 18
+SolidColor:		60	124	  0	  1
+SolidColor:		65	197	  0	  2
+SolidColor:		70	255	255	255
+
+Color:				 0	 54	 54	 54	TOPPED
+Color:				69	187	187	187	TOPPED

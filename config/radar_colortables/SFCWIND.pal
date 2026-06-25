@@ -1,0 +1,29 @@
+Product: SFCWIND
+Units: MPH
+Step:  5
+
+Color4:	   0      0     0     0    0
+Color:     3     80   159     2
+Color:     6    104   172     6
+Color:    12    140   192    13
+Color:    18    177   212    20
+Color:    24    213   232    27
+Color:    30    250   252    34
+Color:    36    250   208    36
+Color:    42    250   164    39
+Color:    48    251   121    41
+Color:    54    251    77    44
+Color:    60    252    34    47
+Color:    66    252    34    86
+Color:    72    252    34   126
+Color:    78    252    34   166
+Color:    84    252    34   206
+Color:    90    252    34   246
+Color:   100    252    65   247
+Color:   110    252    97   248
+Color:   120    253   128   249
+Color:   130    253   160   251
+Color:   140    254   191   252
+Color:   150    254   223   253
+Color:   160    254   223   253
+Color:   225    255   255   255

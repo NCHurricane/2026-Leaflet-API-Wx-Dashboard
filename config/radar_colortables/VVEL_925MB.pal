@@ -1,0 +1,18 @@
+ 
+Product: VVEL_925MB
+Units: DPA S^-1
+Step:  1
+
+
+ Color4:   0     0  0  0  0
+ Color:   10     12  192  25
+ Color:   20     250  230  0   
+ Color:   30     245  113  0   
+ Color:   40     235  0  3   
+ Color:   50     87  0  7   
+ Color:  -10     5  183  235   
+ Color:  -15     130  52  255   
+ Color:  -20     255  5  233   
+ Color:  -30     255  125  242   
+ Color:  -40     255  198  255   
+ Color:  -50     255  255  255  

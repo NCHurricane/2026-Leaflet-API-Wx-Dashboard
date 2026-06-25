@@ -1,0 +1,41 @@
+Product: TEMP_750MB
+Units: C
+Step:  1
+
+Color:  0  108  108  255
+Color:  2  100  177  255 
+Color:  4  138  255  168 
+Color:  6  0  234  58 
+Color:  8  0  183  46 
+Color:  10  0  128  0 
+Color:  12  255  255  108 
+Color:  14  255  255  0 
+Color:  16  255  204  0 
+Color:  18  255  107  36 
+Color:  20  253  82  0 
+Color:  22  255  83  83 
+Color:  24  255  15  15 
+Color:  26  230  0  0 
+Color:  28  170  0  0 
+Color:  30  111  0  0 
+Color:  -2  72  72  255 
+Color:  -4  13  13  255 
+Color:  -6  0  0  206 
+Color:  -8  0  0  185 
+Color:  -10  0  0  145 
+Color:  -12  113  78  252 
+Color:  -14  158  62  255 
+Color:  -16  128  0  255 
+Color:  -18  106  0  213 
+Color:  -20  68  0  136 
+Color:  -22  255  130  255 
+Color:  -24  255  66  255 
+Color:  -26  253  0  253 
+Color:  -28  210  0  210 
+Color:  -30  121  0  121 
+Color:  -32  255  202  255 
+Color:  -34  255  210  255 
+Color:  -36  255  223  255 
+Color:  -38  255  249  255 
+Color:  -40  255  255  255 
+Color4:  -50  255  255  255  0

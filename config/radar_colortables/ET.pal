@@ -1,0 +1,19 @@
+Product: EET
+Units:   kft
+Step:    1
+
+SolidColor:	 0	 51	255	255
+SolidColor:	 5        0	102	255
+SolidColor:	10	  0	  0	204
+SolidColor:	15	 51	255	102
+SolidColor:	20	  0	204	  0
+SolidColor:	25	  0	153	  0
+SolidColor:	30	255	255	 51
+SolidColor:	35	255	204	 51
+SolidColor:	40	255	153	  0
+SolidColor:	45	255	102	102
+SolidColor:	50	255	  0	  0
+SolidColor:	55	204	  0	  0
+SolidColor:	60	255	  0	204
+SolidColor:	65	153	 51	204
+SolidColor:	70	255	255	255

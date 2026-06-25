@@ -19,10 +19,27 @@ _COLORTABLE_DIR = Path(__file__).parent / "radar_colortables"
 
 # Map product key → .pal filename (without the directory path)
 _PAL_FILENAMES: dict[str, str] = {
-    "BR": "RadarScope_BR.pal",
-    "BV": "BV_grl3v2.pal",
-    "SRV": "SRRadarLoopsSRvelo.pal",
+    "BR": "BR.pal",
+    "BV": "BV.pal",
+    "SRV": "SRV.pal",
+    "CC": "AWIPS_RHO.pal",
+    "ZDR": "ZDR.pal",
+    "KDP": "KDP.pal",
+    "SW": "SW.pal",
+    "PHI": "PHI.pal",
+    "HCA": "HC.pal",
+    "ET": "EET.pal",
+    "VIL": "DVL.pal",
+    "DPA": "DPR.pal",
+    "PRECIP_TOTAL": "DAA.pal",
 }
+
+# Palettes whose .pal entry values do not share the product's config value
+# scale -- either array indices (DPR/DAA) or a different-but-linear unit (SW is
+# in m/s while the data is scaled to knots). Their colormaps are normalized
+# across the palette's own min/max so the color sequence spans the full data
+# range set by the product's config vmin/vmax.
+_PAL_INDEXED: set[str] = {"DPA", "PRECIP_TOTAL", "SW"}
 
 _GENERATED_UNITS: dict[str, str] = {
     "CC": "RATIO",
@@ -72,7 +89,7 @@ def _parse_pal(path: Path) -> dict:
     # Re-join lines that were soft-wrapped (continuation lines start with a
     # digit or sign and do NOT start with a keyword).
     _keywords = re.compile(
-        r"^(color|solidcolor|nd|rf|product|units|step|scale):?\b", re.I)
+        r"^(color|solidcolor\d*|nd|rf|product|units|step|scale):?\b", re.I)
     joined: list[str] = []
     for line in raw_lines:
         if joined and not _keywords.match(line):
@@ -109,7 +126,8 @@ def _parse_pal(path: Path) -> dict:
             nums = _extract_ints(rest, count=3)
             if nums:
                 meta["rf"] = tuple(nums)
-        elif key in {"COLOR", "SOLIDCOLOR"} and rest:
+        elif (key == "COLOR" or key.startswith("SOLIDCOLOR")) and rest:
+            # SolidColor / SolidColor4 (with trailing alpha) both supported.
             entry = _parse_color_entry(rest)
             if entry is not None:
                 meta["color_entries"].append(entry)
@@ -162,11 +180,23 @@ def _build_colormap(
     vmin: float,
     vmax: float,
     name: str,
+    own_range: bool = False,
 ) -> mcolors.LinearSegmentedColormap:
-    """Build a matplotlib LinearSegmentedColormap from parsed .pal entries."""
+    """Build a matplotlib LinearSegmentedColormap from parsed .pal entries.
+
+    When ``own_range`` is True the colormap is normalized across the palette's
+    own min/max value instead of (vmin, vmax). Use this for indexed palettes
+    whose entry values are array indices, not physical units, so the color
+    sequence spans the full data range at render time.
+    """
     entries = parsed["color_entries"]
     if not entries:
         raise ValueError(f"No color entries found for colormap '{name}'")
+
+    if own_range:
+        entry_vals = [float(e["value"]) for e in entries]
+        vmin = min(entry_vals)
+        vmax = max(entry_vals)
 
     span = float(vmax - vmin)
     points: list[tuple[float, tuple]] = []
@@ -245,7 +275,7 @@ _CACHE: dict[str, dict] = {}
 
 
 def get_radar_colortable(
-    pal_key: str,  # e.g. "BR" or "BV" — maps to samBR.pal / samVEL.pal
+    pal_key: str,  # palette key (e.g. "BR", "BV") -> .pal file via _PAL_FILENAMES
     vmin: float,
     vmax: float,
 ) -> dict:
@@ -270,7 +300,13 @@ def get_radar_colortable(
         if not pal_path.exists():
             raise FileNotFoundError(f"Colortable not found: {pal_path}")
         parsed = _parse_pal(pal_path)
-        cmap = _build_colormap(parsed, vmin, vmax, name=f"GRS_{pal_key}")
+        cmap = _build_colormap(
+            parsed,
+            vmin,
+            vmax,
+            name=f"GRS_{pal_key}",
+            own_range=pal_key in _PAL_INDEXED,
+        )
     else:
         from radar.radar_colormaps import GRS_COLORMAPS
 

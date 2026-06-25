@@ -1,0 +1,16 @@
+
+Product: RELH_925MB
+Units: %
+Step:  1
+
+Color4: 0  102   0 255 0
+Color: 10    0   0 255
+Color: 20    0 115 255
+Color: 30    0 204 255
+Color: 40    0 255 255
+Color: 50  127 255   0
+Color: 60  255 255   0
+Color: 70  255 204   0
+Color: 80  255 153   0
+Color: 90  255  79   0
+Color: 100 255  40   0

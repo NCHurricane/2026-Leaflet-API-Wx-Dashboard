@@ -1,0 +1,20 @@
+Product: SFCCIN
+Units: J/KG
+Step:
+
+Color4:    0    0   0   0   0
+Color4:   -5    0   0   0   0
+Color:   -10  100 100 100
+Color:   -25   84 200 200
+Color:   -50   64 172 172
+Color:   -75   48 150 150
+Color:  -100   64 128 192
+Color:  -125   57  92 172
+Color:  -150   50  72 152
+Color:  -175   42  52 132
+Color:  -200   64   0 172
+Color:  -225   80   0 172
+Color:  -250  100   0 172
+Color:  -300  150   0 172
+Color:  -350  200   0 172
+Color: -2000  255   0 172

@@ -1,0 +1,13 @@
+Product: SMOKE
+Units: KG/M^3
+Step:  
+
+Color4:   0    0   0   0   0
+Color4:   2    0   0   0   0 
+Color:   10  140 144 201 
+Color:   20   97 201 250 
+Color:   50  184 251  42 
+Color:   60  239 253  97 
+Color:  300  140  26  17 
+Color:  500  255   7 255 
+Color: 1000  200  99 209 
