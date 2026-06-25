@@ -102,3 +102,6 @@ tropical_tab_redesign_plan.md
 tools/install_tasks.ps1
 .gitignore
 docs/tropical-next-session-plan.md
+
+# Standalone palette tool: transient downloaded sample data
+pal_preview/samples/

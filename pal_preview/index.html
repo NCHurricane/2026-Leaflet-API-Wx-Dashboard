@@ -57,7 +57,8 @@
         }
 
         input[type="text"],
-        input[type="number"] {
+        input[type="number"],
+        select {
             width: 100%;
             background: var(--bg);
             border: 1px solid var(--border);
@@ -65,6 +66,20 @@
             color: var(--text);
             padding: 7px 9px;
             font-size: 0.85rem;
+        }
+
+        .fetch-box {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px 14px 14px;
+            margin-bottom: 18px;
+            background: rgba(15, 23, 42, 0.5);
+        }
+
+        .grid-fetch {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
         }
 
         .file-row {
@@ -174,8 +189,22 @@
         <h1>Radar Palette Preview</h1>
         <div class="sub">Render a local radar volume with a .pal colortable.</div>
 
+        <div class="fetch-box">
+            <label style="margin-top:0;">Fetch sample data</label>
+            <div class="grid-fetch">
+                <input type="text" id="fetch-site" value="KTWX" placeholder="Site (KTWX)">
+                <button type="button" class="file-btn" id="fetch-btn">Fetch</button>
+            </div>
+            <div class="hint">Downloads 1 Level II volume + each Level III product from AWS.</div>
+            <div class="status" id="fetch-status"></div>
+        </div>
+
         <form id="form">
-            <label>Radar volume</label>
+            <label>Radar source</label>
+            <select id="radar-sample" name="radar_sample">
+                <option value="">— Upload a file below —</option>
+            </select>
+            <div class="hint" style="margin-bottom:6px;">Pick a fetched sample, or upload your own:</div>
             <div class="file-row">
                 <button type="button" class="file-btn" data-target="radar-input">Choose File</button>
                 <span class="file-name" id="radar-name">No file</span>
@@ -221,22 +250,37 @@
         const byId = (id) => document.getElementById(id);
         const radarInput = byId('radar-input');
         const palInput = byId('pal-input');
+        const sampleSelect = byId('radar-sample');
         const renderBtn = byId('render-btn');
         const statusEl = byId('status');
+        const fetchBtn = byId('fetch-btn');
+        const fetchStatus = byId('fetch-status');
         const preview = byId('preview');
         const placeholder = byId('placeholder');
         let lastUrl = null;
 
-        document.querySelectorAll('.file-btn').forEach((btn) => {
+        document.querySelectorAll('.file-btn[data-target]').forEach((btn) => {
             btn.addEventListener('click', () => byId(btn.dataset.target).click());
         });
 
+        function hasRadar() {
+            return Boolean(sampleSelect.value) || radarInput.files.length > 0;
+        }
+
         function refreshReady() {
-            renderBtn.disabled = !(radarInput.files.length && palInput.files.length);
+            renderBtn.disabled = !(hasRadar() && palInput.files.length);
         }
 
         radarInput.addEventListener('change', () => {
             byId('radar-name').textContent = radarInput.files[0]?.name || 'No file';
+            if (radarInput.files.length) sampleSelect.value = '';
+            refreshReady();
+        });
+        sampleSelect.addEventListener('change', () => {
+            if (sampleSelect.value) {
+                radarInput.value = '';
+                byId('radar-name').textContent = 'No file';
+            }
             refreshReady();
         });
         palInput.addEventListener('change', () => {
@@ -248,6 +292,53 @@
             statusEl.textContent = msg || '';
             statusEl.classList.toggle('err', isErr);
         }
+
+        function populateSamples(names, keepValue) {
+            const prev = keepValue ? sampleSelect.value : '';
+            sampleSelect.innerHTML = '<option value="">— Upload a file below —</option>';
+            (names || []).forEach((name) => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                sampleSelect.appendChild(opt);
+            });
+            if (prev && names.includes(prev)) sampleSelect.value = prev;
+            refreshReady();
+        }
+
+        async function loadSamples() {
+            try {
+                const res = await fetch('/samples');
+                const j = await res.json();
+                populateSamples(j.samples || [], true);
+            } catch (_) { /* ignore on first load */ }
+        }
+
+        fetchBtn.addEventListener('click', async () => {
+            const site = byId('fetch-site').value.trim().toUpperCase();
+            if (!site) { fetchStatus.textContent = 'Enter a site.'; return; }
+            fetchBtn.disabled = true;
+            fetchStatus.classList.remove('err');
+            fetchStatus.textContent = `Fetching ${site}… (this can take a bit)`;
+            try {
+                const data = new FormData();
+                data.append('site', site);
+                const res = await fetch('/fetch', { method: 'POST', body: data });
+                const j = await res.json();
+                if (!res.ok) throw new Error(j.detail || `HTTP ${res.status}`);
+                const ok = (j.results || []).filter((r) => r.ok).length;
+                const total = (j.results || []).length;
+                populateSamples(j.samples || [], false);
+                fetchStatus.textContent = `Fetched ${ok}/${total} products for ${site}.`;
+            } catch (err) {
+                fetchStatus.classList.add('err');
+                fetchStatus.textContent = err.message;
+            } finally {
+                fetchBtn.disabled = false;
+            }
+        });
+
+        loadSamples();
 
         byId('form').addEventListener('submit', async (e) => {
             e.preventDefault();
