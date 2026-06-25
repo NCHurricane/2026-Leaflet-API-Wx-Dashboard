@@ -74,11 +74,12 @@ LIVE_RADAR_PRODUCTS = {
         "label": "L2 Velocity",
         "field_names": ["velocity"],
         "palette": "BV",
-        "units": "kt",
-        "vmin": -120.0,
-        "vmax": 120.0,
+        "units": "mph",
+        # BV.pal is in mph: -64..+64 gradient with a green inbound floor to -150.
+        "vmin": -150.0,
+        "vmax": 64.0,
         "mask": "velocity",
-        "value_scale": 1.94384449,
+        "value_scale": 2.2369363,
         "capabilities": {"elevation_selection": True},
     },
     "L2_SRV": {
@@ -183,11 +184,12 @@ LIVE_RADAR_PRODUCTS = {
         "label": "L3 Velocity",
         "field_names": ["velocity"],
         "palette": "BV",
-        "units": "kt",
-        "vmin": -120.0,
-        "vmax": 120.0,
+        "units": "mph",
+        # BV.pal is in mph: -64..+64 gradient with a green inbound floor to -150.
+        "vmin": -150.0,
+        "vmax": 64.0,
         "mask": "velocity",
-        "value_scale": 1.94384449,
+        "value_scale": 2.2369363,
         "capabilities": {"elevation_selection": False},
     },
     "L3_N0S": {
