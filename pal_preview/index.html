@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar Palette Preview</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #1e293b;
+            --border: #334155;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --accent: #22e8ff;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            min-height: 100vh;
+        }
+
+        aside {
+            background: var(--panel);
+            border-right: 1px solid var(--border);
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 1.1rem;
+            margin: 0 0 4px;
+        }
+
+        .sub {
+            color: var(--muted);
+            font-size: 0.75rem;
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: var(--muted);
+            margin: 14px 0 6px;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            padding: 7px 9px;
+            font-size: 0.85rem;
+        }
+
+        .file-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .file-btn {
+            flex: 0 0 auto;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 7px 12px;
+            cursor: pointer;
+        }
+
+        .file-btn:hover {
+            background: #243043;
+        }
+
+        .file-name {
+            flex: 1 1 auto;
+            font-size: 0.7rem;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .grid2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        button.render {
+            width: 100%;
+            margin-top: 22px;
+            background: #059669;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            font-size: 0.85rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 11px;
+            cursor: pointer;
+        }
+
+        button.render:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.render:hover:not(:disabled) {
+            background: #10b981;
+        }
+
+        .status {
+            margin-top: 14px;
+            font-size: 0.75rem;
+            color: var(--muted);
+            min-height: 1.2em;
+        }
+
+        .status.err {
+            color: #f87171;
+        }
+
+        main {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        #preview {
+            max-width: 100%;
+            max-height: calc(100vh - 48px);
+            border-radius: 6px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+            display: none;
+        }
+
+        .placeholder {
+            color: var(--muted);
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        .hint {
+            font-size: 0.68rem;
+            color: var(--muted);
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+
+<body>
+    <aside>
+        <h1>Radar Palette Preview</h1>
+        <div class="sub">Render a local radar volume with a .pal colortable.</div>
+
+        <form id="form">
+            <label>Radar volume</label>
+            <div class="file-row">
+                <button type="button" class="file-btn" data-target="radar-input">Choose File</button>
+                <span class="file-name" id="radar-name">No file</span>
+                <input type="file" id="radar-input" name="radar_file" hidden>
+            </div>
+            <div class="hint">Level II archive or Level III product file.</div>
+
+            <label>Palette (.pal)</label>
+            <div class="file-row">
+                <button type="button" class="file-btn" data-target="pal-input">Choose File</button>
+                <span class="file-name" id="pal-name">No file</span>
+                <input type="file" id="pal-input" name="pal_file" accept=".pal" hidden>
+            </div>
+
+            <label>Field <span style="text-transform:none;font-weight:400;">(optional)</span></label>
+            <input type="text" id="field" name="field" placeholder="auto-detect (e.g. reflectivity)">
+
+            <div class="grid2">
+                <div>
+                    <label>vmin</label>
+                    <input type="number" id="vmin" name="vmin" step="any" placeholder="palette min">
+                </div>
+                <div>
+                    <label>vmax</label>
+                    <input type="number" id="vmax" name="vmax" step="any" placeholder="palette max">
+                </div>
+            </div>
+
+            <label>Sweep</label>
+            <input type="number" id="sweep" name="sweep" value="0" min="0" step="1">
+
+            <button type="submit" class="render" id="render-btn" disabled>Render</button>
+            <div class="status" id="status"></div>
+        </form>
+    </aside>
+
+    <main>
+        <div class="placeholder" id="placeholder">Upload a radar file and a .pal, then Render.</div>
+        <img id="preview" alt="Rendered radar preview">
+    </main>
+
+    <script>
+        const byId = (id) => document.getElementById(id);
+        const radarInput = byId('radar-input');
+        const palInput = byId('pal-input');
+        const renderBtn = byId('render-btn');
+        const statusEl = byId('status');
+        const preview = byId('preview');
+        const placeholder = byId('placeholder');
+        let lastUrl = null;
+
+        document.querySelectorAll('.file-btn').forEach((btn) => {
+            btn.addEventListener('click', () => byId(btn.dataset.target).click());
+        });
+
+        function refreshReady() {
+            renderBtn.disabled = !(radarInput.files.length && palInput.files.length);
+        }
+
+        radarInput.addEventListener('change', () => {
+            byId('radar-name').textContent = radarInput.files[0]?.name || 'No file';
+            refreshReady();
+        });
+        palInput.addEventListener('change', () => {
+            byId('pal-name').textContent = palInput.files[0]?.name || 'No file';
+            refreshReady();
+        });
+
+        function setStatus(msg, isErr = false) {
+            statusEl.textContent = msg || '';
+            statusEl.classList.toggle('err', isErr);
+        }
+
+        byId('form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            renderBtn.disabled = true;
+            setStatus('Rendering…');
+
+            try {
+                const data = new FormData(byId('form'));
+                const res = await fetch('/render', { method: 'POST', body: data });
+                if (!res.ok) {
+                    let detail = `HTTP ${res.status}`;
+                    try {
+                        const j = await res.json();
+                        if (j.detail) detail = j.detail;
+                    } catch (_) { /* non-JSON error body */ }
+                    throw new Error(detail);
+                }
+
+                const blob = await res.blob();
+                if (lastUrl) URL.revokeObjectURL(lastUrl);
+                lastUrl = URL.createObjectURL(blob);
+                preview.src = lastUrl;
+                preview.style.display = 'block';
+                placeholder.style.display = 'none';
+                setStatus('Done.');
+            } catch (err) {
+                setStatus(err.message, true);
+            } finally {
+                refreshReady();
+            }
+        });
+    </script>
+</body>
+
+</html>
