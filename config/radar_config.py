@@ -68,7 +68,7 @@ LIVE_RADAR_PRODUCTS = {
         # Hide the lightest returns (below the first opaque color in BR.pal).
         "min_value": 5.0,
         "value_scale": 1.0,
-        "cache_variant": "br_min5dbz_v1",
+        "cache_variant": "br_min5dbz_v2",
         "capabilities": {"elevation_selection": True},
     },
     "L2_VEL": {
@@ -181,7 +181,7 @@ LIVE_RADAR_PRODUCTS = {
         # Hide the lightest returns (below the first opaque color in BR.pal).
         "min_value": 5.0,
         "value_scale": 1.0,
-        "cache_variant": "br_min5dbz_v1",
+        "cache_variant": "br_min5dbz_v2",
         "capabilities": {"elevation_selection": False},
     },
     "L3_N0G": {
