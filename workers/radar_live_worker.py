@@ -466,6 +466,12 @@ def _prepare_field_data(field_data, product_code: str, product_cfg: dict | None)
     else:
         invalid = ~np.isfinite(data) | (data <= -31.5)
 
+    # Optional low-value filter: hide the lightest returns (e.g. reflectivity
+    # below a dBZ floor) without affecting the color scaling (vmin/vmax).
+    min_value = render_cfg.get("min_value")
+    if min_value is not None:
+        invalid = invalid | (data < float(min_value))
+
     return np.ma.masked_where(invalid, data)
 
 
