@@ -122,6 +122,28 @@ Marine and Fire/Smoke remain ranked backlog items.
 selection, NST storm tracks, selected-cell SRV, MetPy fallback decoder, and
 standardized API endpoints are implemented and verified live.
 
+### Radar enhancements (planned, post-Phase 1)
+
+Tracked in detail in the session memory note
+`memory/radar-enhancements-planned.md`. Summary:
+
+1. Radar loop "blink" between frames — fixed (crossfade duration raised so the
+   outgoing overlay stays visible until the preloaded incoming frame paints).
+2. Hover tooltips showing pixel values (dBZ, in, mph) — needs a backend
+   point-query against the radar volume; not derivable from the rendered PNG.
+3. Live `.pal` upload + preview without server restart/page refresh — runtime
+   palette parse + server-side re-render of the current frame(s) + DOM swap.
+4. Level III storm-attribute overlays as marker/popup layers (modeled on the
+   existing NST/58 storm-cell parser), folded into the Storm Tracks layer or as
+   sibling toggles:
+   - NSS/62 Storm Structure (per-cell attribute table: max reflectivity, max
+     velocity at lowest elevation, overhang, mass-weighted volume, area
+     base/top, position, tilt).
+   - NHI/59 Hail Index (probable = hollow green triangle, positive = filled
+     green triangle).
+   - NME/60 + NMD/141 Mesocyclone (rotation markers: azimuth, range, height).
+   - NTV/61 Tornadic Vortex Signature (red triangle, location + height).
+
 ## Implementation Changes
 
 ### 1. Radar foundation and NEXRAD products
