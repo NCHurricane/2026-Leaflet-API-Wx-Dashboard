@@ -1013,8 +1013,13 @@
     const RTMA_SCRUB_SWAP_FADE_MS = 90;
     const _RADAR_OVERLAY_FRAMES = 4;
     const _RADAR_OVERLAY_STEP_MIN = 5;
-    const RADAR_CROSSFADE_MS = 5;
-    const SATELLITE_CROSSFADE_MS = RADAR_CROSSFADE_MS;
+    // Radar overlays are removed after the fade completes, so the fade must last
+    // long enough for the (preloaded) incoming image to paint — otherwise the
+    // old overlay disappears a frame before the new one shows, causing a blink
+    // between loop frames. Satellite keeps its old layer underneath in scrub
+    // mode (removeOldAfterFade:false), so it can stay near-instant.
+    const RADAR_CROSSFADE_MS = 140;
+    const SATELLITE_CROSSFADE_MS = 5;
     const SATELLITE_LOOKBACK_HOURS_MAX = 12;
     const SATELLITE_FRAME_REQUEST_MAX = 360;
     const SATELLITE_LOOKBACK_RELOAD_DEBOUNCE_MS = 250;
