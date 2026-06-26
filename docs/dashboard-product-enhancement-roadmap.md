@@ -93,8 +93,9 @@ Marine and Fire/Smoke remain ranked backlog items.
   - L3_N0H: Hydrometeor Classification (HCA palette; field
     `radar_echo_classification`, categories 10–140, vmax 150)
   - L3_DPR: Digital Precipitation Rate (DPA palette, 0–8 in/hr; product 176)
-  - L3_DTA: Storm Total Precipitation (PRECIP_TOTAL palette, 0–20 in;
-    product 172 — replaces the non-viable NRR/197)
+  - L3_DAA: One-Hour Accumulation (DAA palette, indexed 1–254; product 170)
+  - L3_DTA: Storm Total Precipitation (STP palette, 0–18 in; product 172)
+    (previously shared PRECIP_TOTAL palette; split & wired separately 2026-06-25)
   - L3_EET: Echo Tops (ET palette, 0–70 kft; product 135)
   - L3_DVL: Vertically Integrated Liquid (VIL palette, 0–80 kg/m²; product 134)
 - Added a MetPy fallback decoder in the radar worker for digital Level III
@@ -127,12 +128,14 @@ standardized API endpoints are implemented and verified live.
 Tracked in detail in the session memory note
 `memory/radar-enhancements-planned.md`. Summary:
 
-1. Radar loop "blink" between frames — fixed (crossfade duration raised so the
+1. Radar loop "blink" between frames — ✅ fixed (crossfade duration raised so the
    outgoing overlay stays visible until the preloaded incoming frame paints).
 2. Hover tooltips showing pixel values (dBZ, in, mph) — needs a backend
    point-query against the radar volume; not derivable from the rendered PNG.
-3. Live `.pal` upload + preview without server restart/page refresh — runtime
-   palette parse + server-side re-render of the current frame(s) + DOM swap.
+3. Live `.pal` upload + preview — ✅ complete (standalone FastAPI tool in
+   `pal_preview/` on port 8050; independent of dashboard caching; supports
+   all products + palette iteration). Palette parser enhanced to support
+   Color4/RGBA entries and fixed two-color position collisions.
 4. Level III storm-attribute overlays as marker/popup layers (modeled on the
    existing NST/58 storm-cell parser), folded into the Storm Tracks layer or as
    sibling toggles:
