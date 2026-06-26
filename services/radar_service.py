@@ -468,7 +468,8 @@ _RADAR_COLORTABLE_PRODUCTS: dict[str, tuple[float, float]] = {
     "BV": (-120.0, 120.0),
     "HCA": (0.0, 150.0),        # L3_N0H Hydrometeor Classification
     "DPA": (0.0, 8.0),          # L3_DPR Digital Precipitation Rate
-    "PRECIP_TOTAL": (0.0, 20.0), # L3_DTA Storm Total Precipitation
+    "DAA": (0.0, 4.0),          # L3_DAA One-Hour Accumulation
+    "STP": (0.0, 18.0),         # L3_DTA Storm Total Accumulation
     "ET": (0.0, 70.0),          # L3_EET Echo Tops
     "VIL": (0.0, 80.0),         # L3_DVL Vertically Integrated Liquid
 }

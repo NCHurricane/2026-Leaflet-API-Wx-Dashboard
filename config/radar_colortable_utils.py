@@ -31,7 +31,8 @@ _PAL_FILENAMES: dict[str, str] = {
     "ET": "EET.pal",
     "VIL": "DVL.pal",
     "DPA": "DPR.pal",
-    "PRECIP_TOTAL": "DAA.pal",
+    "DAA": "DAA.pal",          # L3_DAA One-Hour Accumulation (indexed levels)
+    "STP": "STP.pal",          # L3_DTA Storm Total Accumulation (physical inches)
 }
 
 # Palettes whose .pal entry values do not share the product's config value
@@ -39,7 +40,7 @@ _PAL_FILENAMES: dict[str, str] = {
 # in m/s while the data is scaled to knots). Their colormaps are normalized
 # across the palette's own min/max so the color sequence spans the full data
 # range set by the product's config vmin/vmax.
-_PAL_INDEXED: set[str] = {"DPA", "PRECIP_TOTAL", "SW"}
+_PAL_INDEXED: set[str] = {"DPA", "DAA", "SW"}
 
 _GENERATED_UNITS: dict[str, str] = {
     "CC": "RATIO",
@@ -89,7 +90,7 @@ def _parse_pal(path: Path) -> dict:
     # Re-join lines that were soft-wrapped (continuation lines start with a
     # digit or sign and do NOT start with a keyword).
     _keywords = re.compile(
-        r"^(color|solidcolor\d*|nd|rf|product|units|step|scale):?\b", re.I)
+        r"^(color\d*|solidcolor\d*|nd|rf|product|units|step|scale):?\b", re.I)
     joined: list[str] = []
     for line in raw_lines:
         if joined and not _keywords.match(line):
@@ -126,9 +127,11 @@ def _parse_pal(path: Path) -> dict:
             nums = _extract_ints(rest, count=3)
             if nums:
                 meta["rf"] = tuple(nums)
-        elif (key == "COLOR" or key.startswith("SOLIDCOLOR")) and rest:
-            # SolidColor / SolidColor4 (with trailing alpha) both supported.
-            entry = _parse_color_entry(rest)
+        elif (key.startswith("COLOR") or key.startswith("SOLIDCOLOR")) and rest:
+            # Color/SolidColor (RGB) and Color4/SolidColor4 (RGBA) all supported;
+            # the trailing "4" signals a 4-channel format whose alpha is skipped.
+            channels = 4 if key.endswith("4") else 3
+            entry = _parse_color_entry(rest, channels)
             if entry is not None:
                 meta["color_entries"].append(entry)
 
@@ -149,23 +152,27 @@ def _extract_ints(tokens: list[str], count: int) -> list[int] | None:
     return nums if len(nums) == count else None
 
 
-def _parse_color_entry(rest: list[str]) -> dict | None:
-    """Parse the value + 3 or 6 RGB integers from a Color: line."""
+def _parse_color_entry(rest: list[str], channels: int = 3) -> dict | None:
+    """Parse a Color/SolidColor line into value + one or two RGB colors.
+
+    ``channels`` is 3 for RGB or 4 for RGBA (Color4/SolidColor4); for RGBA the
+    alpha component is skipped so only RGB is kept. Each color occupies
+    ``channels`` components, so a two-color band has ``2 * channels`` of them.
+    """
     nums: list[float] = []
     for t in rest:
         try:
             nums.append(float(t))
         except ValueError:
             pass
-    if len(nums) < 4:
+    if len(nums) < 1 + channels:
         return None
     value = nums[0]
-    rgb_vals = [int(v) for v in nums[1:]]
-    if len(rgb_vals) >= 6:
-        c1 = (rgb_vals[0], rgb_vals[1], rgb_vals[2])
-        c2 = (rgb_vals[3], rgb_vals[4], rgb_vals[5])
+    comps = [int(v) for v in nums[1:]]
+    c1 = (comps[0], comps[1], comps[2])
+    if len(comps) >= 2 * channels:
+        c2 = (comps[channels], comps[channels + 1], comps[channels + 2])
     else:
-        c1 = (rgb_vals[0], rgb_vals[1], rgb_vals[2])
         c2 = c1
     return {"value": value, "c1": c1, "c2": c2}
 
@@ -228,7 +235,18 @@ def _build_colormap(
     if points[-1][0] < 1.0:
         points.append((1.0, points[-1][1]))
 
-    return mcolors.LinearSegmentedColormap.from_list(name, points, N=512)
+    # matplotlib requires strictly increasing positions. Densely packed
+    # two-color bands can collide at a position (e.g. a two-color top entry that
+    # maps to 1.0 emits both colors there); keep the later color at a shared
+    # position so the gradient stays monotonic.
+    cleaned: list[tuple[float, tuple]] = []
+    for pos, color in points:
+        if cleaned and pos <= cleaned[-1][0]:
+            cleaned[-1] = (cleaned[-1][0], color)
+        else:
+            cleaned.append((pos, color))
+
+    return mcolors.LinearSegmentedColormap.from_list(name, cleaned, N=512)
 
 
 # ---------------------------------------------------------------------------
