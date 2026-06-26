@@ -1,19 +1,18 @@
-Product: BV
-Units:   MPH
-Step:    4
-RF:      142 14 141
-SolidColor: -150 192 252 28
-SolidColor:	-64	192	252	 28
-SolidColor:	-50	121	252	 28
-SolidColor:	-36	 87	217	 23
-SolidColor:	-26	 54	161	 14
-SolidColor:	-20	 20	104	  6
-SolidColor:	-10	  0	 78	  3
-SolidColor:	 -1	108	132	108
-SolidColor:	  0	112	 87	 87
-SolidColor:	 10	101	  2	  0
-SolidColor:	 20	138	  3	  0
-SolidColor:	 26	191	  8	  0
-SolidColor:	 36	255	  0	  0
-SolidColor:	 50	234	103	133
-SolidColor:	 64	255	155	178
+Product: bv
+Units: kts
+Scale: 1.9426
+Offset: 0
+Step: 5
+
+
+color: -90 149 43 255    
+color: -72 0 255 255    
+color: -54 0 0 255    
+color: -36 0 64 0    
+color: -18 0 108 0    
+color: 0 192 192 192    
+color: 18 151 0 0    
+color: 36 255 0 0    
+color: 54 255 83 0    
+color: 72 255 255 0    
+color: 90 255 255 255 
