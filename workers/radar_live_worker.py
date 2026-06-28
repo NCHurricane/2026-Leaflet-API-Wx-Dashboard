@@ -16,6 +16,7 @@ import shutil
 import time
 import zlib
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 # Add project root to path for both module and direct execution
@@ -32,6 +33,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from cache.overlay_cache_utils import (
+    datetime_from_frame_key,
     frame_key_from_datetime,
     radar_overlay_image_path,
     radar_prune_frames,
@@ -473,6 +475,201 @@ def _prepare_field_data(field_data, product_code: str, product_cfg: dict | None)
         invalid = invalid | (data < float(min_value))
 
     return np.ma.masked_where(invalid, data)
+
+
+def _bearing_distance_from_site(
+    site_lat: float, site_lon: float, lat: float, lon: float
+) -> tuple[float, float]:
+    lat1 = math.radians(float(site_lat))
+    lat2 = math.radians(float(lat))
+    dlat = lat2 - lat1
+    dlon = math.radians(float(lon) - float(site_lon))
+
+    a = (
+        math.sin(dlat / 2.0) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2.0) ** 2
+    )
+    distance_m = 6371000.0 * 2.0 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1.0 - a)))
+    y = math.sin(dlon) * math.cos(lat2)
+    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    azimuth_deg = (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
+    return azimuth_deg, distance_m
+
+
+def _circular_angle_delta(values, target):
+    return np.abs(((np.asarray(values, dtype=float) - float(target) + 180.0) % 360.0) - 180.0)
+
+
+def _radar_source_download_dir(site: str, level: str, source_product_code: str) -> Path:
+    level_path = str(level).lower().replace(" ", "")
+    return _RADAR_ROOT / f"radar_{level_path}_downloads" / source_product_code / site
+
+
+def _find_source_file_for_frame(
+    site: str,
+    level: str,
+    source_product_code: str,
+    frame_key: str,
+    source_data_key: str | None = None,
+) -> Path | None:
+    data_dir = _radar_source_download_dir(site, level, source_product_code)
+    if source_data_key:
+        direct = data_dir / str(source_data_key)
+        if direct.exists() and direct.is_file():
+            return direct
+    try:
+        target_dt = frame_key_from_datetime(datetime_from_frame_key(frame_key))
+    except Exception:
+        target_dt = str(frame_key or "")
+    try:
+        candidates = [p for p in data_dir.iterdir() if p.is_file()]
+    except OSError:
+        return None
+    frame_key_text = str(frame_key or "")
+    if frame_key_text:
+        direct_match = next(
+            (p for p in candidates if frame_key_text in p.name),
+            None,
+        )
+        if direct_match:
+            return direct_match
+    for candidate in sorted(candidates, reverse=True):
+        try:
+            radar = _read_radar(level, str(candidate))
+            frame_dt = _frame_dt_from_radar(radar, candidate)
+            if frame_dt and frame_key_from_datetime(frame_dt) == target_dt:
+                return candidate
+        except Exception:
+            continue
+    return None
+
+
+@lru_cache(maxsize=16)
+def _prepared_sample_grid(
+    source_file: str,
+    level: str,
+    product_id: str,
+    product_code: str,
+    elevation: str,
+    storm_motion_key: str,
+) -> dict:
+    product_cfg = LIVE_RADAR_PRODUCTS.get(product_id) or {}
+    storm_motion = json.loads(storm_motion_key) if storm_motion_key else None
+    product_cfg = _product_cfg_with_storm_motion(product_id, product_cfg, storm_motion)
+
+    radar = _read_radar(level, source_file)
+    available_fields = list(getattr(radar, "fields", {}).keys())
+    field_name = _field_for_product(level, product_code, available_fields, product_cfg)
+    if not field_name:
+        raise ValueError("Radar field is unavailable for product.")
+    field_name = _ensure_derived_field(radar, field_name, product_cfg)
+    sweep, _available_elevations, selected_elevation = _select_sweep(
+        radar, field_name, elevation
+    )
+    data = _prepare_field_data(
+        radar.fields[field_name].get("data"),
+        product_code,
+        product_cfg,
+    )
+    sweep_slice = radar.get_slice(sweep)
+    ranges_m = np.asarray(radar.range["data"], dtype=float)
+    return {
+        "sweep_data": np.ma.array(data[sweep_slice]),
+        "azimuths": np.asarray(radar.azimuth["data"][sweep_slice], dtype=float),
+        "ranges_m": ranges_m,
+        "max_range_m": float(np.nanmax(ranges_m)) if ranges_m.size else 0.0,
+        "radar_lat": float(radar.latitude["data"][0]),
+        "radar_lon": float(radar.longitude["data"][0]),
+        "field_name": field_name,
+        "selected_elevation": selected_elevation,
+        "units": _units_for_product(product_id, product_code, product_cfg),
+        "label": str(product_cfg.get("label") or product_id),
+    }
+
+
+def sample_live_radar_value(
+    site: str,
+    product_key: str,
+    frame_key: str,
+    lat: float,
+    lon: float,
+    *,
+    elevation: str = "auto",
+    source_data_key: str | None = None,
+    storm_motion: dict | None = None,
+) -> dict:
+    site_id = str(site or "").strip().upper()
+    product_id = str(product_key or "L3_N0B").strip().upper()
+    product_cfg = LIVE_RADAR_PRODUCTS.get(product_id)
+    if not product_cfg:
+        return {"status": "error", "detail": f"Unsupported radar product: {product_id}"}
+
+    product_cfg = _product_cfg_with_storm_motion(product_id, product_cfg, storm_motion)
+    level = str(product_cfg.get("level") or "Level 3")
+    product_code = str(product_cfg.get("product") or "N0B").upper()
+    source_product_code = _source_product_code(product_code, product_cfg)
+    source_file = _find_source_file_for_frame(
+        site_id, level, source_product_code, frame_key, source_data_key
+    )
+    if source_file is None:
+        return {"status": "error", "detail": "Source radar file for frame is unavailable."}
+
+    storm_motion_key = (
+        json.dumps(storm_motion, sort_keys=True, separators=(",", ":"))
+        if storm_motion
+        else ""
+    )
+    try:
+        grid = _prepared_sample_grid(
+            str(source_file),
+            level,
+            product_id,
+            product_code,
+            elevation,
+            storm_motion_key,
+        )
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}
+
+    azimuth_deg, distance_m = _bearing_distance_from_site(
+        grid["radar_lat"], grid["radar_lon"], float(lat), float(lon)
+    )
+    ranges_m = grid["ranges_m"]
+    if not ranges_m.size or distance_m < 0 or distance_m > grid["max_range_m"]:
+        return {
+            "status": "no_data",
+            "reason": "out_of_range",
+            "azimuth_deg": round(azimuth_deg, 1),
+            "distance_km": round(distance_m / 1000.0, 1),
+        }
+
+    ray_idx = int(np.argmin(_circular_angle_delta(grid["azimuths"], azimuth_deg)))
+    gate_idx = int(np.argmin(np.abs(ranges_m - distance_m)))
+    value = grid["sweep_data"][ray_idx, gate_idx]
+    if np.ma.is_masked(value) or not np.isfinite(float(value)):
+        return {
+            "status": "no_data",
+            "reason": "masked",
+            "azimuth_deg": round(azimuth_deg, 1),
+            "distance_km": round(distance_m / 1000.0, 1),
+            "gate_range_km": round(float(ranges_m[gate_idx]) / 1000.0, 1),
+        }
+
+    return {
+        "status": "success",
+        "site": site_id,
+        "product": product_id,
+        "frame_key": str(frame_key or ""),
+        "source_data_key": source_file.name,
+        "value": round(float(value), 2),
+        "units": grid["units"],
+        "label": grid["label"],
+        "field": grid["field_name"],
+        "selected_elevation": grid["selected_elevation"],
+        "azimuth_deg": round(azimuth_deg, 1),
+        "distance_km": round(distance_m / 1000.0, 1),
+        "gate_range_km": round(float(ranges_m[gate_idx]) / 1000.0, 1),
+    }
 
 
 def _discovery_index_path(site: str, level_code: str, product_key: str) -> Path:
@@ -963,6 +1160,7 @@ def _render_site_product(
                     bounds=bounds,
                     full_name=product_label,
                     units=_units_for_product(product_key, product_code, product_cfg),
+                    data_key=source_key,
                     available_elevations=available_elevations,
                     selected_elevation=selected_elevation,
                 )
@@ -1043,6 +1241,7 @@ def _render_site_product(
                 bounds=bounds,
                 full_name=product_label,
                 units=_units_for_product(product_key, product_code, product_cfg),
+                data_key=source_key,
                 available_elevations=available_elevations,
                 selected_elevation=selected_elevation,
             )

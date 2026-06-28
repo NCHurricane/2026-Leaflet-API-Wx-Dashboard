@@ -159,6 +159,7 @@
 
             context.stopScrubPlay();
             context.incrementScrubRenderSeq();
+            context.clearScrubOverlayPool?.();
             context.setScrubFrames([]);
             context.setScrubContextKey(contextKey);
             context.setScrubFrameIndex(0);

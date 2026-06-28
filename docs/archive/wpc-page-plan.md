@@ -147,10 +147,11 @@ Control model (mirrors the SPC day/hazard dropdowns):
 - Availability/freshness hardening completed: per-product source status,
   last-valid-cache preservation, stale metadata, cold-source-unavailable state,
   startup freshness monitoring, and a 30-minute Windows task definition.
-- Revisit the dashboard legend system after the WPC product work is complete.
-  Audit remaining product-specific legends for full parent-width sizing,
-  horizontal row/wrap layout, and responsive behavior. The WPC legend now uses
-  `.legend-flow`, but several existing legends still need individual adjustment.
+- Dashboard legend audit started on 2026-06-28. Shared categorical legends now
+  wrap whole swatch/label items using `.legend-flow`, labels can wrap without
+  painting into neighboring swatches, and the Alerts legend moved from the
+  six-column helper to the five-column helper after the larger label-size pass.
+  User browser smoke passed on 2026-06-28.
 
 ## Completion Summary
 
@@ -178,7 +179,9 @@ the map no-data overlay.
 Deferred:
 
 - SigWx mixed-geometry products remain an optional future enhancement.
-- Dashboard-wide legend audit is the next separate task.
+- Dashboard-wide legend audit pass is complete for the shared categorical
+  legend wrapping and Alerts five-column adjustment; user browser smoke passed
+  on 2026-06-28.
 
 ## Product Expansion — 2026-06-18
 

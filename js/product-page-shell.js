@@ -12,6 +12,7 @@
         'drought',
         'tropical',
         'wpc',
+        'water',
     ]);
 
     const STANDALONE_PRODUCT_BY_PATH = Object.freeze({
@@ -25,6 +26,7 @@
         '/mrms': 'mrms',
         '/rtma': 'rtma',
         '/wpc': 'wpc',
+        '/water': 'water',
     });
 
     const productPageEntries = new Map();

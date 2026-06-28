@@ -6,9 +6,9 @@ Implement enhancements in bounded phases:
 
 1. Correct and expand domestic NEXRAD.
 2. Expose existing satellite products and add GOES lightning.
-3. Add a flood-focused Water page.
+3. Add an observed-water monitoring page.
 4. Add global satellite coverage.
-5. Add international radar through provider-specific adapters.
+5. Defer international radar to V2 provider expansion.
 
 Marine and Fire/Smoke remain ranked backlog items.
 
@@ -130,22 +130,37 @@ Tracked in detail in the session memory note
 
 1. Radar loop "blink" between frames — ✅ fixed (crossfade duration raised so the
    outgoing overlay stays visible until the preloaded incoming frame paints).
-2. Hover tooltips showing pixel values (dBZ, in, mph) — needs a backend
-   point-query against the radar volume; not derivable from the rendered PNG.
+2. Radar Inspector hover values — ✅ complete. The Radar sidebar now has an
+   opt-in `Inspector` checkbox using the existing selector row styling. When
+   enabled for a site radar product, map hover samples the active radar frame
+   through `/api/radar/live/value` and displays the native data value, units,
+   product label, selected elevation, and range at the cursor. Sampling uses a
+   backend point-query against the decoded radar volume rather than the rendered
+   PNG; the worker caches prepared frame/sweep arrays so the first sample on a
+   frame pays the decode cost and subsequent samples are near-instant. The
+   tooltip follows pointer movement, is throttled to avoid request floods, and
+   suppresses cleanly while storm-attribute marker tooltips/popups are active.
+   Browser validation passed for Inspector alone, Inspector with Storm Tracks,
+   scrubber playback, selected-cell SRV, and layer cleanup.
 3. Live `.pal` upload + preview — ✅ complete (standalone FastAPI tool in
    `pal_preview/` on port 8050; independent of dashboard caching; supports
    all products + palette iteration). Palette parser enhanced to support
    Color4/RGBA entries and fixed two-color position collisions.
-4. Level III storm-attribute overlays as marker/popup layers (modeled on the
-   existing NST/58 storm-cell parser), folded into the Storm Tracks layer or as
-   sibling toggles:
-   - NSS/62 Storm Structure (per-cell attribute table: max reflectivity, max
-     velocity at lowest elevation, overhang, mass-weighted volume, area
-     base/top, position, tilt).
-   - NHI/59 Hail Index (probable = hollow green triangle, positive = filled
-     green triangle).
-   - NME/60 + NMD/141 Mesocyclone (rotation markers: azimuth, range, height).
-   - NTV/61 Tornadic Vortex Signature (red triangle, location + height).
+4. Level III storm-attribute overlays — ✅ complete (IEM-backed). Storm cells and
+   attributes are sourced from the Iowa Environmental Mesonet NEXRAD storm-attributes
+   GeoJSON (`services/radar_storm_attributes_service.py` → `nexrad_attr.geojson`),
+   one pre-parsed feed carrying storm tracking + hail + meso + TVS + structure for
+   every radar, queryable by `valid` time (archive back to ~2010). Cell icons now
+   use high-contrast Shield SVG markers so attributes stand out over radar returns:
+   TVS uses a red inverted warning triangle with `T`, mesocyclone uses an orange rotation
+   badge with `M`, confirmed hail uses a green warning triangle with `H`, probable
+   hail uses a black warning triangle with `?`, and ordinary cells remain yellow
+   circle markers. The popup shows time, track (cardinal/°·kt/mph), storm height,
+   TVS, mesocyclone, max hail size, POH, and POSH. Frame timestamp → IEM `valid=`,
+   so the overlay frame-syncs in scrub/archive mode. Forecast track is a
+   straight-line projection of each cell's motion vector. Replaced the earlier
+   AWS-NST + AWS-NMD + TGFTP approach (the AWS Unidata L3 mirror dropped
+   hail/structure/TVS in 2022); `radar_nst_service.py` removed.
 
 ## Implementation Changes
 
@@ -188,29 +203,46 @@ Tracked in detail in the session memory note
 
 ### 3. Water page
 
-- Add `/water` to the shared product shell and navigation.
-- Use the modern USGS APIs for monitoring locations, continuous values, daily
-  history, and time-series metadata.
-- Integrate NOAA National Water Prediction Service forecasts and flood
-  categories.
-- Load stations by map viewport with clustering and color them by observed or
-  forecast flood status.
-- Provide a station inspector containing current stage, streamflow, trend,
-  operational thresholds, forecast hydrograph, flood impacts, data age, and
-  source links.
-- Include optional WPC Excessive Rainfall Outlook and Real-Time Flood Impact
-  overlays.
-- Cache upstream responses and show stale data with an explicit timestamp
-  rather than removing stations.
-- Exclude groundwater exploration, water quality, coastal tides, buoys, and
-  gauge cameras from v1.
+- V1 status: active implementation. `/water` is registered in the shared
+  product shell and navigation. The page is focused on observed water
+  conditions rather than forecast-impact detail.
+- The map marker cache is now built by `workers/water_worker.py` from three
+  NOAA source families:
+  - NWS ArcGIS `water/riv_gauges/MapServer/0` for river gauges.
+  - NOS CO-OPS `CO_OPS_Stations/MapServer` active water-level stations for
+    coastal gauges. The active currents layer is wired but returned no active
+    features during the latest validation.
+  - NDBC `latest_obs.txt` for buoy and marine observations.
+- `/api/water/stations?bbox=...&max_sites=...&networks=...` filters the local
+  `cache/water/riv_gauges.json` marker cache by viewport and selected networks
+  (`river`, `coastal`, `buoy`). The frontend is currently stress-testing
+  `max_sites=15000`; the backend clamps requests to `1..15000`.
+- Broad map loading stays on the local cache instead of live per-station API
+  fanout. `/api/water/stations/{site_id}` still enriches river gauges through
+  NOAA NWPS on click, while `COOPS_*` and `NDBC_*` stations resolve from the
+  local cache and link to the official provider station page.
+- River gauges are colored by observed flood stage only: Major, Moderate,
+  Minor, Action, or default no-flood/not-given. Forecast category, thresholds,
+  reliability, impacts, flow, and recent-crest popup blocks were intentionally
+  removed to keep the page observed-stage focused.
+- Coastal and NDBC stations have distinct marker colors, bright outlines for
+  dark basemap visibility, and render above state/country border overlays in a
+  dedicated Leaflet `water-markers` pane.
+- The Water sidebar includes a `Networks` selector matching the surface-page
+  pattern: River, Coastal, and NDBC. The legend reflects observed flood-stage
+  river colors plus coastal and NDBC marker styles.
+- The water bbox workflow now handles Leaflet world-wrap edge cases by
+  normalizing/clamping wrapped longitudes instead of returning 422s at World
+  view.
+- Remaining options: clustering or density controls if full-cache rendering is
+  too heavy on target browsers; optional WPC Excessive Rainfall Outlook and
+  Real-Time Flood Impact overlays; optional richer CO-OPS/NDBC click
+  enrichment if station-level API calls stay light.
 
 Proposed internal endpoints:
 
-- `GET /api/water/stations?bbox=...`
+- `GET /api/water/stations?bbox=...&max_sites=...&networks=river,coastal,buoy`
 - `GET /api/water/stations/{site_id}`
-- `GET /api/water/stations/{site_id}/observations`
-- `GET /api/water/stations/{site_id}/forecast`
 
 ### 4. Global satellite coverage
 
@@ -228,6 +260,10 @@ Proposed internal endpoints:
   cleanly when credentials are absent.
 
 ### 5. International radar
+
+Deferred to V2. Keep the US dashboard enhancement path focused on NEXRAD,
+satellite/GLM, Water, WPC, SPC, alerts, and storm reports before adding
+provider-specific radar adapters.
 
 Use a provider-neutral radar site model without pretending every network offers
 NEXRAD product parity.
@@ -257,7 +293,7 @@ imagery.
 - Test satellite platform/product compatibility and GLM one-/five-minute
   aggregation.
 - Use recorded provider fixtures for Himawari, Meteosat, ECCC, DWD, BOM, USGS,
-  and NOAA NWPS.
+  NOAA NWPS, NOS CO-OPS, and NDBC.
 - Browser-smoke `/radar`, `/satellite`, `/water`, and `/weather.html`, including
   scrubbers, source switching, stale states, and map cleanup.
 - Confirm cache retention, worker runtime, upstream throttling, attribution, and
@@ -265,8 +301,9 @@ imagery.
 
 ## Backlog
 
-1. Marine page using NDBC buoys and NOAA CO-OPS tides, currents, and coastal
-   water levels.
+1. Dedicated Marine workspace that builds on the Water page's NDBC and CO-OPS
+   station inventory with marine-specific products, trends, and forecast
+   context.
 2. Fire/Smoke page using NASA FIRMS detections and NOAA smoke analysis.
 3. Cross-product severe-weather workspace combining Radar, GLM, warnings, SPC
    outlooks, and storm reports.
@@ -290,3 +327,5 @@ imagery.
 - [Australian radar feeds](https://www.bom.gov.au/catalogue/data-feeds.shtml)
 - [USGS Water APIs](https://api.waterdata.usgs.gov/)
 - [NOAA NWPS API](https://api.water.noaa.gov/nwps/v1/docs/)
+- [NOAA CO-OPS Tides and Currents](https://tidesandcurrents.noaa.gov/)
+- [NOAA NDBC](https://www.ndbc.noaa.gov/)

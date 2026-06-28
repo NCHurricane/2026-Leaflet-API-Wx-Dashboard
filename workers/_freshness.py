@@ -97,6 +97,7 @@ _HEALTH_THRESHOLDS = {
     "wpc": 60 * 60,  # task fires every 30 min
     "tropical": 75 * 60,  # task fires every 30 min
     "surface": 60 * 60,  # task fires every 30 min
+    "water_riv_gauges": 60 * 60,  # task fires every 30 min
     "rtma_hourly": 2 * 60 * 60,  # task fires hourly at :05
     "rtma_rapid_update": 30 * 60,  # task fires every 15 min starting :20
     "satellite_v2": 30 * 60,  # task fires every 15 min

@@ -785,6 +785,7 @@ def get_radar_live_latest_data(
         "network": "NEXRAD",
         "timestamp": meta.get("timestamp"),
         "source_timestamp": meta.get("timestamp"),
+        "frame_key": meta.get("frame_key") or meta.get("source_data_key", ""),
         "available_elevations": meta.get("available_elevations") or [],
         "selected_elevation": meta.get("selected_elevation"),
         "requested_elevation": elevation_key,
@@ -928,3 +929,99 @@ def get_radar_live_frames_data(
         "refreshing": refreshing,
         "frames": filtered,
     }
+
+
+def get_radar_live_value_data(
+    site: str = "KMHX",
+    product: str = "L3_N0B",
+    elevation: str = "auto",
+    frame_key: str | None = None,
+    lat: float | str | None = None,
+    lon: float | str | None = None,
+    storm_motion_speed_kt: str | float | None = None,
+    storm_motion_to_degrees: str | float | None = None,
+    storm_motion_source: str | None = None,
+    storm_cell_id: str | None = None,
+) -> dict:
+    """Sample the active live radar frame at a map lat/lon."""
+    from cache.overlay_cache_utils import radar_list_frames, radar_read_latest_frame
+    from workers.radar_live_worker import sample_live_radar_value
+
+    try:
+        lat_value = float(lat)
+        lon_value = float(lon)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Valid lat and lon are required.")
+
+    if not (-90.0 <= lat_value <= 90.0 and -180.0 <= lon_value <= 180.0):
+        raise HTTPException(status_code=400, detail="Lat/lon is outside valid bounds.")
+
+    site_id = normalize_radar_site_id(site)
+    product_key = str(product or "L3_N0B").strip().upper()
+    elevation_key = normalize_radar_elevation(product_key, elevation)
+    motion = normalize_radar_srv_motion(
+        product_key,
+        storm_motion_speed_kt,
+        storm_motion_to_degrees,
+        storm_motion_source,
+        storm_cell_id,
+    )
+    cache_product_key = radar_cache_product_key(product_key, elevation_key, motion)
+    level_code = "L2" if product_key.startswith("L2_") else "L3"
+
+    if not _radar_live_product_supported(product_key):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Live radar product is not supported: {product_key}.",
+        )
+    if not _radar_live_site_supported(site_id):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Live radar site is not supported: {site_id}.",
+        )
+
+    frames = radar_list_frames(CACHE_ROOT, site_id, level_code, cache_product_key)
+    frame = None
+    requested_frame_key = str(frame_key or "").strip()
+    if requested_frame_key:
+        frame = next(
+            (
+                item
+                for item in frames
+                if str(item.get("frame_key") or "") == requested_frame_key
+            ),
+            None,
+        )
+    if frame is None:
+        frame = radar_read_latest_frame(
+            CACHE_ROOT, site_id, level_code, cache_product_key
+        )
+    if not frame:
+        raise HTTPException(status_code=404, detail="No live radar frame cached yet.")
+
+    resolved_frame_key = str(
+        frame.get("frame_key") or requested_frame_key or frame.get("source_data_key") or ""
+    )
+    sampled = sample_live_radar_value(
+        site=site_id,
+        product_key=product_key,
+        frame_key=resolved_frame_key,
+        lat=lat_value,
+        lon=lon_value,
+        elevation=elevation_key,
+        source_data_key=frame.get("source_data_key"),
+        storm_motion=motion,
+    )
+    sampled.update(
+        {
+            "site": site_id,
+            "product": product_key,
+            "requested_elevation": elevation_key,
+            "storm_motion": motion,
+            "timestamp": frame.get("timestamp"),
+            "frame_key": resolved_frame_key,
+            "lat": round(lat_value, 5),
+            "lon": round(lon_value, 5),
+        }
+    )
+    return sampled

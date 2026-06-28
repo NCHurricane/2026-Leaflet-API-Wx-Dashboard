@@ -62,6 +62,7 @@ def start_scheduler() -> None:
     from workers.rtma_worker import run_rtma_hourly_worker, run_rtma_rapid_worker
     from satellite_v2.worker import run_satellite_v2_worker
     from workers.surface_worker import run_surface_worker
+    from workers.water_worker import run_water_worker
     from workers.cache_cleanup_worker import run_cache_cleanup_worker
 
     now = datetime.now(timezone.utc)
@@ -162,6 +163,15 @@ def start_scheduler() -> None:
         next_run_time=now,
     )
     _scheduler.add_job(
+        run_water_worker,
+        "interval",
+        minutes=30,
+        id="water_riv_gauges_worker",
+        max_instances=1,
+        misfire_grace_time=300,
+        next_run_time=now + timedelta(seconds=95),
+    )
+    _scheduler.add_job(
         lambda: run_satellite_v2_worker(profile="local-primary"),
         "interval",
         minutes=15,
@@ -221,7 +231,7 @@ def start_scheduler() -> None:
         "[scheduler] In-process fallback ENABLED — alerts (1 min), spc (30 min), "
         "tropical (30 min, +10s delay), mrms (15 min, +30s delay), radar_live (5 min, +20s delay), "
         "rtma_hourly (60 min, +45s delay), rtma_rapid (15 min, +50s delay), "
-        "surface (30 min), satellite_v2 (15 min, +55s delay), "
+        "surface (30 min), water_riv_gauges (30 min, +95s delay), satellite_v2 (15 min, +55s delay), "
         "satellite_v2_meso (5 min, +65s delay), "
         "satellite_v2_light_composites (5 min, +75s delay), "
         "satellite_v2_geocolor (10 min, +85s delay), "

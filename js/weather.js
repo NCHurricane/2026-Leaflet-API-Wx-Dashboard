@@ -513,6 +513,7 @@
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 19,
+        noWrap: true,
     };
     // CONUS framing is driven entirely by CONUS_DEFAULT_BOUNDS via fitBounds(),
     // so the visible extent adapts to the viewport size instead of being fixed
@@ -528,6 +529,7 @@
     const tilesVoyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', tileOptions);
     var USGS_USImagery = L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 20,
+        noWrap: true,
         attribution: 'Tiles courtesy of the <a href="https://usgs.gov/">U.S. Geological Survey</a>'
     });
     const tilesSatellite = L.tileLayer(
@@ -535,10 +537,16 @@
         {
             attribution: 'Tiles &copy; Esri',
             maxZoom: 19,
+            noWrap: true,
         },
     );
 
-    const map = L.map('weather-map', { layers: [tilesDarkNoLabels] });
+    const map = L.map('weather-map', {
+        layers: [tilesDarkNoLabels],
+        minZoom: 2,
+        maxBounds: [[-85, -180], [85, 180]],
+        maxBoundsViscosity: 1.0,
+    });
     map.fitBounds(CONUS_DEFAULT_BOUNDS, { animate: false });
 
     // Initialize city font size CSS variable from slider (or default to 0.6)
@@ -772,6 +780,10 @@
         boundaryLinesPane.style.zIndex = '420';
         boundaryLinesPane.style.pointerEvents = 'none';
     }
+    if (!map.getPane('water-markers')) {
+        const waterMarkersPane = map.createPane('water-markers');
+        waterMarkersPane.style.zIndex = '470';
+    }
     const LogoControl = L.Control.extend({
         options: { position: 'topright' },
         onAdd() {
@@ -856,6 +868,8 @@
     const _radarColortableCache = new Map();
     const _radarMultiSites = new Set();     // siteIds selected via Shift+click
     let _radarScrubFrames = [];
+    const _radarScrubOverlayPool = new Map();
+    let _radarScrubOverlayZCounter = 0;
     let _radarScrubContextKey = '';
     let _radarScrubFrameIndex = 0;
     let _radarScrubRenderSeq = 0;
@@ -869,6 +883,18 @@
     let _radarLatestRetryDeadlineMs = 0;
     let _radarLatestRetrySite = '';
     let _radarLatestRetryProduct = '';
+    let _radarCurrentFrameMeta = null;
+    let _radarInspectorTooltipEl = null;
+    let _radarInspectorTimer = null;
+    let _radarInspectorAbortController = null;
+    let _radarInspectorSeq = 0;
+    let _radarInspectorSuppressed = false;
+    let _radarInspectorOverStormMarker = false;
+    let _radarInspectorStormPopupOpen = false;
+    let _radarInspectorInFlight = false;
+    let _radarInspectorPendingSample = false;
+    let _radarInspectorLastRequestMs = 0;
+    let _radarInspectorLatestLatLng = null;
     const _radarSiteCoords = new Map();
     let rtmaOverlay = null;
     let rtmaPointLayer = null;
@@ -882,6 +908,16 @@
     let droughtLayer = null;
     let wpcLayer = null;
     let _wpcRequestSeq = 0;
+    let waterLayer = null;
+    let _waterStations = [];
+    let _waterRequestSeq = 0;
+    let _waterDetailRequestSeq = 0;
+    let _waterSelectedSiteId = '';
+    let _waterReloadTimer = null;
+    let _waterStationsInFlight = false;
+    let _waterPendingReload = false;
+    let _waterFloodFilter = 'all';
+    const WATER_FLOOD_RANKS = { action: 1, minor: 2, moderate: 3, major: 4 };
     let tropicalOutlookLayer = null;
     let graticuleLayer = null;
     let _tropicalStorms = [];
@@ -926,6 +962,8 @@
     const CITY_LABEL_HEIGHT_PX = 11;
     const CITY_LABEL_X_PAD = 4;
     const CITY_LABEL_Y_PAD = 2;
+    const VALUE_MARKER_OFFSET_X_PX = 0;
+    const VALUE_MARKER_OFFSET_Y_PX = -15;
     let _allAlertFeatures = [];        // Full geometry — used for all interactions (hover, click, pager)
     let _alertsDisplayFeatures = [];   // Simplified display geometry — used for map rendering only
     let _alertsFullBaseFeatures = [];      // Full geometry after cancel/expire filtering (before category filtering)
@@ -1018,7 +1056,7 @@
     // old overlay disappears a frame before the new one shows, causing a blink
     // between loop frames. Satellite keeps its old layer underneath in scrub
     // mode (removeOldAfterFade:false), so it can stay near-instant.
-    const RADAR_CROSSFADE_MS = 140;
+    const RADAR_CROSSFADE_MS = 3;
     const SATELLITE_CROSSFADE_MS = 5;
     const SATELLITE_LOOKBACK_HOURS_MAX = 12;
     const SATELLITE_FRAME_REQUEST_MAX = 360;
@@ -3292,7 +3330,7 @@
         const events = Object.keys(counts).sort((a, b) => a.localeCompare(b));
         if (!events.length) { setLegend(null); return; }
         const rows = events.map((e) => swatch(ALERT_COLORS[e] || ALERT_DEFAULT, `${e} (${counts[e]})`)).join('');
-        setLegend('<h4 class="legend-title">Alerts In View</h4><div class="legend-grid legend-grid-6">' + rows + '</div>');
+        setLegend('<h4 class="legend-title">Alerts In View</h4><div class="legend-grid legend-grid-5">' + rows + '</div>');
     }
 
     function buildSpcCatLegend() {
@@ -5751,7 +5789,7 @@
     }
 
     function _updateTypeSections() {
-        ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'].forEach((type) => {
+        ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc', 'water'].forEach((type) => {
             const section = byId(`wx-section-${type}`);
             if (section) section.style.display = _isTypeEnabled(type) ? '' : 'none';
         });
@@ -5787,6 +5825,7 @@
         drought: 'Drought',
         tropical: 'Tropical',
         wpc: 'WPC',
+        water: 'Water',
     };
 
     function _updateActiveTabName() {
@@ -5844,9 +5883,11 @@
         if (rtmaPointLayer && map.hasLayer(rtmaPointLayer)) map.removeLayer(rtmaPointLayer);
         if (mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
         if (droughtLayer && map.hasLayer(droughtLayer)) map.removeLayer(droughtLayer);
+        if (waterLayer && map.hasLayer(waterLayer)) map.removeLayer(waterLayer);
         _tropicalEngine?.clearLayer?.();
         if (tropicalOutlookLayer && map.hasLayer(tropicalOutlookLayer)) map.removeLayer(tropicalOutlookLayer);
         droughtLayer = null;
+        waterLayer = null;
         tropicalOutlookLayer = null;
         alertsLayer = null;
         localStormReportsLayer = null;
@@ -5854,7 +5895,11 @@
         _spcWatchFeatures = [];
         surfaceLayer = null;
         _radarLiveImageOverlays.clear();
+        _clearRadarScrubOverlayPool();
         radarLiveOverlay = null;
+        _setRadarCurrentFrameMeta(null);
+        _cancelRadarInspectorRequest();
+        _hideRadarInspectorTooltip();
         satelliteOverlay = null;
         _clearSatelliteLayerPool();
         rtmaOverlay = null;
@@ -5864,6 +5909,8 @@
         _satelliteFrames = [];
         _satelliteFrameIndex = 0;
         _surfaceStations = [];
+        _waterStations = [];
+        _waterSelectedSiteId = '';
         _activeTropicalStorm = null;
         _tropicalArchiveSelectedId = null;
         _tropicalArchiveReliabilityLabel = null;
@@ -5951,7 +5998,7 @@
     // Initialized lazily on first use by detecting the currently-checked tab.
     let _activeTabType = null;
     function _detectInitialActiveTabType() {
-        const candidates = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'];
+        const candidates = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc', 'water'];
         for (const t of candidates) {
             if (byId(`weather-type-${t}`)?.checked) return t;
         }
@@ -5973,6 +6020,7 @@
                 _radarScrubFrames = [];
                 _radarScrubFrameIndex = 0;
                 if (radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
+                _clearRadarScrubOverlayPool();
                 _setRadarLiveOverlay(null);
                 _syncRadarSiteLayerVisibility();
                 setLegend(null);
@@ -6038,6 +6086,11 @@
                 setMapEmptyMessage(null);
                 break;
 
+            case 'water':
+                _clearWaterLayer();
+                setMapEmptyMessage(null);
+                break;
+
             case 'tropical':
                 _tropicalRequestSeq += 1;
                 _clearTropicalLayer();
@@ -6088,7 +6141,7 @@
     }
 
     function _activeWeatherType() {
-        const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'];
+        const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc', 'water'];
         return allTypes.find((type) => _isTypeEnabled(type)) || '';
     }
 
@@ -6118,9 +6171,185 @@
         return !!byId('weather-radar-show-storm-tracks')?.checked;
     }
 
+    function _isRadarInspectorEnabled() {
+        return !!byId('weather-radar-inspector')?.checked;
+    }
+
+    function _setRadarCurrentFrameMeta(frame) {
+        _radarCurrentFrameMeta = frame && typeof frame === 'object' ? frame : null;
+    }
+
+    function _cancelRadarInspectorRequest() {
+        _radarInspectorSeq += 1;
+        if (_radarInspectorTimer) {
+            clearTimeout(_radarInspectorTimer);
+            _radarInspectorTimer = null;
+        }
+        if (_radarInspectorAbortController) {
+            _radarInspectorAbortController.abort();
+            _radarInspectorAbortController = null;
+        }
+        _radarInspectorInFlight = false;
+        _radarInspectorPendingSample = false;
+    }
+
+    function _hideRadarInspectorTooltip() {
+        if (_radarInspectorTooltipEl) {
+            _radarInspectorTooltipEl.remove();
+            _radarInspectorTooltipEl = null;
+        }
+    }
+
+    function _syncRadarInspectorSuppression() {
+        _radarInspectorSuppressed = _radarInspectorOverStormMarker || _radarInspectorStormPopupOpen;
+        if (_radarInspectorSuppressed) {
+            _cancelRadarInspectorRequest();
+            _hideRadarInspectorTooltip();
+        }
+    }
+
+    function _setRadarInspectorMarkerHover(active) {
+        _radarInspectorOverStormMarker = !!active;
+        _syncRadarInspectorSuppression();
+    }
+
+    function _setRadarInspectorStormPopupOpen(active) {
+        _radarInspectorStormPopupOpen = !!active;
+        _syncRadarInspectorSuppression();
+    }
+
+    function _syncRadarInspectorState() {
+        if (!_isRadarInspectorEnabled()) {
+            _cancelRadarInspectorRequest();
+            _hideRadarInspectorTooltip();
+        }
+    }
+
+    function _ensureRadarInspectorTooltip() {
+        if (_radarInspectorTooltipEl) return _radarInspectorTooltipEl;
+        const el = document.createElement('div');
+        el.className = 'wx-radar-inspector-readout';
+        const container = map?.getContainer?.();
+        if (container) container.appendChild(el);
+        _radarInspectorTooltipEl = el;
+        return el;
+    }
+
+    function _formatRadarInspectorValue(data) {
+        const rawValue = Number(data?.value);
+        const value = Number.isFinite(rawValue) ? rawValue.toFixed(Math.abs(rawValue) < 10 ? 1 : 0) : '--';
+        const units = data?.units ? ` ${_escapeHtml(data.units)}` : '';
+        const label = _escapeHtml(data?.label || data?.product || 'Radar');
+        const elevation = data?.selected_elevation != null ? `${_escapeHtml(String(data.selected_elevation))} deg` : '';
+        const range = Number.isFinite(Number(data?.distance_km)) ? `${Number(data.distance_km).toFixed(1)} km` : '';
+        const detail = [elevation, range].filter(Boolean).join(' | ');
+        return `<strong>${_escapeHtml(value)}${units}</strong><span>${label}${detail ? ` - ${detail}` : ''}</span>`;
+    }
+
+    function _showRadarInspectorTooltip(data, latlng) {
+        const el = _ensureRadarInspectorTooltip();
+        el.innerHTML = _formatRadarInspectorValue(data);
+        _positionRadarInspectorTooltip(latlng);
+    }
+
+    function _positionRadarInspectorTooltip(latlng) {
+        if (!_radarInspectorTooltipEl || !latlng) return;
+        const point = map.latLngToContainerPoint(latlng);
+        _radarInspectorTooltipEl.style.transform = `translate(${Math.round(point.x + 14)}px, ${Math.round(point.y - 14)}px)`;
+    }
+
+    function _canRunRadarInspector() {
+        return (
+            _isRadarInspectorEnabled()
+            && !_radarInspectorSuppressed
+            && _isTypeEnabled('radar')
+            && !!_activeRadarSite()
+            && !!radarLiveOverlay
+        );
+    }
+
+    async function _requestRadarInspectorSample() {
+        _radarInspectorTimer = null;
+        if (!_canRunRadarInspector() || !_radarInspectorLatestLatLng) return;
+        if (_radarInspectorInFlight) {
+            _radarInspectorPendingSample = true;
+            return;
+        }
+
+        const latlng = _radarInspectorLatestLatLng;
+        const seq = ++_radarInspectorSeq;
+        _radarInspectorInFlight = true;
+        _radarInspectorPendingSample = false;
+        _radarInspectorLastRequestMs = Date.now();
+        _radarInspectorAbortController = new AbortController();
+        const params = new URLSearchParams({
+            site: _activeRadarSite(),
+            product: _activeRadarProduct(),
+            elevation: _activeRadarElevation(),
+            lat: String(latlng.lat),
+            lon: String(latlng.lng),
+        });
+        const frameKey = _radarCurrentFrameMeta?.frame_key;
+        if (frameKey) params.set('frame_key', String(frameKey));
+        _appendRadarSrvMotionParams(params);
+
+        try {
+            const resp = await fetch(apiUrl(`/api/radar/live/value?${params.toString()}`), {
+                cache: 'no-store',
+                signal: _radarInspectorAbortController.signal,
+            });
+            if (seq !== _radarInspectorSeq || !_canRunRadarInspector()) return;
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if (data?.status !== 'success') {
+                _hideRadarInspectorTooltip();
+                return;
+            }
+            _showRadarInspectorTooltip(data, _radarInspectorLatestLatLng || latlng);
+        } catch (err) {
+            if (err?.name !== 'AbortError') _hideRadarInspectorTooltip();
+        } finally {
+            if (seq === _radarInspectorSeq) {
+                _radarInspectorInFlight = false;
+                _radarInspectorAbortController = null;
+                if (_radarInspectorPendingSample && _canRunRadarInspector()) {
+                    _scheduleRadarInspectorSample(0);
+                }
+            }
+        }
+    }
+
+    function _scheduleRadarInspectorSample(delayOverride = null) {
+        if (!_canRunRadarInspector()) return;
+        if (_radarInspectorTimer) return;
+        if (_radarInspectorInFlight) {
+            _radarInspectorPendingSample = true;
+            return;
+        }
+        const elapsed = Date.now() - _radarInspectorLastRequestMs;
+        const delay = delayOverride ?? Math.max(0, 90 - elapsed);
+        _radarInspectorTimer = setTimeout(_requestRadarInspectorSample, delay);
+    }
+
+    function _onRadarInspectorMouseMove(evt) {
+        if (!_canRunRadarInspector()) {
+            _cancelRadarInspectorRequest();
+            _hideRadarInspectorTooltip();
+            return;
+        }
+        const latlng = evt?.latlng;
+        if (!latlng) return;
+        _radarInspectorLatestLatLng = latlng;
+        _positionRadarInspectorTooltip(latlng);
+        _scheduleRadarInspectorSample();
+    }
+
     function _clearRadarStormTracksLayer({ clearSelection = false } = {}) {
         _radarStormTracksRequestSeq += 1;
         if (clearSelection) _selectedRadarStormCell = null;
+        _radarInspectorOverStormMarker = false;
+        _radarInspectorStormPopupOpen = false;
+        _syncRadarInspectorSuppression();
         if (radarStormTracksLayer) {
             radarStormTracksLayer.clearLayers();
             if (map.hasLayer(radarStormTracksLayer)) map.removeLayer(radarStormTracksLayer);
@@ -6161,28 +6390,113 @@
         return `${motion.source}:${motion.cell_id || 'cell'}:${motion.speed_kt}:to${motion.motion_to_degrees}`;
     }
 
+    function _radarStormCellIcon(priority) {
+        const S = 34;
+        const hS = S / 2;
+        const label = (text, y, size = 12) => (
+            `<text x="${hS}" y="${y}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" `
+            + `font-size="${size}" font-weight="900" fill="#fff" stroke="#020617" stroke-width="2.6" paint-order="stroke fill">${text}</text>`
+        );
+        let inner, w, h, ax, ay;
+        switch (priority) {
+            case 'tvs':
+                inner = `<polygon points="2,4 ${S - 2},4 ${hS},${S - 2}" fill="#ef4444" stroke="#020617" stroke-width="4" stroke-linejoin="round"/>`
+                    + `<polygon points="2,4 ${S - 2},4 ${hS},${S - 2}" fill="#ef4444" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>`
+                    + label('T', 19);
+                w = S; h = S; ax = hS; ay = Math.round(S / 2);
+                break;
+            case 'meso':
+                inner = `<circle cx="${hS}" cy="${hS}" r="${hS - 2}" fill="#f97316" stroke="#020617" stroke-width="4"/>`
+                    + `<circle cx="${hS}" cy="${hS}" r="${hS - 4}" fill="#f97316" stroke="#fff" stroke-width="1.6"/>`
+                    + `<path d="M8 15 A9 9 0 0 1 25 11" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>`
+                    + `<path d="M25 11 L25 6 L30 6" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>`
+                    + `<path d="M26 19 A9 9 0 0 1 9 23" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>`
+                    + `<path d="M9 23 L9 28 L4 28" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>`
+                    + label('M', 21, 9);
+                w = S; h = S; ax = hS; ay = hS;
+                break;
+            case 'pos_hail':
+                inner = `<polygon points="${hS},2 ${S - 2},${S - 4} 2,${S - 4}" fill="#22c55e" stroke="#020617" stroke-width="4" stroke-linejoin="round"/>`
+                    + `<polygon points="${hS},2 ${S - 2},${S - 4} 2,${S - 4}" fill="#22c55e" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>`
+                    + label('H', 25);
+                w = S; h = S; ax = hS; ay = Math.round(S / 2);
+                break;
+            case 'prob_hail':
+                inner = `<polygon points="${hS},2 ${S - 2},${S - 4} 2,${S - 4}" fill="#020617" stroke="#22c55e" stroke-width="4" stroke-linejoin="round"/>`
+                    + `<polygon points="${hS},2 ${S - 2},${S - 4} 2,${S - 4}" fill="#020617" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/>`
+                    + label('?', 25, 13);
+                w = S; h = S; ax = hS; ay = Math.round(S / 2);
+                break;
+            default:
+                inner = `<circle cx="${hS}" cy="${hS}" r="${hS - 2}" fill="#111827" stroke="#020617" stroke-width="4"/>`
+                    + `<circle cx="${hS}" cy="${hS}" r="${hS - 4}" fill="#111827" stroke="#facc15" stroke-width="2"/>`;
+                w = S; h = S; ax = hS; ay = hS;
+        }
+        return L.divIcon({
+            html: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${inner}</svg>`,
+            className: '',
+            iconSize: [w, h],
+            iconAnchor: [ax, ay],
+        });
+    }
+
     function _radarStormTrackPopup(properties) {
         const cellId = String(properties?.cell_id || '').trim() || 'Cell';
+        const rows = [];
+        const addRow = (label, value) => {
+            if (value === null || value === undefined || value === '') return;
+            rows.push(`<dt>${_escapeHtml(label)}</dt><dd>${_escapeHtml(String(value))}</dd>`);
+        };
+
+        // Time (volume time carried from the NST product).
+        if (properties?.timestamp) {
+            addRow('Time', _formatValidTimeLabel(_resolveDataTimestampMs(properties.timestamp)));
+        }
+
+        // Track: cardinal (degrees) with forward motion in kt and mph.
         const speed = Number(properties?.speed_kt);
         const direction = Number(properties?.motion_to_degrees);
-        const range = Number(properties?.current_range_nm);
-        const azimuth = Number(properties?.current_azimuth_deg);
-        const parts = [`<strong>NST Cell ${_escapeHtml(cellId)}</strong>`];
         if (Number.isFinite(speed) && Number.isFinite(direction)) {
-            parts.push(`Motion: ${Math.round(speed)} kt toward ${Math.round(direction)}°`);
+            const mph = Math.round(speed * 1.15078);
+            addRow('Track', `${_degToCompass(direction)} (${Math.round(direction)}°) · ${Math.round(speed)} kt (${mph} mph)`);
         }
-        if (Number.isFinite(azimuth) && Number.isFinite(range)) {
-            parts.push(`Position: ${Math.round(azimuth)}° / ${Math.round(range)} nm`);
+
+        // Storm height — echo top from NSS storm structure when the feed carries it.
+        const topKft = Number(properties?.nss?.top_kft);
+        if (Number.isFinite(topKft)) {
+            addRow('Storm Height', `${topKft.toFixed(1)} kft`);
         }
-        if (properties?.timestamp) {
-            parts.push(_escapeHtml(_formatValidTimeLabel(_resolveDataTimestampMs(properties.timestamp))));
+
+        // TVS / Mesocyclone yes-no derived from matched NMD detections.
+        const nmdList = Array.isArray(properties?.nmd) ? properties.nmd : [];
+        const hasTvs = nmdList.some((sig) => sig.tvs) || !!properties?.ntv;
+        const hasMeso = nmdList.length > 0 || !!properties?.nme;
+        addRow('TVS', hasTvs ? 'Yes' : 'No');
+        addRow('Mesocyclone', hasMeso ? 'Yes' : 'No');
+
+        // Hail — only present when the source carries NHI (product 59).
+        const nhi = properties?.nhi;
+        if (nhi) {
+            const maxSize = Number(nhi.max_hail_size_in);
+            if (Number.isFinite(maxSize) && maxSize > 0) {
+                addRow('Max Hail Size', `${maxSize.toFixed(2)}"`);
+            }
+            if (nhi.poh != null) addRow('POH', `${nhi.poh}%`);
+            if (nhi.posh != null) addRow('POSH', `${nhi.posh}%`);
         }
-        return parts.join('<br>');
+
+        return `<div class="wx-storm-popup">`
+            + `<div class="wx-storm-popup-title">Storm Cell ${_escapeHtml(cellId)}</div>`
+            + `<dl class="wx-storm-popup-grid">${rows.join('')}</dl>`
+            + `</div>`;
     }
 
     function _renderRadarStormTracks(data) {
         const layer = _ensureRadarStormTracksLayer();
         layer.clearLayers();
+        _radarInspectorOverStormMarker = false;
+        _radarInspectorStormPopupOpen = false;
+        _syncRadarInspectorSuppression();
         const features = data?.feature_collection?.features;
         if (!Array.isArray(features) || !features.length) {
             if (map.hasLayer(layer)) map.removeLayer(layer);
@@ -6192,6 +6506,9 @@
         features.forEach((feature) => {
             const props = feature?.properties || {};
             const geometry = feature?.geometry || {};
+            const kind = props.kind || '';
+
+            // Forecast track lines.
             if (geometry.type === 'LineString' && Array.isArray(geometry.coordinates)) {
                 const latlngs = geometry.coordinates
                     .map((coord) => Array.isArray(coord) && coord.length >= 2
@@ -6209,23 +6526,33 @@
                 }).addTo(layer);
                 return;
             }
+
             if (geometry.type !== 'Point' || !Array.isArray(geometry.coordinates)) return;
             const lon = Number(geometry.coordinates[0]);
             const lat = Number(geometry.coordinates[1]);
             if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-            const marker = L.circleMarker([lat, lon], {
+
+            // Storm cell — icon driven by icon_priority from the IEM attributes.
+            if (kind !== 'nst_cell') return;
+            const priority = props.icon_priority || 'cell';
+            const tooltipLabel = priority === 'tvs' ? `TVS Cell ${props.cell_id || ''}`
+                : priority === 'meso' ? `Meso Cell ${props.cell_id || ''}`
+                : priority === 'pos_hail' ? `Hail+ Cell ${props.cell_id || ''}`
+                : priority === 'prob_hail' ? `Hail? Cell ${props.cell_id || ''}`
+                : `NST ${props.cell_id || ''}`;
+            const marker = L.marker([lat, lon], {
+                icon: _radarStormCellIcon(priority),
                 pane: 'radar-sites',
-                radius: 7,
-                color: '#facc15',
-                weight: 2,
-                fillColor: '#111827',
-                fillOpacity: 0.88,
             });
-            marker.bindTooltip(`NST ${props.cell_id || ''}`, {
+            marker.bindTooltip(tooltipLabel, {
                 direction: 'top',
                 className: 'city-name-label',
             });
             marker.bindPopup(_radarStormTrackPopup(props));
+            marker.on('mouseover', () => _setRadarInspectorMarkerHover(true));
+            marker.on('mouseout', () => _setRadarInspectorMarkerHover(false));
+            marker.on('popupopen', () => _setRadarInspectorStormPopupOpen(true));
+            marker.on('popupclose', () => _setRadarInspectorStormPopupOpen(false));
             marker.on('click', () => {
                 _selectedRadarStormCell = {
                     site: props.site || _activeRadarSite(),
@@ -6640,8 +6967,8 @@
         return true;
     }
 
-    async function _crossfadeRadarOverlays(oldOverlay, newOverlay, canContinue = () => true) {
-        return _crossfadeOverlays(oldOverlay, newOverlay, 0.9, () => _isTypeEnabled('radar'), canContinue, RADAR_CROSSFADE_MS);
+    async function _crossfadeRadarOverlays(oldOverlay, newOverlay, canContinue = () => true, options = {}) {
+        return _crossfadeOverlays(oldOverlay, newOverlay, 0.9, () => _isTypeEnabled('radar'), canContinue, RADAR_CROSSFADE_MS, options);
     }
 
     async function _crossfadeSatelliteLayers(oldLayer, newLayer, canContinue = () => true) {
@@ -6664,13 +6991,97 @@
         _radarLiveImageOverlays.forEach((overlay) => {
             if (overlay && map.hasLayer(overlay)) map.removeLayer(overlay);
         });
+        _clearRadarScrubOverlayPool();
         _radarLiveImageOverlays.clear();
         radarLiveOverlay = null;
+        _setRadarCurrentFrameMeta(null);
+        _cancelRadarInspectorRequest();
+        _hideRadarInspectorTooltip();
         _clearRadarStormTracksLayer({ clearSelection: true });
         _radarMultiSites.clear();
     }
 
+    function _radarScrubOverlayKey(frame) {
+        const contextKey = _radarScrubContextKey || _radarCurrentScrubContextKey(frame?.product);
+        return `${contextKey}|${_radarScrubFrameIdentity(frame)}`;
+    }
+
+    function _radarScrubOverlayRecord(overlay) {
+        for (const rec of _radarScrubOverlayPool.values()) {
+            if (rec?.overlay === overlay) return rec;
+        }
+        return null;
+    }
+
+    function _getOrCreateRadarScrubOverlay(frame, overlayUrl, bounds) {
+        if (!frame || !overlayUrl || !Array.isArray(bounds) || bounds.length !== 4) return null;
+        const key = _radarScrubOverlayKey(frame);
+        const leafletBounds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
+        let rec = _radarScrubOverlayPool.get(key);
+        if (rec?.overlay) {
+            if (typeof rec.overlay.setBounds === 'function') rec.overlay.setBounds(leafletBounds);
+            if (typeof rec.overlay.setUrl === 'function' && rec.overlay._url !== overlayUrl) {
+                rec.overlay.setUrl(overlayUrl);
+            }
+            return rec.overlay;
+        }
+
+        const overlay = L.imageOverlay(overlayUrl, leafletBounds, {
+            opacity: 0,
+            pane: 'radar-overlays',
+            zIndex: 320,
+        });
+        _radarScrubOverlayPool.set(key, { overlay, key });
+        return overlay;
+    }
+
+    function _activateRadarScrubOverlay(overlay) {
+        if (!overlay) return;
+        if (!map.hasLayer(overlay)) overlay.addTo(map);
+        if (typeof overlay.setZIndex === 'function') {
+            _radarScrubOverlayZCounter += 1;
+            overlay.setZIndex(320 + _radarScrubOverlayZCounter);
+        }
+        radarLiveOverlay = overlay;
+    }
+
+    function _hideInactiveRadarScrubOverlays(activeOverlay, previousOverlay = null) {
+        _radarScrubOverlayPool.forEach((rec) => {
+            const overlay = rec?.overlay;
+            if (!overlay || overlay === activeOverlay || overlay === previousOverlay) return;
+            if (typeof overlay.setOpacity === 'function') overlay.setOpacity(0);
+            if (typeof overlay.setZIndex === 'function') overlay.setZIndex(300);
+        });
+    }
+
+    function _setRadarScrubOverlayActive(overlay) {
+        if (!overlay) return;
+        _activateRadarScrubOverlay(overlay);
+        if (typeof overlay.setOpacity === 'function') overlay.setOpacity(0.9);
+        _hideInactiveRadarScrubOverlays(overlay);
+        _radarLiveImageOverlays.forEach((trackedOverlay) => {
+            if (!trackedOverlay || trackedOverlay === overlay) return;
+            if (map.hasLayer(trackedOverlay)) map.removeLayer(trackedOverlay);
+            _radarLiveImageOverlays.delete(trackedOverlay);
+        });
+    }
+
+    function _clearRadarScrubOverlayPool() {
+        if (_radarScrubOverlayRecord(radarLiveOverlay)) radarLiveOverlay = null;
+        _radarScrubOverlayPool.forEach((rec) => {
+            const overlay = rec?.overlay;
+            if (overlay && map.hasLayer(overlay)) map.removeLayer(overlay);
+        });
+        _radarScrubOverlayPool.clear();
+        _radarScrubOverlayZCounter = 0;
+    }
+
     function _setRadarLiveOverlay(overlay) {
+        if (_radarScrubOverlayRecord(overlay)) {
+            _setRadarScrubOverlayActive(overlay);
+            return;
+        }
+
         if (overlay) _radarLiveImageOverlays.add(overlay);
         _radarLiveImageOverlays.forEach((trackedOverlay) => {
             if (!trackedOverlay || trackedOverlay === overlay) return;
@@ -6678,6 +7089,10 @@
             _radarLiveImageOverlays.delete(trackedOverlay);
         });
         radarLiveOverlay = overlay || null;
+        if (!radarLiveOverlay) {
+            _setRadarCurrentFrameMeta(null);
+            _syncRadarInspectorState();
+        }
     }
 
     function _clearRadarLoadedOverlaysOnly() {
@@ -6686,6 +7101,8 @@
         _stopRadarScrubPlay();
 
         _clearRadarLiveLayers();
+        _setRadarCurrentFrameMeta(null);
+        _syncRadarInspectorState();
 
         if (radarBackdropLayer && map.hasLayer(radarBackdropLayer)) {
             map.removeLayer(radarBackdropLayer);
@@ -6775,6 +7192,7 @@
         }
 
         _setRadarLiveOverlay(newOverlay);
+        _setRadarCurrentFrameMeta(data);
     }
 
     // Legacy "Animate" button is gone in unified mode; these two functions are
@@ -8773,6 +9191,419 @@
         _setRtmaScrubberStatus(`${_satelliteFrames.length} v2 frames loaded (${totalTiles} cached tiles${ageLabel}); tiles fill as they render.`);
     }
 
+    function _ensureWaterLayer() {
+        if (!waterLayer) waterLayer = L.layerGroup();
+        return waterLayer;
+    }
+
+    function _setWaterStatus(message) {
+        const el = byId('weather-water-status');
+        if (el) el.textContent = message || '';
+    }
+
+    function _clearWaterLayer() {
+        _waterRequestSeq += 1;
+        if (_waterReloadTimer) {
+            clearTimeout(_waterReloadTimer);
+            _waterReloadTimer = null;
+        }
+        if (waterLayer) {
+            waterLayer.clearLayers();
+            if (map.hasLayer(waterLayer)) map.removeLayer(waterLayer);
+        }
+        _waterStations = [];
+        _waterSelectedSiteId = '';
+        const detail = byId('weather-water-detail');
+        if (detail) {
+            detail.hidden = true;
+            detail.innerHTML = '';
+        }
+    }
+
+    function _waterMarkerStyle(status) {
+        if (status === 'coastal') return { fill: '#14b8a6', stroke: '#e0f2fe', weight: 2.6 };
+        if (status === 'buoy') return { fill: '#2563eb', stroke: '#bfdbfe', weight: 2.6 };
+        if (status === 'major') return { fill: '#a855f7', stroke: '#581c87' };
+        if (status === 'moderate') return { fill: '#ef4444', stroke: '#991b1b' };
+        if (status === 'minor') return { fill: '#f97316', stroke: '#9a3412' };
+        if (status === 'action') return { fill: '#facc15', stroke: '#a16207' };
+        switch (status) {
+            case 'stale':
+                return { fill: '#64748b', stroke: '#334155' };
+            case 'missing':
+                return { fill: '#f59e0b', stroke: '#92400e' };
+            default:
+                return { fill: '#38bdf8', stroke: '#0369a1' };
+        }
+    }
+
+    function _waterLegendHtml() {
+        const rows = [
+            ['Major', 'major'],
+            ['Moderate ', 'moderate'],
+            ['Minor', 'minor'],
+            ['Action Stage', 'action'],
+            ['No Flood / Unknown', 'normal'],
+            ['Coastal Gauge', 'coastal'],
+            ['NDBC Buoy', 'buoy'],
+        ].map(([label, status]) => {
+            const style = _waterMarkerStyle(status);
+            const shadow = status === 'coastal'
+                ? 'box-shadow:0 0 0 1px #0f766e;'
+                : status === 'buoy'
+                ? 'box-shadow:0 0 0 1px #1d4ed8;'
+                : '';
+            return `<div class="legend-item"><span class="legend-swatch" style="background:${style.fill};border-color:${style.stroke};border-radius:50%;${shadow}"></span><span class="legend-text">${label}</span></div>`;
+        }).join('');
+        return `<h4 class="legend-title">River/Coastal/NDBC</h4><div class="legend-flow">${rows}</div>`;
+    }
+
+    function _selectedWaterNetworks() {
+        return [...document.querySelectorAll('.weather-water-network-filter input[type="checkbox"]:checked')]
+            .map((el) => String(el.value || '').trim().toLowerCase())
+            .filter(Boolean);
+    }
+
+    function _isCoastalWaterStation(station) {
+        return String(station?.network || '').toLowerCase() === 'coastal';
+    }
+
+    function _isBuoyWaterStation(station) {
+        return String(station?.network || '').toLowerCase() === 'buoy';
+    }
+
+    function _waterNetworkLabel(station) {
+        const network = String(station?.network || '').toLowerCase();
+        if (network === 'coastal') return 'Coastal';
+        if (network === 'buoy') return 'NDBC';
+        return 'River';
+    }
+
+    function _waterCapabilityText(station) {
+        const capabilities = Array.isArray(station?.capabilities) ? station.capabilities : [];
+        if (capabilities.length) return capabilities.join(', ');
+        const type = String(station?.station_type || '').replace(/_/g, ' ').trim();
+        return type ? _waterCategoryText(type) : '';
+    }
+
+    function _waterRequestBbox() {
+        const bounds = map.getBounds();
+        const south = Math.max(-90, bounds.getSouth());
+        const north = Math.min(90, bounds.getNorth());
+        const rawWest = bounds.getWest();
+        const rawEast = bounds.getEast();
+        const span = rawEast - rawWest;
+        const west = span >= 360 ? -180 : Math.max(-180, rawWest);
+        const east = span >= 360 ? 180 : Math.min(180, rawEast);
+        return [west, south, east, north].map((value) => value.toFixed(4)).join(',');
+    }
+
+    function _waterReadingText(station, key) {
+        const reading = station?.readings?.[key];
+        if (!reading || reading.value == null) return '—';
+        const value = Number(reading.value);
+        const formatted = Number.isFinite(value)
+            ? value.toLocaleString(undefined, { maximumFractionDigits: key === 'flow' ? 0 : 2 })
+            : String(reading.value);
+        return `${formatted} ${reading.units || ''}`.trim();
+    }
+
+    function _waterReadingRow(station, key, label) {
+        const text = _waterReadingText(station, key);
+        return text && text !== '—' ? [label, text] : null;
+    }
+
+    function _waterLatestTimestamp(station) {
+        const times = Object.values(station?.readings || {})
+            .map((reading) => _asDate(reading?.timestamp))
+            .filter(Boolean)
+            .sort((a, b) => b.getTime() - a.getTime());
+        return times[0] || null;
+    }
+
+    function _waterCategoryText(value) {
+        const text = String(value || '').replace(/_/g, ' ').trim();
+        if (!text) return '';
+        return text.replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    function _waterFloodRank(category) {
+        const cat = String(category || '').toLowerCase();
+        if (cat.includes('major')) return 4;
+        if (cat.includes('moderate')) return 3;
+        if (cat.includes('minor')) return 2;
+        if (cat.includes('action')) return 1;
+        return 0;
+    }
+
+    function _applyWaterFloodFilter(stations) {
+        if (_waterFloodFilter === 'all') return stations;
+        const minRank = WATER_FLOOD_RANKS[_waterFloodFilter] || 0;
+        return stations.filter((s) =>
+            _isCoastalWaterStation(s) ||
+            _isBuoyWaterStation(s) ||
+            _waterFloodRank(s.observed_category) >= minRank,
+        );
+    }
+
+    function _waterStageGaugeHtml(station) {
+        const reading = station?.readings?.stage;
+        const categories = station?.flood?.categories || {};
+        const current = reading?.value != null ? Number(reading.value) : null;
+        if (!Number.isFinite(current)) return '';
+        const THRESH = [
+            { key: 'action',   color: '#facc15', label: 'Act' },
+            { key: 'minor',    color: '#f97316', label: 'Min' },
+            { key: 'moderate', color: '#ef4444', label: 'Mod' },
+            { key: 'major',    color: '#a855f7', label: 'Maj' },
+        ];
+        const parsed = THRESH
+            .map((t) => ({ ...t, stage: Number(categories[t.key]?.stage) }))
+            .filter((t) => Number.isFinite(t.stage));
+        if (!parsed.length) return '';
+        const maxThreshold = parsed[parsed.length - 1].stage;
+        const scaleMax = Math.max(current * 1.1, maxThreshold * 1.15, 1);
+        const pct = (val) => `${Math.min(100, Math.max(0, (val / scaleMax) * 100)).toFixed(1)}%`;
+        let zones = `<div class="wx-stage-zone" style="left:0;width:${pct(parsed[0].stage)};background:#38bdf830;"></div>`;
+        for (let i = 0; i < parsed.length; i++) {
+            const start = parsed[i].stage;
+            const end = i + 1 < parsed.length ? parsed[i + 1].stage : scaleMax;
+            zones += `<div class="wx-stage-zone" style="left:${pct(start)};width:${pct(end - start)};background:${parsed[i].color}50;"></div>`;
+        }
+        const marker = `<div class="wx-stage-marker" style="left:${pct(current)};"></div>`;
+        const units = reading?.units || 'ft';
+        const threshText = parsed.map((t) => `${t.label}:${t.stage.toFixed(1)}`).join('  ');
+        return `<div class="wx-stage-gauge">`
+            + `<div class="wx-stage-bar">${zones}${marker}</div>`
+            + `<div class="wx-stage-summary">`
+            + `<span class="wx-stage-cur">&#9650; ${current.toFixed(2)} ${units}</span>`
+            + `<span class="wx-stage-thresh">${threshText}</span>`
+            + `</div></div>`;
+    }
+
+    function _waterBuoyCardHtml(station) {
+        const readings = station?.readings || {};
+        const rt = (key) => {
+            const rd = readings[key];
+            if (!rd || rd.value == null) return null;
+            const value = Number(rd.value);
+            const formatted = Number.isFinite(value)
+                ? value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+                : String(rd.value);
+            return `${formatted}${rd.units ? ' ' + rd.units : ''}`;
+        };
+        const windDir = readings.wind_direction?.value != null
+            ? `${Number(readings.wind_direction.value).toFixed(0)}°T` : null;
+        const waveDir = readings.mean_wave_direction?.value != null
+            ? `${Number(readings.mean_wave_direction.value).toFixed(0)}°T` : null;
+        const groups = [
+            { label: 'Wind',  items: [['Speed', rt('wind_speed')], ['Gust', rt('wind_gust')], ['Dir', windDir]] },
+            { label: 'Waves', items: [['Height', rt('wave_height')], ['Period', rt('dominant_wave_period')], ['Dir', waveDir]] },
+            { label: 'Atmos', items: [['Pressure', rt('pressure')], ['Tendency', rt('pressure_tendency')]] },
+            { label: 'Temp',  items: [['Air', rt('air_temperature')], ['Water', rt('water_temperature')], ['Dew Pt', rt('dewpoint')]] },
+            { label: 'Other', items: [['Visibility', rt('visibility')], ['Tide', rt('tide')]] },
+        ]
+            .map((g) => ({ ...g, items: g.items.filter(([, v]) => v != null) }))
+            .filter((g) => g.items.length);
+        if (!groups.length) return '';
+        return `<div class="wx-buoy-card">`
+            + groups.map((g) =>
+                `<div class="wx-buoy-group">`
+                + `<span class="wx-buoy-group-label">${_escapeHtml(g.label)}</span>`
+                + `<dl class="wx-storm-popup-grid">`
+                + g.items.map(([l, v]) => `<dt>${_escapeHtml(l)}</dt><dd>${_escapeHtml(v)}</dd>`).join('')
+                + `</dl></div>`,
+            ).join('')
+            + `</div>`;
+    }
+
+    function _waterPopupHydrograph(station) {
+        const pageUrl = station?.source_url || '';
+        const hydrographUrl = station?.floodcat_hydrograph_url || station?.hydrograph_url || '';
+        if (hydrographUrl && pageUrl) {
+            return `<a class="wx-water-hydrograph-link" href="${_escapeHtml(pageUrl)}" target="_blank" rel="noopener" title="Open NOAA gauge page">`
+                + `<img class="wx-water-hydrograph" src="${_escapeHtml(hydrographUrl)}" alt="Hydrograph for ${_escapeHtml(station?.name || station?.site_id || 'gauge')}" loading="lazy">`
+                + `</a>`;
+        }
+        if (!pageUrl) return '';
+        const sourceLabel = station?.source === 'NOAA NDBC'
+            ? 'NOAA NDBC station page'
+            : station?.source === 'NOAA CO-OPS'
+            ? 'NOAA Tides & Currents station page'
+            : station?.source === 'NOAA NWPS'
+            ? 'NOAA NWPS gauge page'
+            : 'NOAA river gauge page';
+        return `<a class="wx-water-detail-link" href="${_escapeHtml(pageUrl)}" target="_blank" rel="noopener">${_escapeHtml(sourceLabel)}</a>`;
+    }
+
+    function _waterStationPopupHtml(station) {
+        if (!station) return '';
+        const isCoastal = _isCoastalWaterStation(station);
+        const isBuoy = _isBuoyWaterStation(station);
+        const latest = _waterLatestTimestamp(station);
+        const updatedDate = latest || _asDate(station.updated);
+        const updated = updatedDate ? _formatValidTimeLabel(updatedDate.getTime()) : 'No current value';
+        const rows = [
+            ['Site', station.nwps_lid || station.coops_id || station.ndbc_id || station.site_id || ''],
+            ['Network', _waterNetworkLabel(station)],
+            ['Type', _waterCapabilityText(station)],
+            ['Waterbody', station.waterbody],
+            ['Stage', (isCoastal || isBuoy) ? '' : _waterReadingText(station, 'stage')],
+            ['Observed', (isCoastal || isBuoy) ? '' : _waterCategoryText(station.observed_category)],
+            isCoastal ? _waterReadingRow(station, 'water_level', 'Water Level') : null,
+            isCoastal ? _waterReadingRow(station, 'current_speed', 'Speed') : null,
+            isCoastal ? _waterReadingRow(station, 'current_direction', 'Direction') : null,
+            ['Updated', updated],
+            ['WFO / RFC', [station.wfo, station.rfc].filter(Boolean).join(' / ')],
+            ['Affiliation', station.affiliation],
+            ['County', [station.county, station.state].filter(Boolean).join(', ')],
+            ['State', isCoastal ? station.state : ''],
+        ]
+            .filter(Boolean)
+            .filter((row) => row[1])
+            .map(([label, value]) => `<dt>${_escapeHtml(label)}</dt><dd>${String(value).includes('<br>') ? value : _escapeHtml(value)}</dd>`)
+            .join('');
+        return `<div class="wx-storm-popup wx-water-popup">`
+            + `<div class="wx-storm-popup-title">${_escapeHtml(station.name || station.site_id)}</div>`
+            + `<dl class="wx-storm-popup-grid">${rows}</dl>`
+            + (!isBuoy && !isCoastal ? _waterStageGaugeHtml(station) : '')
+            + (isBuoy ? _waterBuoyCardHtml(station) : '')
+            + _waterPopupHydrograph(station)
+            + `</div>`;
+    }
+
+    async function _loadWaterStationDetail(siteId, marker) {
+        if (!marker) return;
+        const requestSeq = ++_waterDetailRequestSeq;
+        marker.bindPopup('<div class="wx-storm-popup wx-water-popup"><div class="wx-storm-popup-title">Loading gauge...</div></div>');
+        marker.openPopup();
+        try {
+            const resp = await fetch(apiUrl(`/api/water/stations/${encodeURIComponent(siteId)}`), { cache: 'no-store' });
+            if (requestSeq !== _waterDetailRequestSeq || !_isTypeEnabled('water')) return;
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if (data?.station) {
+                _waterSelectedSiteId = siteId;
+                marker.setPopupContent(_waterStationPopupHtml(data.station));
+                marker.openPopup();
+            }
+        } catch (err) {
+            if (requestSeq !== _waterDetailRequestSeq) return;
+            _setWaterStatus(`Water station unavailable: ${err.message}`);
+            marker.setPopupContent(`<div class="wx-storm-popup wx-water-popup"><div class="wx-storm-popup-title">Gauge unavailable</div><dl class="wx-storm-popup-grid"><dt>Error</dt><dd>${_escapeHtml(err.message)}</dd></dl></div>`);
+            marker.openPopup();
+        }
+    }
+
+    function _waterMarkerStatus(station) {
+        if (_isCoastalWaterStation(station)) return 'coastal';
+        if (_isBuoyWaterStation(station)) return 'buoy';
+        const category = String(station?.observed_category || '').toLowerCase();
+        if (category.includes('major')) return 'major';
+        if (category.includes('moderate')) return 'moderate';
+        if (category.includes('minor')) return 'minor';
+        if (category.includes('action')) return 'action';
+        return 'normal';
+    }
+
+    function _renderWaterStations(stations) {
+        const layer = _ensureWaterLayer();
+        layer.clearLayers();
+        _waterStations = Array.isArray(stations) ? stations : [];
+        _applyWaterFloodFilter(_waterStations).forEach((station) => {
+            const lat = Number(station.lat);
+            const lon = Number(station.lon);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+            const style = _waterMarkerStyle(_waterMarkerStatus(station));
+            const marker = L.circleMarker([lat, lon], {
+                pane: 'water-markers',
+                radius: 5,
+                color: style.stroke,
+                weight: style.weight || 1.6,
+                fillColor: style.fill,
+                fillOpacity: 0.9,
+            });
+            const isCoastal = _isCoastalWaterStation(station);
+            const isBuoy = _isBuoyWaterStation(station);
+            marker.bindTooltip(
+                isCoastal
+                    ? `<strong>${_escapeHtml(station.name || station.site_id)}</strong><br>${_escapeHtml(_waterCapabilityText(station) || 'Coastal Gauge')}`
+                    : isBuoy
+                    ? `<strong>${_escapeHtml(station.name || station.site_id)}</strong><br>${_escapeHtml(_waterReadingText(station, 'wave_height'))} waves`
+                    : `<strong>${_escapeHtml(station.name || station.site_id)}</strong><br>Stage ${_escapeHtml(_waterReadingText(station, 'stage'))}`,
+                { direction: 'top', className: 'city-name-label' },
+            );
+            marker.bindPopup(_waterStationPopupHtml(station));
+            marker.on('click', () => _loadWaterStationDetail(station.site_id, marker));
+            marker.addTo(layer);
+        });
+        if (_isTypeEnabled('water') && !map.hasLayer(layer)) layer.addTo(map);
+    }
+
+    async function _loadWaterStations({ force = false } = {}) {
+        if (!_isTypeEnabled('water')) return;
+        if (_waterStationsInFlight) {
+            _waterPendingReload = true;
+            return;
+        }
+        const bbox = _waterRequestBbox();
+        const requestSeq = ++_waterRequestSeq;
+        _waterStationsInFlight = true;
+        _waterPendingReload = false;
+        _setWaterStatus('Loading NOAA water stations...');
+        try {
+            const params = new URLSearchParams({
+                bbox,
+                max_sites: '15000',
+                networks: _selectedWaterNetworks().join(','),
+            });
+            if (force) params.set('_', String(Date.now()));
+            const resp = await fetch(apiUrl(`/api/water/stations?${params.toString()}`), { cache: 'no-store' });
+            if (requestSeq !== _waterRequestSeq || !_isTypeEnabled('water')) return;
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            const stations = Array.isArray(data?.stations) ? data.stations : [];
+            _renderWaterStations(stations);
+            const totalAvailable = Number(data?.total_available || stations.length);
+            const cachePrefix = data?.cache === 'empty' ? 'Cache warming: ' : '';
+            const staleSuffix = data?.stale ? ' Cache may be stale.' : '';
+            const selectedNetworks = _selectedWaterNetworks();
+            const networkLabel = selectedNetworks.length
+                ? selectedNetworks.map((value) => (
+                    value === 'river' ? 'river' : value === 'coastal' ? 'coastal' : 'NDBC'
+                )).join(' + ')
+                : 'selected';
+            const countText = totalAvailable > stations.length
+                ? `${stations.length} of ${totalAvailable} cached NOAA ${networkLabel} gauges shown.`
+                : `${stations.length} cached NOAA ${networkLabel} gauge${stations.length === 1 ? '' : 's'} loaded.`;
+            _setWaterStatus(`${cachePrefix}${data?.message || countText}${staleSuffix}`);
+            const latest = stations.map(_waterLatestTimestamp).filter(Boolean).sort((a, b) => b.getTime() - a.getTime())[0];
+            if (latest) {
+                _setViewerTimestamp(latest.getTime());
+                _setReliability('water', 'NOAA water gauges', 'Observed river, coastal, and marine stations', latest.getTime());
+                _setTimestampSource('water', 'noaa_water_gauges', latest.getTime());
+            }
+        } catch (err) {
+            if (requestSeq !== _waterRequestSeq) return;
+            _setWaterStatus(`NOAA river gauge data unavailable: ${err.message}`);
+        } finally {
+            _waterStationsInFlight = false;
+            if (requestSeq === _waterRequestSeq && _waterPendingReload && _isTypeEnabled('water')) {
+                _waterPendingReload = false;
+                _scheduleWaterReload(900);
+            }
+        }
+    }
+
+    function _scheduleWaterReload(delayMs = 900) {
+        if (!_isTypeEnabled('water')) return;
+        if (_waterReloadTimer) clearTimeout(_waterReloadTimer);
+        _waterReloadTimer = setTimeout(() => {
+            _waterReloadTimer = null;
+            _loadWaterStations();
+        }, delayMs);
+    }
+
     function refreshActiveLayers() {
         if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length || _satelliteScrubMode) return;
         const alertsEnabled = _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0;
@@ -8787,6 +9618,7 @@
 
         const droughtEnabled = _isTypeEnabled('drought');
         const wpcEnabled = _isTypeEnabled('wpc');
+        const waterEnabled = _isTypeEnabled('water');
         const tropicalEnabled = _isTypeEnabled('tropical');
 
         // Clear legend at the start to ensure old legend doesn't persist when switching products
@@ -8802,6 +9634,7 @@
         if (!spcEnabled && spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
         if (!surfaceEnabled && surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
         if (!radarEnabled && radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
+        if (!radarEnabled) _clearRadarScrubOverlayPool();
         if (!satelliteEnabled && satelliteOverlay && map.hasLayer(satelliteOverlay)) map.removeLayer(satelliteOverlay);
         if (!radarEnabled && radarBackdropLayer && map.hasLayer(radarBackdropLayer)) map.removeLayer(radarBackdropLayer);
         if (!radarEnabled && radarSiteLayer && map.hasLayer(radarSiteLayer)) map.removeLayer(radarSiteLayer);
@@ -8813,6 +9646,9 @@
         if (!rtmaEnabled) { _rtmaSecondaryPoints = []; _rtmaSecondaryUnits = ''; }
         if (!mrmsEnabled && mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
         if (!droughtEnabled && droughtLayer && map.hasLayer(droughtLayer)) { map.removeLayer(droughtLayer); droughtLayer = null; }
+        if (!waterEnabled && waterLayer && map.hasLayer(waterLayer)) {
+            map.removeLayer(waterLayer);
+        }
         if (!wpcEnabled) {
             if (wpcLayer && map.hasLayer(wpcLayer)) map.removeLayer(wpcLayer);
             wpcLayer = null;
@@ -8876,6 +9712,10 @@
         }
         if (wpcEnabled) {
             _wpcEngine?.loadWpcLayer();
+        }
+        if (waterEnabled) {
+            setLegend(_waterLegendHtml());
+            _loadWaterStations();
         }
         if (tropicalEnabled) {
             _tropicalEngine?.loadStorms();
@@ -10127,7 +10967,10 @@
             className: '',
             html: `<div style="width:${size}px;height:${size}px;">${svg}</div>`,
             iconSize: [size, size],
-            iconAnchor: [Math.round(size / 2), size],
+            iconAnchor: [
+                Math.round(size / 2 - VALUE_MARKER_OFFSET_X_PX),
+                Math.round(size - VALUE_MARKER_OFFSET_Y_PX),
+            ],
         });
     }
 
@@ -10152,7 +10995,10 @@
             // Apply opacity at the element level so text fill and outline fade together.
             html: `<div style="opacity:${alpha};color:rgb(255,255,0);font-weight:800;font-size:${fontSizePx}px;line-height:1;font-family:Montserrat-ExtraBold, sans-serif;text-align:center;-webkit-text-stroke:${strokePx}px black;paint-order:stroke fill;">${label}</div>`,
             iconSize: [iconWidth, iconHeight],
-            iconAnchor: [Math.round(iconWidth / 2), Math.round(iconHeight / 2)],
+            iconAnchor: [
+                Math.round(iconWidth / 2 - VALUE_MARKER_OFFSET_X_PX),
+                Math.round(iconHeight / 2 - VALUE_MARKER_OFFSET_Y_PX),
+            ],
         });
     }
 
@@ -12482,7 +13328,7 @@
                         }
                     }
                 } catch { /* network blip, keep polling */ }
-            }, 1500);
+            }, 15000);
         });
     }
 
@@ -12928,7 +13774,7 @@
                 className: 'city-name-tag',
                 html: `<span>${_escapeHtml(cityName)}</span>`,
                 iconSize: [width, height],
-                iconAnchor: [Math.round(width / 2 -20), Math.round(height / 2 -25)],
+                iconAnchor: [Math.round(width / 2), Math.round(height / 2)],
             }),
         });
     }
@@ -13167,10 +14013,10 @@
         _originalRenderSurfaceMarkers(filtered);
     };
 
-    ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'].forEach((type) => {
+    ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc', 'water'].forEach((type) => {
         byId(`weather-type-${type}`)?.addEventListener('change', (e) => {
             // Enforce single active weather type for all tabs
-            const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'];
+            const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc', 'water'];
             // Capture previous tab BEFORE uncheck loop runs (otherwise the DOM
             // state would already reflect the new selection).
             if (_activeTabType === null) _activeTabType = _detectInitialActiveTabType();
@@ -13204,7 +14050,7 @@
                 } else {
                     fitRegion(byId('weather-region')?.value || 'CONUS');
                 }
-                if (['radar', 'satellite', 'rtma', 'drought', 'tropical', 'wpc'].includes(type)) {
+                if (['radar', 'satellite', 'rtma', 'drought', 'tropical', 'wpc', 'water'].includes(type)) {
                     _setViewerTimestamp(null);
                 }
                 if (type === 'satellite') {
@@ -13277,6 +14123,50 @@
 
     byId('weather-refresh-drought')?.addEventListener('click', () => {
         if (_isTypeEnabled('drought')) _droughtEngine?.loadDroughtLayer();
+    });
+
+    byId('weather-refresh-water')?.addEventListener('click', () => {
+        if (_isTypeEnabled('water')) _loadWaterStations({ force: true });
+    });
+
+    byId('weather-clear-water')?.addEventListener('click', () => {
+        _clearWaterLayer();
+        _setWaterStatus('Water markers cleared.');
+    });
+
+    function _updateWaterFloodPillsVisibility() {
+        const riverChecked = !!document.querySelector('.weather-water-network-filter input[value="river"]:checked');
+        const row = byId('weather-water-flood-filter-row');
+        if (row) row.hidden = !riverChecked;
+        if (!riverChecked && _waterFloodFilter !== 'all') {
+            _waterFloodFilter = 'all';
+            document.querySelectorAll('.wx-water-flood-pill').forEach((p) => {
+                p.setAttribute('aria-selected', String(p.dataset.flood === 'all'));
+            });
+        }
+    }
+
+    document.querySelectorAll('.weather-water-network-filter input[type="checkbox"]').forEach((checkbox) => {
+        checkbox.addEventListener('change', () => {
+            _updateWaterFloodPillsVisibility();
+            if (_isTypeEnabled('water')) _loadWaterStations({ force: true });
+        });
+    });
+
+    _updateWaterFloodPillsVisibility();
+
+    byId('weather-water-flood-filters')?.addEventListener('click', (evt) => {
+        const pill = evt.target.closest('.wx-water-flood-pill');
+        if (!pill) return;
+        _waterFloodFilter = pill.dataset.flood || 'all';
+        document.querySelectorAll('.wx-water-flood-pill').forEach((p) => {
+            p.setAttribute('aria-selected', String(p === pill));
+        });
+        _renderWaterStations(_waterStations);
+        if (_waterFloodFilter !== 'all') {
+            const visible = _applyWaterFloodFilter(_waterStations).length;
+            _setWaterStatus(`Flood filter: ${visible} of ${_waterStations.length} river gauges shown.`);
+        }
     });
 
     byId('weather-opacity-drought')?.addEventListener('input', (e) => {
@@ -13616,6 +14506,15 @@
         if (_satelliteScrubMode && _satelliteFrames.length && _isTypeEnabled('satellite')) {
             _scheduleSatelliteTilePrefetch(350);
         }
+        if (_isTypeEnabled('water')) {
+            _scheduleWaterReload();
+        }
+    });
+
+    map.on('mousemove', _onRadarInspectorMouseMove);
+    map.on('mouseout movestart zoomstart', () => {
+        _cancelRadarInspectorRequest();
+        _hideRadarInspectorTooltip();
     });
 
     map.on('zoomstart', () => {
@@ -13724,7 +14623,7 @@
         // background tabs to silently load data (e.g. MRMS PrecipFlag firing
         // on a "Current" tab load because the user had MRMS active before
         // refreshing).
-        const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc'];
+        const allTypes = ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc', 'water'];
         _configureStandaloneProductPage(allTypes);
         allTypes.forEach((t) => {
             const el = byId(`weather-type-${t}`);
@@ -13790,6 +14689,8 @@
         _setViewerTimestamp(null);
         if (_isTypeEnabled('tropical')) {
             fitTropicalDefaultExtent();
+        } else {
+            fitRegion(byId('weather-region')?.value || 'NC');
         }
         _updateSpcReportFilterState();
         refreshActiveLayers();
@@ -13819,10 +14720,12 @@
                 crossfadeOverlays: _crossfadeRadarOverlays,
                 currentScrubContextKey: _radarCurrentScrubContextKey,
                 formatValidTimeLabel: _formatValidTimeLabel,
+                getOrCreateScrubOverlay: _getOrCreateRadarScrubOverlay,
                 getLiveOverlay: () => radarLiveOverlay,
                 getScrubContextKey: () => _radarScrubContextKey,
                 getScrubFrames: () => _radarScrubFrames,
                 hasMultiSites: () => _radarMultiSites.size > 0,
+                isScrubOverlay: (overlay) => !!_radarScrubOverlayRecord(overlay),
                 isCurrentScrubRenderSeq: (renderSeq) => (
                     renderSeq === _radarScrubRenderSeq && _isTypeEnabled('radar')
                 ),
@@ -13842,6 +14745,8 @@
                 setGlobalStatus: setStatus,
                 setLegend,
                 setLiveOverlay: _setRadarLiveOverlay,
+                setCurrentFrameMeta: _setRadarCurrentFrameMeta,
+                setScrubOverlayActive: _setRadarScrubOverlayActive,
                 setRegionRadarSiteSelectedState: _setRegionRadarSiteSelectedState,
                 setReliability: _setReliability,
                 setScrubFrameIndex: (index) => { _radarScrubFrameIndex = index; },
@@ -13851,6 +14756,7 @@
                 siteCoords: (siteId) => _radarSiteCoords.get(siteId),
                 syncSiteLayerVisibility: _syncRadarSiteLayerVisibility,
                 syncSiteSelectionHighlight: _syncRadarSiteSelectionHighlight,
+                syncRadarInspectorState: _syncRadarInspectorState,
                 updateTypeSections: _updateTypeSections,
                 updateScrubberUi: _updateRtmaScrubberUi,
             });
@@ -14244,6 +15150,7 @@
             canApplyResponse: _canApplyRadarResponse,
             clearLatestRetry: _clearRadarLatestRetry,
             clearLiveLayers: _clearRadarLiveLayers,
+            clearScrubOverlayPool: _clearRadarScrubOverlayPool,
             currentScrubContextKey: _radarCurrentScrubContextKey,
             ensureBackdropLayer: _ensureRadarBackdropLayer,
             exitMrmsScrubMode: _exitMrmsScrubMode,
@@ -14289,6 +15196,8 @@
             setRadarStatus: _setRadarStatus,
             setReliability: _setReliability,
             setRtmaScrubberStatus: _setRtmaScrubberStatus,
+            syncRadarInspectorState: _syncRadarInspectorState,
+            setCurrentFrameMeta: _setRadarCurrentFrameMeta,
             setScrubContextKey: (contextKey) => {
                 _radarScrubContextKey = contextKey;
             },

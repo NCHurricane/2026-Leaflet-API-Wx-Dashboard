@@ -9,7 +9,7 @@
         <link rel="stylesheet" href="css/shared.css">
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
-        <link rel="stylesheet" href="css/dashboard.css?v=20260622a">
+        <link rel="stylesheet" href="css/dashboard.css?v=20260627f">
     </head>
 
     <body>
@@ -60,6 +60,10 @@
                 <i class="fas fa-cloud-showers-heavy"></i>
                 <span>WPC</span>
             </a>
+            <a href="/water" class="product-nav-link" data-product="water" title="Water Monitoring">
+                <i class="fas fa-water"></i>
+                <span>Water</span>
+            </a>
         </nav>
             <div class="weather-header-right">
                 <button id="weather-test-new-alert" class="weather-top-test-btn" type="button">Test New Alert</button>
@@ -76,6 +80,7 @@
                 <input id="weather-type-drought" type="checkbox">
                 <input id="weather-type-tropical" type="checkbox">
                 <input id="weather-type-wpc" type="checkbox">
+                <input id="weather-type-water" type="checkbox">
             </div>
         </header>
 
@@ -116,9 +121,9 @@
                         <label for="weather-region">Region</label>
                         <select id="weather-region">
                             <option value="__ALERT_LOCATION__" disabled hidden>Choose Location</option>
-                            <option value="CONUS" selected>CONUS</option>
+                            <option value="CONUS">CONUS</option>
                             <option value="WORLD">World</option>
-                            <option value="NC">North Carolina</option>
+                            <option value="NC" selected>North Carolina</option>
                             <option value="SC">South Carolina</option>
                             <option value="VA">Virginia</option>
                             <option value="TN">Tennessee</option>
@@ -522,6 +527,10 @@
                             <div class="wx-check-row">
                                 <span>Storm Tracks (NST)</span>
                                 <input id="weather-radar-show-storm-tracks" type="checkbox">
+                            </div>
+                            <div class="wx-check-row">
+                                <span>Inspector</span>
+                                <input id="weather-radar-inspector" type="checkbox">
                             </div>
                             <label for="weather-radar-product">Product</label>
                             <div class="wx-radar-select" id="wx-radar-select">
@@ -1108,6 +1117,37 @@
                         </div>
                     </div>
 
+                    <div id="wx-section-water" class="wx-block" data-type="water" style="display:none;">
+                        <label id="weather-water-network-filters-title" class="label-small">Networks</label>
+                        <div id="weather-water-network-filters">
+                            <label class="weather-water-network-filter">
+                                <input type="checkbox" value="river" checked> River
+                            </label>
+                            <label class="weather-water-network-filter">
+                                <input type="checkbox" value="coastal" checked> Coastal
+                            </label>
+                            <label class="weather-water-network-filter">
+                                <input type="checkbox" value="buoy" checked> NDBC
+                            </label>
+                        </div>
+                        <div id="weather-water-flood-filter-row">
+                            <label class="label-small" style="margin-top:6px">River Flood Filter</label>
+                            <div id="weather-water-flood-filters" class="wx-water-flood-pills">
+                                <button class="wx-water-flood-pill" aria-selected="true"  data-flood="all">All</button>
+                                <button class="wx-water-flood-pill" aria-selected="false" data-flood="action">Action+</button>
+                                <button class="wx-water-flood-pill" aria-selected="false" data-flood="minor">Minor+</button>
+                                <button class="wx-water-flood-pill" aria-selected="false" data-flood="moderate">Moderate+</button>
+                                <button class="wx-water-flood-pill" aria-selected="false" data-flood="major">Major</button>
+                            </div>
+                        </div>
+                        <div class="wx-radar-action-row">
+                            <button id="weather-refresh-water" type="button">Refresh</button>
+                            <button id="weather-clear-water" type="button">Clear</button>
+                        </div>
+                        <span id="weather-water-status" class="wx-small"></span>
+                        <div id="weather-water-detail" class="wx-water-detail" hidden></div>
+                    </div>
+
                     <div id="wx-section-tropical" class="wx-block" data-type="tropical" data-tropical-mode="overview" style="display:none;">
                         <div id="weather-tropical-opts">
                             <div class="wx-block wx-tropical-basin-control">
@@ -1575,14 +1615,14 @@
         <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
         <script src="js/shared.js?v=20260526a"></script>
         <script src="js/radar-site-locations.js?v=20260504c"></script>
-        <script src="js/product-page-shell.js?v=20260616a"></script>
+        <script src="js/product-page-shell.js?v=20260627a"></script>
         <script src="js/product-app-context.js?v=20260616a"></script>
         <script src="js/alerts-engine.js?v=20260621a"></script>
         <script src="js/alerts-page.js?v=20260616a"></script>
         <script src="js/satellite-engine.js?v=20260616a"></script>
         <script src="js/satellite-page.js?v=20260616a"></script>
         <script src="js/radar-engine.js?v=20260623c"></script>
-        <script src="js/radar-page.js?v=20260623c"></script>
+        <script src="js/radar-page.js?v=20260625a"></script>
         <script src="js/drought-engine.js?v=20260617a"></script>
         <script src="js/drought-page.js?v=20260617a"></script>
         <script src="js/surface-engine.js?v=20260617a"></script>
@@ -1598,7 +1638,7 @@
         <script src="js/scrubber.js?v=20260619a"></script>
         <script src="js/wpc-engine.js?v=20260618j"></script>
         <script src="js/wpc-page.js?v=20260619f"></script>
-        <script src="js/weather.js?v=20260624b"></script>
+        <script src="js/weather.js?v=20260627u"></script>
         <script>initNav('weather');</script>
     </body>
 

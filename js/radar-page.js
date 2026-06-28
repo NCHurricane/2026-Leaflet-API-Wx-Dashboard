@@ -125,6 +125,11 @@
 
         try {
             const frame = frames[frameIndex];
+            // Refresh storm tracks for this frame up front: the crossfade below
+            // can early-return when a render is superseded (e.g. the parallel
+            // live + scrubber loads on a site switch), which previously skipped
+            // the trailing loadStormTracks call and left the overlay stale.
+            pageContext.loadStormTracks?.(frame?.timestamp);
             const imageUrl = frame?.image_url;
             const bounds = Array.isArray(frame?.bounds) ? frame.bounds : null;
             if (!imageUrl || !bounds || bounds.length !== 4) {
@@ -142,13 +147,14 @@
 
             const oldOverlay = pageContext.getLiveOverlay();
             const leafletBounds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
-            const newOverlay = pageContext.leaflet.imageOverlay(overlayUrl, leafletBounds, {
-                opacity: oldOverlay ? 0 : 0.9,
-                pane: 'radar-overlays',
-                zIndex: 320,
-            });
+            const newOverlay = pageContext.getOrCreateScrubOverlay?.(frame, overlayUrl, bounds)
+                || pageContext.leaflet.imageOverlay(overlayUrl, leafletBounds, {
+                    opacity: oldOverlay ? 0 : 0.9,
+                    pane: 'radar-overlays',
+                    zIndex: 320,
+                });
             if (pageContext.isTypeEnabled('radar')) {
-                newOverlay.addTo(pageContext.map);
+                if (!pageContext.map.hasLayer(newOverlay)) newOverlay.addTo(pageContext.map);
                 pageContext.bringSitesAboveOverlays();
             }
 
@@ -157,13 +163,32 @@
                     oldOverlay,
                     newOverlay,
                     () => pageContext.isCurrentScrubRenderSeq(renderSeq),
+                    { removeOldAfterFade: !pageContext.isScrubOverlay?.(oldOverlay) },
                 );
                 if (!applied) return;
             } else if (oldOverlay && pageContext.map.hasLayer(oldOverlay)) {
                 pageContext.map.removeLayer(oldOverlay);
             }
 
-            pageContext.setLiveOverlay(newOverlay);
+            if (pageContext.setScrubOverlayActive) {
+                pageContext.setScrubOverlayActive(newOverlay);
+            } else {
+                pageContext.setLiveOverlay(newOverlay);
+            }
+            pageContext.setCurrentFrameMeta?.(frame);
+            if (pageContext.getOrCreateScrubOverlay && frames.length > 1) {
+                [1, 2, -1].forEach((offset) => {
+                    const neighborIndex = (frameIndex + offset + frames.length) % frames.length;
+                    if (neighborIndex === frameIndex) return;
+                    const neighbor = frames[neighborIndex];
+                    const neighborUrl = neighbor?.image_url ? pageContext.radarOverlayUrl(neighbor.image_url) : '';
+                    const neighborBounds = Array.isArray(neighbor?.bounds) ? neighbor.bounds : null;
+                    const neighborOverlay = pageContext.getOrCreateScrubOverlay(neighbor, neighborUrl, neighborBounds);
+                    if (!neighborOverlay) return;
+                    if (!pageContext.map.hasLayer(neighborOverlay)) neighborOverlay.addTo(pageContext.map);
+                    if (typeof neighborOverlay.setOpacity === 'function') neighborOverlay.setOpacity(0);
+                });
+            }
             const timestampMs = pageContext.resolveDataTimestampMs(frame?.timestamp);
             pageContext.setViewerTimestamp(timestampMs);
             pageContext.setReliability(
@@ -175,7 +200,6 @@
             pageContext.setTimestampSource('radar', 'radar_live_frames', timestampMs);
             pageContext.setScrubberStatus(`${frameIndex + 1} / ${frames.length} frames.`);
             pageContext.setGlobalStatus(`Radar scrub ${pageContext.formatValidTimeLabel(timestampMs)}.`);
-            pageContext.loadStormTracks?.(frame?.timestamp);
         } catch (err) {
             if (!pageContext.isCurrentScrubRenderSeq(renderSeq)) return;
             pageContext.setGlobalStatus(`Radar scrubber error: ${err.message}`);
@@ -237,6 +261,10 @@
 
         byId('weather-radar-show-storm-tracks')?.addEventListener('change', () => {
             pageContext?.loadStormTracks?.();
+        });
+
+        byId('weather-radar-inspector')?.addEventListener('change', () => {
+            pageContext?.syncRadarInspectorState?.();
         });
 
         byId('weather-refresh-radar')?.addEventListener('click', () => {

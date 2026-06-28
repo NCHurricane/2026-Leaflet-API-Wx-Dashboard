@@ -598,19 +598,155 @@ body.wx-standalone-product .weather-header-right {
     box-shadow: 0 0 0 1px rgba(34, 232, 255, 0.35) inset;
 }
 
+.wx-radar-inspector-readout {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 1200;
+    pointer-events: none;
+    background: rgba(15, 23, 42, 0.94);
+    border: 1px solid rgba(56, 189, 248, 0.55);
+    border-radius: 4px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    color: #e2e8f0;
+    font-size: 0.68rem;
+    line-height: 1.2;
+    max-width: 180px;
+    padding: 4px 6px;
+    white-space: nowrap;
+}
+
+.wx-radar-inspector-readout strong {
+    color: #fff;
+    display: block;
+    font-size: 0.78rem;
+}
+
+.wx-radar-inspector-readout span {
+    color: #94a3b8;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wx-water-detail {
+    border-top: 1px solid #334155;
+    margin-top: 10px;
+    padding-top: 8px;
+}
+
+.wx-water-detail-title {
+    color: #e2e8f0;
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 6px;
+}
+
+.wx-water-detail-grid {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 10px;
+    row-gap: 4px;
+    font-size: 0.74rem;
+    margin: 0 0 8px;
+}
+
+.wx-water-detail-grid dt {
+    color: #94a3b8;
+    text-align: right;
+}
+
+.wx-water-detail-grid dd {
+    color: #e2e8f0;
+    font-weight: 700;
+    margin: 0;
+    min-width: 0;
+}
+
+.wx-water-detail-link {
+    color: #38bdf8;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
 .wx-gradient-label {
     font-size: 0.7rem;
     opacity: 0.65;
     white-space: nowrap;
 }
 
-#weather-network-filters {
+#weather-network-filters,
+#weather-water-network-filters {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr 1fr;
     align-items: center;
     gap: 6px;
     font-size: 0.9rem;
     cursor: pointer;
+}
+
+#weather-water-network-filters {
+    grid-template-columns: 1fr 1fr 1fr;
+    margin-bottom: 8px;
+}
+
+.wx-water-flood-pills {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+    margin: 0 0 8px;
+}
+
+.wx-water-flood-pill {
+    min-width: 0;
+    grid-column: span 2;
+    padding: 5px 4px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #cbd5e1;
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1.05;
+    text-align: center;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.wx-water-flood-pill:hover {
+    background: rgba(30, 41, 59, 0.9);
+    color: #f8fafc;
+}
+
+.wx-water-flood-pill:nth-child(n+4) {
+    grid-column: span 3;
+}
+
+.wx-water-flood-pill[aria-selected="true"] {
+    border-color: rgba(34, 211, 238, 0.68);
+    background: rgba(14, 116, 144, 0.36);
+    color: #f8fafc;
+}
+
+.wx-water-flood-pill[data-flood="action"][aria-selected="true"] {
+    border-color: rgba(250, 204, 21, 0.68);
+    background: rgba(100, 70, 0, 0.36);
+}
+
+.wx-water-flood-pill[data-flood="minor"][aria-selected="true"] {
+    border-color: rgba(249, 115, 22, 0.68);
+    background: rgba(100, 40, 0, 0.36);
+}
+
+.wx-water-flood-pill[data-flood="moderate"][aria-selected="true"] {
+    border-color: rgba(239, 68, 68, 0.68);
+    background: rgba(100, 0, 0, 0.36);
+}
+
+.wx-water-flood-pill[data-flood="major"][aria-selected="true"] {
+    border-color: rgba(168, 85, 247, 0.68);
+    background: rgba(60, 0, 100, 0.36);
 }
 
 #weather-surface-opts>.wx-check-row span {
@@ -1642,13 +1778,16 @@ body.wx-standalone-product .weather-header-right {
     align-items: center;
     gap: 4px;
     margin-bottom: 3px;
-    white-space: nowrap;
     break-inside: avoid;
+    min-width: 0;
 }
 
 .legend-text {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 800;
+    line-height: 1.1;
+    min-width: 0;
+    overflow-wrap: break-word;
 }
 
 .legend-section-label {
@@ -1680,8 +1819,9 @@ body.wx-standalone-product .weather-header-right {
 }
 
 .legend-flow {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 4px 12px;
     width: 100%;
 }
@@ -1689,6 +1829,11 @@ body.wx-standalone-product .weather-header-right {
 .legend-grid .legend-item,
 .legend-flow .legend-item {
     margin-bottom: 0;
+}
+
+.legend-flow .legend-item {
+    flex: 0 1 auto;
+    max-width: 100%;
 }
 
 .legend-item.is-disabled {
@@ -1876,6 +2021,10 @@ body.wx-standalone-product .weather-header-right {
 
 .surface-colorbar-label {
     text-align: center;
+}
+
+.leaflet-container {
+    background-color: var(--primary);
 }
 
 .leaflet-image-layer {
@@ -2072,6 +2221,133 @@ body.wx-standalone-product .weather-header-right {
 
 .leaflet-popup-tip {
     background: #0f172a;
+}
+
+.wx-storm-popup-title {
+    font-weight: 600;
+    text-align: center;
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #334155;
+}
+
+.wx-storm-popup-grid {
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 12px;
+    row-gap: 3px;
+    margin: 0;
+}
+
+.wx-storm-popup-grid dt {
+    text-align: right;
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+.wx-storm-popup-grid dd {
+    margin: 0;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.wx-stage-gauge {
+    margin: 6px 0 2px;
+}
+
+.wx-stage-bar {
+    position: relative;
+    height: 8px;
+    border-radius: 4px;
+    background: #0f172a;
+    overflow: hidden;
+}
+
+.wx-stage-zone {
+    position: absolute;
+    top: 0;
+    height: 100%;
+}
+
+.wx-stage-marker {
+    position: absolute;
+    top: -1px;
+    bottom: -1px;
+    width: 2px;
+    background: #fff;
+    border-radius: 1px;
+    z-index: 2;
+}
+
+.wx-stage-summary {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3px;
+    font-size: 0.63rem;
+    line-height: 1.3;
+}
+
+.wx-stage-cur {
+    color: #e2e8f0;
+    font-weight: 700;
+}
+
+.wx-stage-thresh {
+    color: #64748b;
+    text-align: right;
+}
+
+.wx-buoy-card {
+    margin-top: 6px;
+    border-top: 1px solid #334155;
+    padding-top: 6px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+}
+
+.wx-buoy-group {
+    background: #0f172a;
+    border-radius: 4px;
+    padding: 3px 6px 4px;
+}
+
+.wx-buoy-group-label {
+    display: block;
+    font-size: 0.58rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 2px;
+}
+
+.wx-buoy-group .wx-storm-popup-grid {
+    font-size: 0.68rem;
+    row-gap: 1px;
+}
+
+#weather-map.leaflet-container .wx-water-popup a.wx-water-hydrograph-link {
+    display: block;
+    margin-top: 8px;
+}
+
+#weather-map.leaflet-container .wx-water-popup a.wx-water-detail-link {
+    color: #38bdf8;
+    display: block;
+    font-size: 0.92rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+#weather-map.leaflet-container .wx-water-popup .wx-water-hydrograph {
+    display: block;
+    height: auto;
+    max-height: 150px;
+    max-width: min(320px, 72vw);
+    object-fit: contain;
+    width: 100%;
 }
 
 /* Hide Leaflet keyboard focus outlines on desktop for cleaner stream visuals. */
