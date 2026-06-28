@@ -380,6 +380,16 @@ ABI_CHANNELS = {
         "name": "Sulfur Dioxide",
         "req": ["Channel07", "Channel09", "Channel10", "Channel11", "Channel13"],
     },
+    "GLMFlashExtentDensity1Min": {
+        "name": "GLM Flash Extent Density (1 min)",
+        "req": ["GLM_LCFA"],
+        "glm_minutes": 1,
+    },
+    "GLMFlashExtentDensity5Min": {
+        "name": "GLM Flash Extent Density (5 min)",
+        "req": ["GLM_LCFA"],
+        "glm_minutes": 5,
+    },
     "SplitWindowDifference": {
         "name": "Split Window Difference",
         "req": ["Channel13", "Channel15"],
@@ -441,13 +451,112 @@ SATELLITE_V2_DASHBOARD_PRODUCTS = (
     "Channel08RAMSDIS",
     "Channel09RAMSDIS",
     "Channel13",
+    "FireTemperature",
+    "AirMass",
     "GeoColor",
     "GeoColorBlkMar",
     "TrueColor",
     "NaturalColor",
+    "DayCloudPhase",
+    "DayLandCloudFire",
+    "DaySnowFog",
+    "NighttimeMicrophysics",
     "Dust",
+    "Ash",
+    "SulfurDioxide",
     "RocketPlume",
+    "GLMFlashExtentDensity1Min",
+    "GLMFlashExtentDensity5Min",
 )
+
+SATELLITE_V2_INTERPRETIVE_LEGENDS = {
+    "FireTemperature": {
+        "subtitle": "Renderer-matched RGB interpretation",
+        "items": (
+            {"color": "#ff3a1f", "label": "Active fire / hot spot"},
+            {"color": "#a94f78", "label": "Warm land / desert background"},
+            {"color": "#51345f", "label": "Cooler land or shadowed surface"},
+            {"color": "#0f7eb3", "label": "Cold cloud tops"},
+        ),
+    },
+    "AirMass": {
+        "subtitle": "Renderer-matched RGB interpretation",
+        "items": (
+            {"color": "#c04c5c", "label": "Strong upper-level dry-air signal"},
+            {"color": "#7d4ca8", "label": "Cold/dry upper-level air"},
+            {"color": "#49a36b", "label": "Moist low/mid-level air mass"},
+            {"color": "#d8e7f2", "label": "Cold high cloud tops"},
+        ),
+    },
+    "DayCloudPhase": {
+        "subtitle": "Renderer-matched daytime RGB interpretation",
+        "items": (
+            {"color": "#efe45a", "label": "Thick cold cloud tops"},
+            {"color": "#df8a5a", "label": "High cloud edge / mixed phase"},
+            {"color": "#4ad088", "label": "Low liquid cloud field"},
+            {"color": "#6bb2d8", "label": "Ice/snow-band response"},
+            {"color": "#061d38", "label": "Clear water or dark surface"},
+        ),
+    },
+    "DayLandCloudFire": {
+        "subtitle": "Renderer-matched daytime RGB interpretation",
+        "items": (
+            {"color": "#3d9c56", "label": "Vegetation-dominant surface"},
+            {"color": "#b69476", "label": "Bare or dry ground"},
+            {"color": "#ff3524", "label": "Strong 2.2 µm hot-spot signal"},
+            {"color": "#1d3048", "label": "Water or very dark surface"},
+            {"color": "#f5f5f5", "label": "Clouds"},
+        ),
+    },
+    "DaySnowFog": {
+        "subtitle": "Renderer-matched daytime RGB interpretation",
+        "items": (
+            {"color": "#d8c992", "label": "Snow / ice surface"},
+            {"color": "#e8e5d8", "label": "Low cloud or fog"},
+            {"color": "#b8c8ef", "label": "Cold cloud"},
+            {"color": "#5a8b66", "label": "Vegetated land"},
+            {"color": "#7b4e43", "label": "Bare or dry land"},
+        ),
+    },
+    "NighttimeMicrophysics": {
+        "subtitle": "Renderer-matched nighttime RGB interpretation",
+        "items": (
+            {"color": "#0717d6", "label": "Clear or warm low cloud"},
+            {"color": "#b1009b", "label": "Higher cold cloud"},
+            {"color": "#740010", "label": "Warm/thin cloud edge"},
+            {"color": "#2a006f", "label": "Mixed cloud or transition zone"},
+        ),
+    },
+    "Dust": {
+        "subtitle": "Renderer-matched RGB interpretation",
+        "items": (
+            {"color": "#df65b0", "label": "Dust / split-window signal"},
+            {"color": "#b8834a", "label": "Dry elevated dust or warm surface"},
+            {"color": "#7a5fb0", "label": "Dust mixed with cloud"},
+            {"color": "#5f90b5", "label": "Cloud or moist background"},
+            {"color": "#2d3142", "label": "Clear or dark background"},
+        ),
+    },
+    "Ash": {
+        "subtitle": "Renderer-matched RGB interpretation",
+        "items": (
+            {"color": "#d75fb7", "label": "Split-window ash signal"},
+            {"color": "#7857a4", "label": "Ash mixed with cold cloud"},
+            {"color": "#d2935a", "label": "Dry slot / warmer split-window signal"},
+            {"color": "#b8b8c5", "label": "Meteorological cloud"},
+        ),
+    },
+    "SulfurDioxide": {
+        "subtitle": "Renderer-matched RGB interpretation",
+        "items": (
+            {"color": "#dacb49", "label": "Stronger SO2-sensitive signal"},
+            {"color": "#c05aa0", "label": "SO2 mixed with ash/cloud"},
+            {"color": "#4aa4c7", "label": "Moist cloud or plume"},
+            {"color": "#614682", "label": "Weak/mixed channel signal"},
+            {"color": "#30384c", "label": "Background / clear air"},
+        ),
+    },
+}
 
 SATELLITE_V2_HIGH_RES_PRODUCTS = {
     "Channel01",
@@ -486,6 +595,8 @@ def channel_number_from_key(channel_key: str) -> int:
 
 
 def _product_kind(product_key: str, source_channels: tuple[str, ...]) -> str:
+    if product_key.startswith("GLM"):
+        return "glm_density"
     if product_key in RGB_COMPOSITE_KEYS:
         return "composite"
     channel_number = channel_number_from_key(source_channels[0])
@@ -495,6 +606,8 @@ def _product_kind(product_key: str, source_channels: tuple[str, ...]) -> str:
 
 
 def _product_units(kind: str) -> str:
+    if kind == "glm_density":
+        return "flashes"
     if kind == "composite":
         return "RGB"
     if kind == "reflectance":
@@ -742,6 +855,8 @@ def normalize_channel(channel_key: str | None) -> str:
 
 def normalize_source_channel(channel_key: str | None) -> str:
     value = str(channel_key or "").strip()
+    if value.upper().startswith("GLM_"):
+        return value.upper()
     if value.lower().startswith("channel"):
         digits = "".join(ch for ch in value if ch.isdigit())
         if digits:
@@ -826,3 +941,12 @@ def source_channels_for_product(channel_key: str) -> tuple[str, ...]:
 
 def source_channel_token(source_channel: str) -> str:
     return f"C{channel_number_from_key(source_channel):02d}"
+
+
+def is_glm_product(channel_key: str | None) -> bool:
+    return SATELLITE_V2_PRODUCTS[normalize_channel(channel_key)].kind == "glm_density"
+
+
+def glm_aggregation_minutes(channel_key: str | None) -> int:
+    product_key = normalize_channel(channel_key)
+    return max(1, int(ABI_CHANNELS[product_key].get("glm_minutes") or 1))

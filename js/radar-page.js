@@ -261,6 +261,7 @@
 
         byId('weather-radar-show-storm-tracks')?.addEventListener('change', () => {
             pageContext?.loadStormTracks?.();
+            pageContext?.syncNstLegend?.();
         });
 
         byId('weather-radar-inspector')?.addEventListener('change', () => {

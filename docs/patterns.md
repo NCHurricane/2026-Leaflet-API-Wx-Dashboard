@@ -188,6 +188,35 @@ function leafletBounds(code) {
 
 Do not mix projections. GeoJSON overlays on the Leaflet map must use WGS-84 coordinates (EPSG:4326). SPC and NWS GeoJSON from the API natively provides WGS-84.
 
+## Satellite Legend Pattern
+
+Satellite scalar brightness-temperature products use `/api/satellite-v2/legend`
+to return continuous colorbar anchors and ticks. RGB composite products do not
+use numeric colorbars because their colors come from multi-channel recipes.
+
+For RGB composites:
+
+1. Keep renderer-matched interpretive legend metadata in
+   `config/satellite_v2_config.py`.
+2. Return the same metadata from `satellite_v2.service.get_legend_payload()` as
+   `legend_type: "interpretive"`.
+3. Mirror the interpretive metadata in `js/weather.js` as a frontend fallback so
+   static composite legends render immediately and do not disappear during
+   satellite/sector/product switches or transient API/catalog failures.
+4. Call the Satellite legend updater directly from `js/satellite-page.js`
+   control-change handlers before frame reloads.
+5. Bump affected `weather.html` script query strings when changing Satellite
+   frontend wiring.
+
+For GLM Flash Extent Density:
+
+1. Keep it Satellite-only; do not wire GLM into Radar overlays.
+2. Catalog GLM frames from `GLM-L2-LCFA` and render tiles through the dedicated
+   GLM density renderer instead of the ABI renderer.
+3. Render LCFA group-to-flash relationships onto the fixed 4 km Web Mercator
+   grid; each cell value is a unique flash count for the product window.
+4. Use a count legend whose color stops match the renderer's GLM ramp.
+
 ## Response Shape Pattern
 
 Use `success_payload()` / `error_payload()` helpers for render endpoints.

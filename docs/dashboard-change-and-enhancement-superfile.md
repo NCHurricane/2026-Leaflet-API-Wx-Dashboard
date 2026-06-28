@@ -144,6 +144,23 @@ Completed radar enhancements:
 - Live `.pal` upload and preview in the standalone `pal_preview/` tool.
 - IEM-backed Level III storm-attribute overlays with storm tracking, hail,
   mesocyclone, TVS, and structure attributes.
+- Storm-cell icon set: TVS = red triangle (T), Meso = orange circle (M),
+  Confirmed Hail = solid green triangle (H), Probable Hail = hollow green
+  triangle (no label), Storm Cell = small dark square with yellow border.
+- Floating Storm Tracks mini-legend (`.wx-mini-legend`) appears in the
+  topright map corner below the logo when Storm Tracks are enabled; hidden
+  when disabled. The `.wx-mini-legend` CSS class is global and reusable on
+  other pages.
+- Radar site markers now use a black (`#020617`) outline on all status colors
+  for legibility against the dark basemap. Selected-site highlight rings are
+  unchanged.
+- IEM `meso` rank threshold: only cells with rank ≥ 4 (out of 1–25) receive
+  the Meso icon. Ranks 1–3 are weak rotational shear; below this threshold
+  the cell falls back to its hail/default icon. Constant `_MESO_MIN_RANK`
+  in `services/radar_storm_attributes_service.py`.
+- Debug endpoint `/api/radar/debug/meso-raw?site=KXXX` returns raw IEM
+  `meso`/`tvs` field values for every cell at a site — use this when tuning
+  the rank threshold.
 
 Current radar notes:
 
@@ -152,18 +169,29 @@ Current radar notes:
   its remaining role.
 - Selected-cell SRV and storm-track overlay visibility must remain decoupled so
   hiding tracks does not invalidate the active SRV animation context.
+- IEM meso rank 1–3 = weak shear only; do not lower `_MESO_MIN_RANK` below 4
+  without comparing against a reference tool (e.g. Radarscope) on a live event.
 
 ### Satellite and lightning
 
+Completed enhancements (2026-06-28):
+
+- Implemented GOES composites were exposed in the Satellite product selector:
+  Fire Temperature, Air Mass, Day Cloud Phase, Day Land Cloud/Fire,
+  Day Snow/Fog, Nighttime Microphysics, Dust, Ash, and Sulfur Dioxide.
+- Renderer-matched interpretive legends were added for those RGB composites,
+  with frontend fallback metadata so legends remain visible through
+  satellite/sector/product switches without requiring a hard refresh. Scalar
+  colorbars remain limited to brightness-temperature channels.
+- GOES GLM Flash Extent Density was added as Satellite-only products with
+  one-minute and five-minute rolling aggregations, on-demand tile rendering,
+  and a fixed 4 km Web Mercator grid that counts unique flash extents per cell
+  from LCFA group-to-flash relationships.
+
 Planned/enhancement direction:
 
-- Expose implemented GOES composites: Fire Temperature, Air Mass, Day Cloud
-  Phase, Day Land Cloud/Fire, Day Snow/Fog, Nighttime Microphysics, Ash, and
-  Sulfur Dioxide.
-- Add GOES GLM Flash Extent Density with one-minute and five-minute rolling
-  aggregations.
-- Keep lightning synchronized with the shared scrubber and allow it as a Radar
-  overlay where appropriate.
+- Keep Satellite GLM synchronized with the shared scrubber. Do not add GLM as a
+  Radar overlay.
 - Replace flat satellite tabs with filtered Region, Platform, Sector, and
   Product controls.
 
@@ -304,7 +332,8 @@ imagery.
 
 - Use narrow syntax checks first, such as `node --check` for touched JavaScript
   files and targeted `py_compile` for touched Python modules.
-- Browser smoke is required before marking user-facing product workflows done.
+- Browser smoke is user-owned for current dashboard work; keep automated
+  validation to narrow syntax/import checks unless the user asks otherwise.
 - For map label/value placement, preserve source coordinates and move rendered
   anchors when the goal is visual offset.
 - Keep scrubber continuity and worker/preloader coverage as acceptance criteria

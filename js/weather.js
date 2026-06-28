@@ -797,6 +797,70 @@
     });
     new LogoControl().addTo(map);
 
+    // --- Storm Track Icon Legend (topright, below logo) ---
+    const NstLegendControl = L.Control.extend({
+        options: { position: 'topright' },
+        onAdd() {
+            const S = 20;
+            const hS = S / 2;
+            const mkSvg = (inner) =>
+                `<svg xmlns="http://www.w3.org/2000/svg" width="${S}" height="${S}" viewBox="0 0 ${S} ${S}">${inner}</svg>`;
+            const items = [
+                {
+                    svg: mkSvg(
+                        `<polygon points="1,2 ${S - 1},2 ${hS},${S - 1}" fill="#ef4444" stroke="#020617" stroke-width="2.5" stroke-linejoin="round"/>`
+                        + `<polygon points="1,2 ${S - 1},2 ${hS},${S - 1}" fill="#ef4444" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>`
+                        + `<text x="${hS}" y="13" text-anchor="middle" font-family="Arial" font-size="7" font-weight="900" fill="#fff" stroke="#020617" stroke-width="1.5" paint-order="stroke fill">T</text>`
+                    ),
+                    label: 'Tornadic Vortex Signature',
+                },
+                {
+                    svg: mkSvg(
+                        `<circle cx="${hS}" cy="${hS}" r="${hS - 1}" fill="#f97316" stroke="#020617" stroke-width="2.5"/>`
+                        + `<circle cx="${hS}" cy="${hS}" r="${hS - 2.5}" fill="#f97316" stroke="#fff" stroke-width="1"/>`
+                        + `<text x="${hS}" y="13" text-anchor="middle" font-family="Arial" font-size="7" font-weight="900" fill="#fff" stroke="#020617" stroke-width="1.5" paint-order="stroke fill">M</text>`
+                    ),
+                    label: 'Mesocyclone',
+                },
+                {
+                    svg: mkSvg(
+                        `<polygon points="${hS},1 ${S - 1},${S - 2} 1,${S - 2}" fill="#22c55e" stroke="#020617" stroke-width="2.5" stroke-linejoin="round"/>`
+                        + `<polygon points="${hS},1 ${S - 1},${S - 2} 1,${S - 2}" fill="#22c55e" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>`
+                        + `<text x="${hS}" y="15" text-anchor="middle" font-family="Arial" font-size="7" font-weight="900" fill="#fff" stroke="#020617" stroke-width="1.5" paint-order="stroke fill">H</text>`
+                    ),
+                    label: 'Confirmed Hail (POSH ≥50%)',
+                },
+                {
+                    svg: mkSvg(
+                        `<polygon points="${hS},1 ${S - 1},${S - 2} 1,${S - 2}" fill="#020617" stroke="#22c55e" stroke-width="2.5" stroke-linejoin="round"/>`
+                        + `<polygon points="${hS},1 ${S - 1},${S - 2} 1,${S - 2}" fill="#020617" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>`
+                    ),
+                    label: 'Probable Hail (POH ≥50%)',
+                },
+                {
+                    svg: (() => {
+                        const sC = 16; const p = 2;
+                        return `<svg xmlns="http://www.w3.org/2000/svg" width="${sC}" height="${sC}" viewBox="0 0 ${sC} ${sC}">`
+                            + `<rect x="${p}" y="${p}" width="${sC - p * 2}" height="${sC - p * 2}" rx="1.5" fill="#111827" stroke="#020617" stroke-width="2.5"/>`
+                            + `<rect x="${p + 1.5}" y="${p + 1.5}" width="${sC - p * 2 - 3}" height="${sC - p * 2 - 3}" rx="1" fill="#111827" stroke="#facc15" stroke-width="1.5"/>`
+                            + `</svg>`;
+                    })(),
+                    label: 'Storm Cell',
+                },
+            ];
+            const rows = items.map((it) =>
+                `<div class="wx-mini-legend-row">${it.svg}<span>${it.label}</span></div>`
+            ).join('');
+            const div = L.DomUtil.create('div', 'wx-mini-legend leaflet-control');
+            div.id = 'wx-mini-legend';
+            div.innerHTML = `<div class="wx-mini-legend-title">Storm Tracks</div>${rows}`;
+            div.style.display = 'none';
+            L.DomEvent.disableClickPropagation(div);
+            return div;
+        },
+    });
+    new NstLegendControl().addTo(map);
+
     // Top-center "Last Updated" badge, anchored to the map wrap.
     (() => {
         const wrap = document.querySelector('.weather-map-wrap');
@@ -3293,6 +3357,15 @@
         const items = Array.isArray(legend?.items) ? legend.items : [];
         if (!items.length) return '';
         return `<div class="legend-flow">${items.map((item) => swatch(item.color, escapeHtml(item.label))).join('')}</div>`;
+    }
+
+    function renderInterpretiveLegend(title, items) {
+        const rows = (Array.isArray(items) ? items : [])
+            .filter((item) => item?.color && item?.label)
+            .map((item) => swatch(item.color, escapeHtml(item.label)))
+            .join('');
+        if (!rows) return '';
+        return `<h4 class="legend-title">${escapeHtml(title)}</h4><div class="legend-flow">${rows}</div>`;
     }
 
     // Center-of-map "no data" overlay used when an SPC (or similar) layer
@@ -6423,14 +6496,15 @@
                 break;
             case 'prob_hail':
                 inner = `<polygon points="${hS},2 ${S - 2},${S - 4} 2,${S - 4}" fill="#020617" stroke="#22c55e" stroke-width="4" stroke-linejoin="round"/>`
-                    + `<polygon points="${hS},2 ${S - 2},${S - 4} 2,${S - 4}" fill="#020617" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/>`
-                    + label('?', 25, 13);
+                    + `<polygon points="${hS},2 ${S - 2},${S - 4} 2,${S - 4}" fill="#020617" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/>`;
                 w = S; h = S; ax = hS; ay = Math.round(S / 2);
                 break;
-            default:
-                inner = `<circle cx="${hS}" cy="${hS}" r="${hS - 2}" fill="#111827" stroke="#020617" stroke-width="4"/>`
-                    + `<circle cx="${hS}" cy="${hS}" r="${hS - 4}" fill="#111827" stroke="#facc15" stroke-width="2"/>`;
-                w = S; h = S; ax = hS; ay = hS;
+            default: {
+                const sC = 26; const p = 3;
+                inner = `<rect x="${p}" y="${p}" width="${sC - p * 2}" height="${sC - p * 2}" rx="2" fill="#cfcfcf" stroke="#020617" stroke-width="1.5"/>`
+                    + `<rect x="${p + 2}" y="${p + 2}" width="${sC - p * 2 - 4}" height="${sC - p * 2 - 4}" rx="1" fill="#cfcfcf" stroke="#facc15" stroke-width="2"/>`;
+                w = sC; h = sC; ax = sC / 2; ay = sC / 2;
+            }
         }
         return L.divIcon({
             html: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${inner}</svg>`,
@@ -6717,6 +6791,12 @@
         stormTracksRow.style.display = hasSite ? '' : 'none';
     }
 
+    function syncNstLegendVisibility() {
+        const legend = byId('wx-mini-legend');
+        if (!legend) return;
+        legend.style.display = _isRadarStormTracksEnabled() ? '' : 'none';
+    }
+
     function _radarSiteStatusClass(siteId) {
         const s = _radarSiteStatusMap.get(siteId);
         if (!s) return 'unknown';
@@ -6731,13 +6811,13 @@
 
     function _radarSiteStatusColors(siteId, configured) {
         switch (_radarSiteStatusClass(siteId)) {
-            case 'online': return { fill: '#22c55e', stroke: '#16a34a', weight: 1.5 };
-            case 'maint-mandatory': return { fill: '#f97316', stroke: '#c2410c', weight: 1.5 };
-            case 'maint-required': return { fill: '#f59e0b', stroke: '#b45309', weight: 1.5 };
-            case 'startup': return { fill: '#60a5fa', stroke: '#1d4ed8', weight: 1.5 };
+            case 'online': return { fill: '#22c55e', stroke: '#020617', weight: 1.5 };
+            case 'maint-mandatory': return { fill: '#f97316', stroke: '#020617', weight: 1.5 };
+            case 'maint-required': return { fill: '#f59e0b', stroke: '#020617', weight: 1.5 };
+            case 'startup': return { fill: '#60a5fa', stroke: '#020617', weight: 1.5 };
             default: return configured
-                ? { fill: '#facc15', stroke: '#fef08a', weight: 1 }
-                : { fill: '#64748b', stroke: '#94a3b8', weight: 1 };
+                ? { fill: '#facc15', stroke: '#020617', weight: 1.5 }
+                : { fill: '#64748b', stroke: '#020617', weight: 1.5 };
         }
     }
 
@@ -7986,9 +8066,111 @@
         return String(byId('weather-satellite-channel')?.value || 'Channel13').trim() || 'Channel13';
     }
 
+    const _SATELLITE_INTERPRETIVE_LEGENDS = Object.freeze({
+        FireTemperature: {
+            title: 'Fire Temperature',
+            items: [
+                { color: '#ff3a1f', label: 'Active fire / hot spot' },
+                { color: '#a94f78', label: 'Warm land / desert background' },
+                { color: '#51345f', label: 'Cooler land or shadowed surface' },
+                { color: '#0f7eb3', label: 'Cold cloud tops' },
+            ],
+        },
+        AirMass: {
+            title: 'Air Mass',
+            items: [
+                { color: '#c04c5c', label: 'Strong upper-level dry-air signal' },
+                { color: '#7d4ca8', label: 'Cold/dry upper-level air' },
+                { color: '#49a36b', label: 'Moist low/mid-level air mass' },
+                { color: '#d8e7f2', label: 'Cold high cloud tops' },
+            ],
+        },
+        DayCloudPhase: {
+            title: 'Day Cloud Phase',
+            items: [
+                { color: '#efe45a', label: 'Thick cold cloud tops' },
+                { color: '#df8a5a', label: 'High cloud edge / mixed phase' },
+                { color: '#4ad088', label: 'Low liquid cloud field' },
+                { color: '#6bb2d8', label: 'Ice/snow-band response' },
+                { color: '#061d38', label: 'Clear water or dark surface' },
+            ],
+        },
+        DayLandCloudFire: {
+            title: 'Day Land Cloud Fire',
+            items: [
+                { color: '#3d9c56', label: 'Vegetation-dominant surface' },
+                { color: '#b69476', label: 'Bare or dry ground' },
+                { color: '#ff3524', label: 'Strong 2.2 um hot-spot signal' },
+                { color: '#1d3048', label: 'Water or very dark surface' },
+                { color: '#f5f5f5', label: 'Clouds' },
+            ],
+        },
+        DaySnowFog: {
+            title: 'Day Snow/Fog',
+            items: [
+                { color: '#d8c992', label: 'Snow / ice surface' },
+                { color: '#e8e5d8', label: 'Low cloud or fog' },
+                { color: '#b8c8ef', label: 'Cold cloud' },
+                { color: '#5a8b66', label: 'Vegetated land' },
+                { color: '#7b4e43', label: 'Bare or dry land' },
+            ],
+        },
+        NighttimeMicrophysics: {
+            title: 'Nighttime Microphysics',
+            items: [
+                { color: '#0717d6', label: 'Clear or warm low cloud' },
+                { color: '#b1009b', label: 'Higher cold cloud' },
+                { color: '#740010', label: 'Warm/thin cloud edge' },
+                { color: '#2a006f', label: 'Mixed cloud or transition zone' },
+            ],
+        },
+        Dust: {
+            title: 'Dust',
+            items: [
+                { color: '#df65b0', label: 'Dust / split-window signal' },
+                { color: '#b8834a', label: 'Dry elevated dust or warm surface' },
+                { color: '#7a5fb0', label: 'Dust mixed with cloud' },
+                { color: '#5f90b5', label: 'Cloud or moist background' },
+                { color: '#2d3142', label: 'Clear or dark background' },
+            ],
+        },
+        Ash: {
+            title: 'Ash',
+            items: [
+                { color: '#d75fb7', label: 'Split-window ash signal' },
+                { color: '#7857a4', label: 'Ash mixed with cold cloud' },
+                { color: '#d2935a', label: 'Dry slot / warmer split-window signal' },
+                { color: '#b8b8c5', label: 'Meteorological cloud' },
+            ],
+        },
+        SulfurDioxide: {
+            title: 'Sulfur Dioxide',
+            items: [
+                { color: '#dacb49', label: 'Stronger SO2-sensitive signal' },
+                { color: '#c05aa0', label: 'SO2 mixed with ash/cloud' },
+                { color: '#4aa4c7', label: 'Moist cloud or plume' },
+                { color: '#614682', label: 'Weak/mixed channel signal' },
+                { color: '#30384c', label: 'Background / clear air' },
+            ],
+        },
+    });
+
     async function _fetchSatelliteLegend(channel) {
         const key = String(channel || '').trim() || 'Channel13';
         if (_satelliteLegendCache.has(key)) return _satelliteLegendCache.get(key);
+        if (_SATELLITE_INTERPRETIVE_LEGENDS[key]) {
+            const localLegend = {
+                status: 'success',
+                available: true,
+                channel: key,
+                title: _SATELLITE_INTERPRETIVE_LEGENDS[key].title,
+                kind: 'composite',
+                legend_type: 'interpretive',
+                items: _SATELLITE_INTERPRETIVE_LEGENDS[key].items,
+            };
+            _satelliteLegendCache.set(key, localLegend);
+            return localLegend;
+        }
 
         const resp = await fetch(apiUrl(`/api/satellite-v2/legend?channel=${encodeURIComponent(key)}`), { cache: 'no-store' });
         const data = await resp.json().catch(() => ({}));
@@ -8006,13 +8188,18 @@
             const legend = await _fetchSatelliteLegend(channel);
             if (!_isTypeEnabled('satellite') || _activeSatelliteChannel() !== channel) return;
             if (!legend?.available || !Array.isArray(legend.anchors) || !legend.anchors.length) {
+                if (legend?.legend_type === 'interpretive' && Array.isArray(legend.items) && legend.items.length) {
+                    const title = legend.title ? `Satellite: ${legend.title}` : 'Satellite';
+                    setLegend(renderInterpretiveLegend(title, legend.items));
+                    return;
+                }
                 setLegend(null);
                 return;
             }
 
             const title = legend.title ? `Satellite: ${legend.title}` : 'Satellite';
-            const units = legend.units ? `Brightness Temperature (${legend.units})` : 'Brightness Temperature';
-            setLegend(renderContinuousLegend(title, units, legend.anchors, legend.ticks));
+            const axisLabel = legend.axis_label || (legend.units ? `Brightness Temperature (${legend.units})` : 'Brightness Temperature');
+            setLegend(renderContinuousLegend(title, axisLabel, legend.anchors, legend.ticks));
         } catch (err) {
             console.warn('[satellite-v2] Legend unavailable:', err?.message || err);
             if (_isTypeEnabled('satellite') && _activeSatelliteChannel() === channel) setLegend(null);
@@ -14757,6 +14944,7 @@
                 syncSiteLayerVisibility: _syncRadarSiteLayerVisibility,
                 syncSiteSelectionHighlight: _syncRadarSiteSelectionHighlight,
                 syncRadarInspectorState: _syncRadarInspectorState,
+                syncNstLegend: syncNstLegendVisibility,
                 updateTypeSections: _updateTypeSections,
                 updateScrubberUi: _updateRtmaScrubberUi,
             });
@@ -14771,6 +14959,7 @@
                 loadCurrentFrame: (options) => _satelliteEngine?.loadCurrentFrame(options),
                 loadScrubberFrames: () => _satelliteEngine?.loadScrubberFrames(),
                 scheduleScrubberReload: _scheduleSatelliteScrubberReload,
+                updateLegend: _updateSatelliteLegend,
             });
             _satellitePageController.wireControls?.();
         }
@@ -15197,6 +15386,7 @@
             setReliability: _setReliability,
             setRtmaScrubberStatus: _setRtmaScrubberStatus,
             syncRadarInspectorState: _syncRadarInspectorState,
+            syncNstLegend: syncNstLegendVisibility,
             setCurrentFrameMeta: _setRadarCurrentFrameMeta,
             setScrubContextKey: (contextKey) => {
                 _radarScrubContextKey = contextKey;

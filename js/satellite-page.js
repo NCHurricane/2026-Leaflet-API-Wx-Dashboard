@@ -155,6 +155,7 @@
             byId(id)?.addEventListener('change', () => {
                 syncSubtabs();
                 if (!pageContext?.isTypeEnabled?.('satellite')) return;
+                pageContext.updateLegend?.();
                 pageContext.clearSatelliteLayerPool?.();
                 if (pageContext.isScrubMode?.()) {
                     pageContext.loadScrubberFrames?.();

@@ -13,7 +13,9 @@ import numpy as np
 
 from config.satellite_v2_config import (
     ABI_CHANNELS,
+    SATELLITE_V2_INTERPRETIVE_LEGENDS,
     SATELLITE_V2_PRODUCTS,
+    is_glm_product,
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
@@ -70,6 +72,35 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
     product = SATELLITE_V2_PRODUCTS[channel_key]
     metadata = ABI_CHANNELS[channel_key]
 
+    if product.kind == "glm_density":
+        return {
+            "status": "success",
+            "available": True,
+            "channel": channel_key,
+            "title": product.label,
+            "kind": product.kind,
+            "legend_type": "continuous",
+            "units": "flashes",
+            "axis_label": "Flashes per 4 km cell",
+            "value_units": product.units,
+            "vmin": 0.0,
+            "vmax": 16.0,
+            "anchors": [
+                {"value": 0.0, "color": "#000000"},
+                {"value": 1.0, "color": "#0033ff"},
+                {"value": 2.0, "color": "#00ccff"},
+                {"value": 4.0, "color": "#66ff00"},
+                {"value": 8.0, "color": "#ffcc00"},
+                {"value": 16.0, "color": "#ff0000"},
+            ],
+            "ticks": [
+                {"value": 0.0, "label": "0"},
+                {"value": 4.0, "label": "4"},
+                {"value": 8.0, "label": "8"},
+                {"value": 16.0, "label": "16+"},
+            ],
+        }
+
     if product.kind == "reflectance":
         return {
             "status": "success",
@@ -80,6 +111,18 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
             "reason": "visible_reflectance",
         }
     if product.kind == "composite":
+        legend = SATELLITE_V2_INTERPRETIVE_LEGENDS.get(channel_key)
+        if legend:
+            return {
+                "status": "success",
+                "available": True,
+                "channel": channel_key,
+                "title": product.label,
+                "kind": product.kind,
+                "legend_type": "interpretive",
+                "subtitle": legend.get("subtitle", ""),
+                "items": list(legend.get("items") or ()),
+            }
         return {
             "status": "success",
             "available": False,
@@ -233,7 +276,7 @@ def resolve_tile(
                 "channel": channel_key,
             }
             return path, stats
-        if is_negative_tile_cached(path):
+        if is_negative_tile_cached(path) and not is_glm_product(channel_key):
             cache_status = "invalid"
             stats = {
                 "cache_status": cache_status,

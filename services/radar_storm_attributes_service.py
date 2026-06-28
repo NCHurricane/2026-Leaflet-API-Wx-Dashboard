@@ -36,6 +36,7 @@ _LIVE_TTL_SECONDS = 60          # realtime payload refresh cadence
 _ARCHIVE_TTL_SECONDS = 1800     # historical (valid=) payload is effectively fixed
 _REQUEST_TIMEOUT = 25
 _SEVERE_PCT = 50                # POSH/POH threshold for hail icon classification
+_MESO_MIN_RANK = 4              # IEM meso rank threshold (1-25); <=3 = weak shear, not a confirmed meso
 
 
 def _radar_3letter(site_id: str) -> str:
@@ -77,6 +78,21 @@ def _to_iem_valid(timestamp: str | None) -> str | None:
 def _present(value: Any) -> bool:
     """True when an IEM categorical field carries a real detection."""
     return bool(value) and str(value).strip().upper() not in {"NONE", "", "0"}
+
+
+def _meso_confirmed(value: Any) -> bool:
+    """True only when the IEM meso rank meets the minimum threshold.
+
+    IEM rank 1-25; values below _MESO_MIN_RANK are weak rotational shear
+    signatures that the NWS algorithm detects but trained analysts (and tools
+    like Radarscope) do not flag as confirmed mesocyclones.
+    """
+    if not _present(value):
+        return False
+    try:
+        return float(value) >= _MESO_MIN_RANK
+    except (TypeError, ValueError):
+        return False
 
 
 def _num(value: Any) -> float | None:
@@ -121,7 +137,7 @@ def _build_cells(geojson: dict, site_id: str) -> dict[str, Any]:
         max_dbz = _num(props.get("max_dbz"))
         valid_ts = props.get("valid")
         has_tvs = _present(props.get("tvs"))
-        has_meso = _present(props.get("meso"))
+        has_meso = _meso_confirmed(props.get("meso"))
 
         if valid_ts and (newest_ts is None or valid_ts > newest_ts):
             newest_ts = valid_ts
