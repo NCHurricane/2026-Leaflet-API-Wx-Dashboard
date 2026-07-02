@@ -208,15 +208,6 @@ For RGB composites:
 5. Bump affected `weather.html` script query strings when changing Satellite
    frontend wiring.
 
-For GLM Flash Extent Density:
-
-1. Keep it Satellite-only; do not wire GLM into Radar overlays.
-2. Catalog GLM frames from `GLM-L2-LCFA` and render tiles through the dedicated
-   GLM density renderer instead of the ABI renderer.
-3. Render LCFA group-to-flash relationships onto the fixed 4 km Web Mercator
-   grid; each cell value is a unique flash count for the product window.
-4. Use a count legend whose color stops match the renderer's GLM ramp.
-
 ## Response Shape Pattern
 
 Use `success_payload()` / `error_payload()` helpers for render endpoints.

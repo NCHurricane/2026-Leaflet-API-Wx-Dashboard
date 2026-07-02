@@ -544,7 +544,7 @@
     const map = L.map('weather-map', {
         layers: [tilesDarkNoLabels],
         minZoom: 2,
-        maxBounds: [[-85, -180], [85, 180]],
+        maxBounds: [[-85, -360], [85, 360]],
         maxBoundsViscosity: 1.0,
     });
     map.fitBounds(CONUS_DEFAULT_BOUNDS, { animate: false });
@@ -1140,12 +1140,11 @@
     const SATELLITE_PREFETCH_RETRY_AFTER_MS = 20000;
     const SATELLITE_PREFETCH_SEEN_LIMIT = 1200;
     const RTMA_SCRUB_POINTS_ONLY = false;
-    const RADAR_AUTO_REFRESH_MS = 3 * 60 * 1000; // 3 minutes
+    const RADAR_AUTO_REFRESH_MS = 90_000; // 90 s — matches warm-poll window; catches L2 chunk frames within ~2 min of scan start
     const SATELLITE_AUTO_REFRESH_MS = 5 * 60 * 1000;
     const SATELLITE_ANIMATE_AUTO_REFRESH_MS = SATELLITE_AUTO_REFRESH_MS;
     const ALERTS_AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
     const RADAR_MULTI_SITE_MAX = 5;
-    const IEM_RADAR_OVERLAY_REFRESH_MS = 5 * 60 * 1000;
     const RTMA_STREAM_MAX_HOURS = {
         rtma_hourly: 24,
         rtma_rapid_update: 6,
@@ -1254,172 +1253,6 @@
             lng: (bounds.minLng + bounds.maxLng) / 2,
         };
     }
-
-    const _ALERT_RADAR_FRAME_COUNT = 5;
-    const _ALERT_RADAR_FRAME_MS = 600;
-    const _ALERT_RADAR_REFRESH_MS = 300000; // 5 min
-    const _ALERT_RADAR_RETRY_MS = 60000;    // 60 sec
-    const _ALERT_RADAR_MAX_RETRIES = 5;
-    let _alertRadarTileLayer = null;
-    let _alertRadarFrameLayers = [];
-    let _alertRadarFrameIndex = 0;
-    let _alertRadarPlayTimer = null;
-    let _alertRadarRefreshTimer = null;
-    let _alertRadarLastModified = '';
-    let _alertRadarRetryCount = 0;
-    let _alertRadarAddSeq = 0;
-
-    function _alertRadarOpacity() {
-        const slider = byId('weather-opacity-alert-radar');
-        const v = slider ? parseFloat(slider.value) : 0.65;
-        return Number.isFinite(v) ? v : 0.65;
-    }
-
-    function _alertRadarEnabled() {
-        const cb = byId('weather-alert-radar-enable');
-        return cb ? !!cb.checked : true;
-    }
-
-    function _clearAlertRadarTiles() {
-        if (_alertRadarPlayTimer) {
-            clearInterval(_alertRadarPlayTimer);
-            _alertRadarPlayTimer = null;
-        }
-        if (_alertRadarRefreshTimer) {
-            clearTimeout(_alertRadarRefreshTimer);
-            _alertRadarRefreshTimer = null;
-        }
-        _alertRadarFrameLayers.forEach((layer) => {
-            try { map.removeLayer(layer); } catch (_) { }
-        });
-        _alertRadarFrameLayers = [];
-        _alertRadarTileLayer = null;
-        _alertRadarFrameIndex = 0;
-        _alertRadarRetryCount = 0;
-    }
-
-    async function _checkAlertRadarFreshness() {
-        try {
-            const resp = await fetch('/api/radar/tiles/freshness', { cache: 'no-store' });
-            if (!resp.ok) return '';
-            const data = await resp.json();
-            return data?.last_modified || '';
-        } catch (_) {
-            return '';
-        }
-    }
-
-    async function _refreshAlertRadarTiles() {
-        if (!_alertRadarFrameLayers.length) return;
-        if (document.hidden) {
-            // Defer IEM freshness checks while the tab is hidden; the
-            // visibilitychange handler catches up immediately on return.
-            _alertRadarRefreshTimer = setTimeout(_refreshAlertRadarTiles, _ALERT_RADAR_REFRESH_MS);
-            return;
-        }
-        const latest = await _checkAlertRadarFreshness();
-        const isNewer = latest && latest !== _alertRadarLastModified;
-        if (isNewer) {
-            _alertRadarLastModified = latest;
-            _alertRadarRetryCount = 0;
-            _rebuildAlertRadarLayers();
-            _alertRadarRefreshTimer = setTimeout(_refreshAlertRadarTiles, _ALERT_RADAR_REFRESH_MS);
-        } else if (_alertRadarRetryCount < _ALERT_RADAR_MAX_RETRIES) {
-            _alertRadarRetryCount += 1;
-            _alertRadarRefreshTimer = setTimeout(_refreshAlertRadarTiles, _ALERT_RADAR_RETRY_MS);
-        } else {
-            // Give up retrying; fall back to next normal interval.
-            _alertRadarRetryCount = 0;
-            _alertRadarRefreshTimer = setTimeout(_refreshAlertRadarTiles, _ALERT_RADAR_REFRESH_MS);
-        }
-    }
-
-    function _rebuildAlertRadarLayers() {
-        // Cache-bust the tile URLs by appending the last-modified token,
-        // so Leaflet re-fetches fresh tiles for the current viewport. Only
-        // called when a newer token arrived, so the token is always set;
-        // never substitute Date.now() — it would bust every cached tile.
-        const bust = encodeURIComponent(_alertRadarLastModified);
-        const oldLayers = _alertRadarFrameLayers;
-        _alertRadarFrameLayers = [];
-        const targetOpacity = _alertRadarOpacity();
-        for (let i = 0; i < _ALERT_RADAR_FRAME_COUNT; i += 1) {
-            const layer = L.tileLayer(`/api/radar/tiles/{z}/{x}/{y}?frame=${i}&v=${bust}`, {
-                minZoom: 0,
-                maxZoom: 18,
-                opacity: 0,
-                pane: 'radar-overlays',
-                attribution: 'IEM NEXRAD',
-            });
-            layer.addTo(map);
-            _alertRadarFrameLayers.push(layer);
-        }
-        _alertRadarFrameIndex = _ALERT_RADAR_FRAME_COUNT - 1;
-        _alertRadarFrameLayers[_alertRadarFrameIndex].setOpacity(targetOpacity);
-        _alertRadarTileLayer = _alertRadarFrameLayers[_alertRadarFrameIndex];
-        oldLayers.forEach((layer) => {
-            try { map.removeLayer(layer); } catch (_) { }
-        });
-    }
-
-    async function _addAlertRadarTiles() {
-        const seq = ++_alertRadarAddSeq;
-        _clearAlertRadarTiles();
-        if (!_alertRadarEnabled()) return;
-
-        // Seed the freshness token BEFORE building layers so tile URLs are
-        // stable across page loads and tab re-entry — stable URLs hit the
-        // browser cache (the proxy serves them immutable). Never fall back to
-        // Date.now(): a one-off token busts every cached tile for no reason.
-        if (!_alertRadarLastModified) {
-            const lm = await _checkAlertRadarFreshness();
-            if (seq !== _alertRadarAddSeq) return; // superseded while awaiting
-            if (!_alertRadarEnabled()) return;
-            _alertRadarLastModified = lm || '';
-        }
-
-        const targetOpacity = _alertRadarOpacity();
-        const bust = encodeURIComponent(_alertRadarLastModified);
-        for (let i = 0; i < _ALERT_RADAR_FRAME_COUNT; i += 1) {
-            const layer = L.tileLayer(`/api/radar/tiles/{z}/{x}/{y}?frame=${i}&v=${bust}`, {
-                minZoom: 0,
-                maxZoom: 18,
-                opacity: 0,
-                pane: 'radar-overlays',
-                attribution: 'IEM NEXRAD',
-            });
-            layer.addTo(map);
-            _alertRadarFrameLayers.push(layer);
-        }
-        _alertRadarFrameIndex = _ALERT_RADAR_FRAME_COUNT - 1;
-        _alertRadarFrameLayers[_alertRadarFrameIndex].setOpacity(targetOpacity);
-        _alertRadarTileLayer = _alertRadarFrameLayers[_alertRadarFrameIndex];
-
-        _alertRadarRefreshTimer = setTimeout(_refreshAlertRadarTiles, _ALERT_RADAR_REFRESH_MS);
-
-        _alertRadarPlayTimer = setInterval(() => {
-            const prev = _alertRadarFrameIndex;
-            _alertRadarFrameIndex = (_alertRadarFrameIndex + 1) % _ALERT_RADAR_FRAME_COUNT;
-            _alertRadarFrameLayers[prev]?.setOpacity(0);
-            _alertRadarFrameLayers[_alertRadarFrameIndex]?.setOpacity(_alertRadarOpacity());
-            _alertRadarTileLayer = _alertRadarFrameLayers[_alertRadarFrameIndex];
-        }, _ALERT_RADAR_FRAME_MS);
-    }
-
-    byId('weather-opacity-alert-radar')?.addEventListener('input', () => {
-        if (_alertRadarFrameLayers.length) {
-            const op = _alertRadarOpacity();
-            _alertRadarFrameLayers[_alertRadarFrameIndex]?.setOpacity(op);
-        }
-    });
-
-    byId('weather-alert-radar-enable')?.addEventListener('change', () => {
-        if (_alertRadarEnabled()) {
-            if (_isTypeEnabled('alerts')) _addAlertRadarTiles();
-        } else {
-            _clearAlertRadarTiles();
-        }
-    });
 
     function _alertForecastUrl(feat, preferredLatLng = null) {
         const p = feat?.properties || {};
@@ -3524,7 +3357,7 @@
 
         const entries = ct.entries || [];
         const units = selectedOption?.dataset?.units || '';
-        const vmin = ct.vmin;
+        const vmin = ct.legend_vmin ?? ct.vmin;
         const vmax = ct.vmax;
 
         // Continuous color bar rendered as a linear-gradient
@@ -3906,6 +3739,7 @@
         drought: { ts: null, source: null, label: null },
         tropical: { ts: null, source: null, label: null },
         wpc: { ts: null, source: null, label: null },
+        satellite: { ts: null, source: null, label: null },
     };
     const _timestampSourceByType = {
         global: { provenance: null, ts: null },
@@ -3917,6 +3751,7 @@
         drought: { provenance: null, ts: null },
         tropical: { provenance: null, ts: null },
         wpc: { provenance: null, ts: null },
+        satellite: { provenance: null, ts: null },
     };
     let _reliabilityTickerStarted = false;
     const _LIVE_DATA_STALE_MS = 90 * 60 * 1000;
@@ -3942,6 +3777,7 @@
         if (_isTypeEnabled('tropical')) return 'tropical';
         if (_isTypeEnabled('wpc')) return 'wpc';
         if (_isTypeEnabled('current') && _activeSurfaceProduct()) return 'surface';
+        if (_isTypeEnabled('satellite') && _satelliteFrames.length) return 'satellite';
         return 'global';
     }
 
@@ -4007,6 +3843,27 @@
         _reliabilityByType[key].source = targetSource || null;
         _reliabilityByType[key].ts = _toReliabilityTsMs(targetTs);
         _renderReliability();
+    }
+
+    const _SAT_DISPLAY_NAMES = {
+        goes18: 'GOES-18 (West)',
+        goes19: 'GOES-19 (East)',
+        meteosat12: 'Meteosat-12',
+        meteosat9: 'Meteosat-9',
+    };
+    const _SAT_SOURCES = {
+        goes18: 'NOAA',
+        goes19: 'NOAA',
+        meteosat12: 'EUMETSAT',
+        meteosat9: 'EUMETSAT',
+    };
+
+    function _satelliteReliabilityMeta() {
+        const satId = window.NCHSatellitePage?.activeSatId?.() || 'goes19';
+        const channel = window.NCHSatellitePage?.activeChannel?.() || 'Channel13';
+        const name = _SAT_DISPLAY_NAMES[satId] || satId;
+        const source = _SAT_SOURCES[satId] || 'NOAA';
+        return { label: `${name} — ${channel}`, source };
     }
 
     function _resolveDataTimestampMs(rawTs) {
@@ -6201,7 +6058,7 @@
         if (_radarPageController?.activeElevation) {
             return _radarPageController.activeElevation();
         }
-        return String(byId('weather-radar-elevation')?.value || 'auto').trim().toLowerCase();
+        return String(byId('weather-radar-elevation')?.value || '').trim().toLowerCase();
     }
 
     function _setRadarStatus(message) {
@@ -7461,8 +7318,6 @@
 
     // ── Radar auto-refresh ───────────────────────────────────────────────────
     let _radarAutoRefreshTimer = null;
-    let _radarAutoRefreshCountdownTimer = null;
-    let _radarAutoRefreshNextAtMs = 0;
     let _radarAutoUpdateStatusTimer = null;
 
     function _isRadarAutoUpdateEnabled() {
@@ -7511,42 +7366,6 @@
     function _showRadarAutoUpdateRow(visible) {
         const row = byId('wx-radar-auto-update-row');
         if (row) row.style.display = visible ? '' : 'none';
-    }
-
-    function _setRadarNextUpdateStatus(text, visible = true) {
-        const el = byId('wx-radar-next-update-status');
-        if (!el) return;
-        if (!visible) {
-            el.style.display = 'none';
-            el.textContent = '';
-            return;
-        }
-        el.style.display = 'block';
-        el.textContent = text;
-    }
-
-    function _formatCountdownMs(ms) {
-        const totalSec = Math.max(0, Math.ceil(ms / 1000));
-        const min = Math.floor(totalSec / 60);
-        const sec = totalSec % 60;
-        return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-    }
-
-    function _updateRadarNextUpdateCountdown() {
-        const shouldShow = _isTypeEnabled('radar')
-            && !_archiveMode
-            && _isRadarAutoUpdateEnabled()
-            && !!_radarAutoRefreshTimer;
-        if (!shouldShow) {
-            _setRadarNextUpdateStatus('', false);
-            return;
-        }
-        if (document.hidden) {
-            _setRadarNextUpdateStatus('Time Until Next Update: Paused (tab hidden)', true);
-            return;
-        }
-        const remainingMs = Math.max(0, _radarAutoRefreshNextAtMs - Date.now());
-        _setRadarNextUpdateStatus(`Next Check for New Scans: ${_formatCountdownMs(remainingMs)}`, true);
     }
 
     function _flashAnimateNewFrame() {
@@ -7835,7 +7654,7 @@
         _rtmaScrubWarmPollTimer = setTimeout(tick, 3000);
     }
 
-    async function _tryAppendNewRadarFrames() {
+    async function _tryAppendNewRadarFrames({ refresh = false } = {}) {
         if (!_isTypeEnabled('radar')) return 0;
         if (!_isRadarAutoUpdateEnabled()) return 0;
         const product = _activeRadarProduct();
@@ -7855,6 +7674,7 @@
                 product,
                 elevation: _activeRadarElevation(),
                 hours: String(maxHours),
+                ...(refresh ? { refresh: 'true' } : {}),
             });
             _appendRadarSrvMotionParams(params);
             const resp = await fetch(apiUrl(`/api/radar/live/frames?${params.toString()}`), { cache: 'no-store' });
@@ -7919,42 +7739,32 @@
         if (document.hidden) return;
         if (!_isRadarAutoUpdateEnabled()) return;
 
-        try {
-            const site = _activeRadarSite();
-            if (site) {
-                // Unified mode: always append new frames to scrubber when site is selected
-                await _tryAppendNewRadarFrames();
+        const site = _activeRadarSite();
+        if (site) {
+            // Pass refresh=true so the backend kicks off a render for the newest scan
+            // even when frames already exist. If no new frames came back yet, start a
+            // short warm poll to pick them up once the render completes (~15-30 s).
+            const product = _activeRadarProduct();
+            const appended = await _tryAppendNewRadarFrames({ refresh: true });
+            if (appended === 0) {
+                _startRadarScrubWarmPoll(site, product);
             }
-            // National Composite case: no overlay to refresh (Radar Overlay feature removed).
-        } finally {
-            _radarAutoRefreshNextAtMs = Date.now() + RADAR_AUTO_REFRESH_MS;
-            _updateRadarNextUpdateCountdown();
         }
+        // National Composite case: no overlay to refresh (Radar Overlay feature removed).
     }
 
     function _restartRadarAutoRefreshInterval() {
         if (_radarAutoRefreshTimer) { clearInterval(_radarAutoRefreshTimer); _radarAutoRefreshTimer = null; }
         _radarAutoRefreshTimer = setInterval(() => { _radarAutoRefreshTick(); }, RADAR_AUTO_REFRESH_MS);
-        _radarAutoRefreshNextAtMs = Date.now() + RADAR_AUTO_REFRESH_MS;
     }
 
     function _startRadarAutoRefresh() {
         if (_radarAutoRefreshTimer) return;
         _radarAutoRefreshTimer = setInterval(() => { _radarAutoRefreshTick(); }, RADAR_AUTO_REFRESH_MS);
-        _radarAutoRefreshNextAtMs = Date.now() + RADAR_AUTO_REFRESH_MS;
-        if (!_radarAutoRefreshCountdownTimer) {
-            _radarAutoRefreshCountdownTimer = setInterval(() => {
-                _updateRadarNextUpdateCountdown();
-            }, 1000);
-        }
-        _updateRadarNextUpdateCountdown();
     }
 
     function _stopRadarAutoRefresh() {
         if (_radarAutoRefreshTimer) { clearInterval(_radarAutoRefreshTimer); _radarAutoRefreshTimer = null; }
-        if (_radarAutoRefreshCountdownTimer) { clearInterval(_radarAutoRefreshCountdownTimer); _radarAutoRefreshCountdownTimer = null; }
-        _radarAutoRefreshNextAtMs = 0;
-        _setRadarNextUpdateStatus('', false);
     }
 
     // ── MRMS auto-refresh ───────────────────────────────────────────────────
@@ -8581,22 +8391,23 @@
         ].join('|');
     }
 
-    function _satelliteTileTemplate(frameKey) {
+    function _satelliteTileTemplate(frameKey, options = {}) {
         const key = String(frameKey || '');
+        const renderLive = options?.renderLive !== false;
         const params = new URLSearchParams({
             sat_id: _activeSatelliteSatId(),
             sector: _activeSatelliteSector(),
             channel: _activeSatelliteChannel(),
             frame_key: key,
-            render_live: '1',
+            render_live: renderLive ? '1' : '0',
             rv: String(_satelliteCatalog?.render_version || 'products'),
             t: String(_satelliteTileRefreshToken || 0),
         });
         return apiUrl(`/api/satellite-v2/tile/{z}/{x}/{y}?${params.toString()}`);
     }
 
-    function _satelliteTileUrlForCoords(frameKey, zoomLevel, tileX, tileY) {
-        return _satelliteTileTemplate(frameKey)
+    function _satelliteTileUrlForCoords(frameKey, zoomLevel, tileX, tileY, options = {}) {
+        return _satelliteTileTemplate(frameKey, options)
             .replace('{z}', String(zoomLevel))
             .replace('{x}', String(tileX))
             .replace('{y}', String(tileY));
@@ -8611,7 +8422,18 @@
         return Math.max(0, zoomLevel);
     }
 
-    function _satelliteViewportTileCoords(zoomLevel) {
+    function _satellitePrefetchLimits() {
+        return {
+            aheadFrames: SATELLITE_PREFETCH_AHEAD_FRAMES,
+            behindFrames: SATELLITE_PREFETCH_BEHIND_FRAMES,
+            maxConcurrent: SATELLITE_PREFETCH_MAX_CONCURRENT,
+            maxTilesPerFrame: SATELLITE_PREFETCH_MAX_TILES_PER_FRAME,
+            maxQueueTiles: SATELLITE_PREFETCH_MAX_QUEUE_TILES,
+            renderLive: true,
+        };
+    }
+
+    function _satelliteViewportTileCoords(zoomLevel, maxTiles = SATELLITE_PREFETCH_MAX_TILES_PER_FRAME) {
         if (!Number.isFinite(zoomLevel) || !map.getBounds) return [];
         const bounds = map.getBounds();
         const northWest = map.project(bounds.getNorthWest(), zoomLevel);
@@ -8636,23 +8458,25 @@
             const rightDistance = Math.abs(right.tileX - centerTileX) + Math.abs(right.tileY - centerTileY);
             return leftDistance - rightDistance;
         });
-        return coords.slice(0, SATELLITE_PREFETCH_MAX_TILES_PER_FRAME);
+        const limit = Math.max(0, Number(maxTiles) || 0);
+        return coords.slice(0, limit);
     }
 
     function _satellitePrefetchFrameIndexes(activeIndex = _satelliteFrameIndex) {
+        const limits = _satellitePrefetchLimits();
         const frameCount = _satelliteFrames.length;
         const indexes = [];
         if (!_satelliteScrubMode || frameCount < 2) return indexes;
         const active = Math.max(0, Math.min(frameCount - 1, Number(activeIndex) || 0));
         const seen = new Set([active]);
-        for (let offset = 1; offset <= SATELLITE_PREFETCH_AHEAD_FRAMES; offset += 1) {
+        for (let offset = 1; offset <= limits.aheadFrames; offset += 1) {
             const frameIndex = (active + offset) % frameCount;
             if (!seen.has(frameIndex)) {
                 seen.add(frameIndex);
                 indexes.push(frameIndex);
             }
         }
-        for (let offset = 1; offset <= SATELLITE_PREFETCH_BEHIND_FRAMES; offset += 1) {
+        for (let offset = 1; offset <= limits.behindFrames; offset += 1) {
             const frameIndex = (active - offset + frameCount) % frameCount;
             if (!seen.has(frameIndex)) {
                 seen.add(frameIndex);
@@ -8705,6 +8529,7 @@
     function _enqueueSatelliteTilePrefetch(seq) {
         if (seq !== _satellitePrefetchSeq || !_satelliteScrubMode || !_satelliteFrames.length || !_isTypeEnabled('satellite')) return;
         const nowMs = Date.now();
+        const limits = _satellitePrefetchLimits();
         const queuedUrls = new Set(_satellitePrefetchQueue.map((item) => item.url));
         const frameIndexes = _satellitePrefetchFrameIndexes(_satelliteFrameIndex);
         for (const frameIndex of frameIndexes) {
@@ -8712,10 +8537,16 @@
             const frameKey = frame?.frame_key || '';
             if (!frameKey) continue;
             const zoomLevel = _satelliteEffectiveTileZoom(frame);
-            const coords = _satelliteViewportTileCoords(zoomLevel);
+            const coords = _satelliteViewportTileCoords(zoomLevel, limits.maxTilesPerFrame);
             for (const coord of coords) {
-                if (_satellitePrefetchQueue.length >= SATELLITE_PREFETCH_MAX_QUEUE_TILES) return;
-                const url = _satelliteTileUrlForCoords(frameKey, zoomLevel, coord.tileX, coord.tileY);
+                if (_satellitePrefetchQueue.length >= limits.maxQueueTiles) return;
+                const url = _satelliteTileUrlForCoords(
+                    frameKey,
+                    zoomLevel,
+                    coord.tileX,
+                    coord.tileY,
+                    { renderLive: limits.renderLive },
+                );
                 const lastSeenMs = Number(_satellitePrefetchSeenUrls.get(url));
                 if (queuedUrls.has(url) || (Number.isFinite(lastSeenMs) && nowMs - lastSeenMs < SATELLITE_PREFETCH_RETRY_AFTER_MS)) continue;
                 queuedUrls.add(url);
@@ -8736,7 +8567,8 @@
             _satellitePrefetchController = new AbortController();
         }
         const signal = _satellitePrefetchController.signal;
-        while (_satellitePrefetchActive < SATELLITE_PREFETCH_MAX_CONCURRENT && _satellitePrefetchQueue.length) {
+        const limits = _satellitePrefetchLimits();
+        while (_satellitePrefetchActive < limits.maxConcurrent && _satellitePrefetchQueue.length) {
             const item = _satellitePrefetchQueue.shift();
             _satellitePrefetchActive += 1;
             fetch(item.url, { cache: 'force-cache', signal })
@@ -8774,9 +8606,12 @@
     }
 
     async function _fetchSatelliteFrameSet({ hours, maxFrames, signal, refresh = false, requireTiles = false, minFrames = 1 }) {
+        const satId = _activeSatelliteSatId();
+        const sector = _activeSatelliteSector();
+        if (!satId || !sector) throw new Error('No satellite or sector selected.');
         const v2Params = new URLSearchParams({
-            sat_id: _activeSatelliteSatId(),
-            sector: _activeSatelliteSector(),
+            sat_id: satId,
+            sector: sector,
             channel: _activeSatelliteChannel(),
             hours: String(hours),
             max_frames: String(maxFrames),
@@ -9094,6 +8929,9 @@
 
             const tsMs = _resolveDataTimestampMs(frame.timestamp_utc || frame.frame_key || null);
             _setViewerTimestamp(tsMs);
+            const { label: satLabel, source: satSource } = _satelliteReliabilityMeta();
+            _setReliability('satellite', satLabel, satSource, tsMs);
+            _setTimestampSource('satellite', 'satellite_frame_timestamp', tsMs);
             if (_satelliteScrubMode) {
                 _setRtmaScrubberStatus(`${_satelliteFrameIndex + 1} / ${_satelliteFrames.length} frames.`);
             } else {
@@ -9249,6 +9087,7 @@
             if (document.hidden) return;
             if (!_isTypeEnabled('satellite')) return;
             if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length || _satelliteScrubMode) return;
+            if (!_satelliteFrames.length) return;
             _satelliteEngine?.loadCurrentFrame({ silent: true });
         }, SATELLITE_AUTO_REFRESH_MS);
     }
@@ -9816,8 +9655,6 @@
             map.removeLayer(localStormReportsLayer);
             localStormReportsLayer = null;
         }
-        if (!alertsEnabled) _clearAlertRadarTiles();
-        else if (!_alertRadarTileLayer) _addAlertRadarTiles();
         if (!spcEnabled && spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
         if (!surfaceEnabled && surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
         if (!radarEnabled && radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
@@ -9876,7 +9713,9 @@
             _radarEngine?.loadLiveLatest();
         }
         if (satelliteEnabled) {
-            _satelliteEngine?.loadCurrentFrame({ silent: true });
+            if (_satelliteFrames.length > 0) {
+                _satelliteEngine?.loadCurrentFrame({ silent: true });
+            }
         } else {
             _exitSatelliteScrubMode(false);
             _stopSatelliteAutoRefresh();
@@ -14243,11 +14082,10 @@
                 if (type === 'satellite') {
                     _setSatelliteLookbackHours(_recommendedSatelliteLookbackHours());
                     if (!_satelliteScrubMode) {
-                        // Auto-enter scrubber mode with default product on tab entry
-                        // so the user sees an animation-ready scrubber immediately
-                        // instead of having to click Animate manually.
-                        _satelliteEngine?.loadCurrentFrame({ silent: false });
-                        _satelliteEngine?.loadScrubberFrames();
+                        if (_activeSatelliteSatId() && _activeSatelliteSector()) {
+                            _satelliteEngine?.loadCurrentFrame({ silent: false });
+                            _satelliteEngine?.loadScrubberFrames();
+                        }
                     } else {
                         _setSatelliteModeActive('animate');
                     }
@@ -14496,20 +14334,11 @@
         if (!document.hidden && _isTypeEnabled('radar') && !_archiveMode) {
             _radarAutoRefreshTick();
         }
-        if (!document.hidden && _isTypeEnabled('satellite') && !_archiveMode && !_satelliteScrubMode) {
+        if (!document.hidden && _isTypeEnabled('satellite') && !_archiveMode && !_satelliteScrubMode && _satelliteFrames.length) {
             _satelliteEngine?.loadCurrentFrame({ silent: true });
         }
         if (!document.hidden && _satelliteAnimateAutoRefreshEnabled && _satelliteScrubMode && _isTypeEnabled('satellite')) {
             void _refreshSatelliteAnimationFrames({ auto: true, silent: true });
-        }
-        if (!document.hidden && _alertRadarFrameLayers.length) {
-            // Catch up on IEM freshness deferred while hidden. Reset the
-            // pending timer so only one refresh chain stays scheduled.
-            if (_alertRadarRefreshTimer) {
-                clearTimeout(_alertRadarRefreshTimer);
-                _alertRadarRefreshTimer = null;
-            }
-            void _refreshAlertRadarTiles();
         }
         if (!document.hidden && !_archiveMode && !_rtmaScrubFrames.length && !_mrmsScrubFrames.length) {
             if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length) {
@@ -14523,7 +14352,6 @@
                 if (supplemental.mdsEnabled || supplemental.watchesEnabled) refreshSpc();
             }
         }
-        _updateRadarNextUpdateCountdown();
     });
 
     map.on('click', (evt) => {
@@ -14864,7 +14692,6 @@
             e.preventDefault();
             const btn = byId('wx-radar-auto-update');
             btn?.classList.toggle('active');
-            _updateRadarNextUpdateCountdown();
         });
         _startAlertsAutoRefresh();
         byId('wx-alerts-auto-update')?.addEventListener('click', (e) => {
@@ -14954,6 +14781,10 @@
         if (_satellitePageController?.configureSatellitePage) {
             _satellitePageController.configureSatellitePage({
                 clearSatelliteLayerPool: _clearSatelliteLayerPool,
+                fitSatelliteViewPreset: (bounds) => map.fitBounds(bounds, {
+                    animate: false,
+                    padding: [20, 20],
+                }),
                 isScrubMode: () => _satelliteScrubMode,
                 isTypeEnabled: _isTypeEnabled,
                 loadCurrentFrame: (options) => _satelliteEngine?.loadCurrentFrame(options),
@@ -15416,7 +15247,6 @@
             stopScrubPlay: _stopRadarScrubPlay,
             stopScrubWarmPoll: _stopRadarScrubWarmPoll,
             syncSiteLayerVisibility: _syncRadarSiteLayerVisibility,
-            updateNextUpdateCountdown: _updateRadarNextUpdateCountdown,
                 updateRtmaScrubberUi: _updateRtmaScrubberUi,
                 updateElevationOptions: (data) => {
                     _radarPageController?.updateElevationOptions?.(data);

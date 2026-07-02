@@ -11,11 +11,11 @@ from typing import Any
 import matplotlib.colors as mcolors
 import numpy as np
 
+from config.satellite_platforms import platform_descriptor
 from config.satellite_v2_config import (
     ABI_CHANNELS,
     SATELLITE_V2_INTERPRETIVE_LEGENDS,
     SATELLITE_V2_PRODUCTS,
-    is_glm_product,
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
@@ -28,7 +28,7 @@ from satellite_v2.cache import (
     read_json,
     tile_path,
 )
-from satellite_v2.provider_aws import list_recent_frames
+from satellite_v2.providers import list_recent_frames
 from satellite_v2.tiler import render_frame_tile
 
 
@@ -44,6 +44,13 @@ _ON_DEMAND_TILE_RENDER_POOL = ThreadPoolExecutor(
     max_workers=_ON_DEMAND_TILE_RENDER_WORKERS,
     thread_name_prefix="sat-v2-live",
 )
+
+
+def _provider_name_for_sat(sat_id: str) -> str:
+    try:
+        return str(platform_descriptor(sat_id).get("provider") or "unknown")
+    except ValueError:
+        return "unknown"
 
 
 def shutdown_live_tile_pool() -> None:
@@ -71,35 +78,6 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
     channel_key = normalize_channel(channel)
     product = SATELLITE_V2_PRODUCTS[channel_key]
     metadata = ABI_CHANNELS[channel_key]
-
-    if product.kind == "glm_density":
-        return {
-            "status": "success",
-            "available": True,
-            "channel": channel_key,
-            "title": product.label,
-            "kind": product.kind,
-            "legend_type": "continuous",
-            "units": "flashes",
-            "axis_label": "Flashes per 4 km cell",
-            "value_units": product.units,
-            "vmin": 0.0,
-            "vmax": 16.0,
-            "anchors": [
-                {"value": 0.0, "color": "#000000"},
-                {"value": 1.0, "color": "#0033ff"},
-                {"value": 2.0, "color": "#00ccff"},
-                {"value": 4.0, "color": "#66ff00"},
-                {"value": 8.0, "color": "#ffcc00"},
-                {"value": 16.0, "color": "#ff0000"},
-            ],
-            "ticks": [
-                {"value": 0.0, "label": "0"},
-                {"value": 4.0, "label": "4"},
-                {"value": 8.0, "label": "8"},
-                {"value": 16.0, "label": "16+"},
-            ],
-        }
 
     if product.kind == "reflectance":
         return {
@@ -229,6 +207,7 @@ def get_catalog_payload(
         hours=hours,
         max_frames=max_frames,
         refresh=refresh,
+        list_frames_fn=None,
     )
 
 
@@ -269,14 +248,14 @@ def resolve_tile(
                 "tile_exists_before": path_exists_before,
                 "tile_size_before": path_size_before,
                 "elapsed_ms": int((time.perf_counter() - started) * 1000),
-                "provider": "aws",
+                "provider": _provider_name_for_sat(sat_key),
                 "frame_key": frame_key,
                 "sat_id": sat_key,
                 "sector": sector_key,
                 "channel": channel_key,
             }
             return path, stats
-        if is_negative_tile_cached(path) and not is_glm_product(channel_key):
+        if is_negative_tile_cached(path):
             cache_status = "invalid"
             stats = {
                 "cache_status": cache_status,
@@ -284,7 +263,7 @@ def resolve_tile(
                 "tile_exists_before": path_exists_before,
                 "tile_size_before": path_size_before,
                 "elapsed_ms": int((time.perf_counter() - started) * 1000),
-                "provider": "aws",
+                "provider": _provider_name_for_sat(sat_key),
                 "frame_key": frame_key,
                 "sat_id": sat_key,
                 "sector": sector_key,
@@ -335,7 +314,7 @@ def resolve_tile(
         "tile_size_before": path_size_before,
         "validate_elapsed_ms": validate_elapsed,
         "elapsed_ms": int((time.perf_counter() - started) * 1000),
-        "provider": "aws",
+        "provider": _provider_name_for_sat(sat_key),
         "frame_key": frame_key,
         "sat_id": sat_key,
         "sector": sector_key,

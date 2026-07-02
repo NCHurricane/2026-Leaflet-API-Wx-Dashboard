@@ -16,8 +16,6 @@ from botocore.config import Config
 
 from config.satellite_v2_config import (
     aws_product_prefix_for_sector,
-    glm_aggregation_minutes,
-    is_glm_product,
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
@@ -170,107 +168,6 @@ def _list_recent_channel_frames(
     return frames
 
 
-def _list_recent_glm_lcfa_frames(
-    sat_key: str,
-    hours: int,
-) -> dict[str, SourceFrame]:
-    bucket = _bucket_name(sat_key)
-    frames: dict[str, SourceFrame] = {}
-    for year, day, hour in _iter_hour_prefixes(hours):
-        prefix = f"GLM-L2-LCFA/{year}/{day:03d}/{hour:02d}/"
-        for key, size in _list_prefix_objects(bucket, prefix):
-            filename = key.rsplit("/", 1)[-1]
-            if "GLM-L2-LCFA" not in filename:
-                continue
-            parsed = _parse_frame_timestamp(key)
-            if parsed is None:
-                continue
-            frame_key, timestamp = parsed
-            frames[frame_key] = SourceFrame(
-                frame_key=frame_key,
-                timestamp_utc=timestamp,
-                provider="aws",
-                source_key=key,
-                source_url=f"s3://{bucket}/{key}",
-                file_size=size,
-                source_keys={"GLM_LCFA": key},
-                source_urls={"GLM_LCFA": f"s3://{bucket}/{key}"},
-                file_sizes={"GLM_LCFA": size},
-            )
-    return frames
-
-
-def _list_recent_glm_frames(
-    sat_key: str,
-    channel_key: str,
-    hours: int,
-    max_frames: int,
-) -> list[SourceFrame]:
-    aggregation_minutes = glm_aggregation_minutes(channel_key)
-    source_frames = sorted(
-        _list_recent_glm_lcfa_frames(sat_key, hours).values(),
-        key=lambda frame: frame.timestamp_utc,
-    )
-    if aggregation_minutes <= 1:
-        return source_frames[-max(1, int(max_frames)) :]
-
-    aggregated: list[SourceFrame] = []
-    for idx, frame in enumerate(source_frames):
-        frame_time = _datetime_from_iso(frame.timestamp_utc)
-        if frame_time is None:
-            continue
-        window_start = frame_time - timedelta(minutes=aggregation_minutes - 1)
-        window = [
-            candidate
-            for candidate in source_frames[: idx + 1]
-            if (candidate_time := _datetime_from_iso(candidate.timestamp_utc)) is not None
-            and window_start <= candidate_time <= frame_time
-        ]
-        if not window:
-            continue
-        source_keys = {
-            f"GLM_LCFA_{window_idx:02d}": candidate.source_key
-            for window_idx, candidate in enumerate(window)
-        }
-        source_urls = {
-            key: f"s3://{_bucket_name(sat_key)}/{value}"
-            for key, value in source_keys.items()
-        }
-        file_sizes = {
-            f"GLM_LCFA_{window_idx:02d}": int(candidate.file_size or 0)
-            for window_idx, candidate in enumerate(window)
-        }
-        aggregated.append(
-            SourceFrame(
-                frame_key=frame.frame_key,
-                timestamp_utc=frame.timestamp_utc,
-                provider="aws",
-                source_key=frame.source_key,
-                source_url=frame.source_url,
-                file_size=sum(file_sizes.values()),
-                source_keys=source_keys,
-                source_urls=source_urls,
-                file_sizes=file_sizes,
-            )
-        )
-    return aggregated[-max(1, int(max_frames)) :]
-
-
-def _datetime_from_iso(value: str) -> datetime | None:
-    raw = str(value or "")
-    if not raw:
-        return None
-    try:
-        if raw.endswith("Z"):
-            raw = raw[:-1] + "+00:00"
-        parsed = datetime.fromisoformat(raw)
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
-    except ValueError:
-        return None
-
-
 def list_recent_frames(
     sat_id: str,
     sector: str,
@@ -281,8 +178,6 @@ def list_recent_frames(
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
     channel = normalize_channel(channel_key)
-    if is_glm_product(channel):
-        return _list_recent_glm_frames(sat_key, channel, hours, max_frames)
 
     source_channels = source_channels_for_product(channel)
     channel_maps = {
@@ -340,8 +235,6 @@ def download_product_source_frames(
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
     product_key = normalize_channel(channel_key)
-    if is_glm_product(product_key):
-        return download_glm_source_frames(cache_root, sat_key, sector_key, product_key, frame)
 
     source_channels = source_channels_for_product(product_key)
     source_keys = (
@@ -394,65 +287,4 @@ def download_product_source_frames(
                     pass
                 raise
         paths[source_channel] = target
-    return paths
-
-
-def download_glm_source_frames(
-    cache_root: str | Path,
-    sat_id: str,
-    sector: str,
-    channel_key: str,
-    frame: SourceFrame | dict,
-) -> dict[str, Path]:
-    sat_key = normalize_sat_id(sat_id)
-    sector_key = normalize_sector(sector)
-    product_key = normalize_channel(channel_key)
-    source_keys = (
-        frame.source_keys
-        if isinstance(frame, SourceFrame)
-        else frame.get("source_keys")
-    ) or {}
-
-    if not source_keys:
-        primary_key = str(
-            frame.source_key
-            if isinstance(frame, SourceFrame)
-            else frame.get("source_key")
-        )
-        if primary_key:
-            source_keys = {"GLM_LCFA": primary_key}
-
-    frame_key = str(
-        frame.frame_key if isinstance(frame, SourceFrame) else frame.get("frame_key")
-    )
-    if not frame_key:
-        raise ValueError("Satellite v2 GLM frame is missing frame_key.")
-
-    paths: dict[str, Path] = {}
-    for source_name, source_key_value in source_keys.items():
-        source_key = str(source_key_value)
-        if not source_key:
-            continue
-        filename = source_key.rsplit("/", 1)[-1]
-        target = source_path(
-            cache_root, sat_key, sector_key, str(source_name), frame_key, filename
-        )
-        if not target.exists() or target.stat().st_size <= 0:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            fd, tmp_name = tempfile.mkstemp(
-                prefix=f".{filename}.", suffix=".tmp", dir=str(target.parent)
-            )
-            os.close(fd)
-            try:
-                _s3_client().download_file(_bucket_name(sat_key), source_key, tmp_name)
-                os.replace(tmp_name, target)
-            except Exception:
-                try:
-                    os.unlink(tmp_name)
-                except OSError:
-                    pass
-                raise
-        paths[str(source_name)] = target
-    if not paths:
-        raise ValueError(f"Satellite v2 GLM frame has no source keys for {product_key}.")
     return paths

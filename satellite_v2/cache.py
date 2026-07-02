@@ -14,11 +14,11 @@ from PIL import Image, UnidentifiedImageError
 
 from config.satellite_v2_config import (
     SATELLITE_V2_CACHE_NAMESPACE,
-    SATELLITE_V2_RENDER_VERSION,
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
     normalize_source_channel,
+    satellite_v2_render_version_for_satellite,
 )
 
 
@@ -51,11 +51,12 @@ def tile_path(
     x: int,
     y: int,
 ) -> Path:
+    sat_key = normalize_sat_id(sat_id)
     return (
         namespace_root(cache_root)
         / "tiles"
-        / SATELLITE_V2_RENDER_VERSION
-        / normalize_sat_id(sat_id)
+        / satellite_v2_render_version_for_satellite(sat_key)
+        / sat_key
         / normalize_sector(sector)
         / normalize_channel(channel_key)
         / str(frame_key)

@@ -265,14 +265,23 @@ def _build_legend(
     vmin: float,
     vmax: float,
     n_ticks: int = 11,
+    legend_vmin: float | None = None,
 ) -> list[dict]:
-    """Return a list of {value, label, color} dicts for the frontend legend."""
-    span = float(vmax - vmin)
+    """Return a list of {value, label, color} dicts for the frontend legend.
+
+    ``legend_vmin`` clips the left edge of the legend (e.g. a dBZ floor) while
+    the colormap normalization still uses the original ``vmin`` so colors are
+    correct for their physical values.
+    """
+    eff_vmin = float(legend_vmin) if legend_vmin is not None else float(vmin)
+    full_span = float(vmax - vmin)
+    legend_span = float(vmax - eff_vmin)
     units = parsed.get("units", "")
     entries = []
     for i in range(n_ticks):
-        v = vmin + (span * i / (n_ticks - 1))
-        norm_v = i / (n_ticks - 1)
+        v = eff_vmin + (legend_span * i / (n_ticks - 1))
+        norm_v = (v - vmin) / full_span if full_span else 0.0
+        norm_v = min(max(norm_v, 0.0), 1.0)
         color = _color_hex(cmap(norm_v))
         if units in ("DBZ",):
             label = f"{v:.0f}"
@@ -296,6 +305,7 @@ def get_radar_colortable(
     pal_key: str,  # palette key (e.g. "BR", "BV") -> .pal file via _PAL_FILENAMES
     vmin: float,
     vmax: float,
+    legend_vmin: float | None = None,
 ) -> dict:
     """Return (and cache) the full colortable result for a product.
 
@@ -308,7 +318,7 @@ def get_radar_colortable(
             "legend": [{"value", "label", "color"}, ...]
         }
     """
-    cache_key = f"{pal_key}_{vmin}_{vmax}"
+    cache_key = f"{pal_key}_{vmin}_{vmax}_{legend_vmin}"
     if cache_key in _CACHE:
         return _CACHE[cache_key]
 
@@ -337,12 +347,13 @@ def get_radar_colortable(
         parsed = {"units": _GENERATED_UNITS.get(pal_key, "")}
     cmap.set_bad((0, 0, 0, 0))
     cmap.set_under((0, 0, 0, 0))
-    legend = _build_legend(parsed, cmap, vmin, vmax)
+    legend = _build_legend(parsed, cmap, vmin, vmax, legend_vmin=legend_vmin)
 
     result = {
         "cmap": cmap,
         "vmin": vmin,
         "vmax": vmax,
+        "legend_vmin": legend_vmin,
         "units": parsed.get("units", ""),
         "legend": legend,
     }
@@ -350,9 +361,14 @@ def get_radar_colortable(
     return result
 
 
-def get_legend_json(pal_key: str, vmin: float, vmax: float) -> list[dict]:
+def get_legend_json(
+    pal_key: str,
+    vmin: float,
+    vmax: float,
+    legend_vmin: float | None = None,
+) -> list[dict]:
     """Return just the JSON-serializable legend list (no cmap object)."""
-    ct = get_radar_colortable(pal_key, vmin, vmax)
+    ct = get_radar_colortable(pal_key, vmin, vmax, legend_vmin=legend_vmin)
     return [
         {"value": e["value"], "label": e["label"], "color": e["color"]}
         for e in ct["legend"]

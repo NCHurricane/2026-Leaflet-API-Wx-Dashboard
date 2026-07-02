@@ -104,6 +104,8 @@ _HEALTH_THRESHOLDS = {
     "satellite_v2_meso": 12 * 60,  # task fires every 5 min
     "satellite_v2_light_composites": 15 * 60,  # task fires every 5 min
     "satellite_v2_geocolor": 25 * 60,  # task fires every 10 min
+    "radar_live": 3 * 60,             # task fires every 1 min (L2 chunks cadence)
+    "radar_live_l3": 15 * 60,         # L3 gate; expect to fire every ~5 min
     # MRMS sentinels are per-product; we check whichever exists. See below.
 }
 _MRMS_THRESHOLD = 30 * 60  # task fires every 15 min

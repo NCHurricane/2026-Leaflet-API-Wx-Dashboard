@@ -54,7 +54,7 @@
                 context.clearLatestRetry();
                 context.clearLiveLayers();
                 context.setRadarStatus('');
-                context.setGlobalStatus('Radar tab: IEM overlay is off.');
+                context.setGlobalStatus('Select a radar site to load live radar.');
                 context.buildSiteMarkerLegend();
                 return;
             }
@@ -214,7 +214,6 @@
                 context.setRtmaScrubberStatus(`${frames.length} radar frames loaded (${site} ${product}, ${maxHours}h window)${motionLabel}.`);
                 context.setRadarStatus(`${site} ${product} radar animation loaded${motionLabel}.`);
                 context.showAutoUpdateRow(true);
-                context.updateNextUpdateCountdown();
                 await context.renderScrubFrame(frames.length - 1);
                 context.startScrubWarmPoll(site, product);
             } catch (err) {

@@ -68,7 +68,8 @@ LIVE_RADAR_PRODUCTS = {
         # Hide the lightest returns (below the first opaque color in BR.pal).
         "min_value": 5.0,
         "value_scale": 1.0,
-        "cache_variant": "br_min5dbz_v2",
+        "cache_variant": "br_min5dbz_v4",
+        "figure_size_inches": 22,
         "capabilities": {"elevation_selection": True},
     },
     "L2_VEL": {
@@ -83,6 +84,7 @@ LIVE_RADAR_PRODUCTS = {
         "vmax": 64.0,
         "mask": "velocity",
         "value_scale": 2.2369363,
+        "figure_size_inches": 22,
         "capabilities": {"elevation_selection": True},
     },
     "L2_SRV": {
@@ -103,6 +105,7 @@ LIVE_RADAR_PRODUCTS = {
         "storm_motion_speed_kt": 25.0,
         "storm_motion_to_degrees": 45.0,
         "cache_variant": "motion_25kt_to045_v1",
+        "figure_size_inches": 22,
         "capabilities": {"elevation_selection": True},
     },
     "L2_SW": {
@@ -116,6 +119,7 @@ LIVE_RADAR_PRODUCTS = {
         "vmax": 35.0,
         "mask": "nonnegative",
         "value_scale": 1.94384449,
+        "figure_size_inches": 22,
         "capabilities": {"elevation_selection": True},
     },
     "L2_ZDR": {
@@ -132,6 +136,7 @@ LIVE_RADAR_PRODUCTS = {
         "vmax": 8.0,
         "mask": "finite",
         "value_scale": 1.0,
+        "figure_size_inches": 22,
         "capabilities": {"elevation_selection": True},
     },
     "L2_RHO": {
@@ -145,6 +150,7 @@ LIVE_RADAR_PRODUCTS = {
         "vmax": 1.05,
         "mask": "finite",
         "value_scale": 1.0,
+        "figure_size_inches": 22,
         "capabilities": {"elevation_selection": True},
     },
     # L2_KDP removed: NEXRAD Level 2 contains differential_phase (PHIDP) but not
@@ -166,6 +172,7 @@ LIVE_RADAR_PRODUCTS = {
         "vmax": 360.0,
         "mask": "finite",
         "value_scale": 1.0,
+        "figure_size_inches": 22,
         "capabilities": {"elevation_selection": True},
     },
     "L3_N0B": {
@@ -181,7 +188,8 @@ LIVE_RADAR_PRODUCTS = {
         # Hide the lightest returns (below the first opaque color in BR.pal).
         "min_value": 5.0,
         "value_scale": 1.0,
-        "cache_variant": "br_min5dbz_v2",
+        "cache_variant": "br_min5dbz_v4",
+        "figure_size_inches": 22,
         "capabilities": {"elevation_selection": False},
     },
     "L3_N0G": {
@@ -196,6 +204,7 @@ LIVE_RADAR_PRODUCTS = {
         "vmax": 64.0,
         "mask": "velocity",
         "value_scale": 2.2369363,
+        "figure_size_inches": 22,
         "capabilities": {"elevation_selection": False},
     },
     "L3_N0S": {
@@ -336,6 +345,9 @@ LIVE_RADAR_PRODUCTS = {
 # Worker cadence and retention.
 LIVE_RADAR_LOOKBACK_HOURS = 1
 LIVE_RADAR_WORKER_INTERVAL_MIN = 5
+# Use the unidata-nexrad-level2-chunks S3 bucket for L2 products.
+# Enables sub-minute latency by assembling scans incrementally as chunks arrive.
+LIVE_RADAR_L2_USE_CHUNKS = True
 LIVE_RADAR_TILE_WORKER_INTERVAL_MIN = 5
 LIVE_RADAR_KEEP_FRAMES = 45
 

@@ -1,6 +1,9 @@
 import os as _os
 
 import certifi as _certifi
+from dotenv import load_dotenv as _load_dotenv
+
+_load_dotenv()
 
 # Python on macOS ships with no default CA bundle (ssl cafile=None), so plain
 # urllib/pandas HTTPS fetches fail certificate verification. Point OpenSSL at

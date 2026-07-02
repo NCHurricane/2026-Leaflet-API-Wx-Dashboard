@@ -15,10 +15,10 @@ import numpy as np
 from config.satellite_v2_config import (
     SATELLITE_V2_SECTOR_BOUNDS,
     SATELLITE_V2_TILE_SIZE,
-    is_glm_product,
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
+    source_channels_for_product,
 )
 from satellite_v2.cache import (
     clear_negative_tile_marker,
@@ -28,9 +28,8 @@ from satellite_v2.cache import (
     tile_path,
     write_negative_tile_marker,
 )
-from satellite_v2.provider_aws import download_product_source_frames
+from satellite_v2.providers import download_product_source_frames
 from satellite_v2.renderer import SatelliteTileRenderer
-from satellite_v2.glm import render_glm_density_tile
 
 
 _WARM_TILE_RENDERER: SatelliteTileRenderer | None = None
@@ -492,7 +491,7 @@ def render_frame_tile(
     target_was_invalid = target.exists() and not is_valid_tile_file(target)
     if target.exists() and is_valid_tile_file(target) and not overwrite:
         return target, {"cache_status": "hit", "rendered": 0, "skipped": 1, "errors": 0}
-    if is_negative_tile_cached(target) and not overwrite and not is_glm_product(channel):
+    if is_negative_tile_cached(target) and not overwrite:
         return target, {
             "cache_status": "invalid",
             "rendered": 0,
@@ -504,20 +503,6 @@ def render_frame_tile(
     source_files = download_product_source_frames(
         cache_root, sat_key, sector_key, channel, frame
     )
-    if is_glm_product(channel):
-        return render_glm_density_tile(
-            cache_root=cache_root,
-            sat_id=sat_key,
-            sector=sector_key,
-            product_key=channel,
-            frame_key=frame_key,
-            source_files=source_files.values(),
-            z=int(z),
-            x=int(x),
-            y=int(y),
-            overwrite=overwrite,
-        )
-
     source_files_for_renderer: dict[str, str | Path] = dict(source_files)
     renderer = SatelliteTileRenderer.from_sources(channel, source_files_for_renderer)
     try:
@@ -534,3 +519,4 @@ def render_frame_tile(
     except Exception:
         raise
     return target, {"cache_status": "miss", "rendered": 1, "skipped": 0, "errors": 0}
+

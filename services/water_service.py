@@ -346,18 +346,23 @@ def get_water_stations_data(bbox: str, max_sites: int = 300, networks: str | Non
         key=lambda item: str(item.get("name") or item.get("site_id") or ""),
     )
     if len(selected_networks) > 1:
-        coastal_stations = [station for station in stations if station.get("network") == "coastal"]
-        buoy_stations = [station for station in stations if station.get("network") == "buoy"]
-        river_stations = [station for station in stations if (station.get("network") or "river") == "river"]
+        # Give each selected network an equal share so no network starves another.
+        # Any unused slots from smaller networks roll over to the others in order.
+        per_network = max(1, limit // len(selected_networks))
+        network_buckets: dict[str, list] = {
+            "coastal": [s for s in stations if s.get("network") == "coastal"],
+            "buoy":    [s for s in stations if s.get("network") == "buoy"],
+            "river":   [s for s in stations if (s.get("network") or "river") == "river"],
+        }
         limited_stations = []
-        if "coastal" in selected_networks:
-            limited_stations.extend(coastal_stations[:limit])
-        remaining = max(0, limit - len(limited_stations))
-        if remaining and "buoy" in selected_networks:
-            limited_stations.extend(buoy_stations[:remaining])
-        remaining = max(0, limit - len(limited_stations))
-        if remaining and "river" in selected_networks:
-            limited_stations.extend(river_stations[:remaining])
+        leftover = 0
+        for net in ("coastal", "buoy", "river"):
+            if net not in selected_networks:
+                continue
+            alloc = per_network + leftover
+            taken = network_buckets[net][:alloc]
+            limited_stations.extend(taken)
+            leftover = max(0, alloc - len(taken))
     else:
         limited_stations = stations[:limit]
     updated = payload.get("updated") or ""

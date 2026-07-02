@@ -1,0 +1,89 @@
+"""Platform descriptors for all supported satellite instruments.
+
+Phase 1: config + frontend abstraction only.
+Phase 2 will add provider and renderer implementations per platform.
+"""
+
+from __future__ import annotations
+
+# Provider type constants
+PROVIDER_AWS_GOES = "aws_goes"
+PROVIDER_AWS_HIMAWARI = "aws_himawari"
+PROVIDER_EUMETSAT = "eumetsat"
+
+# Platforms with a live data pipeline (Phase 2+)
+GOES_PLATFORMS: frozenset[str] = frozenset({"goes18", "goes19"})
+
+SATELLITE_PLATFORMS: dict[str, dict] = {
+    "goes19": {
+        "label": "GOES-19",
+        "short_label": "G19",
+        "instrument": "ABI",
+        "provider": PROVIDER_AWS_GOES,
+        "sectors": ["FULLDISK", "CONUS", "MESO1", "MESO2"],
+        "default_sector": "CONUS",
+        "lon_0": -75.0,
+        "implemented": True,
+    },
+    "goes18": {
+        "label": "GOES-18",
+        "short_label": "G18",
+        "instrument": "ABI",
+        "provider": PROVIDER_AWS_GOES,
+        "sectors": ["FULLDISK", "CONUS", "MESO1", "MESO2"],
+        "default_sector": "CONUS",
+        "lon_0": -137.0,
+        "implemented": True,
+    },
+    "himawari9": {
+        "label": "Himawari-9",
+        "short_label": "H9",
+        "instrument": "AHI",
+        "provider": PROVIDER_AWS_HIMAWARI,
+        "sectors": ["FULLDISK"],
+        "default_sector": "FULLDISK",
+        "lon_0": 140.7,
+        "implemented": True,
+    },
+    "meteosat12": {
+        "label": "Meteosat-12",
+        "short_label": "M12",
+        "instrument": "FCI",
+        "provider": PROVIDER_EUMETSAT,
+        "sectors": ["FULLDISK"],
+        "default_sector": "FULLDISK",
+        "lon_0": 0.0,
+        "implemented": True,
+    },
+    "meteosat9": {
+        "label": "Meteosat-9",
+        "short_label": "M9",
+        "instrument": "SEVIRI",
+        "provider": PROVIDER_EUMETSAT,
+        "sectors": ["FULLDISK"],
+        "default_sector": "FULLDISK",
+        "lon_0": 45.5,
+        "implemented": True,
+    },
+}
+
+ALL_SATELLITE_IDS: frozenset[str] = frozenset(SATELLITE_PLATFORMS)
+
+
+def platform_descriptor(sat_id: str) -> dict:
+    desc = SATELLITE_PLATFORMS.get(str(sat_id or "").strip().lower())
+    if desc is None:
+        raise ValueError(f"Unknown satellite platform: '{sat_id}'")
+    return desc
+
+
+def platform_sectors(sat_id: str) -> list[str]:
+    return list(platform_descriptor(sat_id)["sectors"])
+
+
+def platform_default_sector(sat_id: str) -> str:
+    return str(platform_descriptor(sat_id)["default_sector"])
+
+
+def platform_is_implemented(sat_id: str) -> bool:
+    return bool(platform_descriptor(sat_id).get("implemented", False))

@@ -493,10 +493,12 @@ def get_radar_colortable_data(product: str = "BR") -> dict:
                 f"Valid palettes: {list(_RADAR_COLORTABLE_PRODUCTS)}"
             ),
         )
+    raw_min_value = product_metadata.get("min_value") if product_metadata else None
+    legend_vmin = float(raw_min_value) if raw_min_value is not None else None
     try:
         from config.radar_colortable_utils import get_legend_json
 
-        entries = get_legend_json(palette, vmin, vmax)
+        entries = get_legend_json(palette, vmin, vmax, legend_vmin=legend_vmin)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {
@@ -504,6 +506,7 @@ def get_radar_colortable_data(product: str = "BR") -> dict:
         "palette": palette,
         "vmin": vmin,
         "vmax": vmax,
+        "legend_vmin": legend_vmin,
         "entries": entries,
     }
 
@@ -803,6 +806,7 @@ def get_radar_live_frames_data(
     product: str = "L3_N0B",
     elevation: str = "auto",
     hours: int = 2,
+    refresh: bool = False,
     storm_motion_speed_kt: str | float | None = None,
     storm_motion_to_degrees: str | float | None = None,
     storm_motion_source: str | None = None,
@@ -905,6 +909,11 @@ def get_radar_live_frames_data(
                 refreshing = _radar_live_render_in_background(
                     site_id, product_key, elevation_key, motion
                 )
+
+    if refresh and not refreshing and filtered:
+        refreshing = _radar_live_render_in_background(
+            site_id, product_key, elevation_key, motion
+        )
 
     return {
         "status": "success",

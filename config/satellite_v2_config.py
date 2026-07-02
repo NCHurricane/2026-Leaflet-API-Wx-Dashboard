@@ -380,16 +380,6 @@ ABI_CHANNELS = {
         "name": "Sulfur Dioxide",
         "req": ["Channel07", "Channel09", "Channel10", "Channel11", "Channel13"],
     },
-    "GLMFlashExtentDensity1Min": {
-        "name": "GLM Flash Extent Density (1 min)",
-        "req": ["GLM_LCFA"],
-        "glm_minutes": 1,
-    },
-    "GLMFlashExtentDensity5Min": {
-        "name": "GLM Flash Extent Density (5 min)",
-        "req": ["GLM_LCFA"],
-        "glm_minutes": 5,
-    },
     "SplitWindowDifference": {
         "name": "Split Window Difference",
         "req": ["Channel13", "Channel15"],
@@ -465,8 +455,6 @@ SATELLITE_V2_DASHBOARD_PRODUCTS = (
     "Ash",
     "SulfurDioxide",
     "RocketPlume",
-    "GLMFlashExtentDensity1Min",
-    "GLMFlashExtentDensity5Min",
 )
 
 SATELLITE_V2_INTERPRETIVE_LEGENDS = {
@@ -595,8 +583,6 @@ def channel_number_from_key(channel_key: str) -> int:
 
 
 def _product_kind(product_key: str, source_channels: tuple[str, ...]) -> str:
-    if product_key.startswith("GLM"):
-        return "glm_density"
     if product_key in RGB_COMPOSITE_KEYS:
         return "composite"
     channel_number = channel_number_from_key(source_channels[0])
@@ -606,8 +592,6 @@ def _product_kind(product_key: str, source_channels: tuple[str, ...]) -> str:
 
 
 def _product_units(kind: str) -> str:
-    if kind == "glm_density":
-        return "flashes"
     if kind == "composite":
         return "RGB"
     if kind == "reflectance":
@@ -634,7 +618,104 @@ def _build_product_registry() -> dict[str, SatelliteV2Product]:
 
 SATELLITE_V2_PRODUCTS: dict[str, SatelliteV2Product] = _build_product_registry()
 
-SATELLITE_V2_SUPPORTED_SATELLITES = {"goes18", "goes19"}
+SATELLITE_V2_SUPPORTED_SATELLITES = {
+    "goes18",
+    "goes19",
+    "himawari9",
+    "meteosat12",
+    "meteosat9",
+}
+
+# AHI band equivalent for each ABI source channel (Himawari-9). Product keys
+# stay ABI-named everywhere; the mapping applies only when a provider builds
+# AHI filenames. AHI B03 (0.64 µm, 0.5 km) is the red-visible analog of ABI
+# Channel02; AHI B04 (0.86 µm) matches ABI Channel03 (veggie).
+AHI_BAND_FOR_ABI_CHANNEL = {
+    "Channel01": 1,
+    "Channel02": 3,
+    "Channel03": 4,
+    "Channel05": 5,
+    "Channel06": 6,
+    "Channel07": 7,
+    "Channel08": 8,
+    "Channel09": 9,
+    "Channel10": 10,
+    "Channel11": 11,
+    "Channel13": 13,
+    "Channel14": 14,
+    "Channel15": 15,
+}
+
+
+def ahi_band_for_source_channel(source_channel: str) -> int:
+    channel = normalize_source_channel(source_channel)
+    band = AHI_BAND_FOR_ABI_CHANNEL.get(channel)
+    if band is None:
+        raise ValueError(f"No Himawari AHI band mapping for '{source_channel}'.")
+    return band
+
+
+# SEVIRI channel name for each ABI source channel (Meteosat SEVIRI).
+# SEVIRI has no blue (C01) or 2.2 µm (C06) band, so products requiring them
+# are unavailable on Meteosat platforms. C09/C10 both map to WV_073 and
+# C13/C14 both map to IR_108 — with those, the goes2go Dust/Ash recipes
+# reduce exactly to the canonical EUMETSAT split-window RGBs.
+SEVIRI_CHANNEL_FOR_ABI_CHANNEL = {
+    "Channel02": "VIS006",
+    "Channel03": "VIS008",
+    "Channel05": "IR_016",
+    "Channel07": "IR_039",
+    "Channel08": "WV_062",
+    "Channel09": "WV_073",
+    "Channel10": "WV_073",
+    "Channel11": "IR_087",
+    "Channel13": "IR_108",
+    "Channel14": "IR_108",
+    "Channel15": "IR_120",
+}
+
+
+def seviri_channel_for_source_channel(source_channel: str) -> str:
+    channel = normalize_source_channel(source_channel)
+    seviri_name = SEVIRI_CHANNEL_FOR_ABI_CHANNEL.get(channel)
+    if seviri_name is None:
+        raise ValueError(f"No SEVIRI channel mapping for '{source_channel}'.")
+    return seviri_name
+
+
+def seviri_supported_products() -> tuple[str, ...]:
+    """Dashboard products whose source channels all exist on SEVIRI."""
+    supported = []
+    for product_key in SATELLITE_V2_DASHBOARD_PRODUCTS:
+        sources = SATELLITE_V2_PRODUCTS[product_key].source_channels
+        if all(ch in SEVIRI_CHANNEL_FOR_ABI_CHANNEL for ch in sources):
+            supported.append(product_key)
+    return tuple(supported)
+
+
+# Initial FCI support is intentionally narrow until the remaining channel and
+# composite mappings are validated against live MTG NetCDF chunks.
+FCI_CHANNEL_FOR_ABI_CHANNEL = {
+    "Channel13": "ir_105",
+}
+
+
+def fci_channel_for_source_channel(source_channel: str) -> str:
+    channel = normalize_source_channel(source_channel)
+    fci_name = FCI_CHANNEL_FOR_ABI_CHANNEL.get(channel)
+    if fci_name is None:
+        raise ValueError(f"No FCI channel mapping for '{source_channel}'.")
+    return fci_name
+
+
+def fci_supported_products() -> tuple[str, ...]:
+    supported = []
+    for product_key in SATELLITE_V2_DASHBOARD_PRODUCTS:
+        sources = SATELLITE_V2_PRODUCTS[product_key].source_channels
+        if all(ch in FCI_CHANNEL_FOR_ABI_CHANNEL for ch in sources):
+            supported.append(product_key)
+    return tuple(supported)
+
 SATELLITE_V2_SUPPORTED_SECTORS = {"CONUS", "FULLDISK", "MESO1", "MESO2"}
 
 SATELLITE_V2_DEFAULT_SAT_ID = "goes19"
@@ -646,12 +727,19 @@ SATELLITE_V2_DEFAULT_MAX_FRAMES = 360
 SATELLITE_V2_PROVIDER = "aws"
 SATELLITE_V2_CACHE_NAMESPACE = "satellite"
 SATELLITE_V2_RENDER_VERSION = "products"
+SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi1"
 SATELLITE_V2_TILE_SIZE = 256
 SATELLITE_V2_CATALOG_MAX_AGE_SECONDS = 20 * 60
 
 SATELLITE_V2_CONUS_ZOOMS = tuple(range(2, 9))
 SATELLITE_V2_FULLDISK_ZOOMS = tuple(range(1, 7))
 SATELLITE_V2_MESO_ZOOMS = tuple(range(4, 9))
+
+
+def satellite_v2_render_version_for_satellite(sat_id: str | None) -> str:
+    if str(sat_id or "").strip().lower() == "himawari9":
+        return SATELLITE_V2_RENDER_VERSION_HIMAWARI
+    return SATELLITE_V2_RENDER_VERSION
 
 SATELLITE_V2_WORKER_SATELLITES = ("goes19", "goes18")
 SATELLITE_V2_WORKER_PRODUCTS = ("Channel13", "Channel02", "Channel08RAMSDIS")
@@ -855,8 +943,14 @@ def normalize_channel(channel_key: str | None) -> str:
 
 def normalize_source_channel(channel_key: str | None) -> str:
     value = str(channel_key or "").strip()
-    if value.upper().startswith("GLM_"):
-        return value.upper()
+    if value.upper() == "SEVIRI":
+        # Shared pseudo-channel: one SEVIRI .nat bundles all channels, so
+        # the source cache stores it once under this directory.
+        return "SEVIRI"
+    if value.upper() == "FCI":
+        # Shared pseudo-channel: one FCI frame is a set of NetCDF body chunks
+        # containing all channels.
+        return "FCI"
     if value.lower().startswith("channel"):
         digits = "".join(ch for ch in value if ch.isdigit())
         if digits:
@@ -941,12 +1035,3 @@ def source_channels_for_product(channel_key: str) -> tuple[str, ...]:
 
 def source_channel_token(source_channel: str) -> str:
     return f"C{channel_number_from_key(source_channel):02d}"
-
-
-def is_glm_product(channel_key: str | None) -> bool:
-    return SATELLITE_V2_PRODUCTS[normalize_channel(channel_key)].kind == "glm_density"
-
-
-def glm_aggregation_minutes(channel_key: str | None) -> int:
-    product_key = normalize_channel(channel_key)
-    return max(1, int(ABI_CHANNELS[product_key].get("glm_minutes") or 1))

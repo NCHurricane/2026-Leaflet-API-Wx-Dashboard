@@ -43,6 +43,7 @@ from cache.overlay_cache_utils import (
 )
 from config.radar_config import (
     LIVE_RADAR_KEEP_FRAMES,
+    LIVE_RADAR_L2_USE_CHUNKS,
     LIVE_RADAR_LOOKBACK_HOURS,
     LIVE_RADAR_PRODUCTS,
     LIVE_RADAR_SITES,
@@ -54,8 +55,10 @@ _CACHE_ROOT = Path(__file__).resolve().parent.parent / "cache"
 _RADAR_ROOT = _CACHE_ROOT / "radar" / "live"
 _TMP_RENDER_ROOT = _CACHE_ROOT / "tmp" / "radar_live"
 
-# Skip if a successful run happened within 75% of configured interval.
-_FRESH_WINDOW_SEC = max(60, int(LIVE_RADAR_WORKER_INTERVAL_MIN * 60 * 0.75))
+# L3 products: skip if a successful run happened within 75% of configured interval.
+# L2 chunks: no global gate — the task runs every minute and each run is cheap
+# (only new chunks are downloaded; complete scans are skipped entirely).
+_L3_FRESH_WINDOW_SEC = max(60, int(LIVE_RADAR_WORKER_INTERVAL_MIN * 60 * 0.75))
 
 # Radar map bounds use 250 nm range rings with 20% padding.
 # Covers full Level 3 Super-Res extent (460 km).
@@ -65,10 +68,16 @@ _KM_PER_DEG_LAT = 111.32
 _PADDING_FACTOR = 1.20
 
 
-def _resolve_radar_data_utils():
-    from radar import radar_nodd_utils as radar_data_utils
+def _resolve_radar_data_utils(product_key: str = ""):
+    if LIVE_RADAR_L2_USE_CHUNKS and str(product_key).upper().startswith("L2_"):
+        from radar import radar_chunks_utils
+        return radar_chunks_utils
+    from radar import radar_nodd_utils
+    return radar_nodd_utils
 
-    return radar_data_utils
+
+def _is_chunks_utils(radar_data_utils) -> bool:
+    return "chunks" in getattr(radar_data_utils, "__name__", "")
 
 
 def _site_coords(site: str) -> tuple[float, float] | None:
@@ -405,7 +414,7 @@ def _select_sweep(
     fixed_angles = _fixed_angles(radar)
     available = sorted(set(fixed_angles))
     if str(requested_elevation or "auto").lower() == "auto" or not fixed_angles:
-        sweep = _best_sweep(radar, field_name)
+        sweep = fixed_angles.index(min(fixed_angles)) if fixed_angles else 0
     else:
         target = float(requested_elevation)
         sweep = min(
@@ -498,6 +507,21 @@ def _bearing_distance_from_site(
 
 def _circular_angle_delta(values, target):
     return np.abs(((np.asarray(values, dtype=float) - float(target) + 180.0) % 360.0) - 180.0)
+
+
+def _file_key(f: Path, use_mtime: bool) -> str:
+    """Return a cache key for a source radar file.
+
+    When use_mtime=True (chunk-assembled files), the mtime is included so
+    a partial scan that is later re-assembled with more chunks gets a new key
+    and is re-rendered, while a fully assembled stable file keeps the same key.
+    """
+    if use_mtime:
+        try:
+            return f"{f.name}:{int(f.stat().st_mtime)}"
+        except OSError:
+            return f.name
+    return f.name
 
 
 def _radar_source_download_dir(site: str, level: str, source_product_code: str) -> Path:
@@ -806,7 +830,7 @@ def _render_overlay_png(
 
         t_start = time.time() if profile else None
 
-        base_size = float(LIVE_RADAR_FIGURE_SIZE_INCHES or 20)
+        base_size = float((product_cfg or {}).get("figure_size_inches") or LIVE_RADAR_FIGURE_SIZE_INCHES or 20)
         dpi = int(LIVE_RADAR_RENDER_DPI or 200)
         # Render in Web Mercator (EPSG:3857) so Leaflet (which also uses
         # Web Mercator) can composite the overlay without reprojection
@@ -1001,6 +1025,7 @@ def _render_site_product(
     newest_first: bool = False,
     max_render_frames: int | None = None,
     elevation: str = "auto",
+    use_mtime_key: bool = False,
 ) -> int:
     """Render and cache frames for one site/product. Returns number of frames cached."""
     level = str(product_cfg.get("level") or "Level 3")
@@ -1073,8 +1098,12 @@ def _render_site_product(
     read_failures = 0
     _TMP_RENDER_ROOT.mkdir(parents=True, exist_ok=True)
 
-    # Filter out already-processed files
-    unprocessed_files = [f for f in selected_files if f.name not in processed_keys]
+    # Filter out already-processed files. Chunk-assembled files use mtime in the
+    # key so a partial scan that is re-assembled (new mtime) gets re-rendered.
+    unprocessed_files = [
+        f for f in selected_files
+        if _file_key(f, use_mtime_key) not in processed_keys
+    ]
     if not unprocessed_files:
         return 0
 
@@ -1090,13 +1119,17 @@ def _render_site_product(
             f"rendering {len(unprocessed_files)} frames in parallel ({num_workers} workers)"
         )
 
-        # Prepare work items for parallel processing
+        # Prepare work items for parallel processing.
+        # file_key_map lets us use the correct processed_keys entry (which may
+        # include mtime for chunk-assembled files) after the pool returns.
         work_items = []
+        file_key_map: dict[str, str] = {}  # src_file.name → processed_keys entry
         for src_file in unprocessed_files:
             frame_dt = _frame_dt_from_radar_file_lazy(src_file)
             if not frame_dt:
                 read_failures += 1
                 continue
+            file_key_map[src_file.name] = _file_key(src_file, use_mtime_key)
             frame_key = frame_key_from_datetime(frame_dt)
             temp_render_path = str(
                 _TMP_RENDER_ROOT / f"{site}_{cache_product_key}_{frame_key}.png"
@@ -1150,7 +1183,7 @@ def _render_site_product(
                 dest_image.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(temp_render_path, str(dest_image))
 
-                processed_keys.add(source_key)
+                processed_keys.add(file_key_map.get(source_key, source_key))
                 radar_update_index(
                     str(_CACHE_ROOT),
                     site,
@@ -1176,7 +1209,7 @@ def _render_site_product(
         # Sequential rendering (original behavior)
         profile_first_frame = True
         for src_file in unprocessed_files:
-            source_key = src_file.name
+            source_key = _file_key(src_file, use_mtime_key)
             t_frame_start = time.time()
 
             try:
@@ -1278,13 +1311,16 @@ def _render_site_product(
 
 
 def run_radar_live_worker(force: bool = False) -> None:
-    """Render configured site/product live radar overlays into cache."""
-    if not force and is_cache_fresh("radar_live", _FRESH_WINDOW_SEC):
-        print("[radar_live_worker] Cache fresh - skipping run")
-        return
+    """Render configured site/product live radar overlays into cache.
 
-    radar_data_utils = _resolve_radar_data_utils()
-    source_label = "NODD-AWS"
+    L2 products (chunks): run every invocation — the task fires every minute
+    and each run is cheap (only new chunks downloaded, complete scans skipped).
+
+    L3 products (NODD): gated by radar_live_l3 freshness so they only
+    re-download/re-render on the original 5-minute cadence even though the
+    task fires more often.
+    """
+    run_l3 = force or not is_cache_fresh("radar_live_l3", _L3_FRESH_WINDOW_SEC)
 
     total_cached = 0
     total_failed = 0
@@ -1293,6 +1329,16 @@ def run_radar_live_worker(force: bool = False) -> None:
         if not site_id:
             continue
         for product_key, product_cfg in LIVE_RADAR_PRODUCTS.items():
+            level = str(product_cfg.get("level") or "Level 3")
+            is_l2 = "2" in str(level)
+
+            if not is_l2 and not run_l3:
+                continue
+
+            radar_data_utils = _resolve_radar_data_utils(str(product_key))
+            use_mtime = _is_chunks_utils(radar_data_utils)
+            source_label = "NODD-Chunks" if use_mtime else "NODD-AWS"
+
             try:
                 cached = _render_site_product(
                     radar_data_utils,
@@ -1300,12 +1346,14 @@ def run_radar_live_worker(force: bool = False) -> None:
                     site_id,
                     str(product_key),
                     product_cfg,
+                    use_mtime_key=use_mtime,
                 )
                 total_cached += int(cached)
             except Exception as exc:
                 total_failed += 1
                 print(
-                    f"[radar_live_worker] {site_id}/{product_key} failed: {type(exc).__name__}: {exc}"
+                    f"[radar_live_worker] {site_id}/{product_key} failed: "
+                    f"{type(exc).__name__}: {exc}"
                 )
 
     print(f"[radar_live_worker] completed - cached frames: {total_cached}")
@@ -1314,6 +1362,8 @@ def run_radar_live_worker(force: bool = False) -> None:
         print("[radar_live_worker] All renders failed - cache not marked fresh")
     else:
         mark_run_complete("radar_live")
+        if run_l3:
+            mark_run_complete("radar_live_l3")
 
 
 def run_radar_live_site_product(
@@ -1345,13 +1395,18 @@ def run_radar_live_site_product(
         normalized_product, product_cfg, storm_motion
     )
 
-    if not force and is_cache_fresh("radar_live", _FRESH_WINDOW_SEC):
+    level = str(product_cfg.get("level") or "Level 3")
+    is_l2 = "2" in str(level)
+
+    # L3 respects freshness gate; L2 chunks always run (cheap per-call cost)
+    if not force and not is_l2 and is_cache_fresh("radar_live_l3", _L3_FRESH_WINDOW_SEC):
         return 0
 
-    radar_data_utils = _resolve_radar_data_utils()
+    radar_data_utils = _resolve_radar_data_utils(normalized_product)
+    use_mtime = _is_chunks_utils(radar_data_utils)
     cached = _render_site_product(
         radar_data_utils,
-        "NODD-AWS",
+        "NODD-Chunks" if use_mtime else "NODD-AWS",
         site_id,
         normalized_product,
         product_cfg,
@@ -1359,6 +1414,7 @@ def run_radar_live_site_product(
         newest_first=newest_first,
         max_render_frames=max_render_frames,
         elevation=elevation,
+        use_mtime_key=use_mtime,
     )
     if cached > 0:
         mark_run_complete("radar_live")

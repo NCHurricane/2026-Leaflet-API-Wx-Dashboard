@@ -17,7 +17,7 @@
     }
 
     function activeElevation() {
-        return String(byId('weather-radar-elevation')?.value || 'auto').trim().toLowerCase();
+        return String(byId('weather-radar-elevation')?.value || '').trim().toLowerCase();
     }
 
     function syncElevationControl() {
@@ -27,7 +27,7 @@
         if (wrap) wrap.style.display = enabled ? '' : 'none';
         if (!enabled) {
             const select = byId('weather-radar-elevation');
-            if (select) select.value = 'auto';
+            if (select) select.value = '';
         }
         syncElevationPills();
     }
@@ -70,11 +70,14 @@
     function updateElevationOptions(data) {
         const select = byId('weather-radar-elevation');
         if (!select) return;
-        const requested = String(data?.requested_elevation || activeElevation() || 'auto');
         const elevations = Array.isArray(data?.available_elevations)
             ? data.available_elevations
             : [];
-        select.innerHTML = '<option value="auto">Auto</option>';
+        const currentValue = activeElevation();
+        const selectedFromResponse = data?.selected_elevation != null
+            ? Number(data.selected_elevation).toFixed(1)
+            : null;
+        select.innerHTML = '';
         elevations.forEach((elevation) => {
             const value = Number(elevation).toFixed(1);
             const option = document.createElement('option');
@@ -82,9 +85,12 @@
             option.textContent = `${value}°`;
             select.appendChild(option);
         });
-        select.value = Array.from(select.options).some((option) => option.value === requested)
-            ? requested
-            : 'auto';
+        const availableValues = new Set(Array.from(select.options, (o) => o.value));
+        select.value = availableValues.has(currentValue)
+            ? currentValue
+            : availableValues.has(selectedFromResponse)
+                ? selectedFromResponse
+                : select.options[0]?.value || '';
         renderElevationPills();
         syncElevationControl();
     }
@@ -245,7 +251,7 @@
         byId('weather-radar-product')?.addEventListener('change', () => {
             pageContext?.clearSelectedStormCell?.();
             const elevation = byId('weather-radar-elevation');
-            if (elevation) elevation.value = 'auto';
+            if (elevation) elevation.value = '';
             renderElevationPills();
             syncElevationControl();
             pageContext?.loadUnified?.();

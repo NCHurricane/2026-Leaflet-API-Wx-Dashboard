@@ -11,12 +11,12 @@ from config.satellite_v2_config import (
     SATELLITE_V2_DEFAULT_HOURS,
     SATELLITE_V2_DEFAULT_MAX_FRAMES,
     SATELLITE_V2_PROVIDER,
-    SATELLITE_V2_RENDER_VERSION,
     SATELLITE_V2_TILE_SIZE,
     max_native_zoom_for_product,
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
+    satellite_v2_render_version_for_satellite,
     zooms_for_sector,
 )
 from satellite_v2.cache import (
@@ -28,7 +28,7 @@ from satellite_v2.cache import (
     sample_frame_tiles,
 )
 from satellite_v2.models import CatalogFrame, utc_now_iso
-from satellite_v2.provider_aws import list_recent_frames
+from satellite_v2.providers import list_recent_frames
 
 
 def _request_values(hours: int, max_frames: int) -> tuple[int, int]:
@@ -92,7 +92,9 @@ def _catalog_for_request(
     payload["frame_count"] = len(requested_frames)
     payload["hours"] = hours
     payload["max_frames"] = max_frames
-    payload["render_version"] = SATELLITE_V2_RENDER_VERSION
+    payload["render_version"] = satellite_v2_render_version_for_satellite(
+        str(payload.get("sat_id") or "")
+    )
     payload["catalog_request_hours"] = hours
     payload["catalog_request_max_frames"] = max_frames
     if max_native_zoom is not None:
@@ -114,7 +116,7 @@ def _catalog_template(
         "status": "success",
         "data_mode": "current",
         "provider": SATELLITE_V2_PROVIDER,
-        "render_version": SATELLITE_V2_RENDER_VERSION,
+        "render_version": satellite_v2_render_version_for_satellite(sat_id),
         "sat_id": sat_id,
         "sector": sector,
         "channel": channel_key,
@@ -140,6 +142,7 @@ def build_catalog(
     channel_key: str,
     hours: int = SATELLITE_V2_DEFAULT_HOURS,
     max_frames: int = SATELLITE_V2_DEFAULT_MAX_FRAMES,
+    list_frames_fn=None,
 ) -> dict[str, Any]:
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
@@ -152,7 +155,8 @@ def build_catalog(
         sat_key, sector_key, channel, hours_value, max_frames_value
     )
     payload["max_native_zoom"] = max_native_zoom
-    source_frames = list_recent_frames(
+    _list_fn = list_frames_fn or list_recent_frames
+    source_frames = _list_fn(
         sat_id=sat_key,
         sector=sector_key,
         channel_key=channel,
@@ -209,6 +213,7 @@ def get_catalog(
     hours: int = SATELLITE_V2_DEFAULT_HOURS,
     max_frames: int = SATELLITE_V2_DEFAULT_MAX_FRAMES,
     refresh: bool = False,
+    list_frames_fn=None,
 ) -> dict[str, Any]:
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
@@ -221,8 +226,9 @@ def get_catalog(
     # Cache-first behavior for interactive UI loads:
     # if a catalog exists on disk and caller did not request refresh,
     # return it immediately instead of rebuilding from provider.
+    render_version = satellite_v2_render_version_for_satellite(sat_key)
     cached_render_version = str(cached.get("render_version") or "") if cached else ""
-    if cached and not refresh and cached_render_version == SATELLITE_V2_RENDER_VERSION:
+    if cached and not refresh and cached_render_version == render_version:
         if _cached_catalog_covers_request(cached, hours_value, max_frames_value):
             payload = _catalog_for_request(cached, hours_value, max_frames_value)
             age_seconds = int(age) if age is not None else 0
@@ -238,7 +244,8 @@ def get_catalog(
 
     try:
         fresh = build_catalog(
-            cache_root, sat_key, sector_key, channel, hours_value, max_frames_value
+            cache_root, sat_key, sector_key, channel, hours_value, max_frames_value,
+            list_frames_fn=list_frames_fn,
         )
         fresh["catalog_age_seconds"] = 0
         fresh["catalog_source"] = "provider"

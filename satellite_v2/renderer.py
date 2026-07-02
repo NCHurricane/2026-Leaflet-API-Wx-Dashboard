@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 import os
 import threading
-import warnings
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,8 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from PIL import Image
-from pyproj import CRS, Transformer
-from scipy.interpolate import RegularGridInterpolator
+from pyproj import Transformer
 
 from rasterio.crs import CRS as RioCRS
 from rasterio.transform import from_bounds as rio_from_bounds
@@ -28,6 +26,7 @@ from config.satellite_v2_config import (
     normalize_channel,
     source_channels_for_product,
 )
+from satellite_v2.ahi_hsd import load_ahi_raster
 from satellite_v2.composites import (
     reflectance,
     render_composite_rgb,
@@ -64,21 +63,6 @@ _RENDERER_KEY_LOCKS: dict[tuple[object, ...], threading.Lock] = {}
 
 
 @dataclass
-class SourceGrid:
-    interpolator: RegularGridInterpolator
-    transformer: Transformer
-
-    def sample(self, lon_grid: np.ndarray, lat_grid: np.ndarray) -> np.ndarray:
-        with np.errstate(invalid="ignore"):
-            src_x, src_y = self.transformer.transform(lon_grid, lat_grid)
-        points = np.column_stack([src_y.ravel(), src_x.ravel()])
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=RuntimeWarning)
-            values = self.interpolator(points)
-        return values.reshape(lon_grid.shape).astype(np.float32)
-
-
-@dataclass
 class SourceRaster:
     """GOES NetCDF source data for rasterio reprojection."""
 
@@ -92,19 +76,6 @@ class SatelliteTileRenderer:
     product_key: str
     source_rasters: dict[str, SourceRaster]
     source_files: dict[str, Path] = field(default_factory=dict)
-    _source_grids: dict[str, SourceGrid] | None = None
-
-    @property
-    def source_grids(self) -> dict[str, SourceGrid]:
-        # Interpolator grids are only needed by render_tile (single-tile,
-        # on-demand path); canvas warming uses source_rasters exclusively, so
-        # build these lazily instead of paying for them on every load.
-        if self._source_grids is None:
-            self._source_grids = {
-                channel: _load_source_grid(path)
-                for channel, path in self.source_files.items()
-            }
-        return self._source_grids
 
     @classmethod
     def from_source(
@@ -136,31 +107,11 @@ class SatelliteTileRenderer:
         y: int,
         tile_size: int = SATELLITE_V2_TILE_SIZE,
     ) -> Image.Image:
-        lon_grid, lat_grid = _tile_lon_lat_grid(int(z), int(x), int(y), tile_size)
-        samples = {
-            channel: grid.sample(lon_grid, lat_grid)
-            for channel, grid in self.source_grids.items()
-        }
-        valid = _valid_mask(samples)
-        if self.product_key in RGB_COMPOSITE_KEYS:
-            rgb = render_composite_rgb(
-                self.product_key,
-                samples,
-                lon_grid=lon_grid,
-                lat_grid=lat_grid,
-            )
-            return _rgb_to_image(rgb, valid)
-
-        product = ABI_CHANNELS[self.product_key]
-        source_channel = source_channels_for_product(self.product_key)[0]
-        values = samples[source_channel]
-        if source_channel in {"Channel01", "Channel02", "Channel03"}:
-            values = visible_reflectance(values)
-        elif _is_reflectance_channel(source_channel):
-            values = reflectance(values)
-        cmap = product.get("cmap") or plt.get_cmap("Greys_r")
-        norm = product.get("norm")
-        return _colorize_scalar(values, valid, cmap, norm)
+        # Single-tile render is just a 1x1 zoom canvas, so it reuses the same
+        # GDAL-backed (rasterio) reprojection path as canvas warming.
+        return self.render_zoom_canvas(
+            int(z), int(x), int(y), int(x), int(y), tile_size=tile_size
+        )
 
     def render_zoom_canvas(
         self,
@@ -226,14 +177,10 @@ class SatelliteTileRenderer:
         valid = _valid_mask(samples)
         if self.product_key in RGB_COMPOSITE_KEYS:
             # RGB composites need lon/lat for some products — derive them cheaply
-            # from the canvas grid (same math as before, but only computed here if needed)
-            pixels_x = np.arange(canvas_w, dtype=np.float64) + 0.5
-            pixels_y = np.arange(canvas_h, dtype=np.float64) + 0.5
-            tile_x = (x_min * tile_size + pixels_x) / (scale * tile_size)
-            tile_y = (y_min * tile_size + pixels_y) / (scale * tile_size)
-            lon_arr = tile_x * 360.0 - 180.0
-            lat_arr = np.degrees(np.arctan(np.sinh(math.pi * (1.0 - 2.0 * tile_y))))
-            lon_grid, lat_grid = np.meshgrid(lon_arr, lat_arr)
+            # from the canvas grid.
+            lon_grid, lat_grid = _canvas_lon_lat_grid(
+                z, x_min, y_min, canvas_w, canvas_h, tile_size
+            )
             rgb = render_composite_rgb(
                 self.product_key,
                 samples,
@@ -281,7 +228,9 @@ def _load_renderer_uncached(
     required: tuple[str, ...],
 ) -> "SatelliteTileRenderer":
     rasters = {
-        source_channel: _load_source_raster(source_files[source_channel])
+        source_channel: _load_source_raster(
+            source_files[source_channel], source_channel
+        )
         for source_channel in required
     }
     return renderer_cls(
@@ -363,60 +312,85 @@ def _load_netcdf_dataset(source_file: str | Path) -> xr.Dataset:
         return dataset
 
 
-def _load_source_grid(source_file: str | Path) -> SourceGrid:
-    dataset = _load_netcdf_dataset(source_file)
-    cmi_var = "CMI" if "CMI" in dataset else None
-    if cmi_var is None and "Sectorized_CMI" in dataset:
-        cmi_var = "Sectorized_CMI"
-    if cmi_var is None:
-        raise ValueError(f"Source file is missing CMI variable: {source_file}")
-    if "x" not in dataset or "y" not in dataset:
-        raise ValueError(
-            f"Source file is missing x/y scan coordinates: {source_file}"
-        )
-    if "goes_imager_projection" not in dataset:
-        raise ValueError(
-            f"Source file is missing GOES projection metadata: {source_file}"
-        )
+def _is_ahi_hsd_file(path: Path) -> bool:
+    name = path.name.lower()
+    return name.endswith(".dat") or name.endswith(".dat.bz2")
 
-    projection = dataset["goes_imager_projection"].attrs
-    height = float(projection["perspective_point_height"])
-    lon_origin = float(projection["longitude_of_projection_origin"])
-    semi_major = float(projection["semi_major_axis"])
-    semi_minor = float(projection["semi_minor_axis"])
-    sweep = str(projection.get("sweep_angle_axis", "x"))
 
-    x_values = np.asarray(dataset["x"].values, dtype=np.float64) * height
-    y_values = np.asarray(dataset["y"].values, dtype=np.float64) * height
-    cmi = np.asarray(dataset[cmi_var].values, dtype=np.float32)
+def _load_ahi_source_raster(primary_segment: Path) -> SourceRaster:
+    """Load Himawari AHI HSD segments into a SourceRaster.
 
-    if cmi.ndim != 2:
-        raise ValueError(f"CMI variable must be 2D: {source_file}")
-
-    x_order = np.argsort(x_values)
-    y_order = np.argsort(y_values)
-    x_sorted = x_values[x_order]
-    y_sorted = y_values[y_order]
-    cmi_sorted = cmi[np.ix_(y_order, x_order)]
-    cmi_sorted = np.where(np.isfinite(cmi_sorted), cmi_sorted, np.nan)
-
-    geos_crs = CRS.from_proj4(
-        "+proj=geos "
-        f"+h={height} +lon_0={lon_origin} +sweep={sweep} "
-        f"+a={semi_major} +b={semi_minor} +units=m +no_defs"
+    The provider hands over one segment path; the sibling segments live in
+    the same per-frame source cache directory.
+    """
+    segment_paths = sorted(
+        path
+        for path in primary_segment.parent.iterdir()
+        if _is_ahi_hsd_file(path)
     )
-    transformer = Transformer.from_crs("EPSG:4326", geos_crs, always_xy=True)
-    interpolator = RegularGridInterpolator(
-        (y_sorted, x_sorted),
-        cmi_sorted,
-        bounds_error=False,
-        fill_value=np.nan,
+    raster = load_ahi_raster(segment_paths)
+    return SourceRaster(
+        cmi=raster.values,
+        src_transform=raster.src_transform,
+        src_crs=raster.src_crs,
     )
-    return SourceGrid(interpolator=interpolator, transformer=transformer)
 
 
-def _load_source_raster(source_file: str | Path) -> SourceRaster:
-    """Load a GOES NetCDF source file into a SourceRaster for rasterio reprojection."""
+def _load_seviri_source_raster(nat_path: Path, source_channel: str) -> SourceRaster:
+    """Load one SEVIRI channel from a .nat bundle into a SourceRaster."""
+    from satellite_v2.seviri_nat import load_seviri_raster
+
+    raster = load_seviri_raster(nat_path, source_channel)
+    return SourceRaster(
+        cmi=raster.values,
+        src_transform=raster.src_transform,
+        src_crs=raster.src_crs,
+    )
+
+
+def _is_fci_chunk_file(path: Path) -> bool:
+    name = path.name
+    return "FCI-1C-RRAD-FDHSI" in name and "CHK-BODY" in name and name.endswith(".nc")
+
+
+def _load_fci_source_raster(primary_chunk: Path, source_channel: str) -> SourceRaster:
+    """Load Meteosat-12 FCI body chunks into a SourceRaster."""
+    from satellite_v2.fci_nc import load_fci_raster
+
+    chunk_paths = sorted(path for path in primary_chunk.parent.iterdir() if _is_fci_chunk_file(path))
+    raster = load_fci_raster(chunk_paths, source_channel)
+    return SourceRaster(
+        cmi=raster.values,
+        src_transform=raster.src_transform,
+        src_crs=raster.src_crs,
+    )
+
+
+def _load_source_raster(
+    source_file: str | Path,
+    source_channel: str | None = None,
+) -> SourceRaster:
+    """Load a GOES NetCDF, AHI HSD, or SEVIRI .nat source for reprojection.
+
+    ``source_channel`` matters only for SEVIRI: one .nat bundles all
+    channels, so the loader must know which one to extract. GOES and AHI
+    sources are per-channel files and ignore it.
+    """
+    path = Path(source_file)
+    if _is_ahi_hsd_file(path):
+        return _load_ahi_source_raster(path)
+    if _is_fci_chunk_file(path):
+        if not source_channel:
+            raise ValueError(
+                "FCI NetCDF chunks require a source_channel to extract."
+            )
+        return _load_fci_source_raster(path, source_channel)
+    if path.name.lower().endswith(".nat"):
+        if not source_channel:
+            raise ValueError(
+                "SEVIRI .nat sources require a source_channel to extract."
+            )
+        return _load_seviri_source_raster(path, source_channel)
     dataset = _load_netcdf_dataset(source_file)
     cmi_var = "CMI" if "CMI" in dataset else None
     if cmi_var is None and "Sectorized_CMI" in dataset:
@@ -474,21 +448,23 @@ def _load_source_raster(source_file: str | Path) -> SourceRaster:
     return SourceRaster(cmi=cmi_sorted, src_transform=src_transform, src_crs=src_crs)
 
 
-def _tile_lon_lat_grid(
+def _canvas_lon_lat_grid(
     z: int,
-    x: int,
-    y: int,
+    x_min: int,
+    y_min: int,
+    canvas_w: int,
+    canvas_h: int,
     tile_size: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     scale = float(2**z)
-    pixels = np.arange(tile_size, dtype=np.float64) + 0.5
-    tile_x = (float(x) * tile_size + pixels) / (scale * tile_size)
-    tile_y = (float(y) * tile_size + pixels) / (scale * tile_size)
+    pixels_x = np.arange(canvas_w, dtype=np.float64) + 0.5
+    pixels_y = np.arange(canvas_h, dtype=np.float64) + 0.5
+    tile_x = (int(x_min) * tile_size + pixels_x) / (scale * tile_size)
+    tile_y = (int(y_min) * tile_size + pixels_y) / (scale * tile_size)
     lon = tile_x * 360.0 - 180.0
     mercator = math.pi * (1.0 - 2.0 * tile_y)
     lat = np.degrees(np.arctan(np.sinh(mercator)))
-    lon_grid, lat_grid = np.meshgrid(lon, lat)
-    return lon_grid, lat_grid
+    return np.meshgrid(lon, lat)
 
 
 def _is_reflectance_channel(source_channel: str) -> bool:
