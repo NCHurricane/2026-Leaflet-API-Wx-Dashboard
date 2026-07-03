@@ -735,6 +735,9 @@ SATELLITE_V2_PROVIDER = "aws"
 SATELLITE_V2_CACHE_NAMESPACE = "satellite"
 SATELLITE_V2_RENDER_VERSION = "products"
 SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi1"
+# fci1: invalidates Meteosat-12 tiles rendered before the 2026-07-03
+# east-west mirror fix in satellite_v2/fci_nc.py.
+SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci1"
 SATELLITE_V2_TILE_SIZE = 256
 SATELLITE_V2_CATALOG_MAX_AGE_SECONDS = 20 * 60
 
@@ -744,8 +747,11 @@ SATELLITE_V2_MESO_ZOOMS = tuple(range(4, 9))
 
 
 def satellite_v2_render_version_for_satellite(sat_id: str | None) -> str:
-    if str(sat_id or "").strip().lower() == "himawari9":
+    sat_key = str(sat_id or "").strip().lower()
+    if sat_key == "himawari9":
         return SATELLITE_V2_RENDER_VERSION_HIMAWARI
+    if sat_key == "meteosat12":
+        return SATELLITE_V2_RENDER_VERSION_METEOSAT12
     return SATELLITE_V2_RENDER_VERSION
 
 SATELLITE_V2_WORKER_SATELLITES = ("goes19", "goes18")

@@ -3,7 +3,8 @@
 Initial support is scoped to Meteosat-12 Full Disk IR rendering. EUMETSAT FCI
 frames arrive as multiple NetCDF body chunks; each chunk contains all channels
 for one strip of the disk. This module stitches one requested channel into the
-SourceRaster-compatible geostationary grid used by the shared tile renderer.
+SourceRaster-compatible geostationary grid used by the shared tile renderer
+(north-up rows via flip; columns are already west→east in the L1c layout).
 """
 
 from __future__ import annotations
@@ -183,11 +184,18 @@ def load_fci_raster(
     for out_row0, strip in strips:
         values_raw[out_row0 : out_row0 + strip.shape[0], :] = strip
 
-    values = values_raw[::-1, ::-1]
+    # FCI L1c rows are stored south→north (row 1 = south) and need the
+    # north-up flip; columns already run west→east. The x coordinate's
+    # positive fixed-grid scan angle points WEST of the sub-satellite point,
+    # opposite the PROJ geos +x=east convention, so the axis is negated
+    # rather than the data mirrored. Verified against Meteosat-9 SEVIRI and
+    # the solar terminator on 2026-07-03 (the earlier both-axis flip
+    # rendered the disk east-west mirrored).
+    values = values_raw[::-1, :]
     height = float(projection_attrs["perspective_point_height"])
     x_raw = _scaled_axis(x_attrs, full_cols)[offset::stride]
     y_raw = _scaled_axis(y_attrs, full_rows)[offset::stride]
-    x_centers = x_raw[::-1] * height
+    x_centers = -(x_raw * height)
     y_centers = y_raw[::-1] * height
     x_half = float(np.nanmedian(np.diff(x_centers))) / 2.0
     y_half = abs(float(np.nanmedian(np.diff(y_centers)))) / 2.0

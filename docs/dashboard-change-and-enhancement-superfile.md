@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-02 (Satellite platform view presets)
+Last updated: 2026-07-03 (Meteosat pipeline efficiency + FCI mirror fix)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -645,6 +645,54 @@ Cached extraction smoke (2026-07-02 frame `20260702T174500Z`) confirmed
 `Channel13`/`ir_105` all load as 5568x5568 grids with 74.5% finite disk
 coverage before UI exposure.
 Browser smoke passed for selecting Meteosat-12 in the Satellite tab.
+
+#### Meteosat pipeline efficiency pass + FCI orientation fix — 2026-07-03
+
+Efficiency changes mirroring the Himawari optimizations:
+
+- `satellite_v2/provider_eumetsat.py`: `_download_fci_chunks` now writes a
+  `manifest.json` (chunk filename list) into the frame's `FCI` source dir
+  after all chunks are verified on disk. When the manifest is present and
+  every listed chunk exists, the loader returns immediately (~2 ms) instead
+  of re-running the EUMETSAT OpenSearch on every renderer load — previously
+  every FCI renderer construction made a live API call even on full cache
+  hit. An incomplete manifest or missing chunk falls through to the normal
+  search+download path, so interrupted downloads can never render partial
+  strips. Missing chunks download in parallel (`_FCI_DOWNLOAD_WORKERS = 4`),
+  cutting the ~792 MB / 40-chunk cold-frame download several-fold. SEVIRI
+  (.nat) needed no changes: single file, exists-check before download.
+- `satellite_v2/fci_nc.py`: `FCI_MAX_GRID = 5500` stride cap, mirroring
+  `AHI_MAX_GRID` and the GOES FULLDISK stride. Strips are strided on load,
+  so FDHSI 1 km channels (vis_06 = 11136² ≈ 500 MB float32) assemble at
+  5568² and the full-resolution array is never materialised. 2 km IR
+  channels are unaffected (stride 1). Strided sampling verified bit-exact
+  against full-resolution assembly + decimation on live cached vis_06 data.
+  This unblocks the planned `Channel02` → `vis_06` exposure memory-wise.
+
+Correctness bug found during verification — FCI disk was east-west MIRRORED:
+
+- The original loader flipped both axes (`[::-1, ::-1]`) assuming the MSG
+  SEVIRI south-east origin. FCI L1c actually stores columns already
+  west→east; the x coordinate variable's positive fixed-grid scan angle
+  points WEST (opposite PROJ geos +x=east), so the descending x axis had
+  masked the mirror. All Meteosat-12 tiles rendered before 2026-07-03 were
+  east-west mirrored (the 2026-07-02 coastline proof was misjudged).
+- Fix in `load_fci_raster`: flip rows only (`[::-1, :]`) and negate the x
+  axis (`-(x_raw * height)`) instead of reversing it — negation is also
+  exact for strided offset-center sampling where reversal would shift the
+  grid by one source pixel.
+- Verified: Meteosat-12 ir_105 vs Satpy-validated Meteosat-9 IR_108 for the
+  same 17:45 UTC slot warped to one lon/lat grid correlates 0.933 as-is
+  (0.188 mirrored; the pre-fix code scored the reverse). Solar terminator
+  checks on 17:45/19:45/00:45 UTC frames put the lit side west+north as
+  physics requires; the 00:45 disk is fully dark.
+- `config/satellite_v2_config.py`: `SATELLITE_V2_RENDER_VERSION_METEOSAT12 =
+  "products-fci1"` orphans all mirrored cached tiles; GOES/Himawari/
+  Meteosat-9 tile caches are untouched (SEVIRI orientation was validated
+  numerically against Satpy and is correct).
+
+Browser smoke for Meteosat-12 after the mirror fix is user-owned and
+pending.
 
 Next visible-products sequence for non-NOAA satellites:
 
