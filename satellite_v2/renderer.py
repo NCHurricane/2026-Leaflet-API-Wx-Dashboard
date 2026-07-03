@@ -366,6 +366,29 @@ def _load_fci_source_raster(primary_chunk: Path, source_channel: str) -> SourceR
     )
 
 
+# FULLDISK max native zoom is 5, so a source grid wider than ~5500 px can
+# never be displayed at native resolution. Decimating on load keeps 0.5 km
+# FULLDISK bands (Channel02 is 21696² ≈ 470 MP) from exhausting memory when
+# several on-demand render workers load frames at once. Mirrors AHI_MAX_GRID
+# in satellite_v2/ahi_hsd.py. CONUS/MESO grids are small and never decimated.
+_GOES_FULLDISK_MAX_GRID = 5500
+
+
+def _goes_fulldisk_stride(dataset: xr.Dataset, path: Path, shape: tuple[int, ...]) -> int:
+    longest = max(shape)
+    if longest <= _GOES_FULLDISK_MAX_GRID:
+        return 1
+    scene = str(dataset.attrs.get("scene_id", "")).strip().lower()
+    is_fulldisk = (
+        scene == "full disk"
+        or "CMIPF" in path.name.upper()
+        or any(part.upper() == "FULLDISK" for part in path.parts)
+    )
+    if not is_fulldisk:
+        return 1
+    return -(-longest // _GOES_FULLDISK_MAX_GRID)
+
+
 def _load_source_raster(
     source_file: str | Path,
     source_channel: str | None = None,
@@ -415,10 +438,20 @@ def _load_source_raster(
 
     x_values = np.asarray(dataset["x"].values, dtype=np.float64) * height
     y_values = np.asarray(dataset["y"].values, dtype=np.float64) * height
-    cmi = np.asarray(dataset[cmi_var].values, dtype=np.float32)
 
-    if cmi.ndim != 2:
+    cmi_lazy = dataset[cmi_var]
+    if cmi_lazy.ndim != 2:
         raise ValueError(f"CMI variable must be 2D: {source_file}")
+
+    stride = _goes_fulldisk_stride(dataset, path, cmi_lazy.shape)
+    if stride > 1:
+        # Slice the lazy variable so the full-resolution array is never
+        # materialised; netCDF4 reads only the strided hyperslab.
+        offset = stride // 2
+        x_values = x_values[offset::stride]
+        y_values = y_values[offset::stride]
+        cmi_lazy = cmi_lazy[offset::stride, offset::stride]
+    cmi = np.asarray(cmi_lazy.values, dtype=np.float32)
 
     x_order = np.argsort(x_values)
     y_order = np.argsort(y_values)[::-1]

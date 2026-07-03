@@ -52,6 +52,7 @@ def _resolve_cache_root() -> Path:
 _CACHE_ROOT = str(_resolve_cache_root())
 _WORKER_STATE_DIR = Path(_CACHE_ROOT) / ".workers"
 _FRESH_WINDOW_SECONDS = 10 * 60
+TileBounds = tuple[float, float, float, float]
 
 
 def _ordered_unique(values: Iterable[str]) -> tuple[str, ...]:
@@ -64,6 +65,16 @@ def _ordered_unique(values: Iterable[str]) -> tuple[str, ...]:
         seen.add(key)
         ordered.append(key)
     return tuple(ordered)
+
+
+def _parse_tile_bounds(value: str | None) -> TileBounds | None:
+    if not value:
+        return None
+    parts = [part.strip() for part in str(value).split(",")]
+    if len(parts) != 4:
+        raise ValueError("--bounds must be formatted as west,south,east,north")
+    west, south, east, north = (float(part) for part in parts)
+    return west, south, east, north
 
 
 def _profile_config(profile: str | None) -> dict:
@@ -296,6 +307,8 @@ def _warm_job(
     zooms: tuple[int, ...],
     phase: str,
     tile_workers: int,
+    tile_bounds: TileBounds | None = None,
+    tile_buffer: int = 0,
 ) -> dict[str, int]:
     catalog_start = time.perf_counter()
     payload = build_catalog(
@@ -329,6 +342,8 @@ def _warm_job(
             frame=frame,
             zooms=zooms,
             render_workers=tile_workers,
+            tile_bounds=tile_bounds,
+            tile_buffer=tile_buffer,
         )
         frame_elapsed = time.perf_counter() - frame_start
         total["rendered"] += int(stats.get("rendered") or 0)
@@ -364,6 +379,8 @@ def _run_warm_jobs(
     phase: str,
     baseline: bool = False,
     tile_workers: int = 1,
+    tile_bounds: TileBounds | None = None,
+    tile_buffer: int = 0,
 ) -> dict[str, int]:
     totals = {"cataloged": 0, "rendered": 0, "skipped": 0, "errors": 0, "jobs": 0}
     for sat_id, sector, channel in jobs:
@@ -383,6 +400,8 @@ def _run_warm_jobs(
                 zooms,
                 phase,
                 tile_workers,
+                tile_bounds=tile_bounds,
+                tile_buffer=tile_buffer,
             )
         except Exception as exc:
             totals["errors"] += 1
@@ -416,6 +435,8 @@ def _warm_job_rolling(
     latest_frames_per_job: int,
     start_offset: int,
     deadline_utc: datetime | None,
+    tile_bounds: TileBounds | None = None,
+    tile_buffer: int = 0,
 ) -> tuple[dict[str, int], int, bool]:
     payload = build_catalog(
         cache_root=_CACHE_ROOT,
@@ -454,6 +475,8 @@ def _warm_job_rolling(
             frame=frame,
             zooms=zooms,
             render_workers=tile_workers,
+            tile_bounds=tile_bounds,
+            tile_buffer=tile_buffer,
         )
         totals["rendered"] += int(stats.get("rendered") or 0)
         totals["skipped"] += int(stats.get("skipped") or 0)
@@ -486,6 +509,8 @@ def _run_rolling_lookback(
     latest_frames_per_job: int,
     deadline_minutes: int,
     deadline_buffer_seconds: int,
+    tile_bounds: TileBounds | None = None,
+    tile_buffer: int = 0,
 ) -> None:
     if not jobs:
         _mark_profile_run_complete(worker_name, state_name, profile_key)
@@ -535,6 +560,8 @@ def _run_rolling_lookback(
                 latest_frames_per_job=latest_frames_per_job,
                 start_offset=start_offset,
                 deadline_utc=deadline_utc,
+                tile_bounds=tile_bounds,
+                tile_buffer=tile_buffer,
             )
         except Exception as exc:
             totals["errors"] += 1
@@ -610,6 +637,8 @@ def run_satellite_v2_worker(
     profile: str | None = None,
     all_frames: bool = False,
     worker_name_override: str | None = None,
+    tile_bounds: TileBounds | None = None,
+    tile_buffer: int = 0,
 ) -> None:
     run_start = time.perf_counter()
     profile_key = _profile_key(profile)
@@ -634,6 +663,12 @@ def run_satellite_v2_worker(
     print(f"[{worker_name}] Profile: {profile_key}")
     print(f"[{worker_name}] Cache root: {_CACHE_ROOT}")
     print(f"[{worker_name}] Tile render workers: {render_workers}")
+    if tile_bounds is not None:
+        print(
+            f"[{worker_name}] Tile bounds: "
+            f"{tile_bounds[0]},{tile_bounds[1]},{tile_bounds[2]},{tile_bounds[3]} "
+            f"buffer_tiles={max(0, int(tile_buffer or 0))}"
+        )
     print(f"[{worker_name}] Jobs: {len(jobs)}")
 
     lock_enabled = bool(profile_config.get("overlap_lock"))
@@ -672,6 +707,8 @@ def run_satellite_v2_worker(
                 latest_frames_per_job=latest_frames_per_job,
                 deadline_minutes=deadline_minutes,
                 deadline_buffer_seconds=deadline_buffer_seconds,
+                tile_bounds=tile_bounds,
+                tile_buffer=tile_buffer,
             )
             print(
                 f"[{worker_name}] rolling phase elapsed: "
@@ -692,6 +729,8 @@ def run_satellite_v2_worker(
                 phase="backfill-all",
                 baseline=False,
                 tile_workers=render_workers,
+                tile_bounds=tile_bounds,
+                tile_buffer=tile_buffer,
             )
             _mark_profile_run_complete(worker_name, state_name, profile_key)
             print(
@@ -717,6 +756,8 @@ def run_satellite_v2_worker(
             phase="baseline",
             baseline=True,
             tile_workers=render_workers,
+            tile_bounds=tile_bounds,
+            tile_buffer=tile_buffer,
         )
         _mark_profile_run_complete(worker_name, state_name, profile_key)
         print(
@@ -749,6 +790,8 @@ def run_satellite_v2_worker(
             phase="deep",
             baseline=False,
             tile_workers=render_workers,
+            tile_bounds=tile_bounds,
+            tile_buffer=tile_buffer,
         )
         _save_deep_index(state_name, next_index)
         _mark_profile_run_complete(worker_name, state_name, profile_key)
@@ -792,6 +835,17 @@ def main() -> None:
         action="store_true",
         help="Warm every cataloged frame for selected jobs instead of baseline/deep rotation.",
     )
+    parser.add_argument(
+        "--bounds",
+        default=None,
+        help="Optional warm planning bounds as west,south,east,north.",
+    )
+    parser.add_argument(
+        "--tile-buffer",
+        type=int,
+        default=0,
+        help="Tile padding around --bounds for explicit view warming.",
+    )
     args = parser.parse_args()
     if args.log_to_file:
         redirect_stdio_to_log("satellite_v2_meso" if args.meso else "satellite_v2")
@@ -801,6 +855,8 @@ def main() -> None:
         tile_workers=args.tile_workers,
         profile=args.profile,
         all_frames=args.all_frames,
+        tile_bounds=_parse_tile_bounds(args.bounds),
+        tile_buffer=max(0, int(args.tile_buffer or 0)),
     )
 
 

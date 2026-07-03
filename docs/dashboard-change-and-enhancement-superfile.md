@@ -531,14 +531,42 @@ Current international-satellite product direction:
   Himawari-9 Full Disk, Meteosat-12 Full Disk, and Meteosat-9 Full Disk.
   `js/weather.js` exposes the existing Leaflet map through
   `fitSatelliteViewPreset(...)`, and `weather.html` bumps
-  `satellite-page.js` to `?v=20260702d`. The change only runs on satellite or
-  sector changes; product/channel changes preserve user pan/zoom while
-  browsing products.
-- Remaining extent work: add user-facing named view/extent controls separately
-  from data sectors. Extents should fit the map viewport and eventually limit
-  generated output tiles to the requested viewport, while source-frame
-  download/assembly may still be full-disk until provider-level partial loading
-  is explicitly implemented.
+  `satellite-page.js` to `?v=20260702e`. Satellite platform changes now clear
+  the sector selection first, so moving between platforms such as Himawari-9
+  and GOES-18 does not start catalog/tile work until the user explicitly picks
+  a sector. The auto-fit runs only after a sector is selected; product/channel
+  changes preserve user pan/zoom while browsing products.
+- DONE 2026-07-02: Added a user-facing `View` select separate from data
+  sectors. The control is filtered by selected platform and fits named extents
+  without triggering catalog or tile generation. Sector selection still
+  auto-selects the matching default view. `weather.html` now loads
+  `satellite-page.js?v=20260702h`. Browser testing tightened the Meteosat-12
+  Europe/Africa view from the full disk footprint to a practical
+  `[-38,-35]`-to-`[62,48]` inspection extent so it does not zoom out to a
+  near-world view. Browser smoke passed for Himawari-9, Meteosat-9, and
+  Meteosat-12 platform selection, sector clearing, view presets, and first
+  tile load.
+- DONE 2026-07-03: Warm/prefetch planning is viewport-aware without blocking
+  direct tile requests. Frontend animation prefetch uses current map bounds
+  plus an explicit one-tile buffer and reschedules on `moveend`/`zoomend`.
+  Direct Leaflet `/api/satellite-v2/tile/{z}/{x}/{y}` requests still render
+  normally if requested. Backend warm planning now has an opt-in bounds filter:
+  `satellite_v2.tiler.planning_tile_coords(...)` keeps existing sector-wide
+  behavior by default, while `warm_frame_tiles(...)` /
+  `warm_frame_tiles_from_canvas(...)` accept `tile_bounds` + `tile_buffer`.
+  Explicit worker runs can pass named-view bounds with
+  `--bounds west,south,east,north --tile-buffer 1`; scheduled runs pass no
+  bounds and are unchanged until intentionally configured.
+- Possible current-plan or V2 enhancement: reuse the same viewport-aware
+  satellite bounds logic from the Tropical page. When a user opens an active
+  system, Tropical could derive a storm-centered extent from the latest
+  reported fix (or track/cone bounds), fit the map there, and let live
+  on-demand satellite rendering plus animation prefetch fill only that
+  viewport+buffer. If first-frame readiness proves too slow, add a thin async
+  bounded warm helper later that accepts storm bounds, selected satellite,
+  sector, product, and frame count. Prefer the live-on-demand version first
+  because it needs less orchestration and cannot warm stale or wrong storm
+  locations.
 - After the current platforms, auto-center, standard products, and extent
   presets are complete, add these future sources:
   - GK2A from `arn:aws:s3:::noaa-gk2a-pds`.
@@ -578,10 +606,9 @@ offset. End-to-end backend smoke passed through
 tile `meteosat9/FULLDISK/Channel13/20260702T190000Z/5/21/15.png` (97,803
 bytes) and then cache-hitting it with provider `eumetsat`.
 
-#### Meteosat-12 — initial FCI Full Disk slice validated 2026-07-02
+#### Meteosat-12 — FCI Full Disk direct products validated 2026-07-02
 
-Meteosat-12 Full Disk is live for Channel 13 only as the first MTG/FCI proof
-slice:
+Meteosat-12 Full Disk is live for the first direct FCI scalar products:
 
 - `satellite_v2/provider_eumetsat.py`: `meteosat12` uses collection
   `EO:EUM:DAT:0662`. Unlike Meteosat-9, each frame is a set of numbered
@@ -592,10 +619,15 @@ slice:
   conversion constants, flips the native grid to north-up west-east, and
   returns a rasterio geos transform/CRS (`+proj=geos +h=35786400 +lon_0=0
   +sweep=y`).
-- Initial channel mapping is deliberately narrow: ABI `Channel13` maps to FCI
-  `ir_105`; `fci_supported_products()` currently returns only `Channel13`.
-  `js/satellite-page.js` exposes only Channel 13 for Meteosat-12 and only the
-  Full Disk sector. RSS and additional FCI products remain deferred.
+- FCI source-channel mapping now covers direct IR/WV channels needed for the
+  standard scalar product set: ABI `Channel07` -> FCI `ir_38`, `Channel08` ->
+  `wv_63`, `Channel09` -> `wv_73`, `Channel10` -> `ir_97`, `Channel11` ->
+  `ir_87`, `Channel13` -> `ir_105`, `Channel14` -> `ir_123`, and
+  `Channel15` -> `ir_133`. `js/satellite-page.js` exposes Meteosat-12
+  `Channel07`, `Channel07Fire`, `Channel08RAMSDIS`, `Channel09RAMSDIS`, and
+  `Channel13` only. Composite products that become technically source-mapped
+  (AirMass, Night Microphysics, Dust, Ash, SO2, etc.) stay hidden from the UI
+  until each has a proof render. RSS remains deferred.
 - `config/satellite_platforms.py`: Meteosat-12 is marked implemented with
   instrument `FCI`, provider `eumetsat`, sector `FULLDISK`.
 
@@ -608,7 +640,30 @@ backend smoke passed through `service.resolve_tile(...)`, rendering
 and cache-hitting it with provider `eumetsat`. Coastline proof image:
 `cache\satellite\validation\fci_proofs\fci_channel13_20260702T190000Z_disk_z3.png`;
 visual check shows Europe/Africa alignment with no obvious flip or offset.
-Browser smoke is still pending for selecting Meteosat-12 in the Satellite tab.
+Cached extraction smoke (2026-07-02 frame `20260702T174500Z`) confirmed
+`Channel07`/`ir_38`, `Channel08`/`wv_63`, `Channel09`/`wv_73`, and
+`Channel13`/`ir_105` all load as 5568x5568 grids with 74.5% finite disk
+coverage before UI exposure.
+Browser smoke passed for selecting Meteosat-12 in the Satellite tab.
+
+Next visible-products sequence for non-NOAA satellites:
+
+1. Start with a Meteosat-12 visible scalar proof. First target:
+   ABI-style `Channel02` -> FCI `vis_06`.
+2. Validate cached/live FCI extraction before UI exposure. Confirm reflectance
+   calibration works, ranges are sane, finite coverage is expected, and a proof
+   render aligns with coastlines.
+3. Expose only proven products in the Meteosat-12 frontend filter. Add
+   `Channel02` after the proof render passes; do not expose additional visible
+   or RGB products by source mapping alone.
+4. Expand cautiously after the first visible proof. Candidate mappings:
+   `Channel01` -> FCI `vis_04`, `Channel03` -> FCI `vis_08` or `vis_09`,
+   `Channel05` -> FCI `nir_16`, and `Channel06` -> FCI `nir_22`.
+5. Revisit composites only after their source mappings have individual scalar
+   proof renders. Candidate follow-ups include Day Cloud Phase, Fire
+   Temperature, Natural/True Color, and related RGB products. Meteosat-9
+   already has SEVIRI visible-equivalent support, so Meteosat-12 FCI visible
+   exposure is the larger near-term gap.
 
 Himawari (deferred): checked the `AHI-L1b-Target` S3 prefix for rapid-scan
 target areas — `R301`-`R304` are a single persistent ~1000km volcanic-watch

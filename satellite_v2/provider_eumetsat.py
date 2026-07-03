@@ -19,10 +19,12 @@ False.
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -37,7 +39,7 @@ from config.satellite_v2_config import (
     normalize_sector,
     source_channels_for_product,
 )
-from satellite_v2.cache import source_path
+from satellite_v2.cache import atomic_write_json, source_path
 from satellite_v2.models import SourceFrame
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +66,14 @@ _SLOT_MINUTES = 15
 
 _HTTP_TIMEOUT = 60
 _DOWNLOAD_TIMEOUT = 600
+
+# An FCI full-disk frame is ~40 chunk files (~800 MB total). A few parallel
+# connections cut the cold-frame download time several-fold while staying
+# well inside EUMETSAT fair-use connection limits.
+_FCI_DOWNLOAD_WORKERS = 4
+# Written into the frame's FCI source dir after all chunks are verified on
+# disk; its presence lets later loads skip the product re-search API call.
+_FCI_MANIFEST_NAME = "manifest.json"
 
 _TOKEN_LOCK = threading.Lock()
 _TOKEN: dict[str, object] = {"value": "", "expires_at": 0.0}
@@ -336,6 +346,24 @@ def _download_url_to_path(url: str, target: Path) -> None:
         raise
 
 
+def _read_fci_manifest(manifest_path: Path) -> list[Path] | None:
+    """Chunk paths from a completed download, or None if any file is missing."""
+    try:
+        filenames = json.loads(manifest_path.read_text("utf-8")).get("chunks") or []
+    except (OSError, ValueError, AttributeError):
+        return None
+    paths = [manifest_path.parent / str(name) for name in filenames]
+    if not paths:
+        return None
+    for path in paths:
+        try:
+            if path.stat().st_size <= 0:
+                return None
+        except OSError:
+            return None
+    return paths
+
+
 def _download_fci_chunks(
     cache_root: str | Path,
     collection: str,
@@ -344,21 +372,47 @@ def _download_fci_chunks(
     frame_key: str,
     product_id: str,
 ) -> Path:
+    manifest_path = source_path(
+        cache_root, sat_key, sector_key, "FCI", frame_key, _FCI_MANIFEST_NAME
+    )
+    cached = _read_fci_manifest(manifest_path)
+    if cached is not None:
+        return cached[0]
+
     feature = _fci_feature_for_product(collection, product_id)
     entries = _fci_body_entries(feature)
     if not entries:
         raise RuntimeError(f"EUMETSAT FCI product has no body chunks: {product_id}")
-    first_path: Path | None = None
-    for entry in entries:
-        filename = str(entry["title"])
-        target = source_path(cache_root, sat_key, sector_key, "FCI", frame_key, filename)
-        if first_path is None:
-            first_path = target
-        if not target.exists() or target.stat().st_size <= 0:
-            _download_url_to_path(str(entry["href"]), target)
-    if first_path is None:
-        raise RuntimeError(f"EUMETSAT FCI product has no downloadable chunks: {product_id}")
-    return first_path
+    targets: list[tuple[Path, str]] = [
+        (
+            source_path(
+                cache_root, sat_key, sector_key, "FCI", frame_key, str(entry["title"])
+            ),
+            str(entry["href"]),
+        )
+        for entry in entries
+    ]
+    missing = [
+        (target, href)
+        for target, href in targets
+        if not target.exists() or target.stat().st_size <= 0
+    ]
+    if missing:
+        workers = min(_FCI_DOWNLOAD_WORKERS, len(missing))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [
+                pool.submit(_download_url_to_path, href, target)
+                for target, href in missing
+            ]
+            for future in as_completed(futures):
+                future.result()
+    # Written only after every chunk is on disk, so an interrupted download
+    # can never satisfy the manifest fast path with partial strips.
+    atomic_write_json(
+        manifest_path,
+        {"product_id": product_id, "chunks": [target.name for target, _ in targets]},
+    )
+    return targets[0][0]
 
 
 def download_product_source_frames(

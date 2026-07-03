@@ -73,20 +73,23 @@ Next up:
   frontend product list filtered to SEVIRI-compatible products, service tile
   stats report provider=eumetsat. Validated on live
   MSG2-SEVI-MSG15-0100-NA-20260702185739.917000000Z-NA.nat with coastline
-  proof images and backend resolve_tile smoke. Browser smoke for selecting
-  Meteosat-9 in the Satellite tab is still pending.
-- DONE 2026-07-02: Meteosat-12 initial FCI Full Disk slice validated for
-  Channel 13 only. New: satellite_v2/fci_nc.py assembles MTG/FCI NetCDF
-  `CHK-BODY` chunks, calibrates FCI `ir_105` radiance to brightness
-  temperature, and returns the shared SourceRaster/geos path. Provider uses
-  collection EO:EUM:DAT:0662 for meteosat12 and downloads all body chunks for
-  a selected frame into shared `FCI` source cache. Frontend exposes only Full
-  Disk + Channel 13 for Meteosat-12; RSS and additional FCI product mappings
-  remain deferred. Validated live frame 20260702T190000Z: 40 chunks,
-  791,937,141 bytes, assembled 5568x5568 grid, BT 182.94-308.11 K, coastline
-  proof image written under cache/satellite/validation/fci_proofs, backend
-  resolve_tile rendered `meteosat12/FULLDISK/Channel13/20260702T190000Z/4/8/6.png`.
-  Browser smoke for Meteosat-12 tab selection is still pending.
+  proof images and backend resolve_tile smoke. Browser smoke passed for
+  selecting Meteosat-9 in the Satellite tab.
+- DONE 2026-07-02: Meteosat-12 initial FCI Full Disk slice validated, then
+  expanded to direct scalar IR/WV products. New: satellite_v2/fci_nc.py
+  assembles MTG/FCI NetCDF `CHK-BODY` chunks, calibrates FCI radiance to
+  brightness temperature or reflectance, and returns the shared
+  SourceRaster/geos path. Provider uses collection EO:EUM:DAT:0662 for
+  meteosat12 and downloads all body chunks for a selected frame into shared
+  `FCI` source cache. Frontend exposes only Full Disk plus direct products
+  Channel07, Channel07Fire, Channel08RAMSDIS, Channel09RAMSDIS, and Channel13
+  for Meteosat-12; RSS and composite FCI product UI exposure remain deferred
+  until proof renders. Validated live frame 20260702T190000Z: 40 chunks,
+  791,937,141 bytes, assembled 5568x5568 `ir_105` grid, BT 182.94-308.11 K,
+  coastline proof image written under cache/satellite/validation/fci_proofs,
+  backend resolve_tile rendered
+  `meteosat12/FULLDISK/Channel13/20260702T190000Z/4/8/6.png`. Browser smoke
+  passed for Meteosat-12 tab selection.
 - Current satellite sequencing decision: finish the existing non-GOES platforms
   before adding more sources. For Himawari-9, Meteosat-9, and Meteosat-12,
   expose a small standard product set only: Visible, Enhanced IR, Water Vapor,
@@ -94,9 +97,24 @@ Next up:
   before UI exposure. Defer CIRA GeoColor / True Color / Natural Color and
   other RGB parity to V2. DONE 2026-07-02: satellite platform/sector switches
   now auto-fit named frontend view presets for GOES, Himawari-9, Meteosat-9,
-  and Meteosat-12; product/channel switches preserve user pan/zoom. Remaining
-  extent work is user-facing named view controls and viewport-limited tile
-  generation. After those are stable, add GK2A from
+  and Meteosat-12 after the user picks a sector. Switching satellites clears
+  the sector selection first, preventing catalog/tile work until the new sector
+  is explicitly selected; product/channel switches preserve user pan/zoom.
+  DONE 2026-07-02: added a user-facing `View` select filtered by platform;
+  changing it only fits the map and does not generate tiles. Meteosat-12
+  Europe/Africa was tightened after browser testing so it no longer opens as a
+  near-world view. DONE 2026-07-03: warm/prefetch planning is viewport-aware
+  without blocking direct Leaflet tile requests. Frontend animation prefetch
+  uses current map bounds plus a one-tile buffer and reschedules on map bounds
+  changes; backend warm planning has opt-in `tile_bounds` + `tile_buffer`
+  support and worker CLI `--bounds west,south,east,north --tile-buffer 1`.
+  Scheduled warmers remain unchanged unless explicit bounds are configured.
+  Next non-NOAA visible-products step: Meteosat-12 `Channel02` -> FCI `vis_06`
+  proof render first, then expose only that proven visible product; later
+  candidates are `Channel01` -> `vis_04`, `Channel03` -> `vis_08`/`vis_09`,
+  `Channel05` -> `nir_16`, and `Channel06` -> `nir_22`, with composites
+  deferred until scalar source proofs pass. After current direct products and
+  proof renders are stable, add GK2A from
   `arn:aws:s3:::noaa-gk2a-pds` and NOAA GMGSI Meteosat composite from
   `noaa-gmgsi-pds`.
 - Satellite tab no-auto-load / blank-default UX: both sat-id and sector selects

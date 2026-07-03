@@ -1136,6 +1136,7 @@
     const SATELLITE_PREFETCH_MAX_CONCURRENT = 2;
     const SATELLITE_PREFETCH_MAX_TILES_PER_FRAME = 32;
     const SATELLITE_PREFETCH_MAX_QUEUE_TILES = 180;
+    const SATELLITE_PREFETCH_TILE_BUFFER = 1;
     const SATELLITE_PREFETCH_DEBOUNCE_MS = 220;
     const SATELLITE_PREFETCH_RETRY_AFTER_MS = 20000;
     const SATELLITE_PREFETCH_SEEN_LIMIT = 1200;
@@ -8429,21 +8430,27 @@
             maxConcurrent: SATELLITE_PREFETCH_MAX_CONCURRENT,
             maxTilesPerFrame: SATELLITE_PREFETCH_MAX_TILES_PER_FRAME,
             maxQueueTiles: SATELLITE_PREFETCH_MAX_QUEUE_TILES,
+            bufferTiles: SATELLITE_PREFETCH_TILE_BUFFER,
             renderLive: true,
         };
     }
 
-    function _satelliteViewportTileCoords(zoomLevel, maxTiles = SATELLITE_PREFETCH_MAX_TILES_PER_FRAME) {
+    function _satelliteViewportTileCoords(
+        zoomLevel,
+        maxTiles = SATELLITE_PREFETCH_MAX_TILES_PER_FRAME,
+        bufferTiles = SATELLITE_PREFETCH_TILE_BUFFER,
+    ) {
         if (!Number.isFinite(zoomLevel) || !map.getBounds) return [];
         const bounds = map.getBounds();
         const northWest = map.project(bounds.getNorthWest(), zoomLevel);
         const southEast = map.project(bounds.getSouthEast(), zoomLevel);
         const tileSize = 256;
         const maxTileIndex = Math.max(0, (2 ** Math.round(zoomLevel)) - 1);
-        const minTileX = Math.max(0, Math.floor(Math.min(northWest.x, southEast.x) / tileSize) - 1);
-        const maxTileX = Math.min(maxTileIndex, Math.floor(Math.max(northWest.x, southEast.x) / tileSize) + 1);
-        const minTileY = Math.max(0, Math.floor(Math.min(northWest.y, southEast.y) / tileSize) - 1);
-        const maxTileY = Math.min(maxTileIndex, Math.floor(Math.max(northWest.y, southEast.y) / tileSize) + 1);
+        const pad = Math.max(0, Math.round(Number(bufferTiles) || 0));
+        const minTileX = Math.max(0, Math.floor(Math.min(northWest.x, southEast.x) / tileSize) - pad);
+        const maxTileX = Math.min(maxTileIndex, Math.floor(Math.max(northWest.x, southEast.x) / tileSize) + pad);
+        const minTileY = Math.max(0, Math.floor(Math.min(northWest.y, southEast.y) / tileSize) - pad);
+        const maxTileY = Math.min(maxTileIndex, Math.floor(Math.max(northWest.y, southEast.y) / tileSize) + pad);
         const centerPoint = map.project(map.getCenter(), zoomLevel);
         const centerTileX = centerPoint.x / tileSize;
         const centerTileY = centerPoint.y / tileSize;
@@ -8488,6 +8495,7 @@
 
     function _currentSatellitePrefetchContextKey() {
         if (!_satelliteScrubMode || !_satelliteFrames.length || !_isTypeEnabled('satellite')) return '';
+        const limits = _satellitePrefetchLimits();
         const zoomLevel = Math.round(map.getZoom());
         const bounds = map.getBounds();
         const northWest = map.project(bounds.getNorthWest(), zoomLevel);
@@ -8507,6 +8515,7 @@
             maxTileX,
             minTileY,
             maxTileY,
+            limits.bufferTiles,
         ].join('|');
     }
 
@@ -8537,7 +8546,11 @@
             const frameKey = frame?.frame_key || '';
             if (!frameKey) continue;
             const zoomLevel = _satelliteEffectiveTileZoom(frame);
-            const coords = _satelliteViewportTileCoords(zoomLevel, limits.maxTilesPerFrame);
+            const coords = _satelliteViewportTileCoords(
+                zoomLevel,
+                limits.maxTilesPerFrame,
+                limits.bufferTiles,
+            );
             for (const coord of coords) {
                 if (_satellitePrefetchQueue.length >= limits.maxQueueTiles) return;
                 const url = _satelliteTileUrlForCoords(

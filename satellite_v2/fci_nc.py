@@ -98,17 +98,33 @@ def _chunk_paths(paths: Sequence[str | Path]) -> list[Path]:
     return result
 
 
-def load_fci_raster(chunk_files: Sequence[str | Path], channel: str) -> FciRaster:
+# Assembled grids are capped near the 2 km full-disk size (5568 px). FDHSI
+# 1 km channels (vis_06 is 11136² ≈ 124 MP ≈ 500 MB float32) are strided
+# down per strip on load, mirroring AHI_MAX_GRID in satellite_v2/ahi_hsd.py
+# and the GOES FULLDISK stride: FULLDISK max native zoom cannot display more
+# than ~5500 px anyway, and full-resolution assembly is the OOM class that
+# froze this host on GOES Channel02.
+FCI_MAX_GRID = 5500
+
+
+def load_fci_raster(
+    chunk_files: Sequence[str | Path],
+    channel: str,
+    max_grid: int = FCI_MAX_GRID,
+) -> FciRaster:
     """Load one FCI channel from a set of body chunk NetCDF files."""
     paths = _chunk_paths(chunk_files)
     channel_name = _normalize_fci_channel(channel)
 
-    strips: list[tuple[int, int, np.ndarray]] = []
+    strips: list[tuple[int, np.ndarray]] = []
     x_attrs: dict | None = None
     y_attrs: dict | None = None
     projection_attrs: dict | None = None
     full_cols = 0
     full_rows = 0
+    stride = 1
+    offset = 0
+    out_cols = 0
 
     for path in paths:
         with netCDF4.Dataset(path) as ds:
@@ -124,35 +140,53 @@ def load_fci_raster(chunk_files: Sequence[str | Path], channel: str) -> FciRaste
             end_col = int(np.asarray(measured.variables["end_position_column"][:]))
             if start_col != 1:
                 raise ValueError(f"FCI partial-width chunks are not supported: {path}")
-            radiance_var = measured.variables["effective_radiance"]
-            radiance = np.ma.filled(radiance_var[:], np.nan).astype(np.float32)
-            calibrated = _calibrate_radiance(radiance, measured, channel_name)
-            strips.append((start_row, end_row, calibrated))
+            if full_cols == 0:
+                full_cols = end_col
+                stride = max(1, end_col // max(1, int(max_grid)))
+                offset = stride // 2
+                out_cols = len(range(offset, full_cols, stride))
+            elif end_col != full_cols:
+                raise ValueError(
+                    f"FCI chunk width mismatch ({end_col} vs {full_cols}): {path}"
+                )
             full_rows = max(full_rows, end_row)
-            full_cols = max(full_cols, end_col)
             if x_attrs is None:
                 x_var = measured.variables["x"]
                 y_var = measured.variables["y"]
                 x_attrs = {name: getattr(x_var, name) for name in x_var.ncattrs()}
                 y_attrs = {name: getattr(y_var, name) for name in y_var.ncattrs()}
 
+            # First 0-based full-grid row in this strip that lands on the
+            # strided sample lattice (offset, offset+stride, ...).
+            first_sampled = (start_row - 1) + ((offset - (start_row - 1)) % stride)
+            if first_sampled > end_row - 1:
+                continue
+            radiance_var = measured.variables["effective_radiance"]
+            radiance = np.ma.filled(radiance_var[:], np.nan).astype(np.float32)
+            if stride > 1:
+                local_first = first_sampled - (start_row - 1)
+                radiance = radiance[local_first::stride, offset::stride]
+            calibrated = _calibrate_radiance(radiance, measured, channel_name)
+            expected_rows = (end_row - 1 - first_sampled) // stride + 1
+            if calibrated.shape[0] != expected_rows or calibrated.shape[1] != out_cols:
+                raise ValueError(
+                    f"FCI chunk shape mismatch for rows {start_row}-{end_row}: "
+                    f"{calibrated.shape}, expected ({expected_rows}, {out_cols})."
+                )
+            strips.append(((first_sampled - offset) // stride, calibrated))
+
     if x_attrs is None or y_attrs is None or projection_attrs is None:
         raise ValueError("FCI chunks did not expose projection metadata.")
 
-    values_raw = np.full((full_rows, full_cols), np.nan, dtype=np.float32)
-    for start_row, end_row, strip in strips:
-        expected_rows = end_row - start_row + 1
-        if strip.shape[0] != expected_rows or strip.shape[1] != full_cols:
-            raise ValueError(
-                f"FCI chunk shape mismatch for rows {start_row}-{end_row}: "
-                f"{strip.shape}, expected ({expected_rows}, {full_cols})."
-            )
-        values_raw[start_row - 1 : end_row, :] = strip
+    out_rows = len(range(offset, full_rows, stride))
+    values_raw = np.full((out_rows, out_cols), np.nan, dtype=np.float32)
+    for out_row0, strip in strips:
+        values_raw[out_row0 : out_row0 + strip.shape[0], :] = strip
 
     values = values_raw[::-1, ::-1]
     height = float(projection_attrs["perspective_point_height"])
-    x_raw = _scaled_axis(x_attrs, full_cols)
-    y_raw = _scaled_axis(y_attrs, full_rows)
+    x_raw = _scaled_axis(x_attrs, full_cols)[offset::stride]
+    y_raw = _scaled_axis(y_attrs, full_rows)[offset::stride]
     x_centers = x_raw[::-1] * height
     y_centers = y_raw[::-1] * height
     x_half = float(np.nanmedian(np.diff(x_centers))) / 2.0
@@ -162,8 +196,8 @@ def load_fci_raster(chunk_files: Sequence[str | Path], channel: str) -> FciRaste
         float(y_centers[-1] - y_half),
         float(x_centers[-1] + x_half),
         float(y_centers[0] + y_half),
-        full_cols,
-        full_rows,
+        out_cols,
+        out_rows,
     )
     proj4 = (
         f"+proj=geos +h={height:.3f} "

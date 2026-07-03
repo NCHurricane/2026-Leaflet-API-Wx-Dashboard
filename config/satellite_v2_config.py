@@ -693,10 +693,17 @@ def seviri_supported_products() -> tuple[str, ...]:
     return tuple(supported)
 
 
-# Initial FCI support is intentionally narrow until the remaining channel and
-# composite mappings are validated against live MTG NetCDF chunks.
+# FCI source-channel mapping for direct IR/WV products. Composite UI exposure
+# stays separate until each recipe has a proof render against live MTG chunks.
 FCI_CHANNEL_FOR_ABI_CHANNEL = {
+    "Channel07": "ir_38",
+    "Channel08": "wv_63",
+    "Channel09": "wv_73",
+    "Channel10": "ir_97",
+    "Channel11": "ir_87",
     "Channel13": "ir_105",
+    "Channel14": "ir_123",
+    "Channel15": "ir_133",
 }
 
 

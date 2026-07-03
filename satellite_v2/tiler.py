@@ -7,7 +7,7 @@ import os
 import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Iterable, Any
+from typing import Iterable, Any, Mapping, Sequence
 
 import numpy as np
 
@@ -74,6 +74,56 @@ def sector_tile_coords(sector: str, z: int) -> list[tuple[int, int]]:
     x0, x1 = sorted((x_min, x_max))
     y0, y1 = sorted((y_min, y_max))
     return [(x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)]
+
+
+def _normalize_tile_bounds(
+    bounds: Mapping[str, float] | Sequence[float] | None,
+) -> tuple[float, float, float, float] | None:
+    if bounds is None:
+        return None
+    if isinstance(bounds, Mapping):
+        west = float(bounds["west"])
+        south = float(bounds["south"])
+        east = float(bounds["east"])
+        north = float(bounds["north"])
+    else:
+        values = list(bounds)
+        if len(values) != 4:
+            raise ValueError("Tile bounds must be west,south,east,north.")
+        west, south, east, north = (float(value) for value in values)
+    if south > north:
+        south, north = north, south
+    return west, south, east, north
+
+
+def tile_coords_for_bounds(
+    bounds: Mapping[str, float] | Sequence[float],
+    z: int,
+    buffer_tiles: int = 0,
+) -> list[tuple[int, int]]:
+    west, south, east, north = _normalize_tile_bounds(bounds) or (0.0, 0.0, 0.0, 0.0)
+    x_min, y_max = lon_lat_to_tile(west, south, z)
+    x_max, y_min = lon_lat_to_tile(east, north, z)
+    x0, x1 = sorted((x_min, x_max))
+    y0, y1 = sorted((y_min, y_max))
+    max_tile_index = max(0, (2 ** int(z)) - 1)
+    pad = max(0, int(buffer_tiles or 0))
+    x0 = max(0, x0 - pad)
+    x1 = min(max_tile_index, x1 + pad)
+    y0 = max(0, y0 - pad)
+    y1 = min(max_tile_index, y1 + pad)
+    return [(x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)]
+
+
+def planning_tile_coords(
+    sector: str,
+    z: int,
+    bounds: Mapping[str, float] | Sequence[float] | None = None,
+    buffer_tiles: int = 0,
+) -> list[tuple[int, int]]:
+    if bounds is None:
+        return sector_tile_coords(sector, z)
+    return tile_coords_for_bounds(bounds, z, buffer_tiles=buffer_tiles)
 
 
 def _render_tile_to_target(
@@ -283,6 +333,8 @@ def warm_frame_tiles(
     zooms: Iterable[int],
     overwrite: bool = False,
     render_workers: int = 1,
+    tile_bounds: Mapping[str, float] | Sequence[float] | None = None,
+    tile_buffer: int = 0,
 ) -> dict[str, int]:
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
@@ -298,7 +350,9 @@ def warm_frame_tiles(
     tasks: list[dict[str, Any]] = []
 
     for zoom in [int(value) for value in zooms]:
-        for x, y in sector_tile_coords(sector_key, zoom):
+        for x, y in planning_tile_coords(
+            sector_key, zoom, bounds=tile_bounds, buffer_tiles=tile_buffer
+        ):
             target = tile_path(
                 cache_root, sat_key, sector_key, channel, frame_key, zoom, x, y
             )
@@ -387,6 +441,8 @@ def warm_frame_tiles_from_canvas(
     zooms: Iterable[int],
     overwrite: bool = False,
     render_workers: int = 1,
+    tile_bounds: Mapping[str, float] | Sequence[float] | None = None,
+    tile_buffer: int = 0,
 ) -> dict[str, int]:
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
@@ -406,7 +462,9 @@ def warm_frame_tiles_from_canvas(
     # canvas render entirely.
     pending_coords: dict[int, list[tuple[int, int]]] = {}
     for zoom in zoom_list:
-        coords = sector_tile_coords(sector_key, zoom)
+        coords = planning_tile_coords(
+            sector_key, zoom, bounds=tile_bounds, buffer_tiles=tile_buffer
+        )
         if not coords:
             continue
         if overwrite:
