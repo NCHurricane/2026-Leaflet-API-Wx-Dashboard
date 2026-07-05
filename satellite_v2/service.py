@@ -10,15 +10,22 @@ from typing import Any
 
 import matplotlib.colors as mcolors
 import numpy as np
+from pyproj import Transformer
 
 from config.satellite_platforms import platform_descriptor
 from config.satellite_v2_config import (
     ABI_CHANNELS,
     SATELLITE_V2_INTERPRETIVE_LEGENDS,
+    SATELLITE_V2_LEGEND_ANCHOR_COUNT,
+    SATELLITE_V2_LEGEND_TICK_COUNT,
+    SATELLITE_V2_LIVE_TILE_RENDER_WORKERS,
+    SATELLITE_V2_ON_DEMAND_CATALOG_HOURS,
+    SATELLITE_V2_ON_DEMAND_CATALOG_MAX_FRAMES,
     SATELLITE_V2_PRODUCTS,
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
+    source_channels_for_product,
 )
 from satellite_v2 import catalog
 from satellite_v2.cache import (
@@ -28,20 +35,16 @@ from satellite_v2.cache import (
     read_json,
     tile_path,
 )
-from satellite_v2.providers import list_recent_frames
+from satellite_v2.providers import download_product_source_frames, list_recent_frames
+from satellite_v2.renderer import _load_source_raster
 from satellite_v2.tiler import render_frame_tile
 
 
 logger = logging.getLogger(__name__)
 
 
-_ON_DEMAND_CATALOG_HOURS = 12
-_ON_DEMAND_CATALOG_MAX_FRAMES = 360
-_LEGEND_ANCHOR_COUNT = 65
-_LEGEND_TICK_COUNT = 7
-_ON_DEMAND_TILE_RENDER_WORKERS = 10
 _ON_DEMAND_TILE_RENDER_POOL = ThreadPoolExecutor(
-    max_workers=_ON_DEMAND_TILE_RENDER_WORKERS,
+    max_workers=SATELLITE_V2_LIVE_TILE_RENDER_WORKERS,
     thread_name_prefix="sat-v2-live",
 )
 
@@ -141,14 +144,14 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
             "value": round(float(value), 3),
             "color": _color_for_value(cmap, norm, float(value)),
         }
-        for value in np.linspace(vmin_f, vmax_f, _LEGEND_ANCHOR_COUNT)
+        for value in np.linspace(vmin_f, vmax_f, SATELLITE_V2_LEGEND_ANCHOR_COUNT)
     ]
     ticks = [
         {
             "value": round(float(value), 3),
             "label": _brightness_temperature_label(float(value)),
         }
-        for value in np.linspace(vmin_f, vmax_f, _LEGEND_TICK_COUNT)
+        for value in np.linspace(vmin_f, vmax_f, SATELLITE_V2_LEGEND_TICK_COUNT)
     ]
     return {
         "status": "success",
@@ -181,8 +184,8 @@ def _catalog_frame_for_tile(
         sat_id=sat_id,
         sector=sector,
         channel_key=channel,
-        hours=_ON_DEMAND_CATALOG_HOURS,
-        max_frames=_ON_DEMAND_CATALOG_MAX_FRAMES,
+        hours=SATELLITE_V2_ON_DEMAND_CATALOG_HOURS,
+        max_frames=SATELLITE_V2_ON_DEMAND_CATALOG_MAX_FRAMES,
     )
     for frame in frames:
         if str(frame.frame_key or "") == str(frame_key or ""):
@@ -213,6 +216,58 @@ def get_catalog_payload(
 
 def get_status_payload(cache_root: str) -> dict[str, Any]:
     return catalog.status_payload(cache_root)
+
+
+def get_frame_bounds(
+    cache_root: str,
+    sat_id: str,
+    sector: str,
+    channel: str,
+) -> dict[str, Any] | None:
+    """Geographic bounds of the most recent frame, or None if none exist.
+
+    Used for sectors whose real-world extent isn't fixed (e.g. Himawari-9
+    Target Area, which JMA dynamically retasks to a storm, a volcano, or
+    nothing at all) so the frontend can fit the map to wherever the sector
+    currently points instead of relying on a static named view preset.
+    """
+    frames = list_recent_frames(sat_id, sector, channel, hours=1, max_frames=1)
+    if not frames:
+        return None
+    frame = frames[-1]
+
+    source_channel = source_channels_for_product(normalize_channel(channel))[0]
+    paths = download_product_source_frames(cache_root, sat_id, sector, channel, frame)
+    raster = _load_source_raster(paths[source_channel], source_channel)
+
+    transformer = Transformer.from_crs(raster.src_crs, "EPSG:4326", always_xy=True)
+    n_rows, n_cols = raster.cmi.shape
+    # Sample an interior grid rather than just the four corners: full-disk
+    # sectors have off-Earth corners that transform to infinity, while
+    # cropped regional sectors (Target/Japan) are fully on-Earth. Either
+    # way, finite samples across the grid bound the real coverage.
+    px = np.linspace(0, n_cols, 9)
+    py = np.linspace(0, n_rows, 9)
+    lons: list[float] = []
+    lats: list[float] = []
+    for row in py:
+        for col in px:
+            x, y = raster.src_transform * (float(col), float(row))
+            lon, lat = transformer.transform(x, y)
+            if np.isfinite(lon) and np.isfinite(lat):
+                lons.append(lon)
+                lats.append(lat)
+    if not lons:
+        return None
+
+    return {
+        "frame_key": frame.frame_key,
+        "timestamp_utc": frame.timestamp_utc,
+        "west": min(lons),
+        "south": min(lats),
+        "east": max(lons),
+        "north": max(lats),
+    }
 
 
 def resolve_tile(
@@ -278,7 +333,7 @@ def resolve_tile(
         print(
             "[satellite-v2 tile] "
             f"render_start frame_key={frame_key} tile={tile_id} "
-            f"workers={_ON_DEMAND_TILE_RENDER_WORKERS} "
+            f"workers={SATELLITE_V2_LIVE_TILE_RENDER_WORKERS} "
             f"miss_reason={miss_reason} file_exists={path_exists_before} "
             f"file_size={path_size_before}",
             flush=True,
@@ -302,7 +357,10 @@ def resolve_tile(
             "[satellite-v2 tile] "
             f"render_complete frame_key={frame_key} tile={tile_id} "
             f"cache_status={str(render_stats.get('cache_status') or 'miss').upper()} "
-            f"render_ms={render_elapsed}",
+            f"render_ms={render_elapsed} "
+            f"supertile_rendered={int(render_stats.get('supertile_rendered') or 0)} "
+            f"supertile_skipped={int(render_stats.get('supertile_skipped') or 0)} "
+            f"supertile_invalid={int(render_stats.get('supertile_invalid') or 0)}",
             flush=True,
         )
         logger.info("Tile render complete: %s (%sms)", tile_id, render_elapsed)
@@ -320,4 +378,14 @@ def resolve_tile(
         "sector": sector_key,
         "channel": channel_key,
     }
+    if "render_stats" in locals():
+        stats.update(
+            {
+                "supertile_rendered": int(render_stats.get("supertile_rendered") or 0),
+                "supertile_skipped": int(render_stats.get("supertile_skipped") or 0),
+                "supertile_invalid": int(render_stats.get("supertile_invalid") or 0),
+                "supertile_errors": int(render_stats.get("supertile_errors") or 0),
+                "supertile_radius": int(render_stats.get("supertile_radius") or 0),
+            }
+        )
     return path, stats

@@ -412,6 +412,16 @@
                 }
 
                 context.setStatus(`${storms.length} active system${storms.length === 1 ? '' : 's'} found.`);
+                const selectedStormId = String(context.getSelectedStormId?.() || '').toUpperCase();
+                const hasSelectedStorm = storms.some((storm) => (
+                    String(storm?.id || '').toUpperCase() === selectedStormId
+                ));
+                const featuredStormId = selectedStormId && hasSelectedStorm
+                    ? selectedStormId
+                    : String(storms[0]?.id || '').toUpperCase();
+                if (featuredStormId) {
+                    context.selectStorm(featuredStormId, { fitBounds: false, zoomToLatest: true });
+                }
             } catch (err) {
                 if (!context.isCurrentRequest(requestSeq)) return;
                 console.error('[tropical] Storm list error:', err);

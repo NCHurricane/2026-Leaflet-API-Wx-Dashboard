@@ -43,12 +43,18 @@
                             if (grad) grad.checked = false;
                         }
                     });
+                    const activeGrad = document.querySelector(`.weather-surface-gradient[data-product="${evt.target.value}"]`);
+                    if (activeGrad) activeGrad.checked = true;
                 }
                 pageContext?.updateGradientBlurVisibility?.();
                 if (!pageContext?.isTypeEnabled?.('current')) return;
                 const product = activeSurfaceProduct();
                 const region = pageContext?.getRegionValue?.();
-                if (product && region) pageContext.loadSurface?.(region, product);
+                if (product && region) {
+                    pageContext.loadSurface?.(region, product);
+                    return;
+                }
+                pageContext?.clearSurface?.();
             });
         });
 

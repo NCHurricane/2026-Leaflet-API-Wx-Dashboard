@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import os
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -22,6 +21,9 @@ from rasterio.warp import Resampling, reproject as rio_reproject
 from config.satellite_v2_config import (
     ABI_CHANNELS,
     RGB_COMPOSITE_KEYS,
+    SATELLITE_V2_GOES_FULLDISK_MAX_GRID,
+    SATELLITE_V2_NETCDF_CACHE_SIZE,
+    SATELLITE_V2_RENDERER_CACHE_SIZE,
     SATELLITE_V2_TILE_SIZE,
     normalize_channel,
     source_channels_for_product,
@@ -37,24 +39,13 @@ from satellite_v2.composites import (
 _SATELLITE_TILE_ALPHA = 230
 
 
-def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
-    raw = os.environ.get(name, "").strip()
-    if not raw:
-        return default
-    try:
-        value = int(raw)
-    except ValueError:
-        return default
-    return max(minimum, min(maximum, value))
-
-
 # NetCDF dataset memory cache (keyed by file path, avoid re-reading from disk)
 _NETCDF_CACHE: dict[str, tuple[xr.Dataset, int]] = {}
 _NETCDF_CACHE_LOCK = threading.RLock()
-_NETCDF_CACHE_MAX = _env_int("WX_SATELLITE_V2_NETCDF_CACHE_SIZE", 16, 1, 64)
+_NETCDF_CACHE_MAX = SATELLITE_V2_NETCDF_CACHE_SIZE
 
 
-_RENDERER_CACHE_MAX = _env_int("WX_SATELLITE_V2_RENDERER_CACHE_SIZE", 8, 0, 64)
+_RENDERER_CACHE_MAX = SATELLITE_V2_RENDERER_CACHE_SIZE
 _RENDERER_CACHE_LOCK = threading.RLock()
 _RENDERER_CACHE: OrderedDict[tuple[object, ...], "SatelliteTileRenderer"] = (
     OrderedDict()
@@ -366,17 +357,9 @@ def _load_fci_source_raster(primary_chunk: Path, source_channel: str) -> SourceR
     )
 
 
-# FULLDISK max native zoom is 5, so a source grid wider than ~5500 px can
-# never be displayed at native resolution. Decimating on load keeps 0.5 km
-# FULLDISK bands (Channel02 is 21696² ≈ 470 MP) from exhausting memory when
-# several on-demand render workers load frames at once. Mirrors AHI_MAX_GRID
-# in satellite_v2/ahi_hsd.py. CONUS/MESO grids are small and never decimated.
-_GOES_FULLDISK_MAX_GRID = 5500
-
-
 def _goes_fulldisk_stride(dataset: xr.Dataset, path: Path, shape: tuple[int, ...]) -> int:
     longest = max(shape)
-    if longest <= _GOES_FULLDISK_MAX_GRID:
+    if longest <= SATELLITE_V2_GOES_FULLDISK_MAX_GRID:
         return 1
     scene = str(dataset.attrs.get("scene_id", "")).strip().lower()
     is_fulldisk = (
@@ -386,7 +369,7 @@ def _goes_fulldisk_stride(dataset: xr.Dataset, path: Path, shape: tuple[int, ...
     )
     if not is_fulldisk:
         return 1
-    return -(-longest // _GOES_FULLDISK_MAX_GRID)
+    return -(-longest // SATELLITE_V2_GOES_FULLDISK_MAX_GRID)
 
 
 def _load_source_raster(

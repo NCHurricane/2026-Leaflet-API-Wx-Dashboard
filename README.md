@@ -242,66 +242,34 @@ Notes:
 - `GET /api/satellite/archive`
 - `GET /api/satellite` (legacy multiplexer)
 
-### Satellite v2 Worker Tuning
+### Satellite v2 Rapid Worker
 
-Satellite v2 scheduled workers pre-render missing/invalid tiles with bounded
-process parallelism. Defaults are tuned for a high-core local workstation:
+Satellite v2 Full Disk and CONUS imagery are live-rendered on demand with
+tile-cache reuse and supertiles. The only scheduled Satellite v2 warmer is the
+narrow rapid-sector worker, which targets high-cadence sectors where animation
+latency matters.
 
-- Current-sector worker: `4` tile render processes
-- Mesoscale worker: `4` tile render processes
-- Light-composite worker: `2` tile render processes
-- GEOColor worker: `1` tile render process
+Default rapid worker scope:
 
-Tune lower-core machines with environment variables before starting workers:
+- GOES-19/18 `MESO1` and `MESO2`
+- Himawari-9 `JAPAN`
+- Meteosat-11 `RSS`
+- Products: `Channel02` and `Channel13`
+- Latest 12 frames, low worker count, cache-first tile warming
 
-```powershell
-$env:WX_SATELLITE_V2_TILE_WORKERS = "4"
-$env:WX_SATELLITE_V2_MESO_TILE_WORKERS = "2"
-```
-
-For one-off runs, use the CLI override:
+One-off examples:
 
 ```powershell
-python -m workers.satellite_v2_worker --force --tile-workers 4
-python -m workers.satellite_v2_meso_worker --force --tile-workers 2
-python -m workers.satellite_v2_light_composites_worker --force --tile-workers 2
-python -m workers.satellite_v2_geocolor_worker --force --tile-workers 1
+python -m workers.satellite_v2_rapid_worker --force
+python -m workers.satellite_v2_rapid_worker --force --jobs goes19:MESO1 --products Channel02 --frames 2 --tile-workers 1
 ```
 
-Worker ownership profiles split work between the regular, mesoscale, and
-composite lanes:
-
-- `goes19-freshness`: optimized GOES-19 current/full-disk single-channel lane.
-- `goes19-meso`: optimized GOES-19 `MESO1`/`MESO2` single-channel lane.
-- `goes19-light-composites`: GOES-19 CONUS `TrueColor`, `NaturalColor`,
-  `Dust`, and `RocketPlume`.
-- `goes19-geocolor`: GOES-19 CONUS `GeoColor` and `GeoColorBlkMar`.
-- `local-primary`: GOES-19/18 CONUS high-use single-channel lane.
-- `remote-backfill`: GOES-18 products plus lower-priority GOES-19 products.
-- `full`: all configured Satellite v2 worker jobs.
-
-Examples:
+Tune rapid warming with environment variables:
 
 ```powershell
-python -m workers.satellite_v2_worker --profile goes19-freshness --tile-workers 4
-python -m workers.satellite_v2_meso_worker --profile goes19-meso --tile-workers 4
-python -m workers.satellite_v2_light_composites_worker --profile goes19-light-composites --tile-workers 2
-python -m workers.satellite_v2_geocolor_worker --profile goes19-geocolor --tile-workers 1
-python -m workers.satellite_v2_worker --profile local-primary --tile-workers 4
-python -m workers.satellite_v2_worker --profile remote-backfill --tile-workers 3
+$env:WX_SATELLITE_V2_RAPID_WORKER_FRAMES = "12"
+$env:WX_SATELLITE_V2_RAPID_TILE_WORKERS = "2"
 ```
-
-For one-off helper-machine backfill, add `--all-frames` to render every
-cataloged frame in the worker window for the selected profile:
-
-```powershell
-python -m workers.satellite_v2_worker --profile remote-backfill --tile-workers 3 --force --all-frames
-python -m workers.satellite_v2_meso_worker --profile remote-backfill --tile-workers 2 --force --all-frames
-```
-
-The previously documented `tools/run_satellite_v2_network_backfill.ps1` helper
-is not present in this checkout. Use the Python module commands above until that
-launcher is recreated or removed from the operational notes.
 
 ### MRMS
 

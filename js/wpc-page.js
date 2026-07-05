@@ -5,6 +5,7 @@
     let pageContext = null;
     let catalogGroups = new Map();
     let wpcScrubber = null;
+    let suppressReload = false;
 
     // ── State ────────────────────────────────────────────────────────────────
 
@@ -87,8 +88,18 @@
     }
 
     function _reload() {
+        if (suppressReload) return;
         if (!pageContext?.isTypeEnabled?.('wpc')) return;
         pageContext.loadWpcLayer?.();
+    }
+
+    function _withoutReload(callback) {
+        suppressReload = true;
+        try {
+            callback?.();
+        } finally {
+            suppressReload = false;
+        }
     }
 
     // ── Pill toggle helpers ───────────────────────────────────────────────────
@@ -116,13 +127,15 @@
                 state.group = group;
                 _selectPill(pill.closest('.wpc-group-pills'), pill);
                 _showPanel(panelsRoot, `wpc-panel-${group}`);
-                if (group === 'qpf') {
-                    byId('wpc-panel-qpf')?.querySelector('[data-wpc-qpf-tab="6hr"]')?.click();
-                } else if (group === 'winter') {
-                    byId('wpc-panel-winter')?.querySelector('[data-wpc-winter-tab="snow"]')?.click();
-                }
-                _activateScrubber();
-                _reload();
+                pageContext?.clearWpcLayer?.();
+                _withoutReload(() => {
+                    if (group === 'qpf') {
+                        byId('wpc-panel-qpf')?.querySelector('[data-wpc-qpf-tab="6hr"]')?.click();
+                    } else if (group === 'winter') {
+                        byId('wpc-panel-winter')?.querySelector('[data-wpc-winter-tab="snow"]')?.click();
+                    }
+                    _activateScrubber();
+                });
             });
         });
     }
@@ -297,12 +310,12 @@
             input.id = inputId;
             input.name = name;
             input.value = p.id;
-            input.checked = currentId ? p.id === currentId : i === 0;
+            input.checked = !!currentId && p.id === currentId;
             li.appendChild(label);
             li.appendChild(input);
             return li;
         }));
-        return !currentId && products.length ? products[0].id : currentId;
+        return currentId;
     }
 
     function _populateQpf24hrList() {

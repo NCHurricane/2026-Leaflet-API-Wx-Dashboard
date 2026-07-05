@@ -23,7 +23,7 @@
     }
 
     function getDefaultConvectiveHazards() {
-        return ['cat'];
+        return [];
     }
 
     function getCheckedConvectiveHazards() {
@@ -100,12 +100,20 @@
         const allowed = new Set(getAllowedConvectiveHazards(day));
         const defaults = new Set(getDefaultConvectiveHazards());
         const SPC_CONVECTIVE_LABELS = pageContext?.getSpcConvectiveLabels?.() || {};
+        const cigMap = pageContext?.getSpcCigOverlayByHazard?.() || {};
+        const cigParents = Object.fromEntries(Object.entries(cigMap).map(([base, cig]) => [cig, base]));
+        const checkedHazards = new Set(getCheckedConvectiveHazards());
         document.querySelectorAll('.weather-spc-convective-row').forEach((row) => {
             const hazard = row.dataset.hazard || '';
-            const enabled = allowed.has(hazard);
-            row.style.display = enabled ? '' : 'none';
+            const parentHazard = cigParents[hazard] || null;
+            const dependencyMet = !parentHazard || checkedHazards.has(parentHazard);
+            const visible = allowed.has(hazard);
+            const enabled = visible && dependencyMet;
+            row.style.display = visible ? '' : 'none';
+            row.style.opacity = enabled ? '' : '0.55';
             const input = row.querySelector('.weather-spc-convective-toggle');
             if (input) {
+                input.disabled = !enabled;
                 if (!enabled) input.checked = false;
                 else if (resetSelection) input.checked = defaults.has(hazard);
             }
@@ -275,12 +283,15 @@
                         }
                     });
                 }
+                syncConvectiveOptions(false);
                 if (el.checked && day <= 2) {
                     const cigMap = pageContext?.getSpcCigOverlayByHazard?.() || {};
                     const cigHazard = cigMap[el.value];
-                    if (cigHazard) {
-                        const cigEl = document.querySelector(`.weather-spc-convective-toggle[value="${cigHazard}"]`);
-                        if (cigEl && !cigEl.checked && !cigEl.disabled) cigEl.checked = true;
+                    const cigEl = cigHazard
+                        ? document.querySelector(`.weather-spc-convective-toggle[value="${cigHazard}"]`)
+                        : null;
+                    if (cigEl && !cigEl.disabled) {
+                        cigEl.checked = true;
                     }
                 }
                 _refreshIfEnabled();

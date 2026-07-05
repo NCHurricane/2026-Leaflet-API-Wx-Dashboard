@@ -29,13 +29,9 @@ import numpy as np
 from rasterio.crs import CRS as RioCRS
 from rasterio.transform import from_bounds as rio_from_bounds
 
-_VNIR_BANDS = frozenset(range(1, 7))
+from config.satellite_v2_config import SATELLITE_V2_AHI_MAX_GRID
 
-# Output grids are capped at the 2 km full-disk size (5500 px). The 1 km and
-# 0.5 km bands are strided down on load: a FULLDISK 0.5 km band is a
-# 484-megapixel float32 array (~1.9 GB) that has OOMed this host before, and
-# FULLDISK max native zoom cannot display more than ~5500 px anyway.
-AHI_MAX_GRID = 5500
+_VNIR_BANDS = frozenset(range(1, 7))
 
 
 @dataclass(frozen=True)
@@ -222,7 +218,7 @@ def calibrate(counts: np.ndarray, header: AhiHeader) -> np.ndarray:
 
 def load_ahi_raster(
     segment_files: Sequence[str | Path],
-    max_grid: int = AHI_MAX_GRID,
+    max_grid: int = SATELLITE_V2_AHI_MAX_GRID,
 ) -> AhiRaster:
     """Parse, calibrate, decimate, and stitch HSD segments into one grid."""
     if not segment_files:

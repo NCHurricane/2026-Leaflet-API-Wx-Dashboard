@@ -8,15 +8,20 @@
     const PLATFORM_SECTORS = {
         goes18:     ['FullDisk', 'CONUS', 'Meso1', 'Meso2'],
         goes19:     ['FullDisk', 'CONUS', 'Meso1', 'Meso2'],
-        himawari9:  ['FullDisk'],
+        himawari9:  ['FullDisk', 'Japan', 'Target'],
         meteosat12: ['FullDisk'],
         meteosat9:  ['FullDisk'],
+        meteosat11: ['RSS'],
     };
 
     // Channels available per non-GOES platform. null = all channels shown (GOES default).
+    // Himawari uses identical ABI to GOES, so shows full product list.
+    // Meteosat platforms show scalar products only; composites deferred to V2.
     const PLATFORM_CHANNELS = {
         himawari9:  null,
         meteosat12: new Set([
+            'Channel02',
+            'Channel03',
             'Channel07',
             'Channel07Fire',
             'Channel08RAMSDIS',
@@ -31,18 +36,20 @@
             'Channel08RAMSDIS',
             'Channel09RAMSDIS',
             'Channel13',
-            'AirMass',
-            'DayCloudPhase',
-            'DaySnowFog',
-            'NighttimeMicrophysics',
-            'Dust',
-            'Ash',
-            'SulfurDioxide',
+        ]),
+        meteosat11: new Set([
+            'Channel02',
+            'Channel03',
+            'Channel07',
+            'Channel07Fire',
+            'Channel08RAMSDIS',
+            'Channel09RAMSDIS',
+            'Channel13',
         ]),
     };
 
     // Platforms with a live data pipeline.
-    const IMPLEMENTED_SATELLITES = new Set(['goes18', 'goes19', 'himawari9', 'meteosat12', 'meteosat9']);
+    const IMPLEMENTED_SATELLITES = new Set(['goes18', 'goes19', 'himawari9', 'meteosat12', 'meteosat9', 'meteosat11']);
     const SATELLITE_AUTO_VIEW_PRESETS = {
         'goes18:FullDisk': 'goes-west-full-disk',
         'goes18:CONUS': 'conus',
@@ -53,8 +60,11 @@
         'goes19:Meso1': 'conus',
         'goes19:Meso2': 'conus',
         'himawari9:FullDisk': 'west-pacific',
+        'himawari9:Japan': 'himawari-japan',
+        'himawari9:Target': 'west-pacific',
         'meteosat12:FullDisk': 'europe-africa',
         'meteosat9:FullDisk': 'indian-ocean',
+        'meteosat11:RSS': 'europe-rss',
     };
     const SATELLITE_NAMED_VIEW_PRESETS = {
         conus: {
@@ -81,6 +91,19 @@
             bounds: [[-55, -15], [55, 105]],
             platforms: new Set(['meteosat9']),
         },
+        'europe-rss': {
+            bounds: [[25, -15], [65, 35]],
+            platforms: new Set(['meteosat11']),
+        },
+        'himawari-japan': {
+            bounds: [[18, 100], [55, 157]],
+            platforms: new Set(['himawari9']),
+        },
+        'himawari-target-current': {
+            bounds: null,
+            platforms: new Set(['himawari9']),
+            dynamic: true,
+        },
     };
 
     const byId = (id) => document.getElementById(id);
@@ -99,7 +122,7 @@
     }
 
     function activeChannel() {
-        return String(byId('weather-satellite-channel')?.value || 'Channel13').trim() || 'Channel13';
+        return String(byId('weather-satellite-channel')?.value || '').trim();
     }
 
     function satelliteViewPresetKey(satId, sector) {
@@ -136,10 +159,54 @@
         }
     }
 
+    function syncViewPresetEnabled() {
+        const sector = activeSector();
+        const select = byId('weather-satellite-view-preset');
+        if (!select) return;
+        select.disabled = !sector;
+    }
+
+    function syncChannelEnabled() {
+        const view = byId('weather-satellite-view-preset')?.value || '';
+        const select = byId('weather-satellite-channel');
+        if (!select) return;
+        select.disabled = !view;
+        if (!view) {
+            select.value = '';
+        }
+    }
+
+    async function fitDynamicViewPreset(presetKey) {
+        if (presetKey !== 'himawari-target-current') return;
+        const statusEl = byId('weather-satellite-status');
+        const satId = activeSatId();
+        const sector = activeSector();
+        const channel = activeChannel() || 'Channel13';
+        try {
+            const params = new URLSearchParams({ sat_id: satId, sector, channel });
+            const resp = await fetch(window.apiUrl(`/api/satellite-v2/frame-bounds?${params.toString()}`));
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const payload = await resp.json();
+            const bounds = payload?.bounds;
+            if (!bounds) {
+                if (statusEl) statusEl.textContent = 'No current Target Area is being observed right now.';
+                return;
+            }
+            pageContext?.fitSatelliteViewPreset?.([[bounds.south, bounds.west], [bounds.north, bounds.east]]);
+        } catch (err) {
+            if (statusEl) statusEl.textContent = 'Could not locate the current Target Area.';
+        }
+    }
+
     function setActiveViewPreset(presetKey, { fit = true } = {}) {
         const select = byId('weather-satellite-view-preset');
         const safeKey = String(presetKey || '').trim();
         if (select) select.value = safeKey;
+        const entry = SATELLITE_NAMED_VIEW_PRESETS[safeKey];
+        if (fit && entry?.dynamic) {
+            fitDynamicViewPreset(safeKey);
+            return;
+        }
         const preset = namedSatelliteViewPreset(safeKey);
         if (fit && preset) pageContext?.fitSatelliteViewPreset?.(preset);
     }
@@ -193,8 +260,10 @@
             button.tabIndex = isSelected ? 0 : -1;
         });
         syncSectorVisibility();
-        syncChannelVisibility();
         syncViewPresetVisibility();
+        syncViewPresetEnabled();
+        syncChannelVisibility();
+        syncChannelEnabled();
         document.querySelectorAll('.satellite-subtab-button[data-satellite-sector]').forEach((button) => {
             if (button.style.display === 'none') {
                 button.setAttribute('aria-selected', 'false');
@@ -342,8 +411,13 @@
                 if (!pageContext?.isTypeEnabled?.('satellite')) return;
                 const satId = activeSatId();
                 const sector = activeSector();
-                if (!satId || !sector) {
-                    pageContext.clearSatelliteLayerPool?.();
+                if (satId && sector && (id === 'weather-satellite-sat-id' || id === 'weather-satellite-sector')) {
+                    setAutoViewPresetForSelection(satId, sector);
+                    syncChannelEnabled();
+                }
+                const channel = activeChannel();
+                if (!satId || !sector || !channel) {
+                    pageContext.clearSatelliteFrames?.();
                     return;
                 }
                 if (!IMPLEMENTED_SATELLITES.has(satId)) {
@@ -353,19 +427,17 @@
                 }
                 pageContext.updateLegend?.();
                 pageContext.clearSatelliteLayerPool?.();
-                if (id === 'weather-satellite-sat-id' || id === 'weather-satellite-sector') {
-                    setAutoViewPresetForSelection(satId, sector);
-                }
                 if (pageContext.isScrubMode?.()) {
                     pageContext.loadScrubberFrames?.();
                     return;
                 }
-                pageContext.loadCurrentFrame?.({ silent: false });
+                pageContext.loadScrubberFrames?.();
             });
         });
 
         byId('weather-satellite-view-preset')?.addEventListener('change', (event) => {
             setActiveViewPreset(event.target.value, { fit: true });
+            syncChannelEnabled();
         });
 
         byId('weather-satellite-lookback-slider')?.addEventListener('input', (event) => {

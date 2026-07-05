@@ -1,8 +1,6 @@
 (function () {
     'use strict';
 
-    const DEFAULT_ALERT_CATEGORY = 'Severe Weather Warnings';
-
     const byId = (id) => document.getElementById(id);
     let warningsPanelContext = null;
 
@@ -28,11 +26,8 @@
     }
 
     function applyDefaultSelection() {
-        const allEl = byId('weather-alerts-all');
-
         getCategoryCheckboxes().forEach((el) => {
-            if (el === allEl) return;
-            el.checked = el.value === DEFAULT_ALERT_CATEGORY;
+            el.checked = el.value === 'Severe Weather Warnings';
         });
 
         document.querySelectorAll('.wx-warn-filter-ck').forEach((el) => {
@@ -40,6 +35,7 @@
         });
 
         syncMaster();
+        updateFilterOptionsVisibility();
     }
 
     function getCheckedCategories() {
@@ -54,7 +50,7 @@
 
         const checkedCategories = getCheckedCategories();
         const onlyShowSevereWarnings = checkedCategories.length === 1
-            && checkedCategories[0] === DEFAULT_ALERT_CATEGORY;
+            && checkedCategories[0] === 'Severe Weather Warnings';
         filterRow.style.display = onlyShowSevereWarnings ? 'flex' : 'none';
     }
 

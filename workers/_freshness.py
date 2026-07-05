@@ -100,10 +100,7 @@ _HEALTH_THRESHOLDS = {
     "water_riv_gauges": 60 * 60,  # task fires every 30 min
     "rtma_hourly": 2 * 60 * 60,  # task fires hourly at :05
     "rtma_rapid_update": 30 * 60,  # task fires every 15 min starting :20
-    "satellite_v2": 30 * 60,  # task fires every 15 min
-    "satellite_v2_meso": 12 * 60,  # task fires every 5 min
-    "satellite_v2_light_composites": 15 * 60,  # task fires every 5 min
-    "satellite_v2_geocolor": 25 * 60,  # task fires every 10 min
+    "satellite_v2_rapid": 12 * 60,  # task fires every 5 min
     "radar_live": 3 * 60,             # task fires every 1 min (L2 chunks cadence)
     "radar_live_l3": 15 * 60,         # L3 gate; expect to fire every ~5 min
     # MRMS sentinels are per-product; we check whichever exists. See below.

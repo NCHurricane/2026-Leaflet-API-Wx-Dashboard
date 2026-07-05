@@ -27,24 +27,34 @@
             return data;
         }
 
+        async function loadDroughtDates() {
+            const statusEl = byId('weather-drought-date-status');
+            let droughtDates = context.getDroughtDates();
+            if (droughtDates.length) {
+                context.renderDateButtons();
+                return droughtDates;
+            }
+
+            try {
+                const resp = await fetch(context.apiUrl('/api/data/drought/dates'));
+                if (resp.ok) {
+                    const data = await resp.json();
+                    droughtDates = data.dates || [];
+                    context.setDroughtDates(droughtDates);
+                    context.renderDateButtons();
+                }
+            } catch (_) { /* ignore */ }
+
+            if (!droughtDates.length && statusEl) {
+                statusEl.textContent = 'No dates available.';
+            }
+            return droughtDates;
+        }
+
         async function loadDroughtLayer() {
             const statusEl = byId('weather-drought-date-status');
 
-            let droughtDates = context.getDroughtDates();
-            if (!droughtDates.length) {
-                try {
-                    const resp = await fetch(context.apiUrl('/api/data/drought/dates'));
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        droughtDates = data.dates || [];
-                        context.setDroughtDates(droughtDates);
-                        if (!context.getActiveDroughtDate() && droughtDates.length) {
-                            context.setActiveDroughtDate(droughtDates[0]);
-                        }
-                        context.renderDateButtons();
-                    }
-                } catch (_) { /* ignore */ }
-            }
+            await loadDroughtDates();
 
             const date = context.getActiveDroughtDate() || (context.getDroughtDates()[0] ?? null);
             if (!date) {
@@ -130,7 +140,7 @@
             context.buildDroughtLegend(enabledCats, stats, code);
         }
 
-        return Object.freeze({ applyDroughtFilter, loadDroughtLayer });
+        return Object.freeze({ applyDroughtFilter, loadDroughtDates, loadDroughtLayer });
     }
 
     window.NCHDroughtEngine = Object.freeze({ createDroughtEngine });

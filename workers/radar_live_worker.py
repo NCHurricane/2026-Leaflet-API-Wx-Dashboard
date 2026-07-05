@@ -43,6 +43,7 @@ from cache.overlay_cache_utils import (
 )
 from config.radar_config import (
     LIVE_RADAR_KEEP_FRAMES,
+    LIVE_RADAR_L2_DEFAULT_ELEVATION,
     LIVE_RADAR_L2_USE_CHUNKS,
     LIVE_RADAR_LOOKBACK_HOURS,
     LIVE_RADAR_PRODUCTS,
@@ -408,21 +409,41 @@ def _fixed_angles(radar) -> list[float]:
         return []
 
 
+def _sweep_valid_count(radar, field_name: str, sweep_idx: int) -> int:
+    try:
+        data = radar.fields[field_name]["data"][radar.get_slice(sweep_idx)]
+        if hasattr(data, "mask"):
+            return int(np.sum(~np.ma.getmaskarray(data)))
+        return int(np.sum(np.isfinite(data)))
+    except Exception:
+        return 0
+
+
 def _select_sweep(
     radar, field_name: str, requested_elevation: str = "auto"
 ) -> tuple[int, list[float], float | None]:
     fixed_angles = _fixed_angles(radar)
     available = sorted(set(fixed_angles))
-    if str(requested_elevation or "auto").lower() == "auto" or not fixed_angles:
-        sweep = fixed_angles.index(min(fixed_angles)) if fixed_angles else 0
+    if not fixed_angles:
+        return 0, available, None
+    if str(requested_elevation or "auto").lower() == "auto":
+        target = min(fixed_angles)
     else:
         target = float(requested_elevation)
-        sweep = min(
-            range(len(fixed_angles)),
-            key=lambda index: abs(fixed_angles[index] - target),
-        )
-    selected = fixed_angles[sweep] if 0 <= sweep < len(fixed_angles) else None
-    return sweep, available, selected
+    nearest = min(fixed_angles, key=lambda angle: abs(angle - target))
+    # Split-cut VCPs scan the low tilts twice at the same fixed angle: a
+    # surveillance sweep (reflectivity only) and a Doppler sweep (velocity /
+    # spectrum width). Among sweeps at the matched angle, pick the one with
+    # the most valid data for the field being rendered.
+    candidates = [
+        index
+        for index, angle in enumerate(fixed_angles)
+        if abs(angle - nearest) <= 0.1
+    ]
+    sweep = max(
+        candidates, key=lambda index: _sweep_valid_count(radar, field_name, index)
+    )
+    return sweep, available, fixed_angles[sweep]
 
 
 def _radar_cache_product_key(
@@ -1346,6 +1367,7 @@ def run_radar_live_worker(force: bool = False) -> None:
                     site_id,
                     str(product_key),
                     product_cfg,
+                    elevation=LIVE_RADAR_L2_DEFAULT_ELEVATION if is_l2 else "auto",
                     use_mtime_key=use_mtime,
                 )
                 total_cached += int(cached)

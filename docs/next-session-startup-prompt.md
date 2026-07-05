@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date prepared: 2026-07-01
+Date prepared: 2026-07-04
 
 Start in:
 
@@ -34,6 +34,16 @@ Current status:
   behavior should stay in workers/*_worker.py.
 
 Recent completed work:
+- DONE 2026-07-04: Radar site selector now shows all 164 NWS NEXRAD sites
+  (vs. previous 7 CONUS-only). Non-CONUS sites (PGUA/Guam, RKSG/South Korea,
+  RODN/Japan, etc.) render Level 2 data on-demand; Level 3 products are disabled
+  in the UI for non-CONUS sites to reflect AWS/NODD availability (Level III is
+  only generated for CONUS per NOAA spec). Changes: new radar/nexrad_coordinates.py
+  (164-site fallback mapping), backend radar_live_site_supported() fix via
+  importlib fallback, frontend L2_REF default + CONUS filtering + site-change
+  auto-switch to L2, and new _radarSiteConusMap to track CONUS status. All
+  changes documented in superfile. Browser smoke pending for non-CONUS site
+  selection and L2 rendering.
 - Himawari-9 satellite pipeline was fully removed (2026-07-01). It used
   satpy/pyresample to ingest raw AHI HSD segments into an intermediate
   lat/lon npz grid, which caused two problems: dask's default threaded
@@ -128,11 +138,61 @@ Next up:
   jobs. Reopening the same product after restart can resume missing tile renders
   through /api/satellite-v2/tile because resolve_tile(..., allow_render=True)
   renders cache misses on demand.
+- Satellite runtime config consolidation (2026-07-04): live tile worker count,
+  on-demand catalog window, legend sampling counts, renderer/netCDF cache sizes,
+  and GOES/AHI/FCI Full Disk source-grid caps now live in
+  config/satellite_v2_config.py. Provider/render/service modules import those
+  values; adjust that config for future live-render or source-grid tuning.
+- Live on-demand satellite supertiles are enabled via
+  SATELLITE_V2_LIVE_SUPERTILE_RADIUS=1 by default. A visible tile miss renders
+  the requested tile first, then fills the surrounding 3x3 neighborhood while
+  skipping existing/negative-cached tiles. Invalid requested tiles return the
+  normal transparent invalid response; neighbor fill errors are counted without
+  failing the visible tile request.
+- Satellite animation prefetch is cache-only; visible Leaflet tile misses still
+  live-render, but background prefetch uses render_live=0 so high-resolution
+  Full Disk frame setup does not block the first static view.
+- New isolated rapid-sector worker:
+  `satellite_v2/rapid_worker.py` plus `workers/satellite_v2_rapid_worker.py`.
+  It warms GOES-19/18 MESO1/MESO2, Himawari-9 JAPAN, and Meteosat-11 RSS for
+  Channel02/Channel13 only. The old broad Satellite v2 workers were removed;
+  Full Disk and broad CONUS use live render, supertiles, and cache reuse.
+  `tools/install_tasks.ps1 -IncludeSatellite` registers the new
+  Wx-Dashboard-Satellite_v2_rapid task and removes legacy Satellite_v2 task
+  names. Optional future CONUS light-warm should be separate and opt-in: latest
+  1-2 GOES CONUS frames, Channel02/Channel13, zooms 5/6, 1-2 tile workers.
 - Legacy IEM alert-radar loop removed from the product shell: no
   weather-alert-radar-enable checkbox, no weather-opacity-alert-radar slider,
   and no _alertRadar* frontend timer/tile/freshness path. /radar should stay on
   the cache-first /api/radar/live/* workflow. The old /api/radar/tiles/*
   endpoints still exist only for API compatibility.
+- City labels now use a Layers-pane `Off | US | World` segmented control.
+  `US` keeps `data/us-cities-all.json`; `World` uses `data/world-cities.json`.
+  The same density slider applies to both sources through bounded per-source,
+  per-zoom km ranges in `js/weather.js`.
+- Startup map defaults now read from `config/user_settings.default.json` through
+  `GET /api/user-settings/defaults` before the first map fit/product refresh.
+  The frontend updates `weather-region` when the configured map view is a valid
+  region option, so product loads follow the configured initial region.
+- Product route startup respects per-page `autoLoad`; most pages open with
+  map/default controls/background metadata only. Current exceptions: Alerts
+  autoloads Severe Weather Warnings with TOR/SVR/FFW filters; Tropical starts
+  in Atlantic and features the first active storm, falling back to Tropical
+  Outlook when none are active. Drought loads release-week date metadata without
+  drawing a layer.
+- Default-on context controls are state borders, country borders, Surface
+  networks, and Radar Sites. Surface and RTMA can still be empty: unchecking
+  their selected product/stream/field clears stale map values instead of forcing
+  a fallback. Selecting a Surface product auto-checks its matching Gradient
+  toggle, which can still be turned off independently. RTMA field checkboxes
+  stay disabled until a stream is selected, with 24-hour temperature change
+  still Hourly-only. WPC group pills are navigation only and clear the previous
+  WPC overlay until the user selects a day/product.
+- SPC probabilistic hazards auto-enable their matching Significant/CIG hatch
+  layer. Drought release-week pills populate without a highlighted week;
+  selecting a week turns on all five drought categories before drawing.
+- User browser smoke passed on 2026-07-04 for these startup/default-control
+  changes.
 - Shared categorical legends now wrap whole swatch/label items using
   .legend-flow, labels can wrap without painting into neighboring swatches, and
   the Alerts legend uses the five-column helper. User browser smoke passed on
@@ -168,18 +228,35 @@ Next up:
   by default. The Auto option was removed from the UI; the seed <option> in
   weather.html has value="" and no text. L3 products never show elevation pills
   (single fixed sweep) — this is correct, not a bug.
-- L2 radar now uses the unidata-nexrad-level2-chunks S3 bucket via
-  radar/radar_chunks_utils.py. Individual chunks are cached locally in
-  cache/radar/live/l2_chunk_cache/ so each 60s worker run only downloads delta
-  chunks (~5-10 per in-progress scan). Complete scans get a .complete marker
-  and skip S3 entirely. Enabled by LIVE_RADAR_L2_USE_CHUNKS=True in
-  radar_config.py. End-to-end latency ~1-2 min from scan start vs 6-11 min before.
-- RADAR_AUTO_REFRESH_MS changed from 3 min to 90 s in weather.js to match
-  the L2 chunks polling cadence.
+- L2 radar chunks workflow (unidata-nexrad-level2-chunks bucket via
+  radar/radar_chunks_utils.py) was REVERTED 2026-07-04. LIVE_RADAR_L2_USE_CHUNKS
+  is now False; L2 uses the same flat-bucket path as L3 (radar/radar_nodd_utils.py).
+  Reason: benchmarked chunk-completion timestamps against the flat bucket's
+  LastModified for the same scans and they matched to the second -- the flat
+  file is posted by the same upstream pipeline the instant the chunk stream
+  finishes, so chunks bought zero latency benefit for any completed scan (only
+  up to one volume-interval, ~5-6 min, of early visibility into the
+  currently-in-progress scan). Not worth the complexity after fixing three
+  rounds of chunk-discovery/performance bugs in one session. See the
+  "L2 chunks bucket: bugs, latency benchmark, and revert" entry (2026-07-04) in
+  docs/dashboard-change-and-enhancement-superfile.md for full details.
+  radar_chunks_utils.py is left in place, unused, in case the flag is ever
+  flipped back on.
+- RADAR_AUTO_REFRESH_MS is 90 s in weather.js (was 3 min); unaffected by the
+  chunks revert.
 - Wx-Dashboard-Radar-Live scheduled task is now ENABLED at 1-minute intervals
   (changed from 5 min, was previously disabled). L2 runs every invocation; L3
   is gated by radar_live_l3 freshness sentinel (~5 min effective cadence). Re-run
   tools/install_tasks.ps1 after any Task Scheduler reset.
+- Radar scrubber warm-poll fix (2026-07-04): Level 2 Play required a manual
+  Refresh click to show backfilled frames because (1) render batches write to
+  index.json atomically at the end, so a poll mid-render saw zero progress and
+  the warm-poll gave up after ~12s -- fixed with an accurate `refreshing` flag
+  via app_core/background_render.py's is_live_render_inflight(); and (2) L2's
+  elevation <select> auto-resolves from '' to a concrete value on the first
+  response, which broke the warm-poll's stale-context guard in js/weather.js
+  for any elevation-selectable product. Fixed in js/radar-engine.js by
+  re-syncing the stored context key right after updateElevationOptions() runs.
 - "Next Update" countdown (wx-radar-next-update-status) removed; Last Update in
   the reliability row is the freshness indicator.
 - BR.pal reflectivity colormap rewritten: Radarscope-inspired green (5–25 dBZ)

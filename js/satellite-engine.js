@@ -22,7 +22,7 @@
                 && !isArchiveMode()
                 && !hasRtmaScrubFrames()
                 && !hasMrmsScrubFrames()
-                && (!isScrubMode() || isTypeEnabled('satellite'));
+                && !isScrubMode();
         }
 
         async function loadCurrentFrame(options = {}) {

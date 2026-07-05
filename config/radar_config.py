@@ -52,6 +52,11 @@ LIVE_RADAR_SITES = [
     "KGSP",
 ]
 
+# Elevation the scheduled worker renders L2 products at. Must match the UI's
+# default request so worker output and on-demand renders share one cache key
+# (no more parallel ELEV_AUTO / ELEV_0P5 directories rendered twice).
+LIVE_RADAR_L2_DEFAULT_ELEVATION = "0.5"
+
 # Authoritative live-radar product catalog. These entries drive the API, UI,
 # worker field selection/rendering, legends, units, and cache product keys.
 LIVE_RADAR_PRODUCTS = {
@@ -346,8 +351,12 @@ LIVE_RADAR_PRODUCTS = {
 LIVE_RADAR_LOOKBACK_HOURS = 1
 LIVE_RADAR_WORKER_INTERVAL_MIN = 5
 # Use the unidata-nexrad-level2-chunks S3 bucket for L2 products.
-# Enables sub-minute latency by assembling scans incrementally as chunks arrive.
-LIVE_RADAR_L2_USE_CHUNKS = True
+# Enables sub-minute latency by assembling scans incrementally as chunks arrive,
+# but the flat unidata-nexrad-level2 bucket posts a completed scan at the exact
+# same instant the chunk stream for it finishes -- so the only real benefit is
+# up to one volume-interval (~5-6 min) of early visibility into the *current*
+# in-progress scan. Not worth the added discovery/latency complexity for now.
+LIVE_RADAR_L2_USE_CHUNKS = False
 LIVE_RADAR_TILE_WORKER_INTERVAL_MIN = 5
 LIVE_RADAR_KEEP_FRAMES = 45
 

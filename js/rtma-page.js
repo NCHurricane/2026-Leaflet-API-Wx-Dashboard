@@ -35,17 +35,20 @@
 
     function syncProductForStream() {
         const stream = activeRtmaStream();
-        const delta24h = document.querySelector('.weather-rtma-product[value="temperature_change_24h"]');
-        if (!delta24h) return;
-        const supported = stream === 'rtma_hourly';
-        delta24h.disabled = !supported;
-        const row = delta24h.closest('.rtma-product-row');
-        if (row) row.style.opacity = supported ? '' : '0.55';
-        if (!supported && delta24h.checked) {
-            delta24h.checked = false;
-            const fallback = document.querySelector('.weather-rtma-product[value="temperature"]')
-                || document.querySelector('.weather-rtma-product');
-            if (fallback) fallback.checked = true;
+        const hasStream = !!stream;
+        let clearedDelta24h = false;
+        document.querySelectorAll('.weather-rtma-product').forEach((productEl) => {
+            const isDelta24h = productEl.value === 'temperature_change_24h';
+            const supported = hasStream && (!isDelta24h || stream === 'rtma_hourly');
+            productEl.disabled = !supported;
+            if (!supported && productEl.checked) {
+                productEl.checked = false;
+                if (isDelta24h) clearedDelta24h = true;
+            }
+            const row = productEl.closest('.rtma-product-row');
+            if (row) row.style.opacity = supported ? '' : '0.55';
+        });
+        if (clearedDelta24h && hasStream && stream !== 'rtma_hourly') {
             pageContext?.setStatus?.('24-hour temp change is only available on RTMA Hourly.');
         }
     }
@@ -53,13 +56,11 @@
     function syncStreamForRegion() {
         const region = activeRtmaRegion();
         const rapid = document.querySelector('.weather-rtma-stream[value="rtma_rapid_update"]');
-        const hourly = document.querySelector('.weather-rtma-stream[value="rtma_hourly"]');
         if (!rapid) return;
         const rapidSupported = region === 'CONUS';
         rapid.disabled = !rapidSupported;
         if (!rapidSupported && rapid.checked) {
             rapid.checked = false;
-            if (hourly) hourly.checked = true;
             pageContext?.setStatus?.('RTMA Rapid Update is only available for CONUS.');
         }
     }
@@ -72,14 +73,13 @@
                         if (other !== evt.target) other.checked = false;
                     });
                 }
-                if (!activeRtmaStream()) evt.target.checked = true;
                 syncStreamForRegion();
                 syncProductForStream();
                 if (pageContext?.isTypeEnabled?.('rtma') && activeRtmaStream() && activeRtmaProduct()) {
                     pageContext.loadUnified?.();
                     return;
                 }
-                pageContext?.refreshActiveLayers?.();
+                pageContext?.clearRtma?.();
             });
         });
 
@@ -103,14 +103,13 @@
                     });
                 }
                 const checkedProducts = activeRtmaProducts();
-                if (!checkedProducts.length) evt.target.checked = true;
                 const windProds = checkedProducts.filter((p) => p === 'wind_speed' || p === 'wind_direction');
                 if (windProds.length < 2) pageContext?.clearRtmaSecondaryWind?.();
                 if (pageContext?.isTypeEnabled?.('rtma') && activeRtmaStream() && activeRtmaProduct()) {
                     pageContext.loadUnified?.();
                     return;
                 }
-                pageContext?.refreshActiveLayers?.();
+                pageContext?.clearRtma?.();
             });
         });
 
@@ -127,6 +126,8 @@
                 if (pageContext?.isScrubMode?.()) pageContext.loadUnified?.();
             });
         }
+        syncStreamForRegion();
+        syncProductForStream();
     }
 
     window.NCHRtmaPage = Object.freeze({

@@ -18,7 +18,10 @@ import numpy as np
 from rasterio.crs import CRS as RioCRS
 from rasterio.transform import from_bounds as rio_from_bounds
 
-from config.satellite_v2_config import fci_channel_for_source_channel
+from config.satellite_v2_config import (
+    SATELLITE_V2_FCI_MAX_GRID,
+    fci_channel_for_source_channel,
+)
 
 
 @dataclass(frozen=True)
@@ -98,20 +101,10 @@ def _chunk_paths(paths: Sequence[str | Path]) -> list[Path]:
         raise ValueError("No FCI CHK-BODY NetCDF chunks were provided.")
     return result
 
-
-# Assembled grids are capped near the 2 km full-disk size (5568 px). FDHSI
-# 1 km channels (vis_06 is 11136² ≈ 124 MP ≈ 500 MB float32) are strided
-# down per strip on load, mirroring AHI_MAX_GRID in satellite_v2/ahi_hsd.py
-# and the GOES FULLDISK stride: FULLDISK max native zoom cannot display more
-# than ~5500 px anyway, and full-resolution assembly is the OOM class that
-# froze this host on GOES Channel02.
-FCI_MAX_GRID = 5500
-
-
 def load_fci_raster(
     chunk_files: Sequence[str | Path],
     channel: str,
-    max_grid: int = FCI_MAX_GRID,
+    max_grid: int = SATELLITE_V2_FCI_MAX_GRID,
 ) -> FciRaster:
     """Load one FCI channel from a set of body chunk NetCDF files."""
     paths = _chunk_paths(chunk_files)

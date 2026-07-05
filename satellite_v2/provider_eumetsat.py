@@ -52,17 +52,30 @@ _DOWNLOAD_URL = "https://api.eumetsat.int/data/download/1.0.0"
 
 _COLLECTIONS = {
     "meteosat9": "EO:EUM:DAT:MSG:HRSEVIRI-IODC",
+    "meteosat11": "EO:EUM:DAT:MSG:MSG15-RSS",
     "meteosat12": "EO:EUM:DAT:0662",
 }
 
 _INSTRUMENT_FOR_SAT = {
     "meteosat9": "SEVIRI",
+    "meteosat11": "SEVIRI",
     "meteosat12": "FCI",
 }
 
-# SEVIRI full-disk repeat cycle. Scan start times sit a few seconds past the
-# nominal slot, so frame keys floor to this.
-_SLOT_MINUTES = 15
+# SEVIRI repeat cycle in minutes: full-disk MSG scans every 15 min; the
+# Rapid Scan Service (Meteosat-11, Europe/North Africa strip only) scans
+# every 5 min. Scan start times sit a few seconds past the nominal slot, so
+# frame keys floor to this.
+_SLOT_MINUTES = {
+    "meteosat9": 15,
+    "meteosat11": 5,
+    "meteosat12": 15,
+}
+
+# Sectors each platform's live ingest supports beyond FULLDISK.
+_NON_FULLDISK_SECTOR = {
+    "meteosat11": "RSS",
+}
 
 _HTTP_TIMEOUT = 60
 _DOWNLOAD_TIMEOUT = 600
@@ -164,23 +177,25 @@ def _collection_for(sat_key: str) -> str:
     return collection
 
 
-def _require_fulldisk(sector: str) -> str:
+def _require_supported_sector(sat_key: str, sector: str) -> str:
     sector_key = normalize_sector(sector)
-    if sector_key != "FULLDISK":
+    expected = _NON_FULLDISK_SECTOR.get(sat_key, "FULLDISK")
+    if sector_key != expected:
         raise ValueError(
-            f"Meteosat live ingest supports the FULLDISK sector only "
-            f"(got '{sector}')."
+            f"Meteosat live ingest for '{sat_key}' supports the {expected} "
+            f"sector only (got '{sector}')."
         )
     return sector_key
 
 
-def _slot_time(start_iso: str) -> datetime:
+def _slot_time(sat_key: str, start_iso: str) -> datetime:
+    slot_minutes = _SLOT_MINUTES.get(sat_key, 15)
     stamp = start_iso.strip()
     if stamp.endswith("Z"):
         stamp = stamp[:-1] + "+00:00"
     parsed = datetime.fromisoformat(stamp).astimezone(timezone.utc)
     return parsed.replace(
-        minute=parsed.minute - parsed.minute % _SLOT_MINUTES,
+        minute=parsed.minute - parsed.minute % slot_minutes,
         second=0,
         microsecond=0,
     )
@@ -238,7 +253,7 @@ def list_recent_frames(
     max_frames: int,
 ) -> list[SourceFrame]:
     sat_key = normalize_sat_id(sat_id)
-    _require_fulldisk(sector)
+    _require_supported_sector(sat_key, sector)
     channel = normalize_channel(channel_key)
     collection = _collection_for(sat_key)
 
@@ -251,7 +266,7 @@ def list_recent_frames(
         start_iso = date_range.split("/", 1)[0]
         if not start_iso:
             continue
-        slot = _slot_time(start_iso)
+        slot = _slot_time(sat_key, start_iso)
         frame_key = slot.strftime("%Y%m%dT%H%M%SZ")
         timestamp = slot.isoformat().replace("+00:00", "Z")
         size = int(
@@ -423,7 +438,7 @@ def download_product_source_frames(
     frame: SourceFrame | dict,
 ) -> dict[str, Path]:
     sat_key = normalize_sat_id(sat_id)
-    sector_key = _require_fulldisk(sector)
+    sector_key = _require_supported_sector(sat_key, sector)
     product_key = normalize_channel(channel_key)
     collection = _collection_for(sat_key)
     instrument = _INSTRUMENT_FOR_SAT.get(sat_key, "SEVIRI")

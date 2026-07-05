@@ -1,10 +1,26 @@
 """AWS NOAA Himawari-9 AHI HSD listing provider for Satellite v2.
 
 Lists and downloads raw AHI L1b HSD segment files from the public
-noaa-himawari9 bucket. FULLDISK only: one frame per 10-minute timeslot,
-ten segments per band. A frame's source_keys store the S01 segment key per
-source channel; the remaining segment keys are derived from the filename's
-SnnNN sequence token at download time (all segments share one prefix).
+noaa-himawari9 bucket.
+
+Three sectors are supported:
+- FULLDISK: one frame per 10-minute timeslot, ten segments per band, stitched
+  vertically (first_line/total_segments) into one disk-wide grid.
+- JAPAN: a fixed Japan-area box re-scanned 4x per 10-minute timeslot
+  (JP01..JP04). Each scene is a single self-contained segment (its own
+  coff/loff describe that scene's own small grid directly, no full-disk
+  offset needed) sharing identical navigation across all 4 scenes, so this
+  is a genuine ~2.5-min rapid scan of one fixed box, not four spatial tiles.
+- TARGET: JMA's dynamically-retasked "Target Area" (R301..R304 within each
+  10-minute timeslot), same single-segment repeat-scan structure as JAPAN
+  but the navigation (and hence real-world lat/lon box) can change between
+  timeslots depending on what JMA is currently monitoring (a storm, a
+  volcano, or nothing at all).
+
+A frame's source_keys store the primary segment key per source channel; for
+FULLDISK the remaining segment keys are derived from the filename's SnnNN
+sequence token at download time (all segments share one prefix). JAPAN/TARGET
+scenes are always single-segment (S0101), so no sibling derivation is needed.
 """
 
 from __future__ import annotations
@@ -29,45 +45,76 @@ from satellite_v2.provider_aws import _list_prefix_objects, _s3_client
 _BUCKET = "noaa-himawari9"
 
 _SEGMENT_RE = re.compile(
-    r"HS_H\d{2}_(?P<date>\d{8})_(?P<time>\d{4})_B(?P<band>\d{2})_FLDK_"
+    r"HS_H\d{2}_(?P<date>\d{8})_(?P<time>\d{4})_B(?P<band>\d{2})_"
+    r"(?P<scene>FLDK|JP0[1-4]|R30[1-4])_"
     r"R\d{2}_S(?P<segment>\d{2})(?P<total>\d{2})\.DAT(?:\.bz2)?$"
 )
 
+# S3 folder root and repeat-scan behavior per sector. FULLDISK has one scene
+# (FLDK) stitched from multiple segments; JAPAN/TARGET repeat-scan a single
+# fixed-grid segment under 4 scene names per 10-minute timeslot, so each
+# scene is its own frame rather than a stitched whole.
+_SECTOR_INFO = {
+    "FULLDISK": {"root": "AHI-L1b-FLDK", "multi_scene": False},
+    "JAPAN": {"root": "AHI-L1b-Japan", "multi_scene": True},
+    "TARGET": {"root": "AHI-L1b-Target", "multi_scene": True},
+}
 
-def _require_fulldisk(sector: str) -> str:
+
+def _require_supported_sector(sector: str) -> str:
     sector_key = normalize_sector(sector)
-    if sector_key != "FULLDISK":
+    if sector_key not in _SECTOR_INFO:
         raise ValueError(
-            f"Himawari-9 supports the FULLDISK sector only (got '{sector}')."
+            f"Himawari-9 supports "
+            f"{', '.join(sorted(_SECTOR_INFO))} sectors only (got '{sector}')."
         )
     return sector_key
 
 
-def _iter_hour_prefixes(hours: int) -> list[str]:
+def _iter_hour_prefixes(root: str, hours: int) -> list[str]:
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     count = max(1, int(hours)) + 2
     return [
-        f"AHI-L1b-FLDK/{(now - timedelta(hours=offset)):%Y/%m/%d/%H}"
+        f"{root}/{(now - timedelta(hours=offset)):%Y/%m/%d/%H}"
         for offset in range(count)
     ]
 
 
-def _list_band_frames(band: int, hours: int) -> dict[str, dict]:
-    """Complete timeslots for one band: frame_key → timestamp + segment keys."""
+def _list_band_frames(sector_key: str, band: int, hours: int) -> dict[str, dict]:
+    """Complete frames for one band: frame_key → timestamp + segment keys.
+
+    For FULLDISK, frame_key is the 10-minute timeslot (segments stitch into
+    one frame). For JAPAN/TARGET, frame_key includes the scene suffix
+    (JP01..04 / R301..04) since each scene within a timeslot is its own
+    frame.
+    """
+    info = _SECTOR_INFO[sector_key]
+    multi_scene = bool(info["multi_scene"])
     slots: dict[str, dict] = {}
-    for prefix in _iter_hour_prefixes(hours):
+    for prefix in _iter_hour_prefixes(str(info["root"]), hours):
         for key, size in _list_prefix_objects(_BUCKET, prefix):
             match = _SEGMENT_RE.search(key)
             if not match or int(match.group("band")) != band:
                 continue
+            scene = match.group("scene")
             slot_time = datetime.strptime(
                 match.group("date") + match.group("time"), "%Y%m%d%H%M"
             ).replace(tzinfo=timezone.utc)
-            frame_key = slot_time.strftime("%Y%m%dT%H%M%SZ")
+            # The filename only carries the 10-min slot; the actual repeat
+            # scan within it (JP01..04 / R301..04) happens roughly every
+            # 2.5 min. This offset is an approximation for scrubber
+            # ordering/display only, not the true JMA ObsStartTime.
+            scene_index = int(scene[-1]) - 1 if multi_scene else 0
+            scan_time = slot_time + timedelta(seconds=150 * scene_index)
+            frame_key = (
+                f"{slot_time:%Y%m%dT%H%M%SZ}_{scene}"
+                if multi_scene
+                else slot_time.strftime("%Y%m%dT%H%M%SZ")
+            )
             entry = slots.setdefault(
                 frame_key,
                 {
-                    "timestamp_utc": slot_time.isoformat().replace("+00:00", "Z"),
+                    "timestamp_utc": scan_time.isoformat().replace("+00:00", "Z"),
                     "total": int(match.group("total")),
                     "segments": {},
                 },
@@ -94,13 +141,13 @@ def list_recent_frames(
     max_frames: int,
 ) -> list[SourceFrame]:
     normalize_sat_id(sat_id)
-    _require_fulldisk(sector)
+    sector_key = _require_supported_sector(sector)
     channel = normalize_channel(channel_key)
 
     source_channels = source_channels_for_product(channel)
     channel_slots = {
         source_channel: _list_band_frames(
-            ahi_band_for_source_channel(source_channel), hours
+            sector_key, ahi_band_for_source_channel(source_channel), hours
         )
         for source_channel in source_channels
     }
@@ -162,7 +209,7 @@ def download_product_source_frames(
     frame: SourceFrame | dict,
 ) -> dict[str, Path]:
     sat_key = normalize_sat_id(sat_id)
-    sector_key = _require_fulldisk(sector)
+    sector_key = _require_supported_sector(sector)
     product_key = normalize_channel(channel_key)
 
     source_channels = source_channels_for_product(product_key)

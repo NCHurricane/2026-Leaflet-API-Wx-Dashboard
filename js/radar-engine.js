@@ -192,6 +192,13 @@
 
                 const data = await resp.json();
                 context.updateElevationOptions(data);
+                // For elevation-selectable products (L2), updateElevationOptions can
+                // change the elevation <select> from '' (auto) to a resolved default
+                // the moment the first response arrives. The warm poll re-derives its
+                // context key from the live DOM value on every tick and bails out if it
+                // no longer matches the key captured above -- re-sync it now so the
+                // resolved elevation doesn't look like an unrelated context switch.
+                context.setScrubContextKey(context.currentScrubContextKey(product));
                 const frames = context.normalizeScrubFrames(data.frames, site, product);
                 context.setScrubFrames(frames);
 

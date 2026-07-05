@@ -476,12 +476,8 @@
             _alertsPageController.applyDefaultSelection();
             return;
         }
-        const allEl = byId('weather-alerts-all');
-        const defaultCategory = 'Severe Weather Warnings';
-
         _getAlertCategoryCheckboxes().forEach((el) => {
-            if (el === allEl) return;
-            el.checked = el.value === defaultCategory;
+            el.checked = el.value === 'Severe Weather Warnings';
         });
 
         document.querySelectorAll('.wx-warn-filter-ck').forEach((el) => {
@@ -489,6 +485,7 @@
         });
 
         _syncAllAlertsMaster();
+        _updateAlertFilterOptionsVisibility();
     }
 
     function _getCheckedAlertCategories() {
@@ -513,7 +510,7 @@
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 19,
-        noWrap: true,
+        noWrap: false,
     };
     // CONUS framing is driven entirely by CONUS_DEFAULT_BOUNDS via fitBounds(),
     // so the visible extent adapts to the viewport size instead of being fixed
@@ -523,13 +520,17 @@
     const TROPICAL_DEFAULT_CENTER = [33.4183, -87.0313];
     const TROPICAL_DEFAULT_ZOOM = 4;
     const REGION_FIT_BOTTOM_PADDING_PX = 120;
+    const USER_SETTINGS_DEFAULTS_URL = '/api/user-settings/defaults';
+
+    let _userSettingsDefaults = null;
+    let _productRenderArmed = true;
 
     const tilesDarkNoLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', tileOptions);
     const tilesLightNoLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', tileOptions);
     const tilesVoyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', tileOptions);
     var USGS_USImagery = L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 20,
-        noWrap: true,
+        noWrap: false,
         attribution: 'Tiles courtesy of the <a href="https://usgs.gov/">U.S. Geological Survey</a>'
     });
     const tilesSatellite = L.tileLayer(
@@ -537,7 +538,7 @@
         {
             attribution: 'Tiles &copy; Esri',
             maxZoom: 19,
-            noWrap: true,
+            noWrap: false,
         },
     );
 
@@ -924,6 +925,7 @@
     let radarBackdropLayer = null;
     let _radarSitesLoaded = false;
     let _radarSiteConfiguredMap = new Map();
+    let _radarSiteConusMap = new Map();
     let _radarSiteStatusMap = new Map();
     let _radarSiteRequestSeq = 0;
     let _radarLiveRequestSeq = 0;
@@ -1018,6 +1020,8 @@
     let countriesLayer = null;
     let citiesLayer = null;
     let _citiesData = null;
+    const _citiesDataBySource = new Map();
+    let _citiesSource = null;
     let _citiesDensity = 1;
     let _surfaceDensity = 1;
     let _rtmaDensity = 1;
@@ -1026,6 +1030,10 @@
     const CITY_LABEL_HEIGHT_PX = 11;
     const CITY_LABEL_X_PAD = 4;
     const CITY_LABEL_Y_PAD = 2;
+    const CITY_SOURCES = {
+        us: { path: '/data/us-cities-all.json', label: 'US' },
+        world: { path: '/data/world-cities.json', label: 'World' },
+    };
     const VALUE_MARKER_OFFSET_X_PX = 0;
     const VALUE_MARKER_OFFSET_Y_PX = -15;
     let _allAlertFeatures = [];        // Full geometry — used for all interactions (hover, click, pager)
@@ -3328,7 +3336,7 @@
         ).join('');
         const statusSection = `<div class="legend-flow">${statusItems}</div>`;
 
-        setLegend(`<h4 class="legend-title">Radar Sites (CONUS)</h4>${statusSection}`);
+        setLegend(`<h4 class="legend-title">Radar Sites (All NWS NEXRAD)</h4>${statusSection}`);
     }
 
     async function _fetchRadarColortable(palKey) {
@@ -3600,6 +3608,9 @@
                 _activeDroughtDate = d;
                 container.querySelectorAll('.wx-drought-date-btn').forEach((b) => {
                     b.classList.toggle('active', b.dataset.date === d);
+                });
+                document.querySelectorAll('.drought-cat-check').forEach((el) => {
+                    el.checked = true;
                 });
                 if (_isTypeEnabled('drought')) _droughtEngine?.loadDroughtLayer();
             });
@@ -4751,7 +4762,7 @@
     }
 
     function _getDefaultSpcConvectiveHazards(day = _getSpcDay()) {
-        return ['cat'];
+        return [];
     }
 
     function _getSpcConvectiveLabel(hazard, day = _getSpcDay()) {
@@ -5560,7 +5571,7 @@
     }
 
     // ── Region → fitBounds ───────────────────────────────────────────────────
-    function fitRegion(code) {
+    function fitRegion(code, options = {}) {
         const regionCode = (code || 'CONUS').toUpperCase();
         const b = regionCode === 'CONUS'
             ? CONUS_DEFAULT_BOUNDS
@@ -5571,6 +5582,7 @@
             map.fitBounds(b, {
                 paddingTopLeft: [0, 0],
                 paddingBottomRight: [0, REGION_FIT_BOTTOM_PADDING_PX],
+                animate: options.animate !== undefined ? !!options.animate : true,
             });
         }
     }
@@ -5579,6 +5591,82 @@
         map.setView(TROPICAL_DEFAULT_CENTER, TROPICAL_DEFAULT_ZOOM, {
             animate: false,
         });
+    }
+
+    async function _loadUserSettingsDefaults() {
+        try {
+            const res = await fetch(USER_SETTINGS_DEFAULTS_URL, { cache: 'no-store' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const payload = await res.json();
+            _userSettingsDefaults = payload && typeof payload === 'object' ? payload : null;
+        } catch (err) {
+            console.warn('[settings] Default user settings unavailable; using built-in startup defaults.', err);
+            _userSettingsDefaults = null;
+        }
+        return _userSettingsDefaults;
+    }
+
+    function _currentSettingsPageKey() {
+        if (_standaloneProductType === 'current') return 'surface';
+        return _standaloneProductType || 'main';
+    }
+
+    function _configuredInitialMapView() {
+        const pageKey = _currentSettingsPageKey();
+        const pageView = _userSettingsDefaults?.pages?.[pageKey]?.mapView;
+        const globalView = _userSettingsDefaults?.global?.homeRegion;
+        return String(pageView || globalView || 'NC').trim().toUpperCase();
+    }
+
+    function _configuredPageAutoLoad() {
+        const pageKey = _currentSettingsPageKey();
+        const pageConfig = _userSettingsDefaults?.pages?.[pageKey];
+        if (pageConfig && Object.prototype.hasOwnProperty.call(pageConfig, 'autoLoad')) {
+            return pageConfig.autoLoad !== false;
+        }
+        return true;
+    }
+
+    function _configuredPageAutoLoadCatalog() {
+        const pageKey = _currentSettingsPageKey();
+        return _userSettingsDefaults?.pages?.[pageKey]?.autoLoadCatalog === true;
+    }
+
+    function _configuredTropicalBasin() {
+        const basin = _userSettingsDefaults?.pages?.tropical?.basin;
+        return String(basin || 'AL').trim().toUpperCase();
+    }
+
+    function _armProductRendering() {
+        _productRenderArmed = true;
+    }
+
+    function _applyConfiguredTropicalBasin() {
+        const basinSelect = byId('weather-tropical-basin');
+        if (!basinSelect) return;
+        const basin = _configuredTropicalBasin();
+        const hasOption = Array.from(basinSelect.options || []).some((option) => option.value === basin);
+        if (hasOption) basinSelect.value = basin;
+    }
+
+    function _applyInitialMapView() {
+        const mapView = _configuredInitialMapView();
+        if (_isTypeEnabled('tropical') || mapView === 'TROPICAL') {
+            if (_activeTropicalBasin() !== 'WORLD') {
+                _fitTropicalBasinExtent();
+            } else {
+                fitTropicalDefaultExtent();
+            }
+            return;
+        }
+
+        const regionSelect = byId('weather-region');
+        const hasRegionOption = !!Array.from(regionSelect?.options || [])
+            .find((option) => option.value === mapView);
+        if (hasRegionOption) {
+            regionSelect.value = mapView;
+        }
+        fitRegion(mapView || regionSelect?.value || 'CONUS', { animate: false });
     }
 
     function _fitTropicalBasinExtent() {
@@ -6052,7 +6140,7 @@
         if (_radarPageController?.activeProduct) {
             return _radarPageController.activeProduct();
         }
-        return String(byId('weather-radar-product')?.value || 'L3_N0B').trim().toUpperCase();
+        return String(byId('weather-radar-product')?.value || 'L2_REF').trim().toUpperCase();
     }
 
     function _activeRadarElevation() {
@@ -6740,12 +6828,15 @@
                 : {};
             _radarSiteCoords.clear();
             const configuredMap = new Map();
+            const conusMap = new Map();
             sites.forEach((site) => {
                 const siteId = String(site?.site || '').toUpperCase();
                 if (!siteId) return;
                 configuredMap.set(siteId, !!site?.configured);
+                conusMap.set(siteId, !!site?.conus);
             });
             _radarSiteConfiguredMap = configuredMap;
+            _radarSiteConusMap = conusMap;
 
             const select = byId('weather-radar-site');
             if (select) {
@@ -6767,10 +6858,14 @@
             const productSelect = byId('weather-radar-product');
             if (productSelect) {
                 const keepProduct = _activeRadarProduct();
+                const selectedSite = _activeRadarSite();
+                const isConusSite = selectedSite ? _radarSiteConusMap.get(selectedSite) !== false : true;
                 productSelect.innerHTML = '';
                 const productGroups = new Map();
                 Object.entries(products).forEach(([productId, product]) => {
                     const level = String(product?.level || 'Other');
+                    // Skip Level 3 products for non-CONUS sites
+                    if (level === 'Level 3' && !isConusSite) return;
                     if (!productGroups.has(level)) {
                         const group = document.createElement('optgroup');
                         group.label = level;
@@ -6790,11 +6885,14 @@
                 const availableProducts = new Set(
                     Array.from(productSelect.options, (option) => option.value),
                 );
-                productSelect.value = availableProducts.has(keepProduct)
-                    ? keepProduct
-                    : availableProducts.has('L3_N0B')
-                        ? 'L3_N0B'
+                // Always default to L2_REF for initial load or when previous product is unavailable
+                if (!selectedSite || !availableProducts.has(keepProduct)) {
+                    productSelect.value = availableProducts.has('L2_REF')
+                        ? 'L2_REF'
                         : productSelect.options[0]?.value || '';
+                } else {
+                    productSelect.value = keepProduct;
+                }
             }
             _radarPageController?.syncElevationControl?.();
 
@@ -7162,8 +7260,12 @@
                 return;
             }
 
-            const appended = await _tryAppendNewRadarFrames();
-            if (appended > 0) {
+            const { appended, refreshing } = await _tryAppendNewRadarFrames();
+            if (appended > 0 || refreshing) {
+                // A backend render batch reports nothing until the whole batch
+                // finishes, so a poll can see zero new frames while a fill is
+                // still actively in flight. Only count a poll as "stable" once
+                // the backend confirms there is no render running.
                 _radarScrubWarmStablePolls = 0;
             } else {
                 _radarScrubWarmStablePolls += 1;
@@ -7656,14 +7758,14 @@
     }
 
     async function _tryAppendNewRadarFrames({ refresh = false } = {}) {
-        if (!_isTypeEnabled('radar')) return 0;
-        if (!_isRadarAutoUpdateEnabled()) return 0;
+        if (!_isTypeEnabled('radar')) return { appended: 0, refreshing: false };
+        if (!_isRadarAutoUpdateEnabled()) return { appended: 0, refreshing: false };
         const product = _activeRadarProduct();
         const site = _activeRadarSite();
-        if (!site) return 0;
+        if (!site) return { appended: 0, refreshing: false };
         const liveContextKey = _radarCurrentScrubContextKey(product);
         if (_radarScrubContextKey && liveContextKey && _radarScrubContextKey !== liveContextKey) {
-            return 0;
+            return { appended: 0, refreshing: false };
         }
 
         try {
@@ -7679,20 +7781,21 @@
             });
             _appendRadarSrvMotionParams(params);
             const resp = await fetch(apiUrl(`/api/radar/live/frames?${params.toString()}`), { cache: 'no-store' });
-            if (!resp.ok) return 0;
+            if (!resp.ok) return { appended: 0, refreshing: false };
             const data = await resp.json();
-            if (!_isTypeEnabled('radar')) return 0;
+            if (!_isTypeEnabled('radar')) return { appended: 0, refreshing: false };
             _radarPageController?.updateElevationOptions?.(data);
+            const refreshing = !!data.refreshing;
 
             const newFrames = _normalizeRadarScrubFrames(data.frames, site, product);
 
-            if (!newFrames.length) return 0;
+            if (!newFrames.length) return { appended: 0, refreshing };
 
             const existingKeys = new Set(_radarScrubFrames.map(_radarScrubFrameIdentity));
             const appended = newFrames.filter(
                 (frame) => !existingKeys.has(_radarScrubFrameIdentity(frame)),
             );
-            if (!appended.length) return 0;
+            if (!appended.length) return { appended: 0, refreshing };
 
             if (!_radarScrubFrames.length) {
                 _radarScrubFrames = newFrames;
@@ -7703,7 +7806,7 @@
                 _flashAnimateNewFrame();
                 _setRtmaScrubberStatus(`${_radarScrubFrameIndex + 1} / ${_radarScrubFrames.length} frames.`);
                 await _renderRadarScrubFrame(0);
-                return appended.length;
+                return { appended: appended.length, refreshing };
             }
 
             // The API frame list is authoritative and timestamp-sorted. During
@@ -7728,14 +7831,15 @@
             _setRadarAutoUpdateStatus(`+${appended.length} new`, 4000);
             _flashAnimateNewFrame();
             _setRtmaScrubberStatus(`${_radarScrubFrameIndex + 1} / ${_radarScrubFrames.length} frames.`);
-            return appended.length;
+            return { appended: appended.length, refreshing };
         } catch (_) {
-            return 0;
+            return { appended: 0, refreshing: false };
         }
     }
 
     async function _radarAutoRefreshTick() {
         if (!_isTypeEnabled('radar')) return;
+        if (!_productRenderArmed) return;
         if (_archiveMode) return;
         if (document.hidden) return;
         if (!_isRadarAutoUpdateEnabled()) return;
@@ -7746,7 +7850,7 @@
             // even when frames already exist. If no new frames came back yet, start a
             // short warm poll to pick them up once the render completes (~15-30 s).
             const product = _activeRadarProduct();
-            const appended = await _tryAppendNewRadarFrames({ refresh: true });
+            const { appended } = await _tryAppendNewRadarFrames({ refresh: true });
             if (appended === 0) {
                 _startRadarScrubWarmPoll(site, product);
             }
@@ -7777,6 +7881,7 @@
 
     async function _mrmsAutoRefreshTick() {
         if (!_isTypeEnabled('mrms')) return;
+        if (!_productRenderArmed) return;
         if (_archiveMode) return;
         if (document.hidden) return;
         if (!_isMrmsAutoUpdateEnabled()) return;
@@ -7807,6 +7912,7 @@
 
     async function _alertsAutoRefreshTick() {
         if (!_isTypeEnabled('alerts')) return;
+        if (!_productRenderArmed) return;
         if (document.hidden) return;
         if (!_isAlertsAutoUpdateEnabled()) return;
 
@@ -7835,6 +7941,7 @@
 
     async function _rtmaAutoRefreshTick() {
         if (!_isTypeEnabled('rtma')) return;
+        if (!_productRenderArmed) return;
         if (_archiveMode) return;
         if (document.hidden) return;
         if (!_isRtmaAutoUpdateEnabled()) return;
@@ -8334,7 +8441,7 @@
     }
 
     function _satelliteFrameHasTiles(frame) {
-        return _satelliteFrameReadyTileCount(frame) > 0;
+        return _satelliteFrameTileCount(frame) > 0;
     }
 
     function _satelliteFrameIndexForReload(frames, preferredFrameKey = '') {
@@ -8431,7 +8538,7 @@
             maxTilesPerFrame: SATELLITE_PREFETCH_MAX_TILES_PER_FRAME,
             maxQueueTiles: SATELLITE_PREFETCH_MAX_QUEUE_TILES,
             bufferTiles: SATELLITE_PREFETCH_TILE_BUFFER,
-            renderLive: true,
+            renderLive: false,
         };
     }
 
@@ -9643,7 +9750,12 @@
         }, delayMs);
     }
 
-    function refreshActiveLayers() {
+    function refreshActiveLayers(options = {}) {
+        if (options.startup) {
+            if (!_productRenderArmed) return;
+        } else {
+            _productRenderArmed = true;
+        }
         if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length || _satelliteScrubMode) return;
         const alertsEnabled = _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0;
         const lsrEnabled = _isTypeEnabled('alerts') && !!document.querySelectorAll('.weather-lsr-category:checked').length > 0;
@@ -11096,12 +11208,30 @@
         return 400;
     }
 
-    // City labels need heavier thinning than station plots at the same zoom.
-    function _baseCityDistKm(zoom) {
-        if (zoom >= 9) return 1;
-        if (zoom >= 7) return 80;
-        if (zoom >= 5) return 300;
-        return 180;
+    function _cityDistanceRangeKm(source, zoom) {
+        if (source === 'world') {
+            if (zoom >= 10) return { min: 4, max: 80 };
+            if (zoom >= 9) return { min: 8, max: 160 };
+            if (zoom >= 8) return { min: 18, max: 350 };
+            if (zoom >= 7) return { min: 40, max: 800 };
+            if (zoom >= 6) return { min: 85, max: 1600 };
+            if (zoom >= 5) return { min: 175, max: 2500 };
+            if (zoom >= 4) return { min: 350, max: 3500 };
+            if (zoom >= 3) return { min: 700, max: 5000 };
+            return { min: 1200, max: 6000 };
+        }
+
+        if (zoom >= 9) return { min: 5, max: 60 };
+        if (zoom >= 7) return { min: 40, max: 600 };
+        if (zoom >= 5) return { min: 150, max: 1500 };
+        return { min: 180, max: 2500 };
+    }
+
+    function _cityMinDistKm(zoom, density = _citiesDensity) {
+        const source = _readCitiesSource() || _citiesSource || 'us';
+        const { min, max } = _cityDistanceRangeKm(source, zoom);
+        const t = Math.max(0, Math.min(1, Number(density) || 0));
+        return max - ((max - min) * t);
     }
 
     // Filters items so no two are closer than minDistKm.
@@ -11711,6 +11841,16 @@
         }
     }
 
+    function _clearSurfaceLayer() {
+        _surfaceRequestSeq += 1;
+        if (surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
+        surfaceLayer = null;
+        _surfaceStations = [];
+        const countEl = byId('weather-surface-count');
+        if (countEl) countEl.textContent = '0 station(s)';
+        setLegend(null);
+    }
+
     async function _ensureGradientStations(product, regionCode = null, prefetchedStations = null) {
         if (_archiveMode || !product) return;
         const sourceRegion = _getGradientSourceRegion(regionCode);
@@ -11909,9 +12049,6 @@
 
         if (!supported && delta24h.checked) {
             delta24h.checked = false;
-            const fallback = document.querySelector('.weather-rtma-product[value="temperature"]')
-                || document.querySelector('.weather-rtma-product');
-            if (fallback) fallback.checked = true;
             setStatus('24-hour temp change is only available on RTMA Hourly.');
         }
     }
@@ -11923,7 +12060,6 @@
         }
         const region = _activeRtmaRegion();
         const rapid = document.querySelector('.weather-rtma-stream[value="rtma_rapid_update"]');
-        const hourly = document.querySelector('.weather-rtma-stream[value="rtma_hourly"]');
         if (!rapid) return;
 
         const rapidSupported = region === 'CONUS';
@@ -11931,9 +12067,24 @@
 
         if (!rapidSupported && rapid.checked) {
             rapid.checked = false;
-            if (hourly) hourly.checked = true;
             setStatus('RTMA Rapid Update is only available for CONUS.');
         }
+    }
+
+    function _clearRtmaLayers() {
+        _rtmaRequestSeq += 1;
+        _rtmaScrubLoadSeq += 1;
+        _exitRtmaScrubMode(false);
+        if (rtmaOverlay && map.hasLayer(rtmaOverlay)) map.removeLayer(rtmaOverlay);
+        if (rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) map.removeLayer(rtmaGradientLayer);
+        if (rtmaPointLayer && map.hasLayer(rtmaPointLayer)) map.removeLayer(rtmaPointLayer);
+        rtmaOverlay = null;
+        rtmaGradientLayer = null;
+        rtmaPointLayer = null;
+        _rtmaPointsAll = [];
+        _rtmaSecondaryPoints = [];
+        _rtmaSecondaryUnits = '';
+        setLegend(null);
     }
 
     function _activeRtmaRegion() {
@@ -13703,13 +13854,46 @@
         return _normalizeGeometryForDateline(geojson);
     }
 
+    function _readCitiesSource() {
+        const selected = document.querySelector('input[name="weather-cities-mode"]:checked')?.value || 'off';
+        return CITY_SOURCES[selected] ? selected : null;
+    }
+
+    function _clearCitiesLayer() {
+        if (citiesLayer) {
+            map.removeLayer(citiesLayer);
+            citiesLayer = null;
+        }
+    }
+
+    function _syncCitiesModeControls() {
+        const disabled = !_readCitiesSource();
+        document.querySelectorAll('.wx-cities-density').forEach((row) => {
+            row.classList.toggle('is-disabled', disabled);
+            row.querySelectorAll('input').forEach((input) => {
+                input.disabled = disabled;
+            });
+        });
+    }
+
     async function _ensureCitiesLayer() {
+        const sourceKey = _readCitiesSource();
+        if (!sourceKey) {
+            _clearCitiesLayer();
+            return;
+        }
+        if (_citiesSource !== sourceKey) {
+            _citiesSource = sourceKey;
+            _citiesData = _citiesDataBySource.get(sourceKey) || null;
+            _clearCitiesLayer();
+        }
         if (_citiesData && citiesLayer) return;
         try {
             if (!_citiesData) {
-                const resp = await fetch(apiUrl('/data/us-cities-all.json'));
+                const resp = await fetch(apiUrl(CITY_SOURCES[sourceKey].path));
                 if (!resp.ok) return;
                 _citiesData = await resp.json();
+                _citiesDataBySource.set(sourceKey, _citiesData);
             }
             _rebuildCitiesLayer();
         } catch {
@@ -13727,7 +13911,7 @@
         const label = document.querySelector('label[for="weather-cities-density"]');
         if (!label) return;
         const zoom = map?.getZoom() ?? 5;
-        const distKm = Math.round(_baseCityDistKm(zoom) / _citiesDensity);
+        const distKm = Math.round(_cityMinDistKm(zoom));
         const baseLabel = label.dataset.baseLabel || 'City Density';
         label.dataset.baseLabel = baseLabel;
         label.textContent = `${baseLabel} (${distKm} km)`;
@@ -13831,7 +14015,7 @@
         const inView = _citiesData.filter((c) => _cityInBounds(c, map.getBounds().pad(0.1)));
         if (!inView.length) return [];
         const zoom = map.getZoom();
-        const minDistKm = _baseCityDistKm(zoom) / _citiesDensity;
+        const minDistKm = _cityMinDistKm(zoom);
         return _filterByMinDistKm(inView, c => Number(c.latitude), c => Number(c.longitude), minDistKm);
     }
 
@@ -13850,7 +14034,7 @@
     }
 
     function _refreshCitiesIfVisible() {
-        if (!byId('weather-toggle-cities')?.checked) return;
+        if (!_readCitiesSource()) return;
         if (!_citiesData) return;
         _rebuildCitiesLayer();
     }
@@ -13858,11 +14042,12 @@
     async function _syncRightSidebarLayers() {
         const showStates = byId('weather-toggle-states')?.checked;
         const showCounties = byId('weather-toggle-counties')?.checked;
-        const showCities = byId('weather-toggle-cities')?.checked;
+        const showCities = !!_readCitiesSource();
         const showCountries = byId('weather-toggle-countries')?.checked;
 
         await _ensureBoundaryLayers();
-        await _ensureCitiesLayer();
+        if (showCities) await _ensureCitiesLayer();
+        else _clearCitiesLayer();
         await _ensureCountriesLayer();
 
         if (countriesLayer) {
@@ -13936,6 +14121,7 @@
 
     byId('weather-tropical-basin')?.addEventListener('change', () => {
         if (!_isTypeEnabled('tropical')) return;
+        _armProductRendering();
         const sysSelect = byId('weather-tropical-system');
         if (sysSelect) sysSelect.value = '';
         _activeTropicalStorm = null;
@@ -13948,6 +14134,7 @@
 
     byId('weather-tropical-system')?.addEventListener('change', () => {
         if (!_isTypeEnabled('tropical')) return;
+        _armProductRendering();
         _closeTropicalDetail();
         _tropicalEngine?.loadStormDetail(
             _activeTropicalSystemId(),
@@ -13957,6 +14144,7 @@
 
     byId('weather-refresh-tropical')?.addEventListener('click', () => {
         if (!_isTypeEnabled('tropical')) return;
+        _armProductRendering();
         const sysSelect = byId('weather-tropical-system');
         if (sysSelect) sysSelect.value = '';
         _activeTropicalStorm = null;
@@ -13997,18 +14185,9 @@
     const NETWORKS = ['ASOS', 'COOP', 'DCP', 'RWIS'];
     let _networkFilters = {};
 
-    // Load network filters from localStorage
+    // Product pages should start with all networks visible; user changes still apply during the session.
     function _loadNetworkFilters() {
-        const saved = localStorage.getItem('wxNetworkFilters');
-        if (saved) {
-            try {
-                _networkFilters = JSON.parse(saved);
-            } catch (e) {
-                _networkFilters = Object.fromEntries(NETWORKS.map(n => [n, true]));
-            }
-        } else {
-            _networkFilters = Object.fromEntries(NETWORKS.map(n => [n, true]));
-        }
+        _networkFilters = Object.fromEntries(NETWORKS.map(n => [n, true]));
     }
 
     function _saveNetworkFilters() {
@@ -14039,11 +14218,13 @@
             _networkFilters[e.target.value] = e.target.checked;
             _saveNetworkFilters();
             // Re-render surface markers with updated filter
-            if (_surfaceStations.length) {
-                _renderSurfaceMarkers(_getFilteredStations(_surfaceStations));
-            }
+                if (_surfaceStations.length) {
+                    _renderSurfaceMarkers(_getFilteredStations(_surfaceStations));
+                } else if (!_activeSurfaceProduct()) {
+                    _clearSurfaceLayer();
+                }
+            });
         });
-    });
 
     // Wrap _renderSurfaceMarkers to apply network filtering
     const _originalRenderSurfaceMarkers = _renderSurfaceMarkers;
@@ -14119,6 +14300,7 @@
 
     _getAlertCategoryCheckboxes().forEach((el) => {
         el.addEventListener('change', () => {
+            _armProductRendering();
             const allEl = byId('weather-alerts-all');
             if (el === allEl) {
                 _setAllAlertCategories(!!allEl?.checked);
@@ -14142,6 +14324,7 @@
 
     byId('weather-rtma-show-values')?.addEventListener('change', () => {
         if (!_isTypeEnabled('rtma')) return;
+        _armProductRendering();
         // Gradient always shows; this toggle only adds/removes text markers.
         if (_rtmaPointsAll.length) {
             _renderRtmaPoints();
@@ -14156,14 +14339,17 @@
     });
 
     byId('weather-refresh-mrms')?.addEventListener('click', () => {
+        _armProductRendering();
         _mrmsEngine?.loadMrms();
     });
 
     byId('weather-refresh-drought')?.addEventListener('click', () => {
+        _armProductRendering();
         if (_isTypeEnabled('drought')) _droughtEngine?.loadDroughtLayer();
     });
 
     byId('weather-refresh-water')?.addEventListener('click', () => {
+        _armProductRendering();
         if (_isTypeEnabled('water')) _loadWaterStations({ force: true });
     });
 
@@ -14263,6 +14449,25 @@
 
     byId('weather-radar-site')?.addEventListener('change', () => {
         _syncStormTracksVisibility();
+        // Update product filtering based on CONUS status of selected site
+        const selectedSite = _activeRadarSite();
+        const isConusSite = selectedSite ? _radarSiteConusMap.get(selectedSite) !== false : true;
+        const productSelect = byId('weather-radar-product');
+        if (productSelect) {
+            const currentValue = productSelect.value;
+            // Hide/show Level 3 optgroup based on CONUS status
+            const l3Group = Array.from(productSelect.querySelectorAll('optgroup')).find(g => g.label === 'Level 3');
+            if (l3Group) {
+                l3Group.style.display = isConusSite ? '' : 'none';
+            }
+            // If current selection is L3 and site is non-CONUS, switch to first L2 product
+            if (!isConusSite && currentValue.startsWith('L3_')) {
+                const l2Option = Array.from(productSelect.options).find(o => o.value.startsWith('L2_'));
+                if (l2Option) {
+                    productSelect.value = l2Option.value;
+                }
+            }
+        }
     });
 
     const _lsrAllEl = byId('weather-lsr-all');
@@ -14471,8 +14676,12 @@
         if (nowcoastAlertsLayer) nowcoastAlertsLayer.setOpacity(parseFloat(this.value));
     });
 
-    byId('weather-refresh-spc')?.addEventListener('click', refreshSpc);
+    byId('weather-refresh-spc')?.addEventListener('click', () => {
+        _armProductRendering();
+        refreshSpc();
+    });
     byId('weather-refresh-surface')?.addEventListener('click', () => {
+        _armProductRendering();
         const region = byId('weather-region')?.value || 'NC';
         const product = _activeSurfaceProduct();
         if (!product) {
@@ -14485,7 +14694,13 @@
     // Left sidebar satellite lookback and scrubber controls removed - functionality moved to bottom archive bar
 
 
-    byId('weather-toggle-cities')?.addEventListener('change', _syncRightSidebarLayers);
+    document.querySelectorAll('input[name="weather-cities-mode"]').forEach((input) => {
+        input.addEventListener('change', () => {
+            _syncCitiesModeControls();
+            _updateCitiesDensityLabel();
+            _syncRightSidebarLayers();
+        });
+    });
     byId('weather-cities-density')?.addEventListener('input', () => {
         _citiesDensity = _readCitiesDensity();
         _updateCitiesDensityLabel();
@@ -14495,6 +14710,9 @@
         const val = parseFloat(e.target.value || '0.6');
         document.documentElement.style.setProperty('--city-font-size', String(val));
     });
+    _citiesDensity = _readCitiesDensity();
+    _updateCitiesDensityLabel();
+    _syncCitiesModeControls();
     byId('weather-toggle-states')?.addEventListener('change', _syncRightSidebarLayers);
     byId('weather-toggle-counties')?.addEventListener('change', _syncRightSidebarLayers);
     byId('weather-toggle-countries')?.addEventListener('change', _syncRightSidebarLayers);
@@ -14510,10 +14728,10 @@
             // Gradient is a bounds-sized image overlay; rebuild it after panning.
             _renderSurfaceMarkers(_surfaceStations);
         }
-        if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0 && _allAlertFeatures.length) {
+        if (_productRenderArmed && _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0 && _allAlertFeatures.length) {
             buildAlertsLegend(_allAlertFeatures);
         }
-        if (_isTypeEnabled('alerts') && document.querySelectorAll('.weather-lsr-category:checked').length > 0) {
+        if (_productRenderArmed && _isTypeEnabled('alerts') && document.querySelectorAll('.weather-lsr-category:checked').length > 0) {
             _alertsEngine?.loadLocalStormReports({ silentStatus: true });
         }
         if (
@@ -14524,7 +14742,7 @@
         ) {
             buildSpcWatchesLegend();
         }
-        if (_isTypeEnabled('rtma') && byId('weather-rtma-show-values')?.checked) {
+        if (_productRenderArmed && _isTypeEnabled('rtma') && byId('weather-rtma-show-values')?.checked) {
             if (_rtmaScrubFrames.length) {
                 _renderRtmaScrubFrame(_rtmaScrubFrameIndex);
             } else {
@@ -14534,7 +14752,7 @@
         if (_satelliteScrubMode && _satelliteFrames.length && _isTypeEnabled('satellite')) {
             _scheduleSatelliteTilePrefetch(350);
         }
-        if (_isTypeEnabled('water')) {
+        if (_productRenderArmed && _isTypeEnabled('water')) {
             _scheduleWaterReload();
         }
     });
@@ -14644,7 +14862,7 @@
     });
 
     // ── Init ─────────────────────────────────────────────────────────────────
-    function init() {
+    async function init() {
         // Normalize tab checkbox state to HTML defaults at startup. Browsers
         // (both Firefox and Edge) restore form state from previous sessions,
         // which can leave multiple weather-type checkboxes checked and cause
@@ -14698,6 +14916,9 @@
         _updateGradientBlurControlVisibility();
         _syncRtmaStreamForRegion();
         _syncRtmaProductForStream();
+        await _loadUserSettingsDefaults();
+        _productRenderArmed = _configuredPageAutoLoad();
+        _applyConfiguredTropicalBasin();
         _loadRadarSites();
         _startRadarAutoRefresh();
         byId('wx-radar-auto-update')?.classList.add('active');
@@ -14714,21 +14935,26 @@
         });
         _syncRightSidebarLayers();
         _setViewerTimestamp(null);
-        if (_isTypeEnabled('tropical')) {
-            fitTropicalDefaultExtent();
-        } else {
-            fitRegion(byId('weather-region')?.value || 'NC');
-        }
+        _applyInitialMapView();
+        _syncRtmaStreamForRegion();
+        _syncRtmaProductForStream();
         _updateSpcReportFilterState();
-        refreshActiveLayers();
+        refreshActiveLayers({ startup: true });
+        if (_standaloneProductType === 'drought') {
+            _droughtEngine?.loadDroughtDates?.();
+        }
+        if (!_productRenderArmed && _isTypeEnabled('tropical') && _configuredPageAutoLoadCatalog()) {
+            _tropicalEngine?.loadArchiveCatalog();
+        }
         if (
-            _standaloneProductType === 'rtma'
+            _productRenderArmed
+            && _standaloneProductType === 'rtma'
             && _activeRtmaStream()
             && _activeRtmaProduct()
         ) {
             loadRtmaScrubberFrames();
         }
-        if (_standaloneProductType === 'satellite' && !_satelliteScrubMode) {
+        if (_productRenderArmed && _standaloneProductType === 'satellite' && !_satelliteScrubMode) {
             _setSatelliteLookbackHours(_recommendedSatelliteLookbackHours());
             _satelliteEngine?.loadScrubberFrames();
         }
@@ -14759,8 +14985,14 @@
                 isTypeEnabled: _isTypeEnabled,
                 leaflet: L,
                 loadStormTracks: _loadRadarStormTracks,
-                loadScrubberFrames: () => _radarEngine?.loadScrubberFrames(),
-                loadUnified: _loadRadarUnified,
+                loadScrubberFrames: () => {
+                    _armProductRendering();
+                    return _radarEngine?.loadScrubberFrames();
+                },
+                loadUnified: (...args) => {
+                    _armProductRendering();
+                    return _loadRadarUnified(...args);
+                },
                 map,
                 nextScrubRenderSeq: () => {
                     _radarScrubRenderSeq += 1;
@@ -14794,14 +15026,24 @@
         if (_satellitePageController?.configureSatellitePage) {
             _satellitePageController.configureSatellitePage({
                 clearSatelliteLayerPool: _clearSatelliteLayerPool,
+                clearSatelliteFrames: () => {
+                    _clearSatelliteLayer(true);
+                    _satelliteCatalog = null;
+                },
                 fitSatelliteViewPreset: (bounds) => map.fitBounds(bounds, {
                     animate: false,
                     padding: [20, 20],
                 }),
                 isScrubMode: () => _satelliteScrubMode,
                 isTypeEnabled: _isTypeEnabled,
-                loadCurrentFrame: (options) => _satelliteEngine?.loadCurrentFrame(options),
-                loadScrubberFrames: () => _satelliteEngine?.loadScrubberFrames(),
+                loadCurrentFrame: (options) => {
+                    _armProductRendering();
+                    return _satelliteEngine?.loadCurrentFrame(options);
+                },
+                loadScrubberFrames: () => {
+                    _armProductRendering();
+                    return _satelliteEngine?.loadScrubberFrames();
+                },
                 scheduleScrubberReload: _scheduleSatelliteScrubberReload,
                 updateLegend: _updateSatelliteLegend,
             });
@@ -14843,17 +15085,33 @@
 
         if (_droughtPageController?.configureDroughtPage) {
             _droughtPageController.configureDroughtPage({
-                applyDroughtFilter: () => _droughtEngine?.applyDroughtFilter(),
+                applyDroughtFilter: () => {
+                    _armProductRendering();
+                    return _droughtEngine?.applyDroughtFilter();
+                },
                 isTypeEnabled: _isTypeEnabled,
-                loadDroughtLayer: () => _droughtEngine?.loadDroughtLayer(),
+                loadDroughtDates: () => _droughtEngine?.loadDroughtDates(),
+                loadDroughtLayer: () => {
+                    _armProductRendering();
+                    return _droughtEngine?.loadDroughtLayer();
+                },
             });
             _droughtPageController.wireControls?.();
         }
 
         if (_wpcPageController?.configureWpcPage) {
             _wpcPageController.configureWpcPage({
+                clearWpcLayer: () => {
+                    if (wpcLayer && map.hasLayer(wpcLayer)) map.removeLayer(wpcLayer);
+                    wpcLayer = null;
+                    setLegend(null);
+                    setMapEmptyMessage(null);
+                },
                 isTypeEnabled: _isTypeEnabled,
-                loadWpcLayer: () => _wpcEngine?.loadWpcLayer(),
+                loadWpcLayer: () => {
+                    _armProductRendering();
+                    return _wpcEngine?.loadWpcLayer();
+                },
             });
             _wpcPageController.wireControls?.();
         }
@@ -14867,8 +15125,14 @@
                 isTypeEnabled: _isTypeEnabled,
                 isScrubMode: () => _mrmsScrubFrames.length > 0,
                 leaflet: L,
-                loadMrms: () => _mrmsEngine?.loadMrms(),
-                loadScrubberFrames: () => _mrmsEngine?.loadScrubberFrames(),
+                loadMrms: () => {
+                    _armProductRendering();
+                    return _mrmsEngine?.loadMrms();
+                },
+                loadScrubberFrames: () => {
+                    _armProductRendering();
+                    return _mrmsEngine?.loadScrubberFrames();
+                },
                 map,
                 refreshActiveLayers,
                 setOverlay: (overlay) => { mrmsOverlay = overlay; },
@@ -14879,12 +15143,22 @@
         if (_rtmaPageController?.configureRtmaPage) {
             _rtmaPageController.configureRtmaPage({
                 clearRtmaSecondaryWind: () => { _rtmaSecondaryPoints = []; _rtmaSecondaryUnits = ''; },
+                clearRtma: _clearRtmaLayers,
                 getRtmaStreamMaxHours: (stream) => RTMA_STREAM_MAX_HOURS[stream] || 24,
                 isTypeEnabled: _isTypeEnabled,
                 isScrubMode: () => _rtmaScrubFrames.length > 0,
-                loadRtma,
-                loadScrubberFrames: loadRtmaScrubberFrames,
-                loadUnified: _loadRtmaUnified,
+                loadRtma: () => {
+                    _armProductRendering();
+                    return loadRtma();
+                },
+                loadScrubberFrames: () => {
+                    _armProductRendering();
+                    return loadRtmaScrubberFrames();
+                },
+                loadUnified: (...args) => {
+                    _armProductRendering();
+                    return _loadRtmaUnified(...args);
+                },
                 refreshActiveLayers,
                 setStatus,
             });
@@ -14893,15 +15167,22 @@
 
         if (_surfacePageController?.configureSurfacePage) {
             _surfacePageController.configureSurfacePage({
-                applyGradientChange: () => _surfaceEngine?.applyGradientChange(),
+                applyGradientChange: () => {
+                    _armProductRendering();
+                    return _surfaceEngine?.applyGradientChange();
+                },
                 buildSurfaceLegend: (product, unit) => buildSurfaceLegend(
                     unit || _SURFACE_PRODUCTS_UNITS[product] || '',
                     _SURFACE_COLORMAPS[product] || _SURFACE_COLORMAPS.temperature,
                     product,
                 ),
+                clearSurface: _clearSurfaceLayer,
                 getRegionValue: () => byId('weather-region')?.value,
                 isTypeEnabled: _isTypeEnabled,
-                loadSurface: (region, product) => _surfaceEngine?.loadSurface(region, product),
+                loadSurface: (region, product) => {
+                    _armProductRendering();
+                    return _surfaceEngine?.loadSurface(region, product);
+                },
                 renderSurfaceMarkers: _renderSurfaceMarkers,
                 setSurfaceStations: (stations) => { _surfaceStations = stations; },
                 updateGradientBlurVisibility: _updateGradientBlurControlVisibility,
@@ -14924,7 +15205,10 @@
                 isSpcEnabled: () => _isTypeEnabled('spc') && !!byId('weather-show-spc')?.checked,
                 leaflet: L,
                 map,
-                refreshSpc,
+                refreshSpc: (...args) => {
+                    _armProductRendering();
+                    return refreshSpc(...args);
+                },
                 setSpcSubtab: _setSpcSubtab,
                 setSpcLayer: (layer) => { spcLayer = layer; },
                 spcPopup,
@@ -15554,6 +15838,7 @@
             getActiveStorm: () => _activeTropicalStorm,
             getArchiveCatalog: () => _tropicalArchiveCatalog,
             getArchiveStormBase: () => _tropicalArchiveStormBase,
+            getSelectedStormId: _activeTropicalSystemId,
             isCurrentRequest: (requestSeq) => requestSeq === _tropicalRequestSeq,
             isTypeEnabled: _isTypeEnabled,
             leaflet: L,
@@ -15641,6 +15926,7 @@
             setHubMode: _setTropicalHubMode,
             setStatus: _setTropicalStatus,
             setStorms: (storms) => { _tropicalStorms = storms; },
+            selectStorm: _selectTropicalStormCard,
             syncLayerPills: (keys, toggles) => {
                 const layersRoot = byId('wx-tropical-inspector-layers');
                 if (!layersRoot) return;
@@ -15684,6 +15970,7 @@
         if (document.hidden) return;
         if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length) return;
         if (!_isTypeEnabled('alerts')) return;
+        if (!_productRenderArmed) return;
         if (_getCheckedAlertCategories().length) {
             _alertsEngine?.loadLiveAlerts();
         }
@@ -15699,6 +15986,7 @@
         if (document.hidden) return;
         if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length) return;
         if (!_isTypeEnabled('spc')) return;
+        if (!_productRenderArmed) return;
         if (!byId('weather-show-spc')?.checked) return;
         const supplemental = _spcSupplementalSelections();
         const needsActiveRefresh = supplemental.mdsEnabled
@@ -15708,7 +15996,10 @@
     }, SPC_AUTO_REFRESH_MS);
 
     _registerProductAppContexts();
-    init();
+    init().catch((err) => {
+        console.error('[startup] Dashboard initialization failed:', err);
+        setStatus(`Startup error: ${err.message}`);
+    });
 
 }());
 

@@ -120,6 +120,15 @@ class SeviriHeader:
     cal_slopes: np.ndarray
     cal_offsets: np.ndarray
     header_bytes: int
+    # 1-based full-disk reference-grid line/column bounds this product's grid
+    # occupies. Full-disk products cover the whole 1..3712 range; the Rapid
+    # Scan Service is a cropped northern strip (e.g. south=2321, north=3712),
+    # so these are needed to place the crop correctly instead of assuming the
+    # grid is centered on the sub-satellite point.
+    south_line: int
+    north_line: int
+    east_column: int
+    west_column: int
 
 
 @dataclass(frozen=True)
@@ -165,9 +174,17 @@ def _read_header(path: str | Path) -> SeviriHeader:
 
     n_lines = VISIR_NUM_LINES
     n_cols = VISIR_NUM_COLUMNS
+    south_line = 1
+    north_line = VISIR_NUM_LINES
+    east_column = 1
+    west_column = VISIR_NUM_COLUMNS
     if archive:
         n_lines = int(_read_ascii_value(prefix, 4794))
         n_cols = int(_read_ascii_value(prefix, 4874))
+        south_line = int(_read_ascii_value(prefix, 4474))
+        north_line = int(_read_ascii_value(prefix, 4554))
+        east_column = int(_read_ascii_value(prefix, 4634))
+        west_column = int(_read_ascii_value(prefix, 4714))
 
     slopes = np.empty(12, dtype=np.float64)
     offsets = np.empty(12, dtype=np.float64)
@@ -192,6 +209,10 @@ def _read_header(path: str | Path) -> SeviriHeader:
         cal_slopes=slopes,
         cal_offsets=offsets,
         header_bytes=header_bytes,
+        south_line=south_line,
+        north_line=north_line,
+        east_column=east_column,
+        west_column=west_column,
     )
 
 
@@ -213,9 +234,9 @@ def _unpack_10bit(raw: np.ndarray) -> np.ndarray:
 
 
 def _read_channel_counts(path: str | Path, header: SeviriHeader, channel_name: str) -> np.ndarray:
-    if header.n_lines != VISIR_NUM_LINES or header.n_cols != VISIR_NUM_COLUMNS:
+    if header.n_cols != VISIR_NUM_COLUMNS:
         raise ValueError(
-            "Only full-disk 3712x3712 SEVIRI VIS/IR grids are supported "
+            "Only 3712-column SEVIRI VIS/IR grids are supported "
             f"(got {header.n_cols}x{header.n_lines})."
         )
     channel_index = CHANNEL_INDEX[channel_name]
@@ -268,13 +289,25 @@ def _calibrate(counts: np.ndarray, header: SeviriHeader, channel_name: str) -> n
 def _source_georef(header: SeviriHeader) -> tuple[object, object]:
     width = header.n_cols
     height = header.n_lines
-    x_half_span = width * header.column_step_km * 1000.0 / 2.0
-    y_half_span = height * header.line_step_km * 1000.0 / 2.0
+    col_step_m = header.column_step_km * 1000.0
+    line_step_m = header.line_step_km * 1000.0
+
+    # Full-disk reference grid is centered on the sub-satellite point, with
+    # 1-based line/column bounds 1..VISIR_NUM_LINES/COLUMNS. A cropped grid
+    # (e.g. Rapid Scan Service) reports its actual reference-grid bounds via
+    # south/north_line and east/west_column, so its real position relative to
+    # that shared center can be recovered even though the crop itself isn't
+    # disk-centered.
+    west = (header.west_column - VISIR_NUM_COLUMNS / 2.0) * col_step_m
+    east = (header.east_column - VISIR_NUM_COLUMNS / 2.0) * col_step_m
+    south = (header.south_line - VISIR_NUM_LINES / 2.0) * line_step_m
+    north = (header.north_line - VISIR_NUM_LINES / 2.0) * line_step_m
+
     src_transform = rio_from_bounds(
-        -x_half_span,
-        -y_half_span,
-        x_half_span,
-        y_half_span,
+        min(west, east),
+        south,
+        max(west, east),
+        north,
         width,
         height,
     )

@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "global": {
+    "homeRegion": "NC",
+    "cityLabels": {
+      "source": "off",
+      "density": 5
+    }
+  },
+  "pages": {
+    "main": {
+      "mapView": "CONUS",
+      "autoLoad": false
+    },
+    "surface": {
+      "mapView": "CONUS",
+      "autoLoad": false
+    },
+    "alerts": {
+      "mapView": "CONUS",
+      "autoLoad": true
+    },
+    "radar": {
+      "mapView": "CONUS",
+      "autoLoad": false
+    },
+    "spc": {
+      "mapView": "CONUS",
+      "autoLoad": false
+    },
+    "rtma": {
+      "mapView": "CONUS",
+      "autoLoad": false
+    },
+    "mrms": {
+      "mapView": "CONUS",
+      "autoLoad": false
+    },
+    "water": {
+      "mapView": "CONUS",
+      "autoLoad": false
+    },
+    "wpc": {
+      "mapView": "CONUS",
+      "autoLoad": false
+    },
+    "drought": {
+      "mapView": "CONUS",
+      "autoLoad": false
+    },
+    "satellite": {
+      "mapView": "WORLD",
+      "autoLoad": false,
+      "platform": "",
+      "sector": "",
+      "product": "Channel13",
+      "hours": 1
+    },
+    "tropical": {
+      "mapView": "TROPICAL",
+      "autoLoad": true,
+      "autoLoadCatalog": true,
+      "basin": "AL"
+    }
+  }
+}

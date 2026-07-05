@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import os
 import tempfile
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Iterable, Any, Mapping, Sequence
@@ -13,6 +14,7 @@ import numpy as np
 
 
 from config.satellite_v2_config import (
+    SATELLITE_V2_LIVE_SUPERTILE_RADIUS,
     SATELLITE_V2_SECTOR_BOUNDS,
     SATELLITE_V2_TILE_SIZE,
     normalize_channel,
@@ -163,6 +165,29 @@ def _render_tile_to_target(
         except OSError:
             pass
         raise
+
+
+def _live_supertile_coords(z: int, x: int, y: int) -> list[tuple[int, int]]:
+    radius = max(0, int(SATELLITE_V2_LIVE_SUPERTILE_RADIUS or 0))
+    max_tile_index = max(0, (2 ** int(z)) - 1)
+    coords = [(int(x), int(y))]
+    if radius <= 0:
+        return coords
+    for yy in range(max(0, int(y) - radius), min(max_tile_index, int(y) + radius) + 1):
+        for xx in range(max(0, int(x) - radius), min(max_tile_index, int(x) + radius) + 1):
+            if xx == int(x) and yy == int(y):
+                continue
+            coords.append((xx, yy))
+    return coords
+
+
+def _target_needs_live_render(target: Path, overwrite: bool) -> tuple[bool, bool]:
+    target_was_invalid = target.exists() and not is_valid_tile_file(target)
+    if target.exists() and is_valid_tile_file(target) and not overwrite:
+        return False, target_was_invalid
+    if is_negative_tile_cached(target) and not overwrite:
+        return False, target_was_invalid
+    return True, target_was_invalid
 
 
 def _render_warm_tile_task(task: dict[str, Any]) -> dict[str, int]:
@@ -538,6 +563,7 @@ def render_frame_tile(
     y: int,
     overwrite: bool = False,
 ) -> tuple[Path, dict[str, int | str]]:
+    started = time.perf_counter()
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
     channel = normalize_channel(channel_key)
@@ -546,35 +572,112 @@ def render_frame_tile(
         raise ValueError("Satellite v2 frame is missing frame_key.")
 
     target = tile_path(cache_root, sat_key, sector_key, channel, frame_key, z, x, y)
-    target_was_invalid = target.exists() and not is_valid_tile_file(target)
-    if target.exists() and is_valid_tile_file(target) and not overwrite:
+    target_needs_render, target_was_invalid = _target_needs_live_render(target, overwrite)
+    if not target_needs_render:
         return target, {"cache_status": "hit", "rendered": 0, "skipped": 1, "errors": 0}
-    if is_negative_tile_cached(target) and not overwrite:
-        return target, {
-            "cache_status": "invalid",
-            "rendered": 0,
-            "skipped": 1,
-            "errors": 0,
-            "negative_cached": 1,
-        }
 
+    tile_id = f"{sat_key}/{sector_key}/{channel}/{frame_key}/z{z}/{x}/{y}"
+    print(f"[satellite-v2 tile] stage=source_start tile={tile_id}", flush=True)
+    source_start = time.perf_counter()
     source_files = download_product_source_frames(
         cache_root, sat_key, sector_key, channel, frame
     )
+    source_elapsed = int((time.perf_counter() - source_start) * 1000)
+    print(
+        "[satellite-v2 tile] "
+        f"stage=source_complete tile={tile_id} "
+        f"sources={len(source_files)} elapsed_ms={source_elapsed}",
+        flush=True,
+    )
     source_files_for_renderer: dict[str, str | Path] = dict(source_files)
+    renderer_start = time.perf_counter()
+    print(f"[satellite-v2 tile] stage=renderer_start tile={tile_id}", flush=True)
     renderer = SatelliteTileRenderer.from_sources(channel, source_files_for_renderer)
+    renderer_elapsed = int((time.perf_counter() - renderer_start) * 1000)
+    print(
+        "[satellite-v2 tile] "
+        f"stage=renderer_ready tile={tile_id} elapsed_ms={renderer_elapsed}",
+        flush=True,
+    )
+    stats = {
+        "cache_status": "miss",
+        "rendered": 0,
+        "skipped": 0,
+        "errors": 0,
+        "supertile_rendered": 0,
+        "supertile_skipped": 0,
+        "supertile_invalid": 0,
+        "supertile_errors": 0,
+        "supertile_radius": int(SATELLITE_V2_LIVE_SUPERTILE_RADIUS or 0),
+    }
     try:
-        result = _render_tile_to_target(
-            renderer, target, int(z), int(x), int(y), target_was_invalid
-        )
-        if result == "invalid":
-            return target, {
-                "cache_status": "invalid",
-                "rendered": 0,
-                "skipped": 0,
-                "errors": 1,
-            }
+        for tile_x, tile_y in _live_supertile_coords(int(z), int(x), int(y)):
+            current_target = tile_path(
+                cache_root,
+                sat_key,
+                sector_key,
+                channel,
+                frame_key,
+                int(z),
+                tile_x,
+                tile_y,
+            )
+            current_needs_render, current_was_invalid = _target_needs_live_render(
+                current_target, overwrite
+            )
+            is_requested_tile = tile_x == int(x) and tile_y == int(y)
+            if not current_needs_render:
+                if not is_requested_tile:
+                    stats["supertile_skipped"] += 1
+                continue
+            render_start = time.perf_counter()
+            try:
+                result = _render_tile_to_target(
+                    renderer, current_target, int(z), tile_x, tile_y, current_was_invalid
+                )
+            except Exception:
+                if is_requested_tile:
+                    raise
+                stats["supertile_errors"] += 1
+                continue
+            render_elapsed = int((time.perf_counter() - render_start) * 1000)
+            total_elapsed = int((time.perf_counter() - started) * 1000)
+            current_tile_id = (
+                f"{sat_key}/{sector_key}/{channel}/{frame_key}/z{z}/{tile_x}/{tile_y}"
+            )
+            if is_requested_tile:
+                print(
+                    "[satellite-v2 tile] "
+                    f"stage=tile_render_complete tile={current_tile_id} result={result} "
+                    f"render_ms={render_elapsed} total_ms={total_elapsed}",
+                    flush=True,
+                )
+            if result == "invalid":
+                if is_requested_tile:
+                    stats["cache_status"] = "invalid"
+                    stats["errors"] = 1
+                    break
+                else:
+                    stats["supertile_invalid"] += 1
+                continue
+            if is_requested_tile:
+                stats["rendered"] = 1
+            else:
+                stats["supertile_rendered"] += 1
     except Exception:
+        stats["supertile_errors"] += 1
         raise
-    return target, {"cache_status": "miss", "rendered": 1, "skipped": 0, "errors": 0}
+    total_elapsed = int((time.perf_counter() - started) * 1000)
+    print(
+        "[satellite-v2 tile] "
+        f"stage=supertile_complete tile={tile_id} "
+        f"radius={stats['supertile_radius']} "
+        f"rendered={stats['supertile_rendered']} "
+        f"skipped={stats['supertile_skipped']} "
+        f"invalid={stats['supertile_invalid']} "
+        f"errors={stats['supertile_errors']} "
+        f"total_ms={total_elapsed}",
+        flush=True,
+    )
+    return target, stats
 

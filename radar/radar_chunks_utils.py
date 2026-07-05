@@ -46,6 +46,12 @@ _CHUNK_RE = re.compile(
     r"(?P<date>\d{8})-(?P<time>\d{6})-(?P<seq>\d+)-(?P<ctype>[A-Z])$"
 )
 
+# In-process memo of VCP folders already confirmed complete (contain an 'E' chunk),
+# keyed by site. Once a folder is known complete it never needs to be re-listed from
+# S3 on later polls -- only the handful of in-progress folders at the front do.
+_COMPLETE_VCP_CACHE: dict[str, set[str]] = {}
+_VCP_SCAN_TIME_CACHE: dict[str, dict[str, str]] = {}
+
 
 def _log(msg: str) -> None:
     try:
@@ -93,6 +99,138 @@ def _list_site_chunks(s3_client, site: str, max_keys: int = 1000) -> list[dict]:
     except Exception as exc:
         _log(f"[chunks] list failed for {site}: {type(exc).__name__}: {exc}")
         return []
+
+
+def _list_site_prefixes(s3_client, site: str) -> list[str]:
+    """Return numeric VCP subfolder names under SITE/, newest-unsorted.
+
+    Uses a Delimiter listing so only folder names come back (no object bodies),
+    which stays cheap even when a site has thousands of historical VCP folders.
+    """
+    prefix = f"{site}/"
+    prefixes: list[str] = []
+    try:
+        paginator = s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(
+            Bucket=CHUNKS_BUCKET, Prefix=prefix, Delimiter="/"
+        ):
+            for cp in page.get("CommonPrefixes", []):
+                name = cp["Prefix"][len(prefix):].rstrip("/")
+                if name.isdigit():
+                    prefixes.append(name)
+    except Exception as exc:
+        _log(f"[chunks] prefix list failed for {site}: {type(exc).__name__}: {exc}")
+    prefixes.sort(key=int)
+    return prefixes
+
+
+def _list_chunks_in_prefix(s3_client, site: str, vcp: str) -> list[dict]:
+    """Return parsed chunk records for a single SITE/VCP/ subfolder."""
+    prefix = f"{site}/{vcp}/"
+    chunks: list[dict] = []
+    try:
+        paginator = s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=CHUNKS_BUCKET, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                parsed = _parse_chunk_key(obj["Key"])
+                if parsed:
+                    parsed["key"] = obj["Key"]
+                    parsed["last_modified"] = obj.get("LastModified")
+                    parsed["size"] = obj.get("Size", 0)
+                    chunks.append(parsed)
+    except Exception as exc:
+        _log(f"[chunks] list failed for {site}/{vcp}: {type(exc).__name__}: {exc}")
+    return chunks
+
+
+def _list_recent_site_chunks(
+    s3_client, site: str, cutoff_dt: datetime, max_folders: int | None = None
+) -> list[dict]:
+    """Walk newest-first VCP subfolders under SITE/ until scans predate cutoff_dt.
+
+    A flat SITE/ listing is lexicographic across every VCP subfolder the site has
+    ever had; once a site accumulates enough historical subfolders, a MaxItems-capped
+    listing never reaches the newest ones. Discovering subfolder names first
+    (cheap, no object bodies) and walking them newest-first avoids that trap.
+
+    max_folders is a sanity ceiling, not the primary stop condition (the cutoff_dt
+    check below is). A new VCP folder shows up roughly every 4-7 minutes, so it's
+    sized off the requested lookback window with generous headroom.
+
+    Folders already confirmed complete on a prior call are served from an
+    in-process cache instead of being re-listed from S3 -- otherwise every poll
+    would re-list the whole lookback window's worth of folders (e.g. ~30+ for a
+    3h window), which is what made polling slow after the discovery-order fix.
+    Only the front of the walk (folders still in progress) hits S3 each time.
+
+    The VCP counter is not perfectly monotonic with time -- stray/orphaned
+    folders (e.g. a single leftover chunk from days ago) can sort numerically
+    after the true newest folder. Stopping on the very first stale folder can
+    therefore skip past real current data. A stale *streak* threshold gives
+    tolerance for isolated outliers while still bounding the walk.
+    """
+    if max_folders is None:
+        lookback_minutes = max(
+            0.0, (datetime.now(timezone.utc) - cutoff_dt).total_seconds() / 60
+        )
+        max_folders = max(6, int(lookback_minutes / 3) + 10)
+
+    prefixes = _list_site_prefixes(s3_client, site)
+    if not prefixes:
+        return []
+
+    complete_cache = _COMPLETE_VCP_CACHE.setdefault(site, set())
+    time_cache = _VCP_SCAN_TIME_CACHE.setdefault(site, {})
+
+    collected: list[dict] = []
+    stale_streak = 0
+    stale_streak_limit = 3
+    for checked, vcp in enumerate(reversed(prefixes), start=1):
+        if vcp in complete_cache and vcp in time_cache:
+            scan_dt = datetime.strptime(
+                time_cache[vcp], "%Y%m%d-%H%M%S"
+            ).replace(tzinfo=timezone.utc)
+            if scan_dt < cutoff_dt:
+                stale_streak += 1
+                if stale_streak >= stale_streak_limit:
+                    break
+                if checked >= max_folders:
+                    break
+                continue
+            stale_streak = 0
+            collected.append(
+                {
+                    "site": site,
+                    "vcp": vcp,
+                    "scan_prefix": f"{site}/{vcp}/{time_cache[vcp]}-",
+                    "scan_dt": scan_dt,
+                    "seq": 0,
+                    "ctype": "E",
+                    "key": None,
+                    "last_modified": None,
+                    "size": 0,
+                }
+            )
+            continue
+
+        folder_chunks = _list_chunks_in_prefix(s3_client, site, vcp)
+        if folder_chunks:
+            collected.extend(folder_chunks)
+            newest = max(folder_chunks, key=lambda c: c["scan_dt"])
+            time_cache[vcp] = newest["scan_dt"].strftime("%Y%m%d-%H%M%S")
+            if _is_scan_complete(folder_chunks):
+                complete_cache.add(vcp)
+            if newest["scan_dt"] < cutoff_dt:
+                stale_streak += 1
+                if stale_streak >= stale_streak_limit:
+                    break
+            else:
+                stale_streak = 0
+        if checked >= max_folders:
+            break
+
+    collected.sort(key=lambda c: (c["scan_dt"], c["seq"]))
+    return [c for c in collected if c["scan_dt"] >= cutoff_dt]
 
 
 def _group_by_scan(chunks: list[dict]) -> dict[str, list[dict]]:
@@ -165,23 +303,47 @@ def _chunk_local_dir(site: str, scan_prefix: str) -> Path:
     return _CHUNK_CACHE_ROOT / site / safe_name
 
 
+_CHUNK_DOWNLOAD_WORKERS = 16
+
+
+def _download_one_chunk(s3_client, chunk: dict, dest: Path) -> bool:
+    try:
+        obj = s3_client.get_object(Bucket=CHUNKS_BUCKET, Key=chunk["key"])
+        dest.write_bytes(obj["Body"].read())
+        return True
+    except Exception as exc:
+        _log(
+            f"[chunks] chunk download failed {chunk['key']}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return False
+
+
 def _download_new_chunks(s3_client, chunks: list[dict], chunk_dir: Path) -> int:
-    """Download chunks not already on disk. Returns count of newly downloaded files."""
+    """Download chunks not already on disk. Returns count of newly downloaded files.
+
+    Each chunk is a separate small S3 object, so latency (not bandwidth) dominates.
+    A scan can have 50-100+ chunks and a backfill spans many scans, so downloading
+    sequentially (one GetObject round-trip at a time) turned a cold backfill into a
+    50+ second stall. Fetching concurrently keeps this to a couple of seconds.
+    """
     chunk_dir.mkdir(parents=True, exist_ok=True)
-    new_count = 0
+    pending = []
     for chunk in chunks:
         dest = chunk_dir / f"{chunk['seq']:04d}"
-        if dest.exists():
-            continue
-        try:
-            obj = s3_client.get_object(Bucket=CHUNKS_BUCKET, Key=chunk["key"])
-            dest.write_bytes(obj["Body"].read())
-            new_count += 1
-        except Exception as exc:
-            _log(
-                f"[chunks] chunk download failed {chunk['key']}: "
-                f"{type(exc).__name__}: {exc}"
-            )
+        if not dest.exists():
+            pending.append((chunk, dest))
+    if not pending:
+        return 0
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    new_count = 0
+    with ThreadPoolExecutor(max_workers=_CHUNK_DOWNLOAD_WORKERS) as pool:
+        results = pool.map(
+            lambda item: _download_one_chunk(s3_client, item[0], item[1]), pending
+        )
+        new_count = sum(1 for ok in results if ok)
     return new_count
 
 
@@ -276,7 +438,7 @@ def download_radar_data(
     _t0 = _time.perf_counter()
     _log(f"[chunks] listing site={site} lookback={lookback}h")
 
-    all_chunks = _list_site_chunks(s3, site)
+    all_chunks = _list_recent_site_chunks(s3, site, cutoff_dt)
     if not all_chunks:
         _log(f"[chunks] no chunks found for {site}")
         return (save_dir, 0, 0)

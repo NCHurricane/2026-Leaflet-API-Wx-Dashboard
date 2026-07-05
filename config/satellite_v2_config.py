@@ -48,8 +48,6 @@ try:
         FIRE_DETECT_NORM,
         RAMSDIS_WV_CMAP,
         RAMSDIS_WV_NORM,
-        FOGDIFF_BLUE_CMAP,
-        FOGDIFF_BLUE_NORM,
     )
 except ImportError:
     from .satellite_colormaps import (
@@ -622,8 +620,9 @@ SATELLITE_V2_SUPPORTED_SATELLITES = {
     "goes18",
     "goes19",
     "himawari9",
-    "meteosat12",
     "meteosat9",
+    "meteosat11",
+    "meteosat12",
 }
 
 # AHI band equivalent for each ABI source channel (Himawari-9). Product keys
@@ -693,9 +692,11 @@ def seviri_supported_products() -> tuple[str, ...]:
     return tuple(supported)
 
 
-# FCI source-channel mapping for direct IR/WV products. Composite UI exposure
+# FCI source-channel mapping for direct IR/WV/VIS products. Composite UI exposure
 # stays separate until each recipe has a proof render against live MTG chunks.
 FCI_CHANNEL_FOR_ABI_CHANNEL = {
+    "Channel02": "vis_06",
+    "Channel03": "vis_08",
     "Channel07": "ir_38",
     "Channel08": "wv_63",
     "Channel09": "wv_73",
@@ -723,7 +724,9 @@ def fci_supported_products() -> tuple[str, ...]:
             supported.append(product_key)
     return tuple(supported)
 
-SATELLITE_V2_SUPPORTED_SECTORS = {"CONUS", "FULLDISK", "MESO1", "MESO2"}
+SATELLITE_V2_SUPPORTED_SECTORS = {
+    "CONUS", "FULLDISK", "MESO1", "MESO2", "RSS", "JAPAN", "TARGET",
+}
 
 SATELLITE_V2_DEFAULT_SAT_ID = "goes19"
 SATELLITE_V2_DEFAULT_SECTOR = "CONUS"
@@ -754,32 +757,6 @@ def satellite_v2_render_version_for_satellite(sat_id: str | None) -> str:
         return SATELLITE_V2_RENDER_VERSION_METEOSAT12
     return SATELLITE_V2_RENDER_VERSION
 
-SATELLITE_V2_WORKER_SATELLITES = ("goes19", "goes18")
-SATELLITE_V2_WORKER_PRODUCTS = ("Channel13", "Channel02", "Channel08RAMSDIS")
-SATELLITE_V2_WORKER_LIGHT_COMPOSITE_PRODUCTS = (
-    "TrueColor",
-    "NaturalColor",
-    "Dust",
-    "RocketPlume",
-)
-SATELLITE_V2_WORKER_GEOCOLOR_PRODUCTS = ("GeoColor", "GeoColorBlkMar")
-SATELLITE_V2_WORKER_CURRENT_SECTORS = ("CONUS",)
-SATELLITE_V2_WORKER_MESO_SECTORS = ("MESO1", "MESO2")
-SATELLITE_V2_WORKER_PRIORITY_PRODUCTS = (
-    "Channel13",
-    "GeoColor",
-    "GeoColorBlkMar",
-    "TrueColor",
-    "NaturalColor",
-    "Dust",
-    "RocketPlume",
-    "Channel02",
-    "Channel01",
-    "Channel07",
-    "Channel07Fire",
-    "Channel08RAMSDIS",
-    "Channel09RAMSDIS",
-)
 SATELLITE_V2_PRIMARY_PRODUCTS = (
     "Channel02",
     "Channel09RAMSDIS",
@@ -787,106 +764,12 @@ SATELLITE_V2_PRIMARY_PRODUCTS = (
     "GeoColor",
     "GeoColorBlkMar",
 )
-SATELLITE_V2_WORKER_PROFILES = {
-    "full": {
-        "description": "All configured Satellite v2 worker jobs.",
-        "products": SATELLITE_V2_WORKER_PRODUCTS,
-        "satellites": SATELLITE_V2_WORKER_SATELLITES,
-        # 75% of the 15-min task cadence so consecutive ticks are never
-        # skipped just because the previous run finished recently.
-        "fresh_window_seconds": 11 * 60,
-    },
-    "local-primary": {
-        "description": "High-use GOES-19/18 CONUS products for local/main PC warming. Full Disk rendered live.",
-        "products": ("Channel13", "Channel02", "Channel08RAMSDIS"),
-        "satellites": ("goes19", "goes18"),
-        "sectors": ("CONUS",),
-        "fresh_window_seconds": 11 * 60,
-    },
-    "remote-backfill": {
-        "description": "Lower-priority products and GOES-18 jobs for helper-machine backfill (disabled when using local-primary only scope).",
-        "products": SATELLITE_V2_WORKER_PRODUCTS,
-        "satellites": SATELLITE_V2_WORKER_SATELLITES,
-        "exclude_jobs": tuple(
-            ("goes19", product_key) for product_key in SATELLITE_V2_WORKER_PRODUCTS
-        ),
-        "fresh_window_seconds": 11 * 60,
-    },
-    "goes19-freshness": {
-        "description": "Single-worker GOES-19 freshness profile (CONUS only). FULLDISK is on-demand; MESO is handled by goes19-meso.",
-        "products": SATELLITE_V2_WORKER_PRODUCTS,
-        "satellites": ("goes19",),
-        "sectors": ("CONUS",),
-        "mode": "rolling-lookback",
-        "recency_hours": 1,
-        "deadline_minutes": 115,
-        "deadline_buffer_seconds": 180,
-        "latest_frames_per_job": 1,
-        "overlap_lock": True,
-        "fresh_window_seconds": 90 * 60,
-    },
-    "goes19-meso": {
-        "description": "Dedicated GOES-19 MESO1/MESO2 rolling-warm profile. Run as a separate scheduled task.",
-        "products": SATELLITE_V2_WORKER_PRODUCTS,
-        "satellites": ("goes19",),
-        "sectors": ("MESO1", "MESO2"),
-        "mode": "rolling-lookback",
-        "recency_hours": 1,
-        "deadline_minutes": 25,
-        "deadline_buffer_seconds": 60,
-        "latest_frames_per_job": 1,
-        "overlap_lock": True,
-        # 75% of the 5-min task cadence (MESO data is 1-min; do not skip ticks).
-        "fresh_window_seconds": 225,
-    },
-    "goes19-light-composites": {
-        "description": "Dedicated GOES-19 CONUS light-composite rolling-warm profile.",
-        "products": SATELLITE_V2_WORKER_LIGHT_COMPOSITE_PRODUCTS,
-        "satellites": ("goes19",),
-        "sectors": ("CONUS",),
-        "mode": "rolling-lookback",
-        "recency_hours": 1,
-        "deadline_minutes": 60,
-        "deadline_buffer_seconds": 60,
-        "latest_frames_per_job": 1,
-        "overlap_lock": True,
-        "fresh_window_seconds": 225,
-    },
-    "goes19-geocolor": {
-        "description": "Dedicated GOES-19 CONUS GEOColor rolling-warm profile.",
-        "products": SATELLITE_V2_WORKER_GEOCOLOR_PRODUCTS,
-        "satellites": ("goes19",),
-        "sectors": ("CONUS",),
-        "mode": "rolling-lookback",
-        "recency_hours": 1,
-        "deadline_minutes": 60,
-        "deadline_buffer_seconds": 60,
-        "latest_frames_per_job": 1,
-        "overlap_lock": True,
-        # 75% of the 10-min task cadence.
-        "fresh_window_seconds": 450,
-    },
-}
-SATELLITE_V2_WORKER_BASELINE_FRAMES = 2
-SATELLITE_V2_WORKER_PREWARM_FRAMES = 18         # CONUS/FULLDISK (~1.5hr at 5-min intervals)
-SATELLITE_V2_WORKER_MESO_PREWARM_FRAMES = 72    # MESO (~1.2hr at 1-min intervals)
-SATELLITE_V2_WORKER_CURRENT_DEEP_JOBS_PER_RUN = 8
-SATELLITE_V2_WORKER_MESO_DEEP_JOBS_PER_RUN = 4
-SATELLITE_V2_WORKER_FULLDISK_BASELINE_ZOOMS = (1, 2)
-SATELLITE_V2_WORKER_CONUS_BASELINE_ZOOMS = (5, 6)
-SATELLITE_V2_WORKER_MESO_BASELINE_ZOOMS = (7, 8)
-SATELLITE_V2_WORKER_FULLDISK_PREWARM_ZOOMS = (1, 2, 3)
-SATELLITE_V2_WORKER_CONUS_HIGH_RES_PREWARM_ZOOMS = (5, 6)
-SATELLITE_V2_WORKER_CONUS_CHANNEL2_PREWARM_ZOOMS = (5, 6)
-SATELLITE_V2_WORKER_CONUS_STANDARD_PREWARM_ZOOMS = (5, 6)
-SATELLITE_V2_WORKER_MESO_HIGH_RES_PREWARM_ZOOMS = (7, 8)
-SATELLITE_V2_WORKER_MESO_CHANNEL2_PREWARM_ZOOMS = (7, 8)
-SATELLITE_V2_WORKER_MESO_STANDARD_PREWARM_ZOOMS = (7, 8)
 
 # Max zoom levels the frontend is allowed to request.
-# Prewarm covers default + 1 zoom-in; deeper zooms render on-demand.
-SATELLITE_V2_MAX_NATIVE_ZOOM_CONUS = 8
-SATELLITE_V2_MAX_NATIVE_ZOOM_FULLDISK = 5
+# These are request ceilings. Live rendering, supertiles, and any narrow
+# rapid-sector warming decide what is actually generated ahead of time.
+SATELLITE_V2_MAX_NATIVE_ZOOM_CONUS = 10
+SATELLITE_V2_MAX_NATIVE_ZOOM_FULLDISK = 10
 SATELLITE_V2_MAX_NATIVE_ZOOM_MESO = 10
 
 
@@ -901,11 +784,76 @@ def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, value))
 
 
-SATELLITE_V2_WORKER_TILE_RENDER_WORKERS = _env_int(
-    "WX_SATELLITE_V2_TILE_WORKERS", 4, 1, 16
+SATELLITE_V2_ON_DEMAND_CATALOG_HOURS = 12
+SATELLITE_V2_ON_DEMAND_CATALOG_MAX_FRAMES = 360
+SATELLITE_V2_LEGEND_ANCHOR_COUNT = 65
+SATELLITE_V2_LEGEND_TICK_COUNT = 7
+
+# Narrow rapid-scan warmer policy.  This is intentionally separate from the
+# legacy broad prewarm worker settings above: Full Disk and CONUS remain live
+# rendered/cache-assisted by default, while high-cadence sectors get a small
+# cache-first animation tail.
+SATELLITE_V2_RAPID_WORKER_PRODUCTS = ("Channel02", "Channel13")
+SATELLITE_V2_RAPID_WORKER_JOBS = (
+    ("goes19", "MESO1"),
+    ("goes19", "MESO2"),
+    ("goes18", "MESO1"),
+    ("goes18", "MESO2"),
+    ("himawari9", "JAPAN"),
+    ("meteosat11", "RSS"),
 )
-SATELLITE_V2_WORKER_MESO_TILE_RENDER_WORKERS = _env_int(
-    "WX_SATELLITE_V2_MESO_TILE_WORKERS", 4, 1, 16
+SATELLITE_V2_RAPID_WORKER_FRAMES = _env_int(
+    "WX_SATELLITE_V2_RAPID_WORKER_FRAMES", 12, 1, 120
+)
+SATELLITE_V2_RAPID_WORKER_HOURS = _env_int(
+    "WX_SATELLITE_V2_RAPID_WORKER_HOURS", 2, 1, 6
+)
+SATELLITE_V2_RAPID_WORKER_MAX_FRAMES = _env_int(
+    "WX_SATELLITE_V2_RAPID_WORKER_MAX_FRAMES", 120, 1, 360
+)
+SATELLITE_V2_RAPID_WORKER_TILE_WORKERS = _env_int(
+    "WX_SATELLITE_V2_RAPID_TILE_WORKERS", 2, 1, 8
+)
+SATELLITE_V2_RAPID_WORKER_TILE_BUFFER = _env_int(
+    "WX_SATELLITE_V2_RAPID_TILE_BUFFER", 1, 0, 3
+)
+SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS = _env_int(
+    "WX_SATELLITE_V2_RAPID_FRESH_WINDOW_SECONDS", 225, 0, 3600
+)
+SATELLITE_V2_RAPID_WORKER_ZOOMS = {
+    "MESO1": (7, 8),
+    "MESO2": (7, 8),
+    "JAPAN": (6, 7),
+    "RSS": (6, 7),
+}
+SATELLITE_V2_RAPID_WORKER_BOUNDS = {
+    "JAPAN": {"west": 115.0, "south": 20.0, "east": 155.0, "north": 50.0},
+    "RSS": {"west": -30.0, "south": 10.0, "east": 45.0, "north": 70.0},
+}
+
+SATELLITE_V2_LIVE_TILE_RENDER_WORKERS = _env_int(
+    "WX_SATELLITE_V2_LIVE_TILE_WORKERS", 10, 1, 32
+)
+SATELLITE_V2_LIVE_SUPERTILE_RADIUS = _env_int(
+    "WX_SATELLITE_V2_LIVE_SUPERTILE_RADIUS", 1, 0, 3
+)
+SATELLITE_V2_NETCDF_CACHE_SIZE = _env_int(
+    "WX_SATELLITE_V2_NETCDF_CACHE_SIZE", 16, 1, 64
+)
+SATELLITE_V2_RENDERER_CACHE_SIZE = _env_int(
+    "WX_SATELLITE_V2_RENDERER_CACHE_SIZE", 8, 0, 64
+)
+
+# Full-disk source grids are capped before reprojection to keep high-resolution
+# channels usable on live tile requests. Raise provider caps independently.
+SATELLITE_V2_GOES_FULLDISK_MAX_GRID = _env_int(
+    "WX_SATELLITE_V2_GOES_FULLDISK_MAX_GRID", 10848, 1024, 21696
+)
+SATELLITE_V2_AHI_MAX_GRID = _env_int(
+    "WX_SATELLITE_V2_AHI_MAX_GRID", 10848, 1024, 21696
+)
+SATELLITE_V2_FCI_MAX_GRID = _env_int(
+    "WX_SATELLITE_V2_FCI_MAX_GRID", 10848, 1024, 22272
 )
 
 SATELLITE_V2_SECTOR_BOUNDS = {
@@ -971,27 +919,9 @@ def normalize_source_channel(channel_key: str | None) -> str:
     raise ValueError(f"Unsupported satellite source channel '{channel_key}'.")
 
 
-def worker_zooms_for_product(sector: str, channel_key: str) -> tuple[int, ...]:
-    sector_key = normalize_sector(sector)
-    product_key = normalize_channel(channel_key)
-    if sector_key == "FULLDISK":
-        return SATELLITE_V2_WORKER_FULLDISK_PREWARM_ZOOMS
-    if sector_key in {"MESO1", "MESO2"}:
-        if product_key == "Channel02":
-            return SATELLITE_V2_WORKER_MESO_CHANNEL2_PREWARM_ZOOMS
-        if product_key in SATELLITE_V2_HIGH_RES_PRODUCTS:
-            return SATELLITE_V2_WORKER_MESO_HIGH_RES_PREWARM_ZOOMS
-        return SATELLITE_V2_WORKER_MESO_STANDARD_PREWARM_ZOOMS
-    if product_key == "Channel02":
-        return SATELLITE_V2_WORKER_CONUS_CHANNEL2_PREWARM_ZOOMS
-    if product_key in SATELLITE_V2_HIGH_RES_PRODUCTS:
-        return SATELLITE_V2_WORKER_CONUS_HIGH_RES_PREWARM_ZOOMS
-    return SATELLITE_V2_WORKER_CONUS_STANDARD_PREWARM_ZOOMS
-
-
 def max_native_zoom_for_product(sector: str, channel_key: str) -> int:
-    # Max zoom is decoupled from prewarm — worker pre-renders shallow zooms,
-    # on-demand renderer fills deeper zoom requests up to these limits.
+    # Frontend/request ceiling; live rendering and narrow rapid warming decide
+    # what is generated ahead of time.
     sector_key = normalize_sector(sector)
     if sector_key == "FULLDISK":
         return SATELLITE_V2_MAX_NATIVE_ZOOM_FULLDISK
@@ -1000,32 +930,28 @@ def max_native_zoom_for_product(sector: str, channel_key: str) -> int:
     return SATELLITE_V2_MAX_NATIVE_ZOOM_CONUS
 
 
-def worker_baseline_zooms_for_sector(sector: str) -> tuple[int, ...]:
-    sector_key = normalize_sector(sector)
-    if sector_key == "FULLDISK":
-        return SATELLITE_V2_WORKER_FULLDISK_BASELINE_ZOOMS
-    if sector_key in {"MESO1", "MESO2"}:
-        return SATELLITE_V2_WORKER_MESO_BASELINE_ZOOMS
-    return SATELLITE_V2_WORKER_CONUS_BASELINE_ZOOMS
-
-
-def satellite_v2_worker_tile_workers(meso: bool, override: int | None = None) -> int:
-    if override is not None:
-        return max(1, min(16, int(override)))
-    return (
-        SATELLITE_V2_WORKER_MESO_TILE_RENDER_WORKERS
-        if meso
-        else SATELLITE_V2_WORKER_TILE_RENDER_WORKERS
-    )
-
-
 def zooms_for_sector(sector: str) -> tuple[int, ...]:
     sector_key = normalize_sector(sector)
     if sector_key == "FULLDISK":
-        return SATELLITE_V2_FULLDISK_ZOOMS
+        return tuple(
+            range(
+                min(SATELLITE_V2_FULLDISK_ZOOMS),
+                SATELLITE_V2_MAX_NATIVE_ZOOM_FULLDISK + 1,
+            )
+        )
     if sector_key in {"MESO1", "MESO2"}:
-        return SATELLITE_V2_MESO_ZOOMS
-    return SATELLITE_V2_CONUS_ZOOMS
+        return tuple(
+            range(
+                min(SATELLITE_V2_MESO_ZOOMS),
+                SATELLITE_V2_MAX_NATIVE_ZOOM_MESO + 1,
+            )
+        )
+    return tuple(
+        range(
+            min(SATELLITE_V2_CONUS_ZOOMS),
+            SATELLITE_V2_MAX_NATIVE_ZOOM_CONUS + 1,
+        )
+    )
 
 
 def aws_product_prefix_for_sector(sector: str) -> str:

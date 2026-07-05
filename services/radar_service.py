@@ -1,6 +1,7 @@
 """Radar metadata, tile proxy, and live-frame services."""
 
 from datetime import datetime, timedelta, timezone
+import importlib.util
 import json
 import os
 import re
@@ -307,15 +308,67 @@ def _fetch_nws_radar_status() -> dict:
     return status_map
 
 
+def _is_conus_site(site: str) -> bool:
+    """Check if a site is in CONUS based on its coordinates.
+
+    CONUS bounds: lat 21-52°N, lon -140 to -65°W
+    Returns False for Alaska, Hawaii, Puerto Rico, and overseas sites.
+    """
+    try:
+        from pyart.io.nexrad_common import NEXRAD_LOCATIONS
+
+        site_id = normalize_radar_site_id(site)
+
+        # Check Py-ART first
+        info = NEXRAD_LOCATIONS.get(site_id)
+        if info:
+            lat = info.get("lat")
+            lon = info.get("lon")
+            if lat is not None and lon is not None:
+                return 21.0 <= lat <= 52.0 and -140.0 <= lon <= -65.0
+
+        # Fall back to our comprehensive coordinates
+        try:
+            import importlib.util
+            coords_path = os.path.join(BASE_DIR, "radar", "nexrad_coordinates.py")
+            spec = importlib.util.spec_from_file_location("nexrad_coordinates", coords_path)
+            nexrad_coords_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(nexrad_coords_module)
+            coords = nexrad_coords_module.NEXRAD_SITE_COORDINATES.get(site_id)
+            if coords:
+                lat, lon = coords
+                return 21.0 <= lat <= 52.0 and -140.0 <= lon <= -65.0
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    return False
+
+
 def _radar_live_site_supported(site: str) -> bool:
     try:
         from pyart.io.nexrad_common import NEXRAD_LOCATIONS
 
         site_id = normalize_radar_site_id(site)
+
+        # Check Py-ART first
         info = NEXRAD_LOCATIONS.get(site_id)
-        if not info:
-            return False
-        return info.get("lat") is not None and info.get("lon") is not None
+        if info and info.get("lat") is not None and info.get("lon") is not None:
+            return True
+
+        # Fall back to our comprehensive coordinates mapping
+        try:
+            import importlib.util
+            coords_path = os.path.join(BASE_DIR, "radar", "nexrad_coordinates.py")
+            spec = importlib.util.spec_from_file_location("nexrad_coordinates", coords_path)
+            nexrad_coords_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(nexrad_coords_module)
+            return site_id in nexrad_coords_module.NEXRAD_SITE_COORDINATES
+        except Exception:
+            pass
+
+        return False
     except Exception:
         return False
 
@@ -395,6 +448,13 @@ def _radar_live_render_on_demand(
     return cached
 
 
+def _radar_live_render_bg_key(
+    site_id: str, product_key: str, elevation: str, motion: dict | None
+) -> tuple:
+    motion_key = str((motion or {}).get("cache_variant") or "default")
+    return ("radar_live", site_id, product_key, elevation, motion_key)
+
+
 def _radar_live_render_in_background(
     site_id: str,
     product_key: str,
@@ -402,9 +462,10 @@ def _radar_live_render_in_background(
     motion: dict | None = None,
 ) -> bool:
     """Fill the live radar frame window in the background."""
+    key = _radar_live_render_bg_key(site_id, product_key, elevation, motion)
     motion_key = str((motion or {}).get("cache_variant") or "default")
     return spawn_live_render_thread(
-        ("radar_live", site_id, product_key, elevation, motion_key),
+        key,
         f"radar-{site_id}-{product_key}-{elevation}-{motion_key}",
         lambda: _radar_live_render_on_demand(
             site_id,
@@ -415,6 +476,21 @@ def _radar_live_render_in_background(
             motion=motion,
         ),
     )
+
+
+def _radar_live_render_still_filling(
+    site_id: str, product_key: str, elevation: str, motion: dict | None
+) -> bool:
+    """True when a background fill for this site/product is already in flight.
+
+    Lets a poll that didn't itself trigger a render (frames already exist,
+    refresh not requested) still report accurate "still filling" status when an
+    earlier request's background render is the one actually still running.
+    """
+    from app_core.background_render import is_live_render_inflight
+
+    key = _radar_live_render_bg_key(site_id, product_key, elevation, motion)
+    return is_live_render_inflight(key)
 
 
 def _radar_live_is_configured(site: str, product_key: str) -> bool:
@@ -580,16 +656,36 @@ def get_radar_status_data() -> dict:
 
 
 def get_radar_live_sites_data() -> dict:
-    """Return radar sites with configured live-cache flag."""
+    """Return radar sites with configured live-cache flag.
+
+    Uses Py-ART's NEXRAD_LOCATIONS as the primary source, with fallback to
+    a comprehensive NEXRAD coordinate mapping for sites not in Py-ART.
+    """
     try:
-        configured = set(_radar_live_sites())
         from pyart.io.nexrad_common import NEXRAD_LOCATIONS
 
-        valid_prefixes = ("K", "P")
+        # Load fallback coordinates from the nexrad_coordinates module
+        try:
+            import sys
+            import importlib.util
+            coords_path = os.path.join(BASE_DIR, "radar", "nexrad_coordinates.py")
+            spec = importlib.util.spec_from_file_location("nexrad_coordinates", coords_path)
+            nexrad_coords_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(nexrad_coords_module)
+            NEXRAD_SITE_COORDINATES = nexrad_coords_module.NEXRAD_SITE_COORDINATES
+        except Exception as e:
+            print(f"Warning: Could not load NEXRAD_SITE_COORDINATES: {e}")
+            NEXRAD_SITE_COORDINATES = {}
+
+        configured = set(_radar_live_sites())
+
+        valid_prefixes = ("K", "P", "R")  # K=CONUS, P=Pacific/Alaska/Guam, R=Overseas military
         valid_extras = {"TJUA"}
 
         sites = []
         seen = set()
+
+        # First pass: get sites from Py-ART
         for site_id, info in NEXRAD_LOCATIONS.items():
             if not (site_id.startswith(valid_prefixes) or site_id in valid_extras):
                 continue
@@ -601,12 +697,33 @@ def get_radar_live_sites_data() -> dict:
             if lat is None or lon is None:
                 continue
             seen.add(normalized_id)
+            is_conus = _is_conus_site(normalized_id)
             sites.append(
                 {
                     "site": normalized_id,
                     "lat": float(lat),
                     "lon": float(lon),
                     "configured": normalized_id in configured,
+                    "conus": is_conus,
+                }
+            )
+
+        # Second pass: add sites from fallback coordinates that aren't in Py-ART
+        for site_id, (lat, lon) in NEXRAD_SITE_COORDINATES.items():
+            normalized_id = normalize_radar_site_id(site_id)
+            if normalized_id in seen:
+                continue
+            if not (normalized_id.startswith(valid_prefixes) or normalized_id in valid_extras):
+                continue
+            seen.add(normalized_id)
+            is_conus = _is_conus_site(normalized_id)
+            sites.append(
+                {
+                    "site": normalized_id,
+                    "lat": float(lat),
+                    "lon": float(lon),
+                    "configured": normalized_id in configured,
+                    "conus": is_conus,
                 }
             )
 
@@ -912,6 +1029,11 @@ def get_radar_live_frames_data(
 
     if refresh and not refreshing and filtered:
         refreshing = _radar_live_render_in_background(
+            site_id, product_key, elevation_key, motion
+        )
+
+    if not refreshing:
+        refreshing = _radar_live_render_still_filling(
             site_id, product_key, elevation_key, motion
         )
 

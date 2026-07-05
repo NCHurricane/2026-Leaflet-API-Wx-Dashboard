@@ -63,6 +63,27 @@ def get_satellite_v2_catalog(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.get("/api/satellite-v2/frame-bounds")
+def get_satellite_v2_frame_bounds(
+    sat_id: str = SATELLITE_V2_DEFAULT_SAT_ID,
+    sector: str = SATELLITE_V2_DEFAULT_SECTOR,
+    channel: str = SATELLITE_V2_DEFAULT_CHANNEL,
+):
+    """Geographic bounds of the latest frame, for sectors with no fixed extent."""
+    try:
+        bounds = satellite_v2_service.get_frame_bounds(
+            cache_root=CACHE_ROOT,
+            sat_id=sat_id,
+            sector=sector,
+            channel=channel,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"bounds": bounds}
+
+
 @router.get("/api/satellite-v2/status")
 def get_satellite_v2_status():
     try:

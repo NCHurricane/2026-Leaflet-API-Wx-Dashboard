@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-03 (Meteosat pipeline efficiency + FCI mirror fix)
+Last updated: 2026-07-04 (All NWS NEXRAD sites in selector + L2-only filtering for non-CONUS + default product L2_REF)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -29,6 +29,42 @@ Keep separate:
   interpretation, and most rendering. `js/weather.js` still owns shared map
   lifecycle, generic archive orchestration, shared scrubber infrastructure, and
   injected callbacks where cross-product state is still coupled.
+- City labels are controlled from the Layers pane with an `Off | US | World`
+  segmented control. `US` loads `data/us-cities-all.json`; `World` loads
+  `data/world-cities.json`. Both sources share the same density slider, mapped
+  through source/zoom-specific bounded min/max km ranges in `js/weather.js`.
+- `config/user_settings.default.json` is the tracked baseline for user-facing
+  dashboard preferences. `GET /api/user-settings/defaults` serves this file,
+  and `js/weather.js` reads it during startup before the first map-default fit
+  and product refresh. It separates global preferences such as home region and
+  city labels from per-page defaults such as Satellite, Tropical, WPC, and
+  Drought map views. A future writable user settings file should merge over
+  this baseline rather than replacing built-in fallbacks.
+- Most per-page `autoLoad` defaults are `false`, so product routes open to the
+  configured map view with controls/background metadata initialized but no
+  rendered product overlay. Current exceptions are Alerts, which renders Severe
+  Weather Warnings with TOR/SVR/FFW filters enabled, and Tropical, which starts
+  in the Atlantic basin and features the first active storm when present or the
+  Tropical Outlook when no active storm exists. Drought loads release-week date
+  metadata without drawing a drought layer.
+- Startup controls now reflect intentional always/default-on context: state and
+  country borders are checked by default but remain user-selectable; Surface
+  networks start all-on with no selected surface product; Radar Sites start on;
+  WPC group pills are navigation only and clear any previous WPC overlay until
+  the user selects a day/product.
+- Surface and RTMA support true empty product states. Unchecking the selected
+  Surface product or the selected RTMA stream/field clears stale values and
+  invalidates in-flight layer responses instead of forcing a fallback product.
+  Selecting a Surface product auto-enables its matching Gradient toggle, which
+  can still be turned off independently. RTMA field checkboxes stay disabled
+  until a stream is selected; 24-hour temperature change remains Hourly-only
+  and clears when switching to Rapid Update.
+- SPC probabilistic hazards auto-enable their matching Significant/CIG hatch
+  layer when selected, while Significant toggles remain unavailable on their
+  own. Drought release-week metadata loads without a highlighted week; selecting
+  a week turns on all five drought categories before drawing the layer.
+- User browser smoke passed on 2026-07-04 for the startup/default-control
+  changes above.
 - Shared categorical legends now wrap whole swatch/label items using
   `.legend-flow`; labels can wrap without painting into neighboring swatches.
   The Alerts legend uses the five-column helper. User browser smoke passed on
@@ -197,21 +233,105 @@ Completed radar enhancements:
   the seed `<option>` in `weather.html` is `value=""` with no label. L3 products
   have a single fixed sweep and never show elevation pills; that is correct
   behavior (was previously a display bug where the Auto pill appeared for L3).
-- L2 chunks workflow: Level 2 products are sourced from the
-  `unidata-nexrad-level2-chunks` S3 bucket via `radar/radar_chunks_utils.py`
-  instead of the full-volume NODD path. Chunks are cached individually in
-  `cache/radar/live/l2_chunk_cache/{SITE}/{DATE}-{TIME}/`; each worker run
-  downloads only new delta chunks (~5–10 per in-progress scan). A `.complete`
-  marker prevents any S3 I/O once the end-of-volume chunk (type E) is received.
-  Mtime-keyed processed_keys entries ensure partial scans are re-rendered as
-  more chunks arrive. End-to-end latency ~1–2 min from scan start vs 6–11 min
-  before. Enabled by `LIVE_RADAR_L2_USE_CHUNKS = True` in `radar_config.py`.
+- L2 chunks workflow (`radar/radar_chunks_utils.py`, `unidata-nexrad-level2-chunks`
+  bucket) was **reverted 2026-07-04** — see dated entry below. `LIVE_RADAR_L2_USE_CHUNKS`
+  is `False`; the module is left in place but unused should the flag ever flip back.
 - `Wx-Dashboard-Radar-Live` scheduled task is now ENABLED at 1-minute intervals
   (changed from 5 min; was previously disabled). L2 runs every invocation; L3
   is gated by `radar_live_l3` freshness sentinel (~5 min effective cadence).
   Freshness sentinels `radar_live` (3 min) and `radar_live_l3` (15 min) are
   registered in `_HEALTH_THRESHOLDS` in `workers/_freshness.py`. Re-run
   `tools/install_tasks.ps1` after any Task Scheduler reset.
+
+#### L2 chunks bucket: bugs, latency benchmark, and revert — 2026-07-04
+
+L2 live radar stopped loading (`unidata-nexrad-level2-chunks` discovery
+returning "no recent scans" for sites with heavy chunk history). Root-caused
+and fixed a chain of issues in `radar/radar_chunks_utils.py`, then benchmarked
+the chunks approach against the flat bucket and reverted:
+
+- **Discovery bug**: `_list_site_chunks` listed the flat `SITE/` prefix with
+  `MaxItems=1000`; S3 returns keys in lexicographic order across every VCP
+  subfolder a site has ever had, so once a site accumulates enough historical
+  subfolders the newest chunks never made it into the capped page. Fixed by
+  discovering VCP subfolder names first (cheap `Delimiter="/"` listing) and
+  walking them newest-first (`_list_recent_site_chunks`).
+- **Poll-performance regression**: the newest-first walk re-listed every
+  folder in the lookback window from S3 on every single poll (~30+ calls for
+  a 3h window). Fixed with an in-process memo (`_COMPLETE_VCP_CACHE`,
+  `_VCP_SCAN_TIME_CACHE`) so folders already confirmed complete are served
+  from memory; only the front of the walk (in-progress folders) hits S3.
+- **Orphan-folder edge case**: the VCP counter is not perfectly monotonic
+  with time — an isolated stray folder (e.g. one leftover chunk from days
+  earlier) can sort numerically after the true newest folder and halt the
+  newest-first walk immediately. Fixed by requiring 3 consecutive stale
+  folders (not 1) before giving up, with a final cutoff filter for safety.
+- **Sequential chunk downloads**: `_download_new_chunks` issued one
+  `s3_client.get_object` per chunk sequentially; a cold backfill (~10 scans,
+  ~700+ chunks) took 50+ seconds. Parallelized with a 16-worker
+  `ThreadPoolExecutor` (`_download_one_chunk`) — same backfill dropped to
+  ~13s.
+- **Latency benchmark, then revert**: compared chunk-completion timestamps
+  against the flat bucket's `LastModified` for the same scans — they matched
+  to the second. The flat `unidata-nexrad-level2` file is generated by the
+  same upstream pipeline the moment the chunk stream finishes, so chunks buy
+  **zero** latency benefit for any completed scan. The only real benefit is
+  up to one volume-interval (~5-6 min) of early visibility into the
+  *currently in-progress* scan. Given that plus the bug history above, L2 was
+  reverted to the flat-bucket path (`radar/radar_nodd_utils.py`, same code L3
+  already uses) via `LIVE_RADAR_L2_USE_CHUNKS = False` in `radar_config.py`.
+  `_resolve_radar_data_utils` in `workers/radar_live_worker.py` is the single
+  routing switch; no other code assumes chunks-specific behavior.
+- **Scrubber warm-poll bug (separate, frontend-only)**: after the bucket
+  revert, Level 2 Play still required a manual Refresh click to pick up
+  backfilled frames (L3 worked fine). Two causes, both fixed:
+  1. Backend render batches write to `index.json` atomically at the end of
+     the whole batch, so a poll mid-render sees zero progress. The frontend
+     warm-poll (`_startRadarScrubWarmPoll` in `js/weather.js`) gave up after
+     4 consecutive "nothing changed" polls (~12s) — well before a 15-50s
+     batch finishes. Added `is_live_render_inflight()` in
+     `app_core/background_render.py` (read-only check of the existing dedup
+     set) so `get_radar_live_frames_data` in `services/radar_service.py`
+     reports an accurate `refreshing` flag on *every* poll, not just the one
+     that happened to trigger the render; the frontend now resets its
+     stable-poll counter whenever `refreshing` is true.
+  2. The real blocker: L2 products have `elevation_selection: True`, so the
+     very first `/frames` response calls `updateElevationOptions()`, which
+     snaps the elevation `<select>` from `''` (auto) to a concrete value
+     (e.g. `"0.5"`). The warm-poll's stale-context guard
+     (`_tryAppendNewRadarFrames` in `js/weather.js`) recomputes its context
+     key from that same live DOM element on every tick and silently bails
+     out once it no longer matches the key captured before the dropdown
+     changed — so L2 never auto-polled at all, while L3 (no elevation
+     dropdown change) was unaffected. Fixed in `js/radar-engine.js`
+     (`loadScrubberFrames`) by re-syncing the stored context key immediately
+     after `updateElevationOptions()` runs.
+- Cache-busted `js/radar-engine.js` (was stale at `?v=20260623c`) and
+  `js/weather.js` in `weather.html`.
+
+2026-07-04 — L2 blank velocity/SRV/SW fix + auto-elevation removal:
+
+- L2 Velocity, Storm-Relative Velocity, and Spectrum Width rendered blank PNGs
+  at every site while reflectivity worked. Root cause: NEXRAD split-cut VCPs
+  scan the low tilts twice at the same fixed angle — a surveillance sweep
+  (reflectivity only) and a Doppler sweep (velocity/spectrum width).
+  `_select_sweep` in `workers/radar_live_worker.py` picked purely by fixed
+  angle and always landed on the first (surveillance) sweep, where Doppler
+  moments are 100% masked. Fixed by making sweep selection field-aware: among
+  sweeps within 0.1° of the matched angle, pick the one with the most valid
+  data for the field being rendered (`_sweep_valid_count`). Verified on live
+  KMPX and PGUA volumes.
+- The scheduled worker rendered L2 at `elevation="auto"` (`ELEV_AUTO` dirs)
+  while the UI requested `0.5` (`ELEV_0P5` dirs) — a cache-key mismatch that
+  made every UI request a miss and triggered a second full on-demand render
+  pass per site/product. Added `LIVE_RADAR_L2_DEFAULT_ELEVATION = "0.5"` in
+  `config/radar_config.py`; `run_radar_live_worker` now passes it for L2 so
+  worker and UI share one cache key. `auto` is no longer used by the UI or
+  the worker; stale `*__ELEV_AUTO` directories are orphaned and safe to
+  delete.
+- Gotcha: blank frames stay listed in `processed_keys.json`, so a fix like
+  this does not re-render them — delete the affected product folders or wait
+  for new scans.
 
 Current radar notes:
 
@@ -273,9 +393,10 @@ V1 is active implementation.
 - The sidebar `Networks` selector follows the Surface page pattern.
 - Leaflet world-wrap bbox edge cases are normalized/clamped instead of returning
   422s at world view.
-- Map is constrained to a single world copy: `noWrap: true` on all basemap tile
-  layers, `maxBounds` set to the world extent, `maxBoundsViscosity: 1.0`, and
-  `minZoom: 2`.
+- Basemap tile layers may wrap horizontally (`noWrap: false`) to avoid empty
+  side gutters at low/world zooms. Weather overlays, vectors, value/place
+  markers, and country borders remain single-instance overlays; dateline bbox
+  edge cases are still normalized/clamped instead of duplicating data layers.
 
 Completed enhancements (2026-06-28):
 
@@ -399,6 +520,78 @@ restart because the work is cache-backed and restart-triggered:
   the server does not stop enabled scheduled tasks such as satellite cache
   refresh jobs. To prove all work is stopped, inspect/stop matching dashboard
   Python processes and relevant Windows scheduled tasks.
+
+### Satellite runtime config consolidation — added 2026-07-04
+
+Satellite backend runtime policy is now centralized in
+`config/satellite_v2_config.py`:
+
+- `SATELLITE_V2_LIVE_TILE_RENDER_WORKERS` replaces the hardcoded live tile
+  thread count in `satellite_v2/service.py`.
+- `SATELLITE_V2_LIVE_SUPERTILE_RADIUS` controls live on-demand neighbor fill.
+  The default radius is `1`, so one visible cache miss renders a 3x3 tile
+  neighborhood after the requested tile has rendered, skipping already-valid
+  tiles and negative-cache markers.
+- `SATELLITE_V2_ON_DEMAND_CATALOG_HOURS`,
+  `SATELLITE_V2_ON_DEMAND_CATALOG_MAX_FRAMES`,
+  `SATELLITE_V2_LEGEND_ANCHOR_COUNT`, and
+  `SATELLITE_V2_LEGEND_TICK_COUNT` replace local service constants.
+- `SATELLITE_V2_NETCDF_CACHE_SIZE` and
+  `SATELLITE_V2_RENDERER_CACHE_SIZE` replace renderer-local env parsing.
+- `SATELLITE_V2_GOES_FULLDISK_MAX_GRID`, `SATELLITE_V2_AHI_MAX_GRID`, and
+  `SATELLITE_V2_FCI_MAX_GRID` are the provider-specific Full Disk source-grid
+  caps for GOES, Himawari AHI, and Meteosat FCI. Provider/parser modules import
+  these values directly, so future high-resolution tuning should start in this
+  config file.
+- Frontend satellite animation prefetch is cache-only as of 2026-07-04. The
+  active Leaflet layer still live-renders visible tile misses, but background
+  prefetch requests use `render_live=0` so Himawari/Meteosat Full Disk frame
+  setup does not compete with the first visible static image.
+- Live supertile testing passed for Himawari Full Disk, GOES CONUS, and GOES
+  Meso1 Channel02. A bug found during testing where requested invalid/off-disk
+  tiles could keep filling neighbors and produce a 500 was fixed; requested
+  invalid tiles now return the normal transparent invalid response, and neighbor
+  fill errors are counted as `supertile_errors` without poisoning the visible
+  tile request.
+
+### Satellite rapid-sector worker — added 2026-07-04
+
+A new isolated rapid warmer replaced the broad Satellite v2 scheduled workers:
+
+- Entry points: `satellite_v2/rapid_worker.py` and
+  `workers/satellite_v2_rapid_worker.py`.
+- Default jobs: GOES-19/18 `MESO1`/`MESO2`, Himawari-9 `JAPAN`, and
+  Meteosat-11 `RSS`.
+- Default products: `Channel02` and `Channel13`.
+- Default policy: latest 12 frames, low tile-worker count (`2`), cache-first
+  canvas warming, and small per-sector zoom targets (`MESO` 7/8, `JAPAN` and
+  `RSS` 6/7).
+- Himawari `TARGET` is intentionally not warmed by default because it is
+  dynamically retasked and the catalog does not yet publish per-frame bounds.
+  Add it only after implementing target-frame bounds or accepting a broad
+  guessed warm box.
+- Full Disk and broad CONUS prewarming remain excluded; those paths should use
+  live rendering, supertiles, and cross-session cache reuse.
+- Removed old broad-worker modules/launchers and old worker config profiles:
+  `satellite_v2/worker.py`, `satellite_v2/worker_new.py`,
+  `workers/satellite_v2_worker.py`, `workers/satellite_v2_meso_worker.py`,
+  `workers/satellite_v2_light_composites_worker.py`, and
+  `workers/satellite_v2_geocolor_worker.py`.
+- `workers/scheduler.py` now registers only the rapid worker in the optional
+  in-process fallback scheduler. `workers/_freshness.py` now expects only the
+  `satellite_v2_rapid` sentinel for Satellite v2. `tools/install_tasks.ps1`
+  registers `Wx-Dashboard-Satellite_v2_rapid` and unregisters legacy
+  `Wx-Dashboard-Satellite_v2*` broad-worker task names when run.
+
+Optional future CONUS light-warm plan:
+
+- Keep it separate from the rapid default. CONUS currently works well with live
+  rendering, supertiles, and cache reuse.
+- If first-load latency becomes worth the background cost, add a disabled/opt-in
+  light worker for GOES-19/18 `CONUS` only, latest 1-2 frames, `Channel02` and
+  `Channel13`, zooms `(5, 6)`, and `tile_workers=1-2`.
+- Do not reintroduce broad CONUS product/profile warming; the light worker
+  should remain cache-first, current-frame biased, and easy to disable.
 
 ### Global satellite coverage
 
@@ -691,19 +884,52 @@ Correctness bug found during verification — FCI disk was east-west MIRRORED:
   Meteosat-9 tile caches are untouched (SEVIRI orientation was validated
   numerically against Satpy and is correct).
 
-Browser smoke for Meteosat-12 after the mirror fix is user-owned and
-pending.
+Browser smoke for Meteosat-12 after the mirror fix completed 2026-07-03.
+Initial animation load (6 frames over Africa, zoom 5) takes ~60 sec because
+each frame requires an independent EUMETSAT catalog search + 40-chunk download
+(~10–15 sec per frame); GOES/Himawari benefit from AWS S3 edge caching that
+EUMETSAT lacks. Manifest cache accelerates repeat plays of the same timeslot
+and manual scrubbing. Tiles persist and render correctly post-fix.
+
+#### Satellite UI dependency chain + Meteosat visible channel — 2026-07-03
+
+UI dependency chain: **Satellite → Sector → View → Product**
+
+All selections must be explicit; tiles do not load until all four are chosen.
+
+- `weather.html`: Added "Full Disk" as default view option; added
+  "— Choose Product —" placeholder as default Product option (prevents
+  auto-load with fallback channel).
+- `js/satellite-page.js`: View dropdown disabled until Sector selected;
+  Product dropdown disabled until View selected. New functions
+  `syncViewPresetEnabled()` and `syncChannelEnabled()` manage the
+  disabled state. `activeChannel()` now returns empty string when no
+  product selected (was defaulting to Channel13). Tile-loading check
+  requires all four selections non-empty. Verified: correct enable/disable
+  sequence and no auto-load until product explicitly chosen.
+
+Meteosat-12 `Channel02` → FCI `vis_06` visible scalar added:
+
+- `config/satellite_v2_config.py`: Added `"Channel02": "vis_06"` to
+  `FCI_CHANNEL_FOR_ABI_CHANNEL` mapping.
+- `js/satellite-page.js`: Exposed `Channel02` in Meteosat-12 product list;
+  pruned composites from Meteosat-9 and Meteosat-12 (deferred to V2).
+  Himawari-9 retained full GOES product list (identical ABI).
+- Proof validation (2026-07-03T194500Z frame): reflectance range 0–0.7633 K,
+  68.8% disk coverage, 9.7% bright pixels (correct for 19:45 UTC sunset);
+  cloud detail over West Africa coast visible; calibration verified.
+- Product dropdown now correctly filters by satellite:
+  - Himawari-9: All GOES products (ABI-identical rendering speed)
+  - Meteosat-12: Channel02, 07, 07Fire, 08RAMSDIS, 09RAMSDIS, 13 only
+  - Meteosat-9: Channel02, 03, 07, 07Fire, 08RAMSDIS, 09RAMSDIS, 13 only
+  - GOES: Full product list (unchanged)
 
 Next visible-products sequence for non-NOAA satellites:
 
-1. Start with a Meteosat-12 visible scalar proof. First target:
-   ABI-style `Channel02` -> FCI `vis_06`.
-2. Validate cached/live FCI extraction before UI exposure. Confirm reflectance
-   calibration works, ranges are sane, finite coverage is expected, and a proof
-   render aligns with coastlines.
-3. Expose only proven products in the Meteosat-12 frontend filter. Add
-   `Channel02` after the proof render passes; do not expose additional visible
-   or RGB products by source mapping alone.
+1. ✅ Meteosat-12 `Channel02` → `vis_06` proof completed and exposed.
+2. Continue with Meteosat-9 visible channels if `Channel02`/`Channel03` mapping
+   is needed; otherwise defer to next visible band (Shortwave IR/Fire) in
+   the standard product set.
 4. Expand cautiously after the first visible proof. Candidate mappings:
    `Channel01` -> FCI `vis_04`, `Channel03` -> FCI `vis_08` or `vis_09`,
    `Channel05` -> FCI `nir_16`, and `Channel06` -> FCI `nir_22`.
@@ -717,6 +943,139 @@ Himawari (deferred): checked the `AHI-L1b-Target` S3 prefix for rapid-scan
 target areas — `R301`-`R304` are a single persistent ~1000km volcanic-watch
 box near 142°E/26.6°N (Izu/Bonin arc), not a general-purpose movable sector,
 so it was not worth adding even before the pipeline itself was removed.
+
+#### Meteosat-11 Rapid Scan Service (RSS) — validated 2026-07-03
+
+Meteosat-11 RSS is live, giving the dashboard a 5-minute-cadence
+Europe/North Africa product alongside the 15-minute Meteosat-9/12 full disks:
+
+- EUMETSAT collection `EO:EUM:DAT:MSG:MSG15-RSS`. Product IDs use the
+  `MSG4` prefix (satellite_id 324 in the native header) — EUMETSAT's
+  currently-operating RSS satellite, publicly branded Meteosat-11.
+  Calibration constants for platform 324 already existed in
+  `satellite_v2/seviri_nat.py` (reused from the Meteosat-9 work), so no new
+  calibration table was needed.
+- `satellite_v2/provider_eumetsat.py`: `_SLOT_MINUTES` changed from a single
+  module constant to a per-satellite dict (5 min for RSS vs 15 min for full
+  disk); `_require_fulldisk` generalized to `_require_supported_sector` so
+  each platform can declare its own allowed sector (`RSS` for Meteosat-11).
+  New `RSS` sector key added to `SATELLITE_V2_SUPPORTED_SECTORS`.
+- Real bug found and fixed during validation: RSS products are a cropped
+  northern strip (3712 columns x 1392 lines, not the full 3712x3712 disk).
+  `seviri_nat.py`'s `_source_georef` assumed the grid is always centered on
+  the sub-satellite point, which is true for full disk but placed the RSS
+  strip incorrectly near the equator instead of its actual ~13-68N position
+  at 9.5E. Fixed by reading the native header's
+  `SouthLineSelectedRectangle`/`NorthLineSelectedRectangle`/`East`/
+  `WestColumnSelectedRectangle` fields and computing bounds relative to the
+  full 3712-line/column reference grid rather than the cropped array's own
+  dimensions. Verified with a coastline ghost-overlay proof render over
+  Europe before wiring the UI.
+- `config/satellite_platforms.py`: new `meteosat11` descriptor (instrument
+  SEVIRI, provider eumetsat, sectors `["RSS"]`, lon_0 9.5).
+- Frontend: platform button, `PLATFORM_SECTORS.meteosat11 = ['RSS']`,
+  `PLATFORM_CHANNELS.meteosat11` (same scalar set as Meteosat-9), and a new
+  `europe-rss` named view preset. The RSS sector toggle button and native
+  `<option value="RSS">` already existed pre-hidden in `weather.html` from
+  earlier scaffolding; only needed un-hiding via the existing
+  `PLATFORM_SECTORS`-driven visibility logic. `weather.html` bumped to
+  `satellite-page.js?v=20260703a`.
+- User browser-tested and confirmed working 2026-07-03.
+
+#### Himawari-9 Japan Area and Target Area sectors — added 2026-07-03
+
+Investigated after confirming Himawari-9's `AHI-L1b-Target` prefix is not
+always the fixed Izu/Bonin volcanic-watch box noted earlier: JMA dynamically
+retasks it (observed pointed at a typhoon near the Vietnam/Hainan coast,
+`ObsMode=TY`, center ~109.7E/18.5N). A second prefix, `AHI-L1b-Japan`, had
+not been examined before and turned out to be a genuine fixed-box rapid-scan
+product.
+
+- S3 bucket structure: `noaa-himawari9` has exactly three top-level AHI-L1b
+  prefixes — `FLDK` (full disk, already implemented), `Japan`, and `Target`.
+- Both `Japan` (`JP01`..`JP04`) and `Target` (`R301`..`R304`) are **repeat
+  scans of one fixed grid**, not spatial quadrants: parsing all 4 headers
+  for the same 10-min timeslot showed identical `coff`/`loff`/`n_cols`/
+  `n_lines` across all 4 scenes, each `total_segments=1`. This gives ~2.5-min
+  effective cadence (JMA scans the box 4x within each 10-min block).
+  Difference between the two: Japan's box is permanently fixed over
+  Japan/nearby seas; Target's box changes per JMA tasking and can be a
+  storm, a volcano, or empty.
+- No parser bug this time (unlike Meteosat RSS): AHI's `coff`/`loff` are
+  self-describing per-file/per-crop (small values matching that crop's own
+  local grid, e.g. Target's `coff=1755.5, loff=1220.5` on a 500x500 grid),
+  not full-disk-relative like MSG's line/column numbering. `ahi_hsd.py`'s
+  existing `load_ahi_raster` worked unmodified. Verified with a coastline
+  ghost-overlay proof: a live Target frame (2026-07-03) showed a very cold
+  BT core (183-190K, consistent with overshooting convective tops) correctly
+  positioned over the Vietnam coast near Hue, matching JMA's published
+  target coordinates.
+- `satellite_v2/provider_himawari.py`: generalized from FULLDISK-only to a
+  `_SECTOR_INFO` dict (`FULLDISK`/`JAPAN`/`TARGET` → S3 root + whether the
+  sector is "multi-scene" i.e. each scene within a 10-min slot is its own
+  frame rather than being segment-stitched). `_SEGMENT_RE` widened to match
+  the `FLDK|JP0[1-4]|R30[1-4]` scene token. Frame keys for multi-scene
+  sectors embed the scene suffix (e.g. `20260703T235000Z_R304`) since 4
+  distinct frames exist per 10-min slot. The exact per-scene scan time isn't
+  in the S3 filename (only the 10-min slot); frame `timestamp_utc` uses a
+  150s-per-scene-index approximation for scrubber ordering/display, not
+  JMA's true `ObsStartTime`.
+- `config/satellite_v2_config.py`: `JAPAN`/`TARGET` added to
+  `SATELLITE_V2_SUPPORTED_SECTORS`. `config/satellite_platforms.py`:
+  himawari9 `sectors` expanded to `["FULLDISK", "JAPAN", "TARGET"]`.
+- Frontend: new sector toggle buttons (`#satellite-sector-japan`,
+  `#satellite-sector-target`) and native `<option>`s in `weather.html`;
+  `PLATFORM_SECTORS.himawari9` includes `Japan`/`Target`. Japan gets a real
+  computed named view preset `himawari-japan` (bounds derived from the
+  JP01 header's actual geolocated corners, `[[18,100],[55,157]]`). Target's
+  box moves per JMA tasking, so V1 reuses the existing wide `west-pacific`
+  full-disk preset as a fallback rather than auto-centering — user pans
+  manually to find the current target. Auto-centering on the live target
+  box is a possible V2 follow-up. `weather.html` bumped to
+  `satellite-page.js?v=20260703b`.
+- Verified end-to-end (catalog + live tile render, both sectors) via direct
+  API calls against an isolated test server; the app's normal dev workflow
+  always proxies API calls to the long-running `main.py` on port 8000
+  (see `js/shared.js`'s `resolveApiOrigin`), so a manual restart of that
+  process is needed before this is testable in the live dashboard.
+- User confirmed both Japan and Target sectors working live 2026-07-04.
+
+#### Himawari-9 "Current Target Area" auto-fit view — added 2026-07-04
+
+Because JMA retasks the Target Area dynamically, the static named view
+presets used elsewhere don't work for it (the box moves). Added a
+dynamic-fit alternative instead of requiring the user to manually pan from
+the wide West Pacific fallback:
+
+- New endpoint `GET /api/satellite-v2/frame-bounds?sat_id=&sector=&channel=`
+  (`routes/satellite_v2.py` → `satellite_v2.service.get_frame_bounds`)
+  returns the real-world lon/lat bounds of the most recent frame, or
+  `{"bounds": null}` if no frame currently exists for that sector (nothing
+  tasked). Implementation: lists the latest frame, downloads its single
+  small source file, loads it through the existing generic
+  `renderer._load_source_raster` dispatch (same one used for tile
+  rendering, so no per-format special-casing), then samples a 9x9 interior
+  pixel grid through the raster's `src_transform`/`src_crs` with
+  `pyproj.Transformer`, keeping only finite lon/lat results before taking
+  min/max. Interior sampling (not just the 4 corners) matters because
+  full-disk-shaped sectors have off-Earth corners that transform to
+  infinity, while cropped regional sectors are fully on-Earth — the same
+  function needs to handle both without extra branching.
+- Frontend: new View option "Current Target Area"
+  (`himawari-target-current`) in `weather.html`. Unlike the static presets
+  in `SATELLITE_NAMED_VIEW_PRESETS`, this entry has `bounds: null` and
+  `dynamic: true`; `js/satellite-page.js`'s `setActiveViewPreset` checks
+  for that flag and calls the new async `fitDynamicViewPreset`, which
+  fetches `/api/satellite-v2/frame-bounds` via the shared `window.apiUrl`
+  helper and fits the map to the returned box, or shows a status message
+  if nothing is currently tasked or the request fails.
+  `weather.html` bumped to `satellite-page.js?v=20260703c`.
+- Verified end-to-end in-browser: temporarily pointed `window.apiUrl` at
+  the isolated test server (since the real port-8000 process wasn't
+  restarted yet for this addition either) and confirmed selecting "Current
+  Target Area" re-tiled the map to a tight z5 cluster bracketing the
+  target's actual longitude/latitude box, instead of the wide West Pacific
+  fallback extent.
 
 ### International radar
 
@@ -741,6 +1100,53 @@ imagery.
 2. Fire/Smoke page using NASA FIRMS detections and NOAA smoke analysis.
 3. Cross-product severe-weather workspace combining Radar, warnings, SPC
    outlooks, storm reports, and possibly a broader current-weather workspace.
+4. User preference persistence:
+   - Add backend read/patch endpoints that merge a writable user settings file
+     over `config/user_settings.default.json` with validation and safe fallback
+     behavior.
+   - Add frontend page actions such as "Use this as default for this page" and
+     "Reset page defaults" after the initial map-default behavior is stable.
+   - Save stable product concepts only: map view, Satellite platform/sector/
+     product/lookback, Tropical basin, city label source/density, and similar
+     UI preferences. Keep provider names, cache namespaces, render versions,
+     function names, and implementation internals in code or operator config.
+
+### Radar: All NWS NEXRAD Sites + L2-Only Filtering
+
+**Context:** NOAA NEXRAD documentation confirms Level III products are only generated
+for CONUS sites. Non-CONUS/remote sites (Alaska, Hawaii, Puerto Rico, US territories,
+overseas military bases) have Level II base data on AWS but no Level III in standard
+LDM feeds due to satellite-routing latency isolation from CONUS internet relays.
+
+**Changes (2026-07-04):**
+
+- **Backend (`services/radar_service.py`)**:
+  - Added `_is_conus_site(site)` function to identify CONUS (lat 21–52°N, lon −140 to −65°W)
+    vs non-CONUS sites using their coordinates.
+  - Updated `get_radar_live_sites_data()` to include a `"conus": bool` flag for each
+    site in the `/api/radar/live/sites` response.
+  - Fixed `_radar_live_site_supported()` to recognize all non-CONUS sites via fallback
+    coordinates from the new `radar/nexrad_coordinates.py` module.
+  - Created `radar/__init__.py` to make the radar directory a Python package.
+
+- **Frontend (`js/weather.js`)**:
+  - Added `_radarSiteConusMap` to track CONUS status for each site.
+  - Changed default product from `L3_N0B` to `L2_REF` in two locations:
+    `_activeRadarProduct()` fallback and `_loadRadarSites()` initial selection logic.
+  - Disabled Level 3 products in dropdown for non-CONUS sites (greyed out with note).
+  - Site selection change handler auto-switches to L2 when non-CONUS site selected.
+
+- **Data (`radar/nexrad_coordinates.py`)**:
+  - New comprehensive NEXRAD site coordinate mapping for all 164 NWS WSR-88D sites,
+    including 121 CONUS, 7 Alaska, 4 Hawaii, Puerto Rico, Guam, and 3 overseas military.
+  - Serves as fallback when Py-ART's NEXRAD_LOCATIONS lacks a site's coordinates.
+
+**Result:**
+- Radar site selector now shows all 164 NWS sites (vs. previous 7 CONUS-only).
+- Non-CONUS sites (PGUA/Guam, RKSG/South Korea, RODN/Japan, etc.) render **Level 2 data**
+  on-demand from AWS; Level 3 options are disabled to reflect unavailability.
+- Default product `L2_REF` works universally across all sites.
+- No 404 errors or confusion about missing Level 3 data for remote sites.
 
 ## Verification Expectations
 
