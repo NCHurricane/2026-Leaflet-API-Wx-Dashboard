@@ -736,11 +736,11 @@ SATELLITE_V2_DEFAULT_MAX_FRAMES = 360
 
 SATELLITE_V2_PROVIDER = "aws"
 SATELLITE_V2_CACHE_NAMESPACE = "satellite"
-SATELLITE_V2_RENDER_VERSION = "products-v2"
-SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi1"
-# fci1: invalidates Meteosat-12 tiles rendered before the 2026-07-03
-# east-west mirror fix in satellite_v2/fci_nc.py.
-SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci1"
+SATELLITE_V2_RENDER_VERSION = "products-v3"
+SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi2"
+# fci2 retains the Meteosat-12 east-west mirror invalidation from fci1 and
+# invalidates tiles rendered before the shared scalar-reflectance stretch.
+SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci2"
 SATELLITE_V2_TILE_SIZE = 256
 SATELLITE_V2_CATALOG_MAX_AGE_SECONDS = 20 * 60
 

@@ -979,14 +979,22 @@ Next visible-products sequence for non-NOAA satellites:
 1. ✅ Meteosat-12 `Channel02` → `vis_06` proof completed and exposed.
    Daylight browser smoke passed 2026-07-04; night full-disk smoke passed the
    same evening on a prefetched frame (~250 ms/tile).
-2. Reflectance display stretch (NEXT, agreed 2026-07-04): visible/NIR products
-   look dark/flat on GOES, Himawari-9, and Meteosat-12 alike because all
-   pipelines correctly produce linear reflectance factor (0-1) and the shared
-   renderer displays it linearly. Apply a gamma/sqrt stretch (CIRA-style
-   `sqrt(reflectance)`) to reflectance-typed products in the shared render
-   path, gated by channel type, with a render-version bump so cached tiles
-   invalidate. Evaluate on a fully lit Meteosat disk (~12:00 UTC). Optional
-   later: solar-zenith normalization.
+2. ✅ Reflectance display stretch completed 2026-07-10. User evaluation
+   confirmed that visible imagery from Meteosat had the same flat appearance
+   as the other providers, with too little distinction between darker and
+   lighter image areas. The renderer already applied a power-law stretch to
+   Channels 01-03, so the missing step was contrast-range expansion rather
+   than a second gamma adjustment. All scalar reflectance products
+   (Channels 01-06) now use one provider-independent display transform: clip
+   linear reflectance to a fixed 0.02-0.90 window, normalize it to 0-1, then
+   apply `sqrt`. Fixed bounds avoid tile seams and animation flicker; RGB
+   recipes remain unchanged. Render namespaces advanced to `products-v3`,
+   `products-ahi2`, and `products-fci2` so old tiles do not mask the change.
+   Focused tests passed, and a direct browser smoke against the new local
+   server returned a valid 256x256 GOES-18 Channel02 tile. On the same tile,
+   the grayscale p5-p95 span increased from 141 to 178 levels. Full-page user
+   comparison remains the final visual acceptance step. Optional later:
+   solar-zenith normalization.
 3. Continue with Meteosat-9 visible channels if `Channel02`/`Channel03` mapping
    is needed; otherwise defer to next visible band (Shortwave IR/Fire) in
    the standard product set.

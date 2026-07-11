@@ -30,9 +30,8 @@ from config.satellite_v2_config import (
 )
 from satellite_v2.ahi_hsd import load_ahi_raster
 from satellite_v2.composites import (
-    reflectance,
     render_composite_rgb,
-    visible_reflectance,
+    scalar_reflectance,
 )
 
 
@@ -183,10 +182,8 @@ class SatelliteTileRenderer:
         product = ABI_CHANNELS[self.product_key]
         source_channel = source_channels_for_product(self.product_key)[0]
         values = samples[source_channel]
-        if source_channel in {"Channel01", "Channel02", "Channel03"}:
-            values = visible_reflectance(values)
-        elif _is_reflectance_channel(source_channel):
-            values = reflectance(values)
+        if _is_reflectance_channel(source_channel):
+            values = scalar_reflectance(values)
         cmap = product.get("cmap") or plt.get_cmap("Greys_r")
         norm = product.get("norm")
         return _colorize_scalar(values, valid, cmap, norm)

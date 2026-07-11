@@ -16,6 +16,9 @@ from config.satellite_colormaps import IR_CMAP, IR_NORM
 
 Image.MAX_IMAGE_PIXELS = None
 
+_SCALAR_REFLECTANCE_BLACK_POINT = 0.02
+_SCALAR_REFLECTANCE_WHITE_POINT = 0.90
+
 
 def normalize(value: np.ndarray, lower_limit: float, upper_limit: float, clip: bool = True) -> np.ndarray:
     result = (value - lower_limit) / (upper_limit - lower_limit)
@@ -43,6 +46,17 @@ def reflectance(values: np.ndarray, gamma: float | None = None) -> np.ndarray:
 
 def visible_reflectance(values: np.ndarray) -> np.ndarray:
     return reflectance(values, gamma=0.45)
+
+
+def scalar_reflectance(values: np.ndarray) -> np.ndarray:
+    """Apply a stable contrast stretch for scalar VIS/NIR display products."""
+    data = reflectance(values)
+    data = normalize(
+        data,
+        _SCALAR_REFLECTANCE_BLACK_POINT,
+        _SCALAR_REFLECTANCE_WHITE_POINT,
+    )
+    return np.sqrt(data).astype(np.float32)
 
 
 def _rgb(red: np.ndarray, green: np.ndarray, blue: np.ndarray) -> np.ndarray:

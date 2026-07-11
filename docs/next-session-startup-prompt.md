@@ -95,14 +95,16 @@ Recent completed work:
   detail in docs/dashboard-change-and-enhancement-superfile.md.
 
 Next up:
-- NEXT: reflectance display stretch (agreed 2026-07-04). Visible/NIR products
-  look dark/flat on GOES, Himawari-9, and Meteosat-12 alike — every pipeline
-  correctly produces linear reflectance factor (0-1) and the shared renderer
-  displays it linearly. Apply a gamma/sqrt stretch (CIRA-style
-  sqrt(reflectance)) to reflectance-typed products once in the shared render
-  path, gated by channel type, with a render-version bump so cached tiles
-  invalidate. Evaluate against a fully lit Meteosat disk (~12:00 UTC).
-  Memory note: satellite-reflectance-gamma.
+- DONE 2026-07-10: corrected the flat scalar reflectance display across all
+  satellite providers. The renderer already applied a power law to Channels
+  01-03; the actual missing step was contrast-range expansion. All scalar
+  reflectance products (Channels 01-06) now use a fixed 0.02-0.90 reflectance
+  window followed by sqrt. Fixed bounds prevent tile seams/frame flicker and
+  RGB recipes are unchanged. Cache namespaces bumped to products-v3,
+  products-ahi2, and products-fci2. Focused unit tests pass; one GOES-18 tile's
+  grayscale p5-p95 range increased from 141 to 178. A direct browser request
+  to the new local server returned the corrected 256x256 tile; full-page user
+  comparison remains for visual acceptance.
 - THEN: continue the non-GOES standard product set per the sequencing decision
   (visible/NIR candidates Channel01->vis_04, Channel03->vis_08/vis_09,
   Channel05->nir_16, Channel06->nir_22; composites only after scalar proofs).
