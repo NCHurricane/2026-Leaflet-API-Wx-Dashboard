@@ -434,6 +434,8 @@ SATELLITE_V2_DASHBOARD_PRODUCTS = (
     "Channel01",
     "Channel02",
     "Channel03",
+    "Channel05",
+    "Channel06",
     "Channel07",
     "Channel07Fire",
     "Channel08RAMSDIS",
@@ -694,17 +696,23 @@ def seviri_supported_products() -> tuple[str, ...]:
 
 # FCI source-channel mapping for direct IR/WV/VIS products. Composite UI exposure
 # stays separate until each recipe has a proof render against live MTG chunks.
+# C13/C14 both map to ir_105 and C15 maps to ir_123 (FCI has no 11.2 µm band)
+# so the goes2go split-window recipes (Night Microphysics, Dust, Ash) reduce
+# exactly to the canonical EUMETSAT MTG RGBs — the same aliasing SEVIRI uses.
 FCI_CHANNEL_FOR_ABI_CHANNEL = {
+    "Channel01": "vis_04",
     "Channel02": "vis_06",
     "Channel03": "vis_08",
+    "Channel05": "nir_16",
+    "Channel06": "nir_22",
     "Channel07": "ir_38",
     "Channel08": "wv_63",
     "Channel09": "wv_73",
     "Channel10": "ir_97",
     "Channel11": "ir_87",
     "Channel13": "ir_105",
-    "Channel14": "ir_123",
-    "Channel15": "ir_133",
+    "Channel14": "ir_105",
+    "Channel15": "ir_123",
 }
 
 

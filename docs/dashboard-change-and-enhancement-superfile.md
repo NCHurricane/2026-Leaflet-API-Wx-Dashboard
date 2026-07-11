@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-05 (Surface gradient overlay cache refresh + image URL versioning)
+Last updated: 2026-07-10 (Meteosat standard composites: Night Micro, Dust, Ash)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -764,6 +764,12 @@ Current international-satellite product direction:
   Water Vapor, Shortwave IR/Fire, Night Microphysics, Dust, Ash, and SO2.
   Each product must have explicit per-instrument channel mapping and at least
   one proof render before appearing in the UI.
+  Status 2026-07-10: 7 of 8 complete for Meteosat-9/11/12 (see the
+  "Meteosat standard composites" section below). SO2 is intentionally
+  dropped for Meteosat: the recipe's red beam is `C09 − C10`, SEVIRI aliases
+  both to WV_073 (red ≡ constant), and FCI cannot map C09/C10 faithfully
+  without corrupting the exposed Channel09 WV scalar. Doing SO2 right needs
+  per-instrument recipe-level channel overrides — V2 if ever.
 - Defer CIRA GeoColor / True Color / Natural Color / other RGB parity to V2.
   Full-disk RGB source loading can be expensive, especially for FCI and
   high-resolution visible channels, so RGB should wait until standard products,
@@ -940,6 +946,47 @@ each frame requires an independent EUMETSAT catalog search + 40-chunk download
 (~10–15 sec per frame); GOES/Himawari benefit from AWS S3 edge caching that
 EUMETSAT lacks. Manifest cache accelerates repeat plays of the same timeslot
 and manual scrubbing. Tiles persist and render correctly post-fix.
+
+#### Meteosat standard composites: Night Microphysics, Dust, Ash — 2026-07-10
+
+The last three implementable products of the standard non-GOES set are live
+on Meteosat-9, Meteosat-11, and Meteosat-12. All three are IR-only, so they
+work day and night and add **no download cost** — every source channel
+already ships inside the frame's single `.nat` (SEVIRI) or shared FCI chunk
+set; only the extra channel extraction and composite math are new.
+
+- `config/satellite_v2_config.py`: FCI aliases corrected — `Channel14 →
+  ir_105` (was `ir_123`) and `Channel15 → ir_123` (was `ir_133`, the 13.3 µm
+  CO2 band, physically wrong for split-window recipes). With the aliases,
+  the goes2go Night Microphysics / Dust / Ash recipes reduce exactly to the
+  canonical EUMETSAT MTG RGBs, mirroring the SEVIRI table's `C13/C14 →
+  IR_108` trick. Nothing exposed or prefetched used FCI C14/C15, so no
+  render-version bump was needed.
+- `js/satellite-page.js` (`?v=20260710b`): `NighttimeMicrophysics`, `Dust`,
+  `Ash` added to `PLATFORM_CHANNELS` for `meteosat9`, `meteosat11`, and
+  `meteosat12`.
+- SO2 is intentionally skipped for Meteosat (see the standard-set note in
+  the planning section above): SEVIRI's alias table makes the recipe's red
+  beam a constant, and FCI can't map it without breaking the exposed C09 WV
+  scalar. Requires recipe-level per-instrument overrides — deferred.
+- Proofs (2026-07-11T0100Z-ish cached frames, night over Africa): all 3
+  composites × both instruments render 100% opaque with healthy variance in
+  every band; palette behavior matches a GOES-19 CONUS Night Microphysics
+  reference rendered through the same recipe, and M9 Dust shows the
+  canonical look (warm land pink, convective cores dark red, cold Southern
+  Ocean olive). Proof PNGs in `cache\satellite\validation\fci_proofs\`
+  (`meteosat{9,12}_{NighttimeMicrophysics,Dust,Ash}_proof_z3.png` plus the
+  GOES reference). Meteosat-11 has no cached RSS source to proof against,
+  but it shares the SEVIRI parser and composite path with Meteosat-9
+  end-to-end; browser spot-check of one RSS composite is user-owned.
+- Legends: interpretive RGB legends are keyed by product, so the existing
+  GOES legends for these three composites apply to Meteosat automatically
+  (verified via `get_legend_payload`).
+
+Browser smoke passed 2026-07-10: user tested the three RGB composites on
+the Meteosat platforms and confirmed the output, and separately confirmed
+satisfaction with visible-channel reflectance rendering (the shared
+scalar-reflectance stretch), closing out that follow-up.
 
 #### Satellite UI dependency chain + Meteosat visible channel — 2026-07-03
 
