@@ -61,6 +61,9 @@ def start_scheduler() -> None:
     from workers.radar_live_worker import run_radar_live_worker
     from workers.rtma_worker import run_rtma_hourly_worker, run_rtma_rapid_worker
     from satellite_v2.rapid_worker import run_satellite_v2_rapid_worker
+    from satellite_v2.meteosat_prefetch_worker import (
+        run_satellite_v2_meteosat_prefetch_worker,
+    )
     from workers.surface_worker import run_surface_worker
     from workers.water_worker import run_water_worker
     from workers.cache_cleanup_worker import run_cache_cleanup_worker
@@ -181,6 +184,15 @@ def start_scheduler() -> None:
         next_run_time=now + timedelta(seconds=65),
     )
     _scheduler.add_job(
+        run_satellite_v2_meteosat_prefetch_worker,
+        "interval",
+        minutes=10,
+        id="satellite_v2_meteosat_prefetch_worker",
+        max_instances=1,
+        misfire_grace_time=300,
+        next_run_time=now + timedelta(seconds=75),
+    )
+    _scheduler.add_job(
         run_cache_cleanup_worker,
         "interval",
         hours=6,
@@ -198,6 +210,7 @@ def start_scheduler() -> None:
         "rtma_hourly (60 min, +45s delay), rtma_rapid (15 min, +50s delay), "
         "surface (30 min), water_riv_gauges (30 min, +95s delay), "
         "satellite_v2_rapid (5 min, +65s delay), "
+        "satellite_v2_meteosat_prefetch (10 min, +75s delay), "
         "cache_cleanup (6 hours, +1 min delay)"
     )
 

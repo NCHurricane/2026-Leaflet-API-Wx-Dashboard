@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date prepared: 2026-07-04
+Date prepared: 2026-07-05
 
 Start in:
 
@@ -34,6 +34,41 @@ Current status:
   behavior should stay in workers/*_worker.py.
 
 Recent completed work:
+- DONE 2026-07-04 (late evening), user-tested: L2 blank velocity/SRV/spectrum
+  width fix. NEXRAD split-cut VCPs scan low tilts twice at the same fixed
+  angle (surveillance sweep = reflectivity only, Doppler sweep = velocity/SW);
+  _select_sweep in workers/radar_live_worker.py picked the first (surveillance)
+  sweep by angle alone, rendering fully-masked blanks at every site. Now
+  field-aware: among sweeps within 0.1 deg of the matched angle it picks the
+  one with the most valid data for the rendered field. Also retired
+  elevation="auto" for L2: LIVE_RADAR_L2_DEFAULT_ELEVATION="0.5" in
+  config/radar_config.py so the scheduled worker and UI share one ELEV_0P5
+  cache key (the dual ELEV_AUTO/ELEV_0P5 double-render is gone; stale
+  *__ELEV_AUTO dirs are orphaned/deletable). Gotcha: blank frames stay in
+  processed_keys.json and will not self-heal; delete affected product folders
+  or wait for new scans.
+- DONE 2026-07-04 (late evening), user-tested: Meteosat source-prefetch worker.
+  New satellite_v2/meteosat_prefetch_worker.py +
+  workers/satellite_v2_meteosat_prefetch_worker.py (download-only, no tiles).
+  Per run: newest 2 missing frames + 1 oldest-missing backfill inside a 6 h
+  window, 7 h keep-prune, per-file atomic/resumable. Config
+  SATELLITE_V2_METEOSAT_PREFETCH_* in config/satellite_v2_config.py. Scheduled
+  task Wx-Dashboard-Satellite_v2_meteosat_prefetch (10 min, 25-min TimeLimit
+  via new per-task TimeLimit support in tools/install_tasks.ps1; installed and
+  enabled). EUMETSAT frames are all-channel bundles so one prefetched frame
+  warms every product. Result: Meteosat-12 Channel02 FULLDISK on a warm frame
+  renders ~250 ms/tile vs 3-4 min cold. Post-install fix: frame list is
+  filtered to the lookback window (catalog over-returns) so backfill no longer
+  downloads frames the prune immediately deletes. Himawari-9 deliberately
+  excluded (per-band files, no bundle bonus).
+- DONE 2026-07-05: Surface gradient overlays no longer retain stale worker PNGs
+  indefinitely on open pages. `js/weather.js` now refreshes frontend gradient
+  metadata after 5 minutes, fetches `/api/data/surface-gradient` with
+  `cache: 'no-cache'`, and appends the worker metadata timestamp as an image URL
+  version query. `js/surface-engine.js` re-renders the active gradient after a
+  successful prime so replaced worker output is applied without a manual
+  product toggle. Static validation passed with `node --check` for touched JS;
+  browser smoke pending.
 - DONE 2026-07-04: Radar site selector now shows all 164 NWS NEXRAD sites
   (vs. previous 7 CONUS-only). Non-CONUS sites (PGUA/Guam, RKSG/South Korea,
   RODN/Japan, etc.) render Level 2 data on-demand; Level 3 products are disabled
@@ -60,6 +95,19 @@ Recent completed work:
   detail in docs/dashboard-change-and-enhancement-superfile.md.
 
 Next up:
+- NEXT: reflectance display stretch (agreed 2026-07-04). Visible/NIR products
+  look dark/flat on GOES, Himawari-9, and Meteosat-12 alike — every pipeline
+  correctly produces linear reflectance factor (0-1) and the shared renderer
+  displays it linearly. Apply a gamma/sqrt stretch (CIRA-style
+  sqrt(reflectance)) to reflectance-typed products once in the shared render
+  path, gated by channel type, with a render-version bump so cached tiles
+  invalidate. Evaluate against a fully lit Meteosat disk (~12:00 UTC).
+  Memory note: satellite-reflectance-gamma.
+- THEN: continue the non-GOES standard product set per the sequencing decision
+  (visible/NIR candidates Channel01->vis_04, Channel03->vis_08/vis_09,
+  Channel05->nir_16, Channel06->nir_22; composites only after scalar proofs).
+  After those are stable: GK2A (noaa-gk2a-pds), then NOAA GMGSI composite
+  (noaa-gmgsi-pds).
 - DONE 2026-07-02: Himawari-9 rebuilt on a native AHI HSD parser (no
   satpy/pyresample/dask). New: satellite_v2/ahi_hsd.py (parser, calibration,
   Earth-visibility space mask, 0.5km→2km stride cap),

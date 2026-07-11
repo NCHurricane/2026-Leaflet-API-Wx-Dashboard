@@ -39,9 +39,9 @@
 
                 await context.ensureGradientStations(product, region, stations);
                 const before = context.hasGradientCache(product, region);
-                await context.primeSurfaceGradientCache(product, region);
+                const gradientMeta = await context.primeSurfaceGradientCache(product, region);
                 const after = context.hasGradientCache(product, region);
-                if (!before && after && context.canApplySurfaceResponse(region, product) && context.activeSurfaceGradient()) {
+                if ((gradientMeta || (!before && after)) && context.canApplySurfaceResponse(region, product) && context.activeSurfaceGradient()) {
                     context.renderSurfaceMarkers(context.getSurfaceStations());
                 }
             } catch (err) {

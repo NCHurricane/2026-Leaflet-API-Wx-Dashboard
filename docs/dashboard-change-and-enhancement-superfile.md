@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-04 (All NWS NEXRAD sites in selector + L2-only filtering for non-CONUS + default product L2_REF)
+Last updated: 2026-07-05 (Surface gradient overlay cache refresh + image URL versioning)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -59,6 +59,10 @@ Keep separate:
   can still be turned off independently. RTMA field checkboxes stay disabled
   until a stream is selected; 24-hour temperature change remains Hourly-only
   and clears when switching to Rapid Update.
+- Surface gradient overlays are worker-generated at stable cache paths, so the
+  frontend refreshes cached gradient metadata after 5 minutes and appends the
+  worker timestamp as an image URL version query. This prevents open `/surface`
+  pages from retaining stale gradient PNGs after the worker replaces files.
 - SPC probabilistic hazards auto-enable their matching Significant/CIG hatch
   layer when selected, while Significant toggles remain unavailable on their
   own. Drought release-week metadata loads without a highlighted week; selecting
@@ -583,6 +587,52 @@ A new isolated rapid warmer replaced the broad Satellite v2 scheduled workers:
   registers `Wx-Dashboard-Satellite_v2_rapid` and unregisters legacy
   `Wx-Dashboard-Satellite_v2*` broad-worker task names when run.
 
+### Meteosat source-prefetch worker — added 2026-07-04
+
+Cold Meteosat loads took 3-4 minutes because the first product on a frame
+pays the full EUMETSAT download (~790 MB FCI chunk set per Meteosat-12 frame,
+~270 MB SEVIRI `.nat` per Meteosat-9 frame). EUMETSAT frames are all-channel
+bundles, so one prefetched frame warms every product — switching channels on
+a warm frame is near-instant (parse + warp only).
+
+- New `satellite_v2/meteosat_prefetch_worker.py` +
+  `workers/satellite_v2_meteosat_prefetch_worker.py` entrypoint. Download-only:
+  fills the shared source cache via `providers.download_product_source_frames`;
+  renders nothing.
+- Per run: downloads the newest N missing frames (default 2 = current + 1),
+  then up to 1 oldest missing frame inside the lookback window (default 6 h),
+  so animation depth backfills gradually across runs. Completeness checks use
+  the FCI `manifest.json` (all chunks present) or the SEVIRI `.nat` size.
+- Prunes source frame dirs older than the keep window (default 7 h). ~6 h of
+  both platforms ≈ 35 GB of source cache at steady state.
+- Config in `config/satellite_v2_config.py`
+  (`SATELLITE_V2_METEOSAT_PREFETCH_*`): jobs (meteosat12/meteosat9 FULLDISK),
+  frames/backfill per run, lookback, keep hours, fresh window. All
+  env-overridable.
+- Scheduled task `Wx-Dashboard-Satellite_v2_meteosat_prefetch` (10 min cadence,
+  25-min ExecutionTimeLimit — `install_tasks.ps1` now supports per-task
+  `TimeLimit`). Registered ENABLED by default. Also added to the in-process
+  fallback scheduler and `_freshness.py` health thresholds (45 min, generous
+  because a cold backfill run legitimately downloads for 15+ min).
+- Interrupted runs are safe: per-file atomic downloads (tmp + rename) and the
+  FCI manifest is only written after all chunks land, so a killed run resumes
+  where it left off.
+- Himawari-9 deliberately excluded: AHI segments are per-band files (no
+  all-channel bundle bonus) and per-band downloads are small; revisit only if
+  Himawari cold loads become a complaint.
+- Validated against the live EUMETSAT catalog: frames downloaded during the
+  2026-07-04 browser session report cached=True; missing frames report False.
+- User browser smoke passed 2026-07-04 (late evening): Meteosat-12 Channel02
+  FULLDISK on a prefetched frame rendered at ~250 ms/tile ("faster by
+  minutes" vs the cold-download flow). Off-disk tiles at low zoom correctly
+  return the negative-cached invalid/transparent response — `result=invalid`
+  in the tile log for space-only tiles is expected, not an error.
+- Post-install fix: the EUMETSAT catalog search returns frames older than the
+  requested lookback window, so the backfill was repeatedly downloading
+  frames the keep-window prune deleted on the same run (~790 MB wasted per
+  run). The worker now filters the frame list to the lookback window before
+  selecting downloads.
+
 Optional future CONUS light-warm plan:
 
 - Keep it separate from the rapid default. CONUS currently works well with live
@@ -927,7 +977,17 @@ Meteosat-12 `Channel02` → FCI `vis_06` visible scalar added:
 Next visible-products sequence for non-NOAA satellites:
 
 1. ✅ Meteosat-12 `Channel02` → `vis_06` proof completed and exposed.
-2. Continue with Meteosat-9 visible channels if `Channel02`/`Channel03` mapping
+   Daylight browser smoke passed 2026-07-04; night full-disk smoke passed the
+   same evening on a prefetched frame (~250 ms/tile).
+2. Reflectance display stretch (NEXT, agreed 2026-07-04): visible/NIR products
+   look dark/flat on GOES, Himawari-9, and Meteosat-12 alike because all
+   pipelines correctly produce linear reflectance factor (0-1) and the shared
+   renderer displays it linearly. Apply a gamma/sqrt stretch (CIRA-style
+   `sqrt(reflectance)`) to reflectance-typed products in the shared render
+   path, gated by channel type, with a render-version bump so cached tiles
+   invalidate. Evaluate on a fully lit Meteosat disk (~12:00 UTC). Optional
+   later: solar-zenith normalization.
+3. Continue with Meteosat-9 visible channels if `Channel02`/`Channel03` mapping
    is needed; otherwise defer to next visible band (Shortwave IR/Fire) in
    the standard product set.
 4. Expand cautiously after the first visible proof. Candidate mappings:

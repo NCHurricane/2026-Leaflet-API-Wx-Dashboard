@@ -736,7 +736,7 @@ SATELLITE_V2_DEFAULT_MAX_FRAMES = 360
 
 SATELLITE_V2_PROVIDER = "aws"
 SATELLITE_V2_CACHE_NAMESPACE = "satellite"
-SATELLITE_V2_RENDER_VERSION = "products"
+SATELLITE_V2_RENDER_VERSION = "products-v2"
 SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi1"
 # fci1: invalidates Meteosat-12 tiles rendered before the 2026-07-03
 # east-west mirror fix in satellite_v2/fci_nc.py.
@@ -830,6 +830,37 @@ SATELLITE_V2_RAPID_WORKER_BOUNDS = {
     "JAPAN": {"west": 115.0, "south": 20.0, "east": 155.0, "north": 50.0},
     "RSS": {"west": -30.0, "south": 10.0, "east": 45.0, "north": 70.0},
 }
+
+# Meteosat source-prefetch worker (download-only, no tile rendering).
+# EUMETSAT frames are all-channel bundles (one SEVIRI .nat / one FCI chunk set
+# per frame), so prefetching any product key warms every channel. Each run
+# downloads the newest FRAMES missing frames plus up to BACKFILL of the oldest
+# missing frames inside HOURS, so animation depth fills in across runs.
+SATELLITE_V2_METEOSAT_PREFETCH_JOBS = (
+    ("meteosat12", "FULLDISK"),
+    ("meteosat9", "FULLDISK"),
+)
+SATELLITE_V2_METEOSAT_PREFETCH_CHANNEL = "Channel13"
+SATELLITE_V2_METEOSAT_PREFETCH_FRAMES = _env_int(
+    "WX_SATELLITE_V2_METEOSAT_PREFETCH_FRAMES", 2, 1, 12
+)
+SATELLITE_V2_METEOSAT_PREFETCH_BACKFILL = _env_int(
+    "WX_SATELLITE_V2_METEOSAT_PREFETCH_BACKFILL", 1, 0, 6
+)
+SATELLITE_V2_METEOSAT_PREFETCH_HOURS = _env_int(
+    "WX_SATELLITE_V2_METEOSAT_PREFETCH_HOURS", 6, 1, 24
+)
+SATELLITE_V2_METEOSAT_PREFETCH_MAX_FRAMES = _env_int(
+    "WX_SATELLITE_V2_METEOSAT_PREFETCH_MAX_FRAMES", 48, 1, 200
+)
+# Source frames older than this are pruned from the source cache. Slightly
+# larger than HOURS so a frame is never pruned while still inside the window.
+SATELLITE_V2_METEOSAT_PREFETCH_KEEP_HOURS = _env_int(
+    "WX_SATELLITE_V2_METEOSAT_PREFETCH_KEEP_HOURS", 7, 1, 48
+)
+SATELLITE_V2_METEOSAT_PREFETCH_FRESH_WINDOW_SECONDS = _env_int(
+    "WX_SATELLITE_V2_METEOSAT_PREFETCH_FRESH_WINDOW_SECONDS", 450, 0, 3600
+)
 
 SATELLITE_V2_LIVE_TILE_RENDER_WORKERS = _env_int(
     "WX_SATELLITE_V2_LIVE_TILE_WORKERS", 10, 1, 32

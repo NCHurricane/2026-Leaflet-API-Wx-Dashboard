@@ -101,6 +101,9 @@ _HEALTH_THRESHOLDS = {
     "rtma_hourly": 2 * 60 * 60,  # task fires hourly at :05
     "rtma_rapid_update": 30 * 60,  # task fires every 15 min starting :20
     "satellite_v2_rapid": 12 * 60,  # task fires every 5 min
+    # Task fires every 10 min; a cold backfill run can legitimately take ~15+
+    # min of downloading, so the threshold is generous.
+    "satellite_v2_meteosat_prefetch": 45 * 60,
     "radar_live": 3 * 60,             # task fires every 1 min (L2 chunks cadence)
     "radar_live_l3": 15 * 60,         # L3 gate; expect to fire every ~5 min
     # MRMS sentinels are per-product; we check whichever exists. See below.

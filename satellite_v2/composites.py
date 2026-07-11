@@ -42,7 +42,7 @@ def reflectance(values: np.ndarray, gamma: float | None = None) -> np.ndarray:
 
 
 def visible_reflectance(values: np.ndarray) -> np.ndarray:
-    return reflectance(values, gamma=0.5)
+    return reflectance(values, gamma=0.45)
 
 
 def _rgb(red: np.ndarray, green: np.ndarray, blue: np.ndarray) -> np.ndarray:

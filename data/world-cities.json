@@ -703498,5 +703498,19 @@
     "capital": "primary",
     "id": "1850037473",
     "city_ascii": "Charlotte Amalie"
+  },
+  {
+    "city": "Sinapalo",
+    "latitude": 14.168818,
+    "longitude": 145.230505,
+    "rank": "50251",
+    "state": "Rota",
+    "country": "Northern Mariana Islands",
+    "iso2": "MP",
+    "iso3": "MNP",
+    "population": null,
+    "capital": null,
+    "id": "1580000000",
+    "city_ascii": "Sinapalo"
   }
 ]

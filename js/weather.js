@@ -11079,6 +11079,7 @@
     let _surfaceGradientRegion = null;
     const _surfaceGradientOverlayCache = new Map();
     const _surfaceGradientOverlayInflight = new Map();
+    const _SURFACE_GRADIENT_META_TTL_MS = 5 * 60 * 1000;
 
     function _getGradientSourceRegion(regionCode = null) {
         const region = (regionCode || byId('weather-region')?.value || 'CONUS').toUpperCase();
@@ -11723,11 +11724,26 @@
         return `${sourceRegion}|${product}`;
     }
 
+    function _surfaceGradientCacheEntryIsFresh(meta) {
+        const fetchedAt = Number(meta?._fetchedAtMs || 0);
+        return fetchedAt > 0 && (Date.now() - fetchedAt) < _SURFACE_GRADIENT_META_TTL_MS;
+    }
+
+    function _surfaceGradientImageUrl(meta) {
+        const imageUrl = meta?.image_url;
+        if (!imageUrl) return '';
+        const version = meta.timestamp || meta.generated_at || meta.updated_at || '';
+        if (!version) return apiUrl(imageUrl);
+        const separator = String(imageUrl).includes('?') ? '&' : '?';
+        return apiUrl(`${imageUrl}${separator}v=${encodeURIComponent(version)}`);
+    }
+
     async function _primeSurfaceGradientOverlayCache(product, regionCode = null) {
         if (_archiveMode || !product) return null;
         const key = _surfaceGradientCacheKey(product, regionCode);
-        if (_surfaceGradientOverlayCache.has(key)) {
-            return _surfaceGradientOverlayCache.get(key);
+        const cached = _surfaceGradientOverlayCache.get(key) || null;
+        if (cached && _surfaceGradientCacheEntryIsFresh(cached)) {
+            return cached;
         }
         if (_surfaceGradientOverlayInflight.has(key)) {
             return _surfaceGradientOverlayInflight.get(key);
@@ -11737,17 +11753,18 @@
         const fetchPromise = (async () => {
             try {
                 const url = apiUrl(`/api/data/surface-gradient?region=${encodeURIComponent(sourceRegion)}&product=${encodeURIComponent(product)}`);
-                const resp = await fetch(url);
+                const resp = await fetch(url, { cache: 'no-cache' });
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const meta = await resp.json();
                 if (meta && meta.image_url && Array.isArray(meta.bounds) && meta.bounds.length === 4) {
+                    meta._fetchedAtMs = Date.now();
                     _surfaceGradientOverlayCache.set(key, meta);
                     return meta;
                 }
             } catch (_err) {
                 // Keep silent and allow client-side fallback interpolation.
             }
-            return null;
+            return cached;
         })();
 
         _surfaceGradientOverlayInflight.set(key, fetchPromise);
@@ -11793,7 +11810,7 @@
             ) {
                 const b = cachedGradientMeta.bounds;
                 const leafletBounds = [[b[2], b[0]], [b[3], b[1]]];
-                gradientLayer = L.imageOverlay(apiUrl(cachedGradientMeta.image_url), leafletBounds, {
+                gradientLayer = L.imageOverlay(_surfaceGradientImageUrl(cachedGradientMeta), leafletBounds, {
                     opacity: surfaceGradientOpacity,
                     className: 'surface-gradient-overlay',
                 });
