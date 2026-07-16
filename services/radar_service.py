@@ -397,11 +397,14 @@ def _radar_live_render_on_demand(
     max_render_frames: int | None = None,
     elevation: str = "auto",
     motion: dict | None = None,
+    lookback_hours: float | None = None,
 ) -> int:
     from workers.radar_live_worker import run_radar_live_site_product
+    from config.radar_config import normalize_live_radar_lookback_hours
 
     site_id = normalize_radar_site_id(site)
     product_id = str(product_key or "").strip().upper()
+    requested_lookback = normalize_live_radar_lookback_hours(lookback_hours)
 
     lock = _radar_live_fallback_lock(site_id, product_id)
     with lock:
@@ -415,6 +418,7 @@ def _radar_live_render_on_demand(
                 max_render_frames=max_render_frames,
                 elevation=elevation,
                 storm_motion=motion,
+                lookback_hours=requested_lookback,
             )
         )
 
@@ -436,6 +440,7 @@ def _radar_live_render_on_demand(
                     latest_only=False,
                     elevation=elevation,
                     storm_motion=motion,
+                    lookback_hours=requested_lookback,
                 )
         except Exception as exc:
             print(
@@ -460,8 +465,11 @@ def _radar_live_render_in_background(
     product_key: str,
     elevation: str = "auto",
     motion: dict | None = None,
+    lookback_hours: float | None = None,
 ) -> bool:
     """Fill the live radar frame window in the background."""
+    from config.radar_config import LIVE_RADAR_BACKFILL_BATCH_FRAMES
+
     key = _radar_live_render_bg_key(site_id, product_key, elevation, motion)
     motion_key = str((motion or {}).get("cache_variant") or "default")
     return spawn_live_render_thread(
@@ -472,8 +480,11 @@ def _radar_live_render_in_background(
             product_key,
             latest_only=False,
             backfill_history=False,
+            newest_first=True,
+            max_render_frames=LIVE_RADAR_BACKFILL_BATCH_FRAMES,
             elevation=elevation,
             motion=motion,
+            lookback_hours=lookback_hours,
         ),
     )
 
@@ -922,7 +933,7 @@ def get_radar_live_frames_data(
     site: str = "KMHX",
     product: str = "L3_N0B",
     elevation: str = "auto",
-    hours: int = 2,
+    hours: float = 2,
     refresh: bool = False,
     storm_motion_speed_kt: str | float | None = None,
     storm_motion_to_degrees: str | float | None = None,
@@ -935,6 +946,7 @@ def get_radar_live_frames_data(
         OVERLAY_EMPTY_CACHE_SYNC_FRAMES,
         OVERLAY_STALE_SERVE_WINDOW_MIN,
     )
+    from config.radar_config import normalize_live_radar_lookback_hours
 
     site_id = normalize_radar_site_id(site)
     product_key = str(product or "L3_N0B").strip().upper()
@@ -988,6 +1000,7 @@ def get_radar_live_frames_data(
                 max_render_frames=OVERLAY_EMPTY_CACHE_SYNC_FRAMES,
                 elevation=elevation_key,
                 motion=motion,
+                lookback_hours=requested_hours,
             )
         except Exception as exc:
             print(
@@ -996,7 +1009,8 @@ def get_radar_live_frames_data(
             )
             return 0
 
-    cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours or 2)))
+    requested_hours = normalize_live_radar_lookback_hours(hours)
+    cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=requested_hours)
     frames = radar_list_frames(CACHE_ROOT, site_id, level_code, cache_product_key)
     fallback_cached = 0
     refreshing = False
@@ -1006,7 +1020,7 @@ def get_radar_live_frames_data(
         frames = radar_list_frames(CACHE_ROOT, site_id, level_code, cache_product_key)
         if frames:
             refreshing = _radar_live_render_in_background(
-                site_id, product_key, elevation_key, motion
+                site_id, product_key, elevation_key, motion, requested_hours
             )
 
     filtered = _within(frames, cutoff_dt) if frames else []
@@ -1016,7 +1030,7 @@ def get_radar_live_frames_data(
         filtered = _within(frames, cutoff_dt - timedelta(minutes=grace_min))
         if filtered:
             refreshing = _radar_live_render_in_background(
-                site_id, product_key, elevation_key, motion
+                site_id, product_key, elevation_key, motion, requested_hours
             )
         else:
             fallback_cached = max(fallback_cached, _render_newest_sync())
@@ -1024,12 +1038,35 @@ def get_radar_live_frames_data(
             filtered = _within(frames, cutoff_dt)
             if filtered:
                 refreshing = _radar_live_render_in_background(
-                    site_id, product_key, elevation_key, motion
+                    site_id, product_key, elevation_key, motion, requested_hours
                 )
+
+    oldest_filtered_dt = None
+    for frame in filtered:
+        try:
+            frame_dt = parse_utc_datetime(frame.get("timestamp"))
+        except Exception:
+            frame_dt = None
+        if frame_dt is not None and (
+            oldest_filtered_dt is None or frame_dt < oldest_filtered_dt
+        ):
+            oldest_filtered_dt = frame_dt
+    coverage_complete = bool(
+        oldest_filtered_dt
+        and oldest_filtered_dt <= cutoff_dt + timedelta(minutes=10)
+    )
+    if filtered and not coverage_complete and not refreshing:
+        refreshing = _radar_live_render_in_background(
+            site_id,
+            product_key,
+            elevation_key,
+            motion,
+            requested_hours,
+        )
 
     if refresh and not refreshing and filtered:
         refreshing = _radar_live_render_in_background(
-            site_id, product_key, elevation_key, motion
+            site_id, product_key, elevation_key, motion, requested_hours
         )
 
     if not refreshing:
@@ -1057,6 +1094,8 @@ def get_radar_live_frames_data(
         "requested_elevation": elevation_key,
         "storm_motion": motion,
         "frame_count": len(filtered),
+        "lookback_hours": requested_hours,
+        "coverage_complete": coverage_complete,
         "refreshing": refreshing,
         "frames": filtered,
     }

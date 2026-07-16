@@ -35,6 +35,7 @@ import matplotlib.pyplot as plt
 from cache.overlay_cache_utils import (
     datetime_from_frame_key,
     frame_key_from_datetime,
+    radar_list_frames,
     radar_overlay_image_path,
     radar_prune_frames,
     radar_read_processed_keys,
@@ -46,9 +47,12 @@ from config.radar_config import (
     LIVE_RADAR_L2_DEFAULT_ELEVATION,
     LIVE_RADAR_L2_USE_CHUNKS,
     LIVE_RADAR_LOOKBACK_HOURS,
+    LIVE_RADAR_MAX_KEEP_FRAMES,
     LIVE_RADAR_PRODUCTS,
     LIVE_RADAR_SITES,
     LIVE_RADAR_WORKER_INTERVAL_MIN,
+    live_radar_target_frames,
+    normalize_live_radar_lookback_hours,
 )
 from workers._freshness import is_cache_fresh, mark_run_complete
 
@@ -1047,6 +1051,7 @@ def _render_site_product(
     max_render_frames: int | None = None,
     elevation: str = "auto",
     use_mtime_key: bool = False,
+    lookback_hours: float | None = None,
 ) -> int:
     """Render and cache frames for one site/product. Returns number of frames cached."""
     level = str(product_cfg.get("level") or "Level 3")
@@ -1060,12 +1065,17 @@ def _render_site_product(
     kwargs = {}
     if radar_data_utils.__name__.endswith("radar_nodd_utils"):
         kwargs["provider"] = provider
+        kwargs["newest_first"] = newest_first
+        kwargs["max_new_files"] = max_render_frames
 
+    requested_lookback = normalize_live_radar_lookback_hours(
+        LIVE_RADAR_LOOKBACK_HOURS if lookback_hours is None else lookback_hours
+    )
     data_dir, total_files, _downloaded = radar_data_utils.download_radar_data(
         level,
         site,
         source_product_code,
-        float(LIVE_RADAR_LOOKBACK_HOURS),
+        requested_lookback,
         str(_RADAR_ROOT),
         latest_only=latest_only,
         **kwargs,
@@ -1101,12 +1111,17 @@ def _render_site_product(
     if not bounds:
         return 0
 
-    keep_n = max(1, int(LIVE_RADAR_KEEP_FRAMES or 30))
-    selected_files = radar_files[-keep_n:]
+    target_n = live_radar_target_frames(requested_lookback)
+    existing_count = len(
+        radar_list_frames(str(_CACHE_ROOT), site, level_code, cache_product_key)
+    )
+    keep_n = min(
+        int(LIVE_RADAR_MAX_KEEP_FRAMES),
+        max(int(LIVE_RADAR_KEEP_FRAMES or 30), target_n, existing_count),
+    )
+    selected_files = radar_files[-(1 if latest_only else target_n):]
     if newest_first:
         selected_files = list(reversed(selected_files))
-    if max_render_frames is not None:
-        selected_files = selected_files[: max(1, int(max_render_frames))]
 
     # Load dedup tracking for this product.
     processed_keys = radar_read_processed_keys(
@@ -1125,6 +1140,8 @@ def _render_site_product(
         f for f in selected_files
         if _file_key(f, use_mtime_key) not in processed_keys
     ]
+    if max_render_frames is not None:
+        unprocessed_files = unprocessed_files[: max(1, int(max_render_frames))]
     if not unprocessed_files:
         return 0
 
@@ -1397,6 +1414,7 @@ def run_radar_live_site_product(
     max_render_frames: int | None = None,
     elevation: str = "auto",
     storm_motion: dict | None = None,
+    lookback_hours: float | None = None,
 ) -> int:
     """Render and cache frames for a single live radar site/product pair.
 
@@ -1437,6 +1455,7 @@ def run_radar_live_site_product(
         max_render_frames=max_render_frames,
         elevation=elevation,
         use_mtime_key=use_mtime,
+        lookback_hours=lookback_hours,
     )
     if cached > 0:
         mark_run_complete("radar_live")

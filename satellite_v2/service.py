@@ -91,7 +91,7 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
             "kind": product.kind,
             "reason": "visible_reflectance",
         }
-    if product.kind == "composite":
+    if product.kind in ("composite", "categorical"):
         legend = SATELLITE_V2_INTERPRETIVE_LEGENDS.get(channel_key)
         if legend:
             return {
@@ -139,6 +139,7 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
             "reason": "invalid_colormap_range",
         }
 
+    is_aod = product.kind == "aod"
     anchors = [
         {
             "value": round(float(value), 3),
@@ -149,7 +150,11 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
     ticks = [
         {
             "value": round(float(value), 3),
-            "label": _brightness_temperature_label(float(value)),
+            "label": (
+                f"{float(value):.2f}"
+                if is_aod
+                else _brightness_temperature_label(float(value))
+            ),
         }
         for value in np.linspace(vmin_f, vmax_f, SATELLITE_V2_LEGEND_TICK_COUNT)
     ]
@@ -159,7 +164,8 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
         "channel": channel_key,
         "title": product.label,
         "kind": product.kind,
-        "units": "°C",
+        "units": "" if is_aod else "°C",
+        "axis_label": "Aerosol Optical Depth (550 nm)" if is_aod else None,
         "value_units": product.units,
         "vmin": vmin_f,
         "vmax": vmax_f,

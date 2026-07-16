@@ -19,6 +19,12 @@ Image.MAX_IMAGE_PIXELS = None
 _SCALAR_REFLECTANCE_BLACK_POINT = 0.02
 _SCALAR_REFLECTANCE_WHITE_POINT = 0.90
 
+# EUMETSAT publishes its own stretch windows for SEVIRI/FCI RGB recipes
+# ("Compilation of RGB Recipes") that differ from the NOAA/CIRA windows used
+# for GOES ABI/Himawari AHI. Apply the EUMETSAT windows only for those two
+# instruments; ABI/AHI (and unspecified/legacy callers) keep the CIRA windows.
+_EUMETSAT_RECIPE_INSTRUMENTS = frozenset({"SEVIRI", "FCI"})
+
 
 def normalize(value: np.ndarray, lower_limit: float, upper_limit: float, clip: bool = True) -> np.ndarray:
     result = (value - lower_limit) / (upper_limit - lower_limit)
@@ -203,7 +209,9 @@ def render_composite_rgb(
     channels: dict[str, np.ndarray],
     lon_grid: np.ndarray | None = None,
     lat_grid: np.ndarray | None = None,
+    instrument: str | None = None,
 ) -> np.ndarray:
+    use_eumetsat_recipe = instrument in _EUMETSAT_RECIPE_INSTRUMENTS
     if product_key in {"TrueColor", "NaturalColor"}:
         return _true_color(channels)
     if product_key == "GeoColor":
@@ -284,6 +292,14 @@ def render_composite_rgb(
             normalize(channels["Channel07"] - channels["Channel13"], 0.0, 30.0), 1.7)
         return _rgb(red, green, blue)
     if product_key == "NighttimeMicrophysics":
+        if use_eumetsat_recipe:
+            return _rgb(
+                normalize(channels["Channel15"] -
+                          channels["Channel13"], -4.0, 2.0),
+                normalize(channels["Channel13"] -
+                          channels["Channel07"], 0.0, 10.0),
+                normalize(channels["Channel13"] - 273.15, -30.15, 19.85),
+            )
         return _rgb(
             normalize(channels["Channel15"] -
                       channels["Channel13"], -6.7, 2.6),
@@ -292,6 +308,14 @@ def render_composite_rgb(
             normalize(channels["Channel13"] - 273.15, -29.6, 19.5),
         )
     if product_key == "Dust":
+        if use_eumetsat_recipe:
+            return _rgb(
+                normalize(channels["Channel15"] -
+                          channels["Channel13"], -4.0, 2.0),
+                gamma_correction(
+                    normalize(channels["Channel14"] - channels["Channel11"], 0.0, 15.0), 2.5),
+                normalize(channels["Channel13"] - 273.15, -12.15, 15.85),
+            )
         return _rgb(
             normalize(channels["Channel15"] -
                       channels["Channel13"], -6.7, 2.6),
@@ -300,6 +324,14 @@ def render_composite_rgb(
             normalize(channels["Channel13"] - 273.15, -11.95, 15.55),
         )
     if product_key == "Ash":
+        if use_eumetsat_recipe:
+            return _rgb(
+                normalize(channels["Channel15"] -
+                          channels["Channel13"], -4.0, 2.0),
+                normalize(channels["Channel14"] -
+                          channels["Channel11"], -4.0, 5.0),
+                normalize(channels["Channel13"] - 273.15, -30.15, 29.85),
+            )
         return _rgb(
             normalize(channels["Channel15"] -
                       channels["Channel13"], -6.7, 2.6),

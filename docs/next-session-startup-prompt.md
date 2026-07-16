@@ -33,10 +33,42 @@ Current status:
   behavior should stay in services/*_service.py, and upstream/cache refresh
   behavior should stay in workers/*_worker.py.
 
-Satellite v2 status (2026-07-11) — the current focus area:
-- GOES (goes18/goes19), Himawari-9, Meteosat-9 (SEVIRI), and Meteosat-12 (FCI)
-  are all implemented and browser-smoke-tested. Meteosat-11 (RSS) shares the
-  SEVIRI parser/composite path with Meteosat-9 but has no cached RSS proof yet.
+Satellite v2 status (2026-07-11) — Meteosat recipe work is DONE, next focus
+is GK2A + GMGSI:
+- GOES (goes18/goes19), Himawari-9, Meteosat-9 (SEVIRI), Meteosat-12 (FCI),
+  and Meteosat-11 (RSS) are all implemented and browser-smoke-tested.
+  Meteosat-11 RSS full product set (4 scalars + Night Microphysics/Dust/Ash)
+  user-confirmed loading correctly 2026-07-11. RSS proofing is DONE.
+- DONE + user-confirmed 2026-07-11: SEVIRI/FCI RGB recipe correction for
+  NighttimeMicrophysics/Dust/Ash. These 3 composites previously reused the
+  NOAA/CIRA (GOES-tuned) stretch windows on every platform. They now use
+  EUMETSAT's own published stretch windows (source: EUMETSAT "Compilation
+  of RGB Recipes" PDF) when rendering on SEVIRI/FCI instruments, while
+  GOES/Himawari (ABI/AHI) keep the original CIRA windows unchanged. This
+  required threading `sat_id` -> `instrument` (via
+  `config/satellite_platforms.SATELLITE_PLATFORMS`) through
+  `SatelliteTileRenderer.from_sources`/`from_source` in
+  satellite_v2/renderer.py, into the renderer cache key, and finally into
+  `render_composite_rgb(..., instrument=...)` in satellite_v2/composites.py,
+  which branches on `instrument in {"SEVIRI", "FCI"}` for those 3 product
+  keys only. All 3 `SatelliteTileRenderer.from_sources` call sites in
+  satellite_v2/tiler.py (single-tile, zoom-canvas, and the process-pool warm
+  path incl. the pool initializer) now pass `sat_id` through. If you add
+  another instrument-specific recipe override, follow this same
+  `instrument` plumbing rather than inventing a new path.
+- Verified (analysis, not a code change): the static interpretive legend
+  swatches in `SATELLITE_V2_INTERPRETIVE_LEGENDS`
+  (config/satellite_v2_config.py) and their JS mirror
+  (`_SATELLITE_INTERPRETIVE_LEGENDS` in js/weather.js) do NOT need
+  per-instrument variants. Gamma-per-beam is unchanged between the CIRA and
+  EUMETSAT windows for all 3 affected products, and swatch color is a pure
+  function of the normalized fraction (`(value-min)/(max-min)`, then gamma)
+  -- changing only min/max does not change what color a given fraction
+  renders as. The existing swatches were confirmed (by inverting their hex
+  back to fractions) to already be fraction-space qualitative picks, not
+  physical-value-tied renders, so they remain valid on both instrument
+  families. Don't revisit this unless the swatch-generation approach itself
+  changes (e.g. if gamma starts differing per instrument).
 - Standard non-GOES product set is DONE at 7 of 8 for Meteosat-9/11/12:
   Visible, Enhanced IR, Water Vapor, Shortwave IR/Fire, Night Microphysics,
   Dust, and Ash are all live and user-confirmed (2026-07-10/11). SO2 is
@@ -76,10 +108,11 @@ Satellite v2 status (2026-07-11) — the current focus area:
   Microphysics/Dust/Ash recipes to reduce to the correct EUMETSAT RGBs. Do
   not "correct" these to nearest-wavelength without re-deriving the composite
   math.
-- Not started: GK2A (arn:aws:s3:::noaa-gk2a-pds) and NOAA GMGSI Meteosat
-  composite (noaa-gmgsi-pds). These are the next planned satellite sources
-  once the team is ready to move past Meteosat. No provider/parser work has
-  begun on either.
+- NEXT UP (starting 2026-07-12): GK2A (arn:aws:s3:::noaa-gk2a-pds) and NOAA
+  GMGSI Meteosat composite (noaa-gmgsi-pds). Meteosat recipe work is done, so
+  the team is moving past Meteosat now. No provider/parser work has begun on
+  either -- this is greenfield, same as Himawari/Meteosat were before their
+  provider modules existed.
 - Untracked file docs/token-saver-maybe.md has been sitting in the working
   tree for several sessions (a Claude Code skill definition, not dashboard
   documentation). The .gitignore entry added 2026-07-10 points at
@@ -104,6 +137,11 @@ Other recent completed work (pre-satellite-focus, still relevant context):
   REVERTED 2026-07-04 after benchmarking showed zero latency benefit over the
   flat NODD bucket for completed scans. LIVE_RADAR_L2_USE_CHUNKS = False.
   radar_chunks_utils.py is left in place unused in case this flips back on.
+- DONE 2026-07-16: Radar lookback is live-cache-aware from 30 minutes through
+  12 hours. Requested fractional hours now reach the NODD worker, cache coverage
+  gaps start bounded newest-to-oldest background batches, and expanded history
+  is retained without changing the scheduled worker's one-hour download default.
+  Do not route this back through the archive renderer.
 - Himawari-9 was fully removed 2026-07-01 (satpy/dask oversubscription +
   unnecessary resample-to-grid architecture), then REBUILT 2026-07-02 on a
   native AHI HSD parser with zero satpy/pyresample/dask (see
@@ -124,7 +162,10 @@ Important guardrails:
 Validation defaults:
 - Run the narrowest meaningful static check first, such as node --check for
   touched JavaScript and py_compile for touched Python.
-- Browser smoke is user-owned for current dashboard work unless explicitly
-  requested. Keep claims limited to static/import validation when no browser
-  proof was run.
+- Browser smoke and all proofing/correlation checks (satellite recipe proofs,
+  visual comparisons, etc.) are user-owned. Do not drive the browser preview
+  tools for this project's verification. After a static check passes, say the
+  edit is ready and stop -- the user runs the manual smoke test/proof and
+  reports back. Keep claims limited to static/import validation until the
+  user confirms.
 ```

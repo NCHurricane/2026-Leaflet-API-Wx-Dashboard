@@ -94,7 +94,7 @@ def get_radar_live_frames(
     site: str = "KMHX",
     product: str = "L3_N0B",
     elevation: str = "auto",
-    hours: int = 2,
+    hours: float = 2,
     refresh: bool = False,
     storm_motion_speed_kt: str | None = None,
     storm_motion_to_degrees: str | None = None,

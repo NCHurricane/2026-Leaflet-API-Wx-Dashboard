@@ -102,14 +102,17 @@
 
     function radarLookbackHours() {
         const slider = byId('radar-animate-slider');
-        return Math.max(1, Math.round(slider ? Number(slider.value) : 1));
+        const hours = slider ? Number(slider.value) : 1;
+        return Math.max(0.5, Math.min(12, Number.isFinite(hours) ? hours : 1));
     }
 
     function updateLookbackDisplay() {
         const slider = byId('radar-animate-slider');
         if (!slider) return;
         const displayValue = Number(slider.value);
-        const displayText = displayValue === Math.floor(displayValue)
+        const displayText = displayValue === 0.5
+            ? '30M'
+            : displayValue === Math.floor(displayValue)
             ? `${Math.floor(displayValue)}H`
             : `${displayValue}H`;
         const valueDisplay = byId('radar-animate-slider-value');

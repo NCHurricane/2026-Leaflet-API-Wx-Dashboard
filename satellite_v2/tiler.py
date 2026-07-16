@@ -40,6 +40,7 @@ _WARM_TILE_RENDERER: SatelliteTileRenderer | None = None
 def _initialize_warm_tile_worker(
     channel_key: str,
     source_files: dict[str, str],
+    sat_id: str | None = None,
 ) -> None:
     global _WARM_TILE_RENDERER
     source_file_paths: dict[str, str | Path] = {
@@ -48,6 +49,7 @@ def _initialize_warm_tile_worker(
     _WARM_TILE_RENDERER = SatelliteTileRenderer.from_sources(
         channel_key,
         source_file_paths,
+        sat_id=sat_id,
     )
 
 
@@ -260,7 +262,9 @@ def _render_warm_zoom_canvas_task(task: dict[str, Any]) -> dict[str, int]:
             source_channel: Path(path)
             for source_channel, path in (task.get("source_files") or {}).items()
         }
-        renderer = SatelliteTileRenderer.from_sources(channel, source_files)
+        renderer = SatelliteTileRenderer.from_sources(
+            channel, source_files, sat_id=sat_id
+        )
         canvas = renderer.render_zoom_canvas(
             zoom,
             x_min,
@@ -407,7 +411,7 @@ def warm_frame_tiles(
     if worker_count <= 1:
         source_files_for_renderer: dict[str, str | Path] = dict(source_files)
         renderer = SatelliteTileRenderer.from_sources(
-            channel, source_files_for_renderer
+            channel, source_files_for_renderer, sat_id=sat_key
         )
         for task in tasks:
             try:
@@ -446,7 +450,7 @@ def warm_frame_tiles(
     with ProcessPoolExecutor(
         max_workers=worker_count,
         initializer=_initialize_warm_tile_worker,
-        initargs=(channel, source_file_map),
+        initargs=(channel, source_file_map, sat_key),
     ) as pool:
         futures = [pool.submit(_render_warm_tile_task, task) for task in tasks]
         for future in as_completed(futures):
@@ -592,7 +596,9 @@ def render_frame_tile(
     source_files_for_renderer: dict[str, str | Path] = dict(source_files)
     renderer_start = time.perf_counter()
     print(f"[satellite-v2 tile] stage=renderer_start tile={tile_id}", flush=True)
-    renderer = SatelliteTileRenderer.from_sources(channel, source_files_for_renderer)
+    renderer = SatelliteTileRenderer.from_sources(
+        channel, source_files_for_renderer, sat_id=sat_key
+    )
     renderer_elapsed = int((time.perf_counter() - renderer_start) * 1000)
     print(
         "[satellite-v2 tile] "

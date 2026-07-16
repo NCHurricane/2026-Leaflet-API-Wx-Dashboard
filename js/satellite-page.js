@@ -62,6 +62,11 @@
         ]),
     };
 
+    // Products that only exist for GOES ABI (NOAA aerosol L2). No AHI/SEVIRI
+    // equivalent is published, so these stay hidden for every other platform.
+    const GOES_ONLY_CHANNELS = new Set(['AerosolDetection', 'AerosolOpticalDepth']);
+    const isGoesPlatform = (satId) => satId === 'goes18' || satId === 'goes19';
+
     // Platforms with a live data pipeline.
     const IMPLEMENTED_SATELLITES = new Set(['goes18', 'goes19', 'himawari9', 'meteosat12', 'meteosat9', 'meteosat11']);
     const SATELLITE_AUTO_VIEW_PRESETS = {
@@ -255,13 +260,21 @@
         const select = byId('weather-satellite-channel');
         if (!select) return;
 
+        const goesOk = isGoesPlatform(satId);
         Array.from(select.options).forEach((opt) => {
-            opt.style.display = (!allowed || allowed.has(opt.value)) ? '' : 'none';
+            const platformOk = (!allowed || allowed.has(opt.value));
+            const goesOnlyOk = (!GOES_ONLY_CHANNELS.has(opt.value) || goesOk);
+            opt.style.display = (platformOk && goesOnlyOk) ? '' : 'none';
         });
 
         if (satId && allowed && !allowed.has(activeChannel())) {
             const fallback = allowed.has('Channel13') ? 'Channel13' : Array.from(allowed)[0];
             if (fallback) select.value = fallback;
+        }
+        // A GOES-only aerosol product selected while switching to a non-GOES
+        // platform would otherwise stay hidden-but-selected; reset it.
+        if (satId && !goesOk && GOES_ONLY_CHANNELS.has(activeChannel())) {
+            select.value = 'Channel13';
         }
     }
 

@@ -1,5 +1,7 @@
 # NEXRAD Level II and Level III product definitions.
 
+import math
+
 L2_PRODUCTS = {
     "REF": "Reflectivity",
     "VEL": "Velocity",
@@ -359,6 +361,42 @@ LIVE_RADAR_WORKER_INTERVAL_MIN = 5
 LIVE_RADAR_L2_USE_CHUNKS = False
 LIVE_RADAR_TILE_WORKER_INTERVAL_MIN = 5
 LIVE_RADAR_KEEP_FRAMES = 45
+LIVE_RADAR_MIN_LOOKBACK_HOURS = 0.5
+LIVE_RADAR_MAX_LOOKBACK_HOURS = 12.0
+# Allow for the fastest common NEXRAD volume cadence plus a small boundary
+# buffer when translating a requested wall-clock window into a file count.
+LIVE_RADAR_SCANS_PER_HOUR = 15
+LIVE_RADAR_LOOKBACK_FRAME_BUFFER = 3
+LIVE_RADAR_BACKFILL_BATCH_FRAMES = 12
+
+
+def normalize_live_radar_lookback_hours(value, default=LIVE_RADAR_LOOKBACK_HOURS) -> float:
+    """Clamp live-radar lookback requests to the supported slider range."""
+    try:
+        hours = float(value)
+    except (TypeError, ValueError):
+        hours = float(default)
+    return max(
+        LIVE_RADAR_MIN_LOOKBACK_HOURS,
+        min(hours, LIVE_RADAR_MAX_LOOKBACK_HOURS),
+    )
+
+
+def live_radar_target_frames(lookback_hours) -> int:
+    """Return a bounded scan-count target for one requested lookback window."""
+    hours = normalize_live_radar_lookback_hours(lookback_hours)
+    target = math.ceil(hours * LIVE_RADAR_SCANS_PER_HOUR)
+    target += LIVE_RADAR_LOOKBACK_FRAME_BUFFER
+    maximum = math.ceil(
+        LIVE_RADAR_MAX_LOOKBACK_HOURS * LIVE_RADAR_SCANS_PER_HOUR
+    ) + LIVE_RADAR_LOOKBACK_FRAME_BUFFER
+    return max(1, min(target, maximum))
+
+
+LIVE_RADAR_MAX_KEEP_FRAMES = max(
+    LIVE_RADAR_KEEP_FRAMES,
+    live_radar_target_frames(LIVE_RADAR_MAX_LOOKBACK_HOURS),
+)
 
 # Rendering performance settings (easily tunable without code changes)
 # Figure size in inches. At DPI=200: 12 → 2400×2400px (native L3 Super-Res 0.25km grid)

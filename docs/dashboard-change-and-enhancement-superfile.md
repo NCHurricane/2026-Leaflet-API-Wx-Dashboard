@@ -203,9 +203,18 @@ Completed radar enhancements:
   the rank threshold.
 - Radar scrubber auto-update now triggers an on-demand backend render on each
   tick via `?refresh=true` on `/api/radar/live/frames`, then restarts the warm
-  poll (~3 s interval, 90 s window) to pick up the new frame as soon as the
-  render completes. `RADAR_AUTO_REFRESH_MS` is 90 s (was 3 min) to match the
-  L2 chunks polling cadence.
+  poll (~3 s interval) to pick up the new frame as soon as the render completes.
+  `RADAR_AUTO_REFRESH_MS` is 90 s (was 3 min).
+- DONE 2026-07-16: Live radar lookback requests now propagate from
+  `/api/radar/live/frames?hours=` into the NODD worker instead of only filtering
+  its fixed one-hour cache. The scheduled worker still defaults to one hour;
+  a 0.5-12 h UI request starts a coverage-aware background fill when needed,
+  downloads and renders missing scans newest-to-oldest in bounded 12-frame
+  batches, and
+  preserves an expanded rolling cache up to the bounded 12 h target. Manual
+  history polling continues even when Radar Auto-update is off. The slider now
+  includes a `30M` value and keeps fractional hours through the route/service
+  wiring. This remains the live-cache path; no archive renderer is involved.
 - The "Next Update" countdown element (`wx-radar-next-update-status`) was
   removed; the reliability row "Last Update" timestamp serves as the freshness
   indicator instead.

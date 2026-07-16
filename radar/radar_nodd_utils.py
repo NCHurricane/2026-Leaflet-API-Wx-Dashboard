@@ -568,6 +568,8 @@ def download_radar_data(
     date_from=None,
     date_to=None,
     latest_only=False,
+    newest_first=False,
+    max_new_files=None,
 ):
     provider = str(provider).lower()
     level_path = str(level).lower().replace(" ", "")
@@ -622,6 +624,12 @@ def download_radar_data(
     if latest_only:
         keys = keys[-1:]
         total_files = len(keys)
+    elif newest_first:
+        keys = list(reversed(keys))
+
+    download_limit = None
+    if max_new_files is not None:
+        download_limit = max(1, int(max_new_files))
 
     if provider == "gcp":
         buckets = (
@@ -646,6 +654,8 @@ def download_radar_data(
 
     _t_dl = _time.perf_counter()
     for idx, key in enumerate(keys, start=1):
+        if download_limit is not None and downloaded >= download_limit:
+            break
         if progress_callback:
             progress_callback(idx, total_files)
 

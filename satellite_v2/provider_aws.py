@@ -124,11 +124,34 @@ def _parse_frame_timestamp(key: str) -> tuple[str, str] | None:
 
 
 def _filename_matches_sector(filename: str, sector_key: str) -> bool:
+    # Match the mesoscale sub-sector across product families: CMIPM1/CMIPM2
+    # (imagery) and ADPM1/ADPM2 (aerosol) both carry "M1-M"/"M2-M" ahead of
+    # the scan-mode token (e.g. "...ADPM1-M6...").
     if sector_key == "MESO1":
-        return "CMIPM1" in filename
+        return "M1-M" in filename
     if sector_key == "MESO2":
-        return "CMIPM2" in filename
+        return "M2-M" in filename
     return True
+
+
+# ABI-L2 bucket sub-sector suffix. Full Disk = F, CONUS = C, both mesoscales
+# share the single M-prefixed listing (filtered by _filename_matches_sector).
+_SECTOR_PREFIX_SUFFIX = {"CONUS": "C", "FULLDISK": "F", "MESO1": "M", "MESO2": "M"}
+
+
+def _aws_family_prefix(source_channel: str, sector_key: str) -> str:
+    """AWS listing prefix for a source channel's product family + sector.
+
+    CMIP imagery keeps its existing sector→prefix mapping; the aerosol
+    families (ADP, AOD) share the same sector suffix convention.
+    """
+    if source_channel == "ADP":
+        family = "ADP"
+    elif source_channel == "AOD":
+        family = "AOD"
+    else:
+        return aws_product_prefix_for_sector(sector_key)
+    return f"ABI-L2-{family}{_SECTOR_PREFIX_SUFFIX.get(sector_key, 'C')}"
 
 
 def _list_recent_channel_frames(
@@ -137,8 +160,10 @@ def _list_recent_channel_frames(
     source_channel: str,
     hours: int,
 ) -> dict[str, SourceFrame]:
-    product_prefix = aws_product_prefix_for_sector(sector_key)
-    token = source_channel_token(source_channel)
+    product_prefix = _aws_family_prefix(source_channel, sector_key)
+    # ADP/AOD are single-file-per-scene products with no C## channel token in
+    # the filename, so they skip the imagery token filter.
+    token = None if source_channel in ("ADP", "AOD") else source_channel_token(source_channel)
     bucket = _bucket_name(sat_key)
 
     frames: dict[str, SourceFrame] = {}
@@ -148,7 +173,7 @@ def _list_recent_channel_frames(
             filename = key.rsplit("/", 1)[-1]
             if not _filename_matches_sector(filename, sector_key):
                 continue
-            if f"{token}_" not in filename:
+            if token is not None and f"{token}_" not in filename:
                 continue
             parsed = _parse_frame_timestamp(key)
             if parsed is None:

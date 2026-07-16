@@ -7246,7 +7246,9 @@
 
     function _startRadarScrubWarmPoll(site, product) {
         _stopRadarScrubWarmPoll();
-        _radarScrubWarmPollDeadlineMs = Date.now() + 90_000;
+        const requestedHours = _radarPageController?.radarLookbackHours?.() || 1;
+        _radarScrubWarmPollDeadlineMs = Date.now()
+            + Math.max(90_000, requestedHours * 60_000);
         _radarScrubWarmStablePolls = 0;
 
         const tick = async () => {
@@ -7260,7 +7262,9 @@
                 return;
             }
 
-            const { appended, refreshing } = await _tryAppendNewRadarFrames();
+            const { appended, refreshing } = await _tryAppendNewRadarFrames({
+                requireAutoUpdate: false,
+            });
             if (appended > 0 || refreshing) {
                 // A backend render batch reports nothing until the whole batch
                 // finishes, so a poll can see zero new frames while a fill is
@@ -7299,7 +7303,7 @@
                     site,
                     product,
                     elevation: _activeRadarElevation(),
-                    hours: '3',
+                    hours: String(_radarPageController?.radarLookbackHours?.() || 1),
                 });
                 _appendRadarSrvMotionParams(params);
                 const resp = await fetch(apiUrl(`/api/radar/live/frames?${params.toString()}`), { cache: 'no-store' });
@@ -7757,9 +7761,14 @@
         _rtmaScrubWarmPollTimer = setTimeout(tick, 3000);
     }
 
-    async function _tryAppendNewRadarFrames({ refresh = false } = {}) {
+    async function _tryAppendNewRadarFrames({
+        refresh = false,
+        requireAutoUpdate = true,
+    } = {}) {
         if (!_isTypeEnabled('radar')) return { appended: 0, refreshing: false };
-        if (!_isRadarAutoUpdateEnabled()) return { appended: 0, refreshing: false };
+        if (requireAutoUpdate && !_isRadarAutoUpdateEnabled()) {
+            return { appended: 0, refreshing: false };
+        }
         const product = _activeRadarProduct();
         const site = _activeRadarSite();
         if (!site) return { appended: 0, refreshing: false };
@@ -7770,7 +7779,11 @@
 
         try {
             const radarSlider = document.querySelector('#radar-animate-slider');
-            const maxHours = Math.max(1, Math.round(radarSlider ? Number(radarSlider.value) : 1));
+            const sliderHours = radarSlider ? Number(radarSlider.value) : 1;
+            const maxHours = Math.max(
+                0.5,
+                Math.min(12, Number.isFinite(sliderHours) ? sliderHours : 1),
+            );
 
             const params = new URLSearchParams({
                 site,
@@ -8069,6 +8082,14 @@
                 { color: '#4aa4c7', label: 'Moist cloud or plume' },
                 { color: '#614682', label: 'Weak/mixed channel signal' },
                 { color: '#30384c', label: 'Background / clear air' },
+            ],
+        },
+        AerosolDetection: {
+            title: 'Smoke & Dust (ADP)',
+            items: [
+                { color: '#39d0d8', label: 'Smoke detected' },
+                { color: '#e8a33d', label: 'Dust detected' },
+                { color: '#c44dff', label: 'Smoke + dust detected' },
             ],
         },
     });
@@ -15518,7 +15539,7 @@
             normalizeScrubFrames: _normalizeRadarScrubFrames,
             radarLookbackHours: () => (_radarPageController?.radarLookbackHours
                 ? _radarPageController.radarLookbackHours()
-                : Math.max(1, Math.round(Number(byId('radar-animate-slider')?.value || 1)))),
+                : Math.max(0.5, Math.min(12, Number(byId('radar-animate-slider')?.value || 1)))),
             renderLiveLatestFrame: _renderRadarLiveLatestFrame,
             renderScrubFrame: _renderRadarScrubFrame,
             resolveDataTimestampMs: _resolveDataTimestampMs,

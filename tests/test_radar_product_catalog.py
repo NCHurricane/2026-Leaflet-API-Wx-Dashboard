@@ -1,19 +1,29 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import numpy as np
 
 from cache.overlay_cache_utils import radar_list_frames, radar_update_index
-from config.radar_config import LIVE_RADAR_PRODUCTS
+from config.radar_config import (
+    LIVE_RADAR_MAX_KEEP_FRAMES,
+    LIVE_RADAR_PRODUCTS,
+    live_radar_target_frames,
+    normalize_live_radar_lookback_hours,
+)
 from services.radar_service import (
     _radar_live_catalog,
     _radar_live_product_metadata,
+    _radar_live_render_on_demand,
+    get_radar_live_frames_data,
     get_radar_colortable_data,
     normalize_radar_srv_motion,
     normalize_radar_elevation,
     radar_cache_product_key,
 )
+from radar import radar_nodd_utils
 from workers.radar_live_worker import (
     _ensure_derived_field,
     _field_for_product,
@@ -25,6 +35,105 @@ from workers.radar_live_worker import (
 
 
 class RadarProductCatalogTests(unittest.TestCase):
+    @patch("radar.radar_nodd_utils._enforce_cache_size")
+    @patch("radar.radar_nodd_utils.list_nexrad_files")
+    @patch("radar.radar_nodd_utils.get_s3_client")
+    def test_nodd_backfill_downloads_newest_missing_batch_only(
+        self, get_s3_client, list_files, _enforce_cache_size
+    ):
+        keys = [
+            "2026/07/16/KMHX/KMHX-old",
+            "2026/07/16/KMHX/KMHX-middle",
+            "2026/07/16/KMHX/KMHX-new",
+        ]
+        list_files.return_value = keys
+
+        class FakeS3:
+            downloaded_keys = []
+
+            def download_file(self, _bucket, key, local_path):
+                self.downloaded_keys.append(key)
+                Path(local_path).write_bytes(b"radar")
+
+        fake_s3 = FakeS3()
+        get_s3_client.return_value = fake_s3
+
+        with TemporaryDirectory() as temp_dir:
+            existing = (
+                Path(temp_dir)
+                / "radar_level2_downloads"
+                / "REF"
+                / "KMHX"
+                / "KMHX-new"
+            )
+            existing.parent.mkdir(parents=True)
+            existing.write_bytes(b"cached")
+            _save_dir, total, downloaded = radar_nodd_utils.download_radar_data(
+                "Level 2",
+                "KMHX",
+                "REF",
+                6,
+                temp_dir,
+                newest_first=True,
+                max_new_files=1,
+            )
+
+        self.assertEqual(total, 3)
+        self.assertEqual(downloaded, 1)
+        self.assertEqual(fake_s3.downloaded_keys, [keys[-2]])
+
+    def test_live_radar_lookback_supports_thirty_minutes_and_is_bounded(self):
+        self.assertEqual(normalize_live_radar_lookback_hours(0.25), 0.5)
+        self.assertEqual(normalize_live_radar_lookback_hours(0.5), 0.5)
+        self.assertEqual(normalize_live_radar_lookback_hours(1.5), 1.5)
+        self.assertEqual(normalize_live_radar_lookback_hours(99), 12.0)
+        self.assertLess(
+            live_radar_target_frames(0.5),
+            live_radar_target_frames(1),
+        )
+        self.assertEqual(
+            live_radar_target_frames(12),
+            LIVE_RADAR_MAX_KEEP_FRAMES,
+        )
+
+    @patch("workers.radar_live_worker.run_radar_live_site_product", return_value=4)
+    def test_on_demand_render_passes_requested_lookback_to_worker(self, run_worker):
+        cached = _radar_live_render_on_demand(
+            "KMHX",
+            "L2_REF",
+            latest_only=False,
+            backfill_history=False,
+            elevation="0.5",
+            lookback_hours=6,
+        )
+        self.assertEqual(cached, 4)
+        self.assertEqual(run_worker.call_args.kwargs["lookback_hours"], 6.0)
+
+    @patch("services.radar_service._radar_live_render_in_background", return_value=True)
+    @patch("cache.overlay_cache_utils.radar_list_frames")
+    def test_frames_endpoint_backfills_when_cache_does_not_cover_request(
+        self, list_frames, render_background
+    ):
+        now = datetime.now(timezone.utc)
+        list_frames.return_value = [
+            {"timestamp": (now - timedelta(minutes=45)).isoformat()},
+            {"timestamp": (now - timedelta(minutes=5)).isoformat()},
+        ]
+
+        data = get_radar_live_frames_data(
+            site="KMHX",
+            product="L2_REF",
+            elevation="0.5",
+            hours=6,
+        )
+
+        self.assertFalse(data["coverage_complete"])
+        self.assertTrue(data["refreshing"])
+        self.assertEqual(data["lookback_hours"], 6.0)
+        render_background.assert_called_once_with(
+            "KMHX", "L2_REF", "0.5", None, 6.0
+        )
+
     def test_supported_live_products_have_required_metadata(self):
         self.assertEqual(
             list(LIVE_RADAR_PRODUCTS),

@@ -97,6 +97,22 @@ ABI_CHANNELS = {
         "cmap": plt.cm.Greys_r,
         "norm": mcolors.Normalize(vmin=0, vmax=1.0),
     },
+    # GOES ABI L2 aerosol products. These are not imagery channels: ADP is a
+    # categorical smoke/dust detection mask and AOD is a continuous optical
+    # depth field. Their "source channel" is a pseudo token (ADP / AOD), so
+    # they carry no ABI channel number.
+    "AerosolDetection": {
+        "name": "Smoke & Dust (ADP)",
+        "req": ["ADP"],
+        "cmap": None,
+        "norm": None,
+    },
+    "AerosolOpticalDepth": {
+        "name": "Aerosol Optical Depth (550 nm)",
+        "req": ["AOD"],
+        "cmap": plt.get_cmap("turbo"),
+        "norm": mcolors.Normalize(vmin=0.0, vmax=1.0, clip=True),
+    },
     "Channel03": {
         "name": "Veggie (Near-IR)",
         "cmap": plt.cm.Greys_r,
@@ -441,6 +457,8 @@ SATELLITE_V2_DASHBOARD_PRODUCTS = (
     "Channel08RAMSDIS",
     "Channel09RAMSDIS",
     "Channel13",
+    "AerosolDetection",
+    "AerosolOpticalDepth",
     "FireTemperature",
     "AirMass",
     "GeoColor",
@@ -544,6 +562,14 @@ SATELLITE_V2_INTERPRETIVE_LEGENDS = {
             {"color": "#30384c", "label": "Background / clear air"},
         ),
     },
+    "AerosolDetection": {
+        "subtitle": "GOES ABI Aerosol Detection Product (categorical)",
+        "items": (
+            {"color": "#39d0d8", "label": "Smoke detected"},
+            {"color": "#e8a33d", "label": "Dust detected"},
+            {"color": "#c44dff", "label": "Smoke + dust detected"},
+        ),
+    },
 }
 
 SATELLITE_V2_HIGH_RES_PRODUCTS = {
@@ -585,6 +611,11 @@ def channel_number_from_key(channel_key: str) -> int:
 def _product_kind(product_key: str, source_channels: tuple[str, ...]) -> str:
     if product_key in RGB_COMPOSITE_KEYS:
         return "composite"
+    source = source_channels[0]
+    if source == "ADP":
+        return "categorical"
+    if source == "AOD":
+        return "aod"
     channel_number = channel_number_from_key(source_channels[0])
     if channel_number <= 6:
         return "reflectance"
@@ -595,6 +626,10 @@ def _product_units(kind: str) -> str:
     if kind == "composite":
         return "RGB"
     if kind == "reflectance":
+        return "1"
+    if kind == "categorical":
+        return "flag"
+    if kind == "aod":
         return "1"
     return "K"
 
@@ -951,6 +986,13 @@ def normalize_source_channel(channel_key: str | None) -> str:
         # Shared pseudo-channel: one FCI frame is a set of NetCDF body chunks
         # containing all channels.
         return "FCI"
+    if value.upper() == "ADP":
+        # Pseudo-channel: one ABI-L2-ADP file holds all detection flags
+        # (Smoke, Dust, ...). Stored once under this source directory.
+        return "ADP"
+    if value.upper() == "AOD":
+        # Pseudo-channel: one ABI-L2-AOD file holds the optical-depth field.
+        return "AOD"
     if value.lower().startswith("channel"):
         digits = "".join(ch for ch in value if ch.isdigit())
         if digits:
