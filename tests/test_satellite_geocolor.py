@@ -6,6 +6,7 @@ import numpy as np
 import xarray as xr
 
 from satellite_v2.composites import (
+    _geocolor_display_tone,
     _rayleigh_correct_reflectance,
     _satellite_local_vectors,
     _solar_day_weight,
@@ -26,6 +27,17 @@ class GeoColorRecipeTests(unittest.TestCase):
         self.assertGreater(float(result[2]), 0.30)
         self.assertGreater(float(result[3]), 0.65)
         self.assertGreater(float(result[4]), 0.90)
+
+    def test_display_tone_uses_full_luminance_range(self):
+        rgb = np.array([[[0.0, 0.425, 0.85]]], dtype=np.float32)
+
+        result = _geocolor_display_tone(rgb)
+
+        np.testing.assert_allclose(
+            result,
+            np.array([[[0.0, 0.5, 1.0]]], dtype=np.float32),
+            atol=1e-6,
+        )
 
     def test_day_weight_uses_solar_position_not_surface_brightness(self):
         lon = np.array([[-75.0]], dtype=np.float32)

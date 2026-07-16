@@ -22,6 +22,7 @@ _SCALAR_REFLECTANCE_WHITE_POINT = 0.90
 _CIRA_VISIBLE_BLACK_POINT = 0.0223
 _CIRA_VISIBLE_LOG_ROOT = np.log10(_CIRA_VISIBLE_BLACK_POINT)
 _CIRA_VISIBLE_DENOMINATOR = (1.0 - _CIRA_VISIBLE_LOG_ROOT) * 0.75
+_GEOCOLOR_DISPLAY_WHITE_POINT = 0.85
 
 # ABI molecular optical depths used by the corrected-reflectance (CREFL)
 # algorithm for its 0.47, 0.64, and 0.86 micron bands.  The compact
@@ -106,6 +107,15 @@ def _rgb(red: np.ndarray, green: np.ndarray, blue: np.ndarray) -> np.ndarray:
 def _boost_saturation(rgb: np.ndarray, amount: float = 1.1) -> np.ndarray:
     luma = (0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2])
     return np.clip(luma[:, :, np.newaxis] + amount * (rgb - luma[:, :, np.newaxis]), 0.0, 1.0).astype(np.float32)
+
+
+def _geocolor_display_tone(rgb: np.ndarray) -> np.ndarray:
+    """Lift CIRA-stretched GeoColor into the full display luminance range."""
+    return np.clip(
+        np.asarray(rgb, dtype=np.float32) / _GEOCOLOR_DISPLAY_WHITE_POINT,
+        0.0,
+        1.0,
+    ).astype(np.float32)
 
 
 def _as_utc(observation_time: datetime) -> datetime:
@@ -332,7 +342,8 @@ def _geocolor_day_rgb(
         cira_visible_stretch(green),
         cira_visible_stretch(blue),
     )
-    return _boost_saturation(stretched, amount=1.08), solar_up
+    toned = _geocolor_display_tone(stretched)
+    return _boost_saturation(toned, amount=1.08), solar_up
 
 
 def _geocolor_day_weight(

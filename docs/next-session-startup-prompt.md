@@ -33,8 +33,14 @@ Current status:
   behavior should stay in services/*_service.py, and upstream/cache refresh
   behavior should stay in workers/*_worker.py.
 
+Active track order (2026-07-16):
+1. Frontend True Split Stage 2, starting with Phase 18 core API inventory.
+2. Satellite render-pipeline latency optimization. This backend-only track may
+   interleave with Track 1 while their files remain disjoint.
+3. GK2A + GMGSI after the satellite-page migration boundary is safe.
+
 Satellite v2 status (2026-07-16) — Meteosat recipe work DONE; GOES aerosol/fire
-products (ADP/AOD/FRP) added 2026-07-16; next focus is GK2A + GMGSI:
+products (ADP/AOD/FRP) and GeoColor display corrections added 2026-07-16:
 - DONE 2026-07-16 (GOES-18/19 only): three new single-instant GOES ABI L2
   products. AerosolDetection (ABI-L2-ADP smoke/dust mask, confidence-graded via
   DQF bit-fields -> opacity), AerosolOpticalDepth (ABI-L2-AOD, high+medium DQF
@@ -52,6 +58,15 @@ products (ADP/AOD/FRP) added 2026-07-16; next focus is GK2A + GMGSI:
   render-version bump). Full detail in the superfile's "GOES aerosol and fire
   products: ADP, AOD, FRP" section. weather.js?v=20260716c,
   satellite-page.js?v=20260716b, dashboard.css?v=20260716a.
+- DONE 2026-07-16: GOES GeoColor and Black Marble daytime RGB now use bounded
+  ABI Rayleigh correction, CIRA log stretch, solar-zenith blending from frame
+  geometry, a 0.85 display white point, and 1.08 saturation. Filled satellite
+  imagery is opaque in both rendered tiles and Leaflet; ADP/AOD/FRP retain
+  their specialized alpha behavior. Current render versions are products-v5
+  (GOES/default), products-ahi3 (Himawari), and products-fci3 (Meteosat-12).
+  Colors and opacity are user-confirmed; the final white-point brightness lift
+  still needs browser confirmation. Current weather.js cachebuster is
+  v=20260716d.
 - GOES (goes18/goes19), Himawari-9, Meteosat-9 (SEVIRI), Meteosat-12 (FCI),
   and Meteosat-11 (RSS) are all implemented and browser-smoke-tested.
   Meteosat-11 RSS full product set (4 scalars + Night Microphysics/Dust/Ash)
@@ -125,11 +140,10 @@ products (ADP/AOD/FRP) added 2026-07-16; next focus is GK2A + GMGSI:
   Microphysics/Dust/Ash recipes to reduce to the correct EUMETSAT RGBs. Do
   not "correct" these to nearest-wavelength without re-deriving the composite
   math.
-- NEXT UP (starting 2026-07-12): GK2A (arn:aws:s3:::noaa-gk2a-pds) and NOAA
-  GMGSI Meteosat composite (noaa-gmgsi-pds). Meteosat recipe work is done, so
-  the team is moving past Meteosat now. No provider/parser work has begun on
-  either -- this is greenfield, same as Himawari/Meteosat were before their
-  provider modules existed.
+- TRACK 3: GK2A (arn:aws:s3:::noaa-gk2a-pds) and NOAA GMGSI Meteosat composite
+  (noaa-gmgsi-pds). No provider/parser work has begun on either. Start this
+  after the satellite-page migration boundary is safe so the integration is
+  not implemented twice across the frontend split.
 - Untracked file docs/token-saver-maybe.md has been sitting in the working
   tree for several sessions (a Claude Code skill definition, not dashboard
   documentation). The .gitignore entry added 2026-07-10 points at

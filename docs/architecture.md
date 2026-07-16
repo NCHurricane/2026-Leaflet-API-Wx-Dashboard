@@ -30,8 +30,9 @@ Planned product-page migration:
   the repository root in this checkout. Preserve that route during backend
   refactors because it is a planned product-page route.
 - `satellite.html` is also not present in the repository root. `js/satellite.js`
-  exists and should not be treated as dead code solely because the page is not
-  present yet.
+  is dead code — it is not loaded by `weather.html` or any route (confirmed
+  during the 2026-07-11 render pipeline review) and is slated for deletion in
+  Frontend Split Stage 2.
 - `weather.html` remains the combined workspace during the transition and should
   not be promoted to the application landing page.
 
@@ -108,6 +109,8 @@ GET /api/data/rtma/points?region={REGION}&stream={STREAM}&product={PRODUCT}[&sou
 GET /api/radar/live/sites
 GET /api/radar/live/latest?site={SITE}&product={PRODUCT}[&force=true]
 GET /api/radar/live/frames?site={SITE}&product={PRODUCT}[&hours=2]
+GET /api/satellite-v2/catalog?sat_id={SAT}&sector={SECTOR}&channel={PRODUCT}
+GET /api/satellite-v2/tile/{z}/{x}/{y}?sat_id={SAT}&sector={SECTOR}&channel={PRODUCT}&frame_key={FRAME}
 ```
 
 Alerts/SPC endpoints:
@@ -130,6 +133,21 @@ Weather radar live endpoints:
 2. On cache miss, trigger bounded on-demand render via `workers/radar_live_worker.py`.
 3. Latest endpoint prioritizes first-paint responsiveness by rendering newest-first with a single-frame cap on cold start, then starts async history backfill.
 4. Responses include `history_filling` so the frontend can signal that animation history is still warming.
+5. The requested `hours` value (0.5-12 h, including the UI's 30-minute
+   option) propagates through route/service into the NODD worker. A request
+   beyond current cache coverage starts bounded newest-to-oldest background
+   fill and retains the expanded live history; the scheduled worker keeps its
+   one-hour default. This is not an archive-render workflow.
+
+Satellite v2 tile endpoints:
+
+1. Resolve a platform/provider frame catalog, download/cache required source
+   channels, and render missing Web Mercator tiles on demand.
+2. Tile paths include a platform render-version namespace so display-recipe
+   changes can invalidate old pixels without deleting source downloads.
+3. Filled satellite images own the basemap inside valid coverage (PNG alpha
+   255); invalid/off-disk pixels remain transparent. ADP, AOD, and FRP retain
+   product-specific sparse-overlay alpha.
 
 Cache served as static files via `/cache` mount (StaticFiles).
 
@@ -147,6 +165,9 @@ Responsibilities:
 - Radar live site/product selection with multi-site map overlays
 - Radar time-mode playback from `/api/radar/live/frames` with context invalidation when selection changes
 - Radar clear control that clears loaded radar overlays and exits animate mode back to current without resetting map view
+- Satellite tile layers render at Leaflet opacity 1.0; transparency is encoded
+  per pixel by the backend rather than applied as a second layer-wide dimming
+  pass.
 - Region → `fitBounds` mapping (all 50 states + CONUS)
 - Layer visibility and opacity sliders (no page reload)
 - SPC three-way dropdown: convective / fire / other (tracks `_spcLastTouched`)
@@ -170,6 +191,9 @@ Weather workflow is mixed by product family:
   - Feels Like is a derived RTMA product: wind chill at <= 50 F with wind >= 3
     mph, heat index at >= 80 F, otherwise actual temperature.
 - Radar (weather tab): cache-first pre-rendered PNG overlays (latest + frames), with bounded on-demand fallback rendering
+- Satellite v2: cache-first source/channel resolution plus on-demand Web
+  Mercator PNG tiles. Filled imagery is opaque; sparse analytical products
+  retain per-product alpha ramps.
 
 Radar/Satellite archive workflows: unchanged — synchronous render pipeline, Lambert projection, server-side image generation, layered PNG scrubber.
 
@@ -204,6 +228,10 @@ cache/
       {SITE}/{LEVEL}/{PRODUCT}/
         {frame_key}.png
         processed.json
+  satellite/
+    catalog/{satellite}/{sector}/{product}.json
+    source/{satellite}/{sector}/{source_channel}/{frame_key}/...
+    tiles/{render_version}/{satellite}/{sector}/{product}/{frame_key}/{z}/{x}/{y}.png
   .workers/
     rtma.last_run
     radar_live.last_run
@@ -226,6 +254,9 @@ cache/
 | `workers/rtma_worker.py`       | RTMA points + pre-render overlay refresh                                      |
 | `workers/rtma_preload.py`      | One-time RTMA backfill/preload                                                |
 | `workers/radar_live_worker.py` | Live radar cache renderer for weather radar endpoints                          |
+| `satellite_v2/renderer.py`     | Source-raster loading, Web Mercator reprojection, PNG alpha policy, composite dispatch |
+| `satellite_v2/composites.py`   | RGB recipes, including solar-aware/Rayleigh-corrected GOES GeoColor                     |
+| `satellite_v2/cache.py`        | Versioned catalog/source/tile cache paths and tile validation                            |
 | `alerts/alerts_utils.py`       | `fetch_active_alerts_with_source()`                                           |
 | `spc/spc_utils.py`             | `fetch_outlook_geojson()`, `fetch_fire_wx_geojson()`                          |
 | `radar/radar_nodd_utils.py`    | NODD radar key listing + downloads with race-tolerant retries                 |
@@ -233,6 +264,41 @@ cache/
 | `cache/overlay_cache_utils.py` | Overlay frame paths/index/meta helpers                                        |
 | `config/geo_config.py`         | `STATE_BOUNDS` dict (used in weather.js)                                      |
 | `config/alerts_config.py`      | `ALERT_COLORS` dict                                                           |
+
+## Satellite v2 GeoColor and display-alpha contract (2026-07-16)
+
+GOES GeoColor needs observation and viewing geometry in addition to channel
+arrays. GOES NetCDF loading therefore stores `observation_time`, projection
+longitude, and satellite height on `SourceRaster`; `render_zoom_canvas()` passes
+those values with the canvas lon/lat grid into `render_composite_rgb()`.
+
+The daytime path in `satellite_v2/composites.py` is:
+
+1. Normalize ABI Channels 1, 2, and 3 while retaining bright-cloud
+   reflectance above 1.0.
+2. Apply a bounded, wavelength-dependent Rayleigh path-reflectance correction
+   using solar and geostationary viewing geometry.
+3. Construct the established CIMSS/Kaba simulated green.
+4. Apply the CIRA logarithmic visible stretch, a GeoColor-only `0.85` display
+   white point, and the small `1.08` saturation adjustment.
+5. Blend day/night by solar zenith rather than visible surface brightness.
+
+`GeoColorBlkMar` uses the same daytime path. Its static Black Marble city-light
+image is sampled and composited into nighttime RGB before PNG encoding; it is
+not the Leaflet basemap and is not hidden by full tile opacity.
+
+Alpha ownership is deliberately split by product semantics:
+
+- Filled RGB and scalar imagery: alpha 255 for valid pixels, 0 outside valid
+  coverage; Leaflet layer opacity 1.0.
+- ADP: categorical confidence alpha.
+- AOD: value-driven alpha ramp.
+- FRP: sparse overlay alpha.
+
+Current render namespaces carrying this contract are `products-v5` for the
+default/GOES path, `products-ahi3` for Himawari-9, and `products-fci3` for
+Meteosat-12. Any pixel-output optimization must establish golden tiles from
+these namespaces before changing the render pipeline.
 
 ## Radar / Satellite Product Pages (Planned / Needs Revalidation)
 

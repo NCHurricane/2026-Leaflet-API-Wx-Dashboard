@@ -795,7 +795,7 @@ SATELLITE_V2_PROVIDER = "aws"
 SATELLITE_V2_CACHE_NAMESPACE = "satellite"
 # These versions invalidate tiles rendered with the former 230/255 image
 # alpha so each platform picks up the filled-image opacity policy immediately.
-SATELLITE_V2_RENDER_VERSION = "products-v4"
+SATELLITE_V2_RENDER_VERSION = "products-v5"
 SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi3"
 # fci3 retains the Meteosat-12 east-west mirror invalidation from fci1 and
 # invalidates tiles rendered before the full-opacity imagery policy.
