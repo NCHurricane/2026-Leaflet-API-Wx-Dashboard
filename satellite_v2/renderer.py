@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import math
+import re
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -36,7 +38,8 @@ from satellite_v2.composites import (
 )
 
 
-_SATELLITE_TILE_ALPHA = 230
+_SATELLITE_FILLED_ALPHA = 255
+_SATELLITE_OVERLAY_ALPHA = 230
 
 # GOES ABI L2 aerosol products. ADP renders as a categorical smoke/dust mask
 # (nearest-neighbour resample so the 0/1/2/3 codes never smear); AOD renders
@@ -44,12 +47,15 @@ _SATELLITE_TILE_ALPHA = 230
 # transparent and plumes read opaque.
 _ADP_CATEGORICAL_KEYS = frozenset({"AerosolDetection"})
 _AOD_KEYS = frozenset({"AerosolOpticalDepth"})
+_SPARSE_SCALAR_OVERLAY_KEYS = frozenset({"FireRadiativePower"})
 # Categorical LUT — colours must match the AerosolDetection interpretive
 # legend in config.satellite_v2_config.
 _ADP_SMOKE_RGB = (0x39, 0xD0, 0xD8)
 _ADP_DUST_RGB = (0xE8, 0xA3, 0x3D)
 _ADP_BOTH_RGB = (0xC4, 0x4D, 0xFF)
-_ADP_CATEGORICAL_ALPHA = 200
+# Opacity per DQF confidence level, indexed 0=high, 1=medium, 2=low, so
+# high-confidence detections read solid and low-confidence edges read faint.
+_ADP_CONFIDENCE_ALPHA = (210, 140, 80)
 # AOD alpha ramp: fully transparent at/below _AOD_ALPHA_MIN, fully opaque
 # at/above _AOD_ALPHA_FULL (optical depth at 550 nm).
 _AOD_ALPHA_MIN = 0.10
@@ -77,6 +83,9 @@ class SourceRaster:
     cmi: np.ndarray  # float32, shape (rows, cols), sorted ascending in both axes
     src_transform: object  # rasterio Affine transform in geostationary metres
     src_crs: object  # rasterio CRS for the GOES geostationary projection
+    observation_time: datetime | None = None
+    satellite_longitude: float | None = None
+    satellite_height_km: float | None = None
 
 
 @dataclass
@@ -205,12 +214,16 @@ class SatelliteTileRenderer:
             lon_grid, lat_grid = _canvas_lon_lat_grid(
                 z, x_min, y_min, canvas_w, canvas_h, tile_size
             )
+            geometry_source = next(iter(self.source_rasters.values()))
             rgb = render_composite_rgb(
                 self.product_key,
                 samples,
                 lon_grid=lon_grid,
                 lat_grid=lat_grid,
                 instrument=self.instrument,
+                observation_time=geometry_source.observation_time,
+                satellite_longitude=geometry_source.satellite_longitude,
+                satellite_height_km=geometry_source.satellite_height_km,
             )
             return _rgb_to_image(rgb, valid)
 
@@ -225,7 +238,12 @@ class SatelliteTileRenderer:
         norm = product.get("norm")
         if self.product_key in _AOD_KEYS:
             return _colorize_aod(values, valid, cmap, norm)
-        return _colorize_scalar(values, valid, cmap, norm)
+        alpha = (
+            _SATELLITE_OVERLAY_ALPHA
+            if self.product_key in _SPARSE_SCALAR_OVERLAY_KEYS
+            else _SATELLITE_FILLED_ALPHA
+        )
+        return _colorize_scalar(values, valid, cmap, norm, alpha=alpha)
 
 
 def _source_file_signature(source_file: str | Path) -> tuple[str, int, int]:
@@ -344,6 +362,46 @@ def _load_netcdf_dataset(source_file: str | Path) -> xr.Dataset:
         return dataset
 
 
+def _parse_observation_time(dataset: xr.Dataset, path: Path) -> datetime | None:
+    """Read a UTC frame time from GOES metadata, with filename fallback."""
+    for attribute in (
+        "time_coverage_start",
+        "start_date_time",
+        "date_created",
+    ):
+        value = dataset.attrs.get(attribute)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+
+    # ABI filenames encode start time as sYYYYJJJHHMMSSf, where JJJ is
+    # day-of-year and the trailing fractional-second digits are optional.
+    match = re.search(
+        r"_s(\d{4})(\d{3})(\d{2})(\d{2})(\d{2})(\d*)_",
+        path.name,
+    )
+    if match is None:
+        return None
+    year, day_of_year, hour, minute, second, fraction = match.groups()
+    microseconds = int((fraction + "000000")[:6]) if fraction else 0
+    return datetime(int(year), 1, 1, tzinfo=timezone.utc) + timedelta(
+        days=int(day_of_year) - 1,
+        hours=int(hour),
+        minutes=int(minute),
+        seconds=int(second),
+        microseconds=microseconds,
+    )
+
+
 def _is_ahi_hsd_file(path: Path) -> bool:
     name = path.name.lower()
     return name.endswith(".dat") or name.endswith(".dat.bz2")
@@ -430,31 +488,97 @@ def _geos_scan_source_raster(
 
 
 def _load_adp_source_raster(path: Path) -> SourceRaster:
-    """Load an ABI-L2-ADP file into a single categorical smoke/dust band.
+    """Load an ABI-L2-ADP file into a single category+confidence code band.
 
-    Combines the binary Smoke and Dust detection flags into one code grid:
-    0 = neither, 1 = smoke, 2 = dust, 3 = both. Off-disk/fill pixels collapse
-    to 0 (transparent at colorise time).
+    Combines the Smoke and Dust detection flags with their DQF confidence into
+    one code grid: ``category * 10 + confidence`` where category is
+    1=smoke / 2=dust / 3=both and confidence is 0=high / 1=medium / 2=low.
+    0 = no detection. ``bad`` confidence (DQF field == 3) is treated as no
+    detection. The DQF packs confidence in 2-bit fields: smoke at bits 2-3,
+    dust at bits 4-5 (0=high, 1=medium, 2=low, 3=bad). Off-disk/fill pixels
+    collapse to 0 (transparent at colorise time).
     """
     dataset = _load_netcdf_dataset(path)
     if "Smoke" not in dataset or "Dust" not in dataset:
         raise ValueError(f"ADP source file is missing Smoke/Dust flags: {path}")
-    smoke_on = np.nan_to_num(np.asarray(dataset["Smoke"].values, dtype=np.float32)) >= 0.5
-    dust_on = np.nan_to_num(np.asarray(dataset["Dust"].values, dtype=np.float32)) >= 0.5
+    smoke = np.nan_to_num(np.asarray(dataset["Smoke"].values, dtype=np.float32)) >= 0.5
+    dust = np.nan_to_num(np.asarray(dataset["Dust"].values, dtype=np.float32)) >= 0.5
+    if "DQF" in dataset:
+        dqf = np.nan_to_num(
+            np.asarray(dataset["DQF"].values, dtype=np.float32), nan=255.0
+        ).astype(np.int32)
+    else:
+        dqf = np.zeros(smoke.shape, dtype=np.int32)
+    smoke_conf = (dqf >> 2) & 0x3
+    dust_conf = (dqf >> 4) & 0x3
+    smoke_ok = smoke & (smoke_conf != 3)
+    dust_ok = dust & (dust_conf != 3)
+    both = smoke_ok & dust_ok
     combined = np.where(
-        smoke_on & dust_on,
-        3.0,
-        np.where(dust_on, 2.0, np.where(smoke_on, 1.0, 0.0)),
+        both,
+        30 + np.minimum(smoke_conf, dust_conf),
+        np.where(
+            dust_ok & ~smoke_ok,
+            20 + dust_conf,
+            np.where(smoke_ok & ~dust_ok, 10 + smoke_conf, 0),
+        ),
     ).astype(np.float32)
     return _geos_scan_source_raster(dataset, combined, path)
 
 
+def _dilate_sparse(grid: np.ndarray, radius: int = 1) -> np.ndarray:
+    """Grow sparse finite values into their neighbours via a max window.
+
+    Fire pixels are single 2 km cells and would be near-invisible at CONUS zoom;
+    a small max-dilation makes each fire a readable block without moving it.
+    ``np.fmax`` ignores NaN, so background stays NaN.
+    """
+    height, width = grid.shape
+    out = grid.copy()
+    for dy in range(-radius, radius + 1):
+        for dx in range(-radius, radius + 1):
+            if dy == 0 and dx == 0:
+                continue
+            shifted = np.full_like(grid, np.nan)
+            y_src = slice(max(0, dy), height + min(0, dy))
+            y_dst = slice(max(0, -dy), height + min(0, -dy))
+            x_src = slice(max(0, dx), width + min(0, dx))
+            x_dst = slice(max(0, -dx), width + min(0, -dx))
+            shifted[y_dst, x_dst] = grid[y_src, x_src]
+            out = np.fmax(out, shifted)
+    return out
+
+
+def _load_frp_source_raster(path: Path) -> SourceRaster:
+    """Load Fire Radiative Power (MW) from an ABI-L2-FDC file.
+
+    Only actual fire pixels carry a value; everything else is NaN, so the
+    scalar colorizer renders fires as hot points over a transparent field.
+    """
+    dataset = _load_netcdf_dataset(path)
+    if "Power" not in dataset:
+        raise ValueError(f"FDC source file is missing the Power variable: {path}")
+    power = np.asarray(dataset["Power"].values, dtype=np.float32)
+    power = _dilate_sparse(power, radius=1)
+    return _geos_scan_source_raster(dataset, power, path)
+
+
 def _load_aod_source_raster(path: Path) -> SourceRaster:
-    """Load the AOD (aerosol optical depth at 550 nm) field from an ABI-L2-AOD file."""
+    """Load the AOD (aerosol optical depth at 550 nm) field from an ABI-L2-AOD file.
+
+    Restricted to high- and medium-quality retrievals via DQF (0=high, 1=medium,
+    2=low, 3=no-retrieval); low-quality pixels are the main source of clear-sky
+    speckle, so they are dropped to NaN — matching NESDIS AerosolWatch imagery.
+    """
     dataset = _load_netcdf_dataset(path)
     if "AOD" not in dataset:
         raise ValueError(f"AOD source file is missing the AOD variable: {path}")
     aod = np.asarray(dataset["AOD"].values, dtype=np.float32)
+    if "DQF" in dataset:
+        dqf = np.nan_to_num(
+            np.asarray(dataset["DQF"].values, dtype=np.float32), nan=3.0
+        )
+        aod = np.where(dqf <= 1.0, aod, np.nan).astype(np.float32)
     return _geos_scan_source_raster(dataset, aod, path)
 
 
@@ -506,6 +630,8 @@ def _load_source_raster(
         return _load_adp_source_raster(path)
     if source_channel == "AOD":
         return _load_aod_source_raster(path)
+    if source_channel == "FRP":
+        return _load_frp_source_raster(path)
     if _is_ahi_hsd_file(path):
         return _load_ahi_source_raster(path)
     if _is_fci_chunk_file(path):
@@ -584,7 +710,14 @@ def _load_source_raster(
         cmi_sorted.shape[0],
     )
 
-    return SourceRaster(cmi=cmi_sorted, src_transform=src_transform, src_crs=src_crs)
+    return SourceRaster(
+        cmi=cmi_sorted,
+        src_transform=src_transform,
+        src_crs=src_crs,
+        observation_time=_parse_observation_time(dataset, path),
+        satellite_longitude=lon_origin,
+        satellite_height_km=height / 1000.0,
+    )
 
 
 def _canvas_lon_lat_grid(
@@ -625,11 +758,17 @@ def _rgb_to_image(rgb: np.ndarray, valid: np.ndarray) -> Image.Image:
     rgba = np.zeros((*rgb.shape[:2], 4), dtype=np.uint8)
     safe_rgb = np.where(valid[:, :, np.newaxis], rgb, 0.0)
     rgba[:, :, :3] = np.clip(safe_rgb * 255.0, 0, 255).astype(np.uint8)
-    rgba[:, :, 3] = np.where(valid, _SATELLITE_TILE_ALPHA, 0).astype(np.uint8)
+    rgba[:, :, 3] = np.where(valid, _SATELLITE_FILLED_ALPHA, 0).astype(np.uint8)
     return Image.fromarray(rgba, mode="RGBA")
 
 
-def _colorize_scalar(values: np.ndarray, valid: np.ndarray, cmap, norm) -> Image.Image:
+def _colorize_scalar(
+    values: np.ndarray,
+    valid: np.ndarray,
+    cmap,
+    norm,
+    alpha: int = _SATELLITE_FILLED_ALPHA,
+) -> Image.Image:
     if norm is None:
         safe_values = np.where(valid, values, 0.0)
         finite = np.isfinite(safe_values)
@@ -644,24 +783,31 @@ def _colorize_scalar(values: np.ndarray, valid: np.ndarray, cmap, norm) -> Image
         fallback = getattr(norm, "vmax", 1.0)
         safe_values = np.where(valid, values, fallback)
         rgba = cmap(norm(safe_values), bytes=True)
-    rgba[..., 3] = np.where(valid, _SATELLITE_TILE_ALPHA, 0).astype(np.uint8)
+    rgba[..., 3] = np.where(valid, alpha, 0).astype(np.uint8)
     return Image.fromarray(rgba, mode="RGBA")
 
 
 def _colorize_categorical(values: np.ndarray, valid: np.ndarray) -> Image.Image:
-    """Colorise ADP smoke/dust codes (1=smoke, 2=dust, 3=both); 0 stays clear."""
+    """Colorise ADP category+confidence codes.
+
+    Code = category * 10 + confidence: category 1=smoke / 2=dust / 3=both sets
+    the hue, confidence 0=high / 1=medium / 2=low sets the opacity so
+    high-confidence cores read solid and low-confidence edges read faint.
+    """
     codes = np.rint(np.where(valid, values, 0.0)).astype(np.int16)
+    category = codes // 10
+    confidence = codes % 10
     rgba = np.zeros((*codes.shape, 4), dtype=np.uint8)
-    for code, rgb in (
-        (1, _ADP_SMOKE_RGB),
-        (2, _ADP_DUST_RGB),
-        (3, _ADP_BOTH_RGB),
-    ):
-        mask = valid & (codes == code)
-        rgba[mask, 0] = rgb[0]
-        rgba[mask, 1] = rgb[1]
-        rgba[mask, 2] = rgb[2]
-        rgba[mask, 3] = _ADP_CATEGORICAL_ALPHA
+    category_rgb = {1: _ADP_SMOKE_RGB, 2: _ADP_DUST_RGB, 3: _ADP_BOTH_RGB}
+    for cat, rgb in category_rgb.items():
+        for conf, alpha in enumerate(_ADP_CONFIDENCE_ALPHA):
+            mask = valid & (category == cat) & (confidence == conf)
+            if not mask.any():
+                continue
+            rgba[mask, 0] = rgb[0]
+            rgba[mask, 1] = rgb[1]
+            rgba[mask, 2] = rgb[2]
+            rgba[mask, 3] = alpha
     return Image.fromarray(rgba, mode="RGBA")
 
 
@@ -674,6 +820,6 @@ def _colorize_aod(values: np.ndarray, valid: np.ndarray, cmap, norm) -> Image.Im
     ramp = np.clip(
         (filled - _AOD_ALPHA_MIN) / (_AOD_ALPHA_FULL - _AOD_ALPHA_MIN), 0.0, 1.0
     )
-    alpha = (ramp * _SATELLITE_TILE_ALPHA).astype(np.uint8)
+    alpha = (ramp * _SATELLITE_OVERLAY_ALPHA).astype(np.uint8)
     rgba[..., 3] = np.where(valid & finite, alpha, 0).astype(np.uint8)
     return Image.fromarray(rgba, mode="RGBA")

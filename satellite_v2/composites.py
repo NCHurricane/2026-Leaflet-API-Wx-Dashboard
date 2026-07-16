@@ -6,6 +6,7 @@ sample arrays from the v2 Web Mercator renderer.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
@@ -18,6 +19,21 @@ Image.MAX_IMAGE_PIXELS = None
 
 _SCALAR_REFLECTANCE_BLACK_POINT = 0.02
 _SCALAR_REFLECTANCE_WHITE_POINT = 0.90
+_CIRA_VISIBLE_BLACK_POINT = 0.0223
+_CIRA_VISIBLE_LOG_ROOT = np.log10(_CIRA_VISIBLE_BLACK_POINT)
+_CIRA_VISIBLE_DENOMINATOR = (1.0 - _CIRA_VISIBLE_LOG_ROOT) * 0.75
+
+# ABI molecular optical depths used by the corrected-reflectance (CREFL)
+# algorithm for its 0.47, 0.64, and 0.86 micron bands.  The compact
+# single-scattering correction below removes the dominant blue atmospheric
+# path radiance without adding a large runtime dependency or external LUT.
+_ABI_RAYLEIGH_OPTICAL_DEPTH = {
+    "Channel01": 0.184720,
+    "Channel02": 0.052349,
+    "Channel03": 0.015845,
+}
+_ABI_RAYLEIGH_CORRECTION_STRENGTH = 0.55
+_EARTH_EQUATORIAL_RADIUS_KM = 6378.137
 
 # EUMETSAT publishes its own stretch windows for SEVIRI/FCI RGB recipes
 # ("Compilation of RGB Recipes") that differ from the NOAA/CIRA windows used
@@ -54,6 +70,24 @@ def visible_reflectance(values: np.ndarray) -> np.ndarray:
     return reflectance(values, gamma=0.45)
 
 
+def _geocolor_reflectance(values: np.ndarray) -> np.ndarray:
+    """Normalize reflectance while retaining bright-cloud values above one."""
+    data = np.asarray(values, dtype=np.float32)
+    finite = np.isfinite(data)
+    if finite.any() and float(np.nanmax(data[finite])) > 2.0:
+        data = data / 100.0
+    return np.clip(data, 0.0, 1.6).astype(np.float32)
+
+
+def cira_visible_stretch(values: np.ndarray) -> np.ndarray:
+    """Apply CIRA's logarithmic visible-channel display stretch."""
+    data = _geocolor_reflectance(values)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        data = (np.log10(np.clip(data, np.finfo(np.float32).eps, 1.6))
+                - _CIRA_VISIBLE_LOG_ROOT) / _CIRA_VISIBLE_DENOMINATOR
+    return np.clip(data, 0.0, 1.0).astype(np.float32)
+
+
 def scalar_reflectance(values: np.ndarray) -> np.ndarray:
     """Apply a stable contrast stretch for scalar VIS/NIR display products."""
     data = reflectance(values)
@@ -69,6 +103,175 @@ def _rgb(red: np.ndarray, green: np.ndarray, blue: np.ndarray) -> np.ndarray:
     return np.clip(np.dstack([red, green, blue]), 0.0, 1.0).astype(np.float32)
 
 
+def _boost_saturation(rgb: np.ndarray, amount: float = 1.1) -> np.ndarray:
+    luma = (0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2])
+    return np.clip(luma[:, :, np.newaxis] + amount * (rgb - luma[:, :, np.newaxis]), 0.0, 1.0).astype(np.float32)
+
+
+def _as_utc(observation_time: datetime) -> datetime:
+    if observation_time.tzinfo is None:
+        return observation_time.replace(tzinfo=timezone.utc)
+    return observation_time.astimezone(timezone.utc)
+
+
+def _solar_local_vectors(
+    observation_time: datetime,
+    lon_grid: np.ndarray,
+    lat_grid: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return local east/north/up unit-vector components toward the sun."""
+    when = _as_utc(observation_time)
+    longitude_values = np.asarray(lon_grid, dtype=np.float32)
+    latitude_values = np.asarray(lat_grid, dtype=np.float32)
+    fractional_hour = (
+        when.hour + when.minute / 60.0 + when.second / 3600.0
+        + when.microsecond / 3_600_000_000.0
+    )
+    year_days = 366.0 if (
+        when.year % 4 == 0 and (when.year % 100 != 0 or when.year % 400 == 0)
+    ) else 365.0
+    fractional_year = (
+        2.0 * np.pi / year_days
+        * (when.timetuple().tm_yday - 1.0 + (fractional_hour - 12.0) / 24.0)
+    )
+    equation_of_time = 229.18 * (
+        0.000075
+        + 0.001868 * np.cos(fractional_year)
+        - 0.032077 * np.sin(fractional_year)
+        - 0.014615 * np.cos(2.0 * fractional_year)
+        - 0.040849 * np.sin(2.0 * fractional_year)
+    )
+    declination = (
+        0.006918
+        - 0.399912 * np.cos(fractional_year)
+        + 0.070257 * np.sin(fractional_year)
+        - 0.006758 * np.cos(2.0 * fractional_year)
+        + 0.000907 * np.sin(2.0 * fractional_year)
+        - 0.002697 * np.cos(3.0 * fractional_year)
+        + 0.001480 * np.sin(3.0 * fractional_year)
+    )
+    solar_minutes = (
+        fractional_hour * 60.0 + equation_of_time + 4.0 * longitude_values
+    ) % 1440.0
+    hour_angle = np.deg2rad(solar_minutes / 4.0 - 180.0)
+    latitude = np.deg2rad(latitude_values)
+    cos_declination = np.cos(declination)
+    sun_east = -cos_declination * np.sin(hour_angle)
+    sun_north = (
+        np.cos(latitude) * np.sin(declination)
+        - np.sin(latitude) * cos_declination * np.cos(hour_angle)
+    )
+    sun_up = (
+        np.sin(latitude) * np.sin(declination)
+        + np.cos(latitude) * cos_declination * np.cos(hour_angle)
+    )
+    return (
+        sun_east.astype(np.float32),
+        sun_north.astype(np.float32),
+        sun_up.astype(np.float32),
+    )
+
+
+def _satellite_local_vectors(
+    lon_grid: np.ndarray,
+    lat_grid: np.ndarray,
+    satellite_longitude: float,
+    satellite_height_km: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return local east/north/up unit-vector components toward a GEO satellite."""
+    longitude = np.deg2rad(np.asarray(lon_grid, dtype=np.float32))
+    latitude = np.deg2rad(np.asarray(lat_grid, dtype=np.float32))
+    satellite_lon = np.deg2rad(float(satellite_longitude))
+    satellite_radius = _EARTH_EQUATORIAL_RADIUS_KM + float(satellite_height_km)
+
+    observer_x = _EARTH_EQUATORIAL_RADIUS_KM * np.cos(latitude) * np.cos(longitude)
+    observer_y = _EARTH_EQUATORIAL_RADIUS_KM * np.cos(latitude) * np.sin(longitude)
+    observer_z = _EARTH_EQUATORIAL_RADIUS_KM * np.sin(latitude)
+    delta_x = satellite_radius * np.cos(satellite_lon) - observer_x
+    delta_y = satellite_radius * np.sin(satellite_lon) - observer_y
+    delta_z = -observer_z
+
+    east = -np.sin(longitude) * delta_x + np.cos(longitude) * delta_y
+    north = (
+        -np.sin(latitude) * np.cos(longitude) * delta_x
+        - np.sin(latitude) * np.sin(longitude) * delta_y
+        + np.cos(latitude) * delta_z
+    )
+    up = (
+        np.cos(latitude) * np.cos(longitude) * delta_x
+        + np.cos(latitude) * np.sin(longitude) * delta_y
+        + np.sin(latitude) * delta_z
+    )
+    magnitude = np.sqrt(east * east + north * north + up * up)
+    magnitude = np.where(magnitude > 0.0, magnitude, 1.0)
+    return (
+        (east / magnitude).astype(np.float32),
+        (north / magnitude).astype(np.float32),
+        (up / magnitude).astype(np.float32),
+    )
+
+
+def _rayleigh_correct_reflectance(
+    values: np.ndarray,
+    channel: str,
+    solar_vectors: tuple[np.ndarray, np.ndarray, np.ndarray],
+    satellite_vectors: tuple[np.ndarray, np.ndarray, np.ndarray],
+) -> np.ndarray:
+    """Remove a bounded single-scattering Rayleigh path-reflectance estimate."""
+    data = _geocolor_reflectance(values)
+    optical_depth = _ABI_RAYLEIGH_OPTICAL_DEPTH[channel]
+    sun_east, sun_north, sun_up = solar_vectors
+    sat_east, sat_north, sat_up = satellite_vectors
+
+    mu_sun = np.clip(sun_up, 0.05, 1.0)
+    mu_view = np.clip(sat_up, 0.05, 1.0)
+    scattering_cosine = np.clip(
+        sun_east * sat_east + sun_north * sat_north + sun_up * sat_up,
+        -1.0,
+        1.0,
+    )
+    phase = 0.75 * (1.0 + scattering_cosine * scattering_cosine)
+    air_mass = 1.0 / mu_sun + 1.0 / mu_view
+    path_reflectance = (
+        0.25
+        * phase
+        * (1.0 - np.exp(-optical_depth * air_mass))
+        / (mu_sun + mu_view)
+    )
+
+    # Fade the correction from full strength at 70 degrees solar zenith to
+    # zero at the terminator, where the single-scattering approximation is
+    # least stable and the product is transitioning into the night recipe.
+    correction_weight = np.clip(sun_up / np.cos(np.deg2rad(70.0)), 0.0, 1.0)
+    correction_weight = correction_weight * correction_weight * (
+        3.0 - 2.0 * correction_weight
+    )
+    corrected = (
+        data
+        - _ABI_RAYLEIGH_CORRECTION_STRENGTH
+        * path_reflectance
+        * correction_weight
+    )
+    return np.clip(corrected, 0.0, 1.6).astype(np.float32)
+
+
+def _solar_day_weight(
+    observation_time: datetime,
+    lon_grid: np.ndarray,
+    lat_grid: np.ndarray,
+) -> np.ndarray:
+    """Blend smoothly from the daytime recipe at 80° SZA to night at 95°."""
+    sun_up = _solar_local_vectors(observation_time, lon_grid, lat_grid)[2]
+    return _solar_day_weight_from_up(sun_up)
+
+
+def _solar_day_weight_from_up(sun_up: np.ndarray) -> np.ndarray:
+    night_edge = np.cos(np.deg2rad(95.0))
+    day_edge = np.cos(np.deg2rad(80.0))
+    weight = np.clip((sun_up - night_edge) / (day_edge - night_edge), 0.0, 1.0)
+    return (weight * weight * (3.0 - 2.0 * weight)).astype(np.float32)
+
+
 def _true_color(channels: dict[str, np.ndarray]) -> np.ndarray:
     red = visible_reflectance(channels["Channel02"])
     blue = visible_reflectance(channels["Channel01"])
@@ -77,9 +280,95 @@ def _true_color(channels: dict[str, np.ndarray]) -> np.ndarray:
     return _rgb(red, green, blue)
 
 
-def _geocolor(channels: dict[str, np.ndarray]) -> np.ndarray:
-    day_rgb = _true_color(channels)
-    red_ref = day_rgb[:, :, 0]
+def _geocolor_day_rgb(
+    channels: dict[str, np.ndarray],
+    lon_grid: np.ndarray | None,
+    lat_grid: np.ndarray | None,
+    observation_time: datetime | None,
+    satellite_longitude: float | None,
+    satellite_height_km: float | None,
+    instrument: str | None,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    reflectances = {
+        channel: _geocolor_reflectance(channels[channel])
+        for channel in ("Channel01", "Channel02", "Channel03")
+    }
+    has_geometry = (
+        str(instrument or "").upper() == "ABI"
+        and lon_grid is not None
+        and lat_grid is not None
+        and observation_time is not None
+        and satellite_longitude is not None
+        and satellite_height_km is not None
+    )
+    solar_up = None
+    if has_geometry:
+        solar_vectors = _solar_local_vectors(
+            observation_time, lon_grid, lat_grid
+        )
+        solar_up = solar_vectors[2]
+        satellite_vectors = _satellite_local_vectors(
+            lon_grid,
+            lat_grid,
+            satellite_longitude,
+            satellite_height_km,
+        )
+        reflectances = {
+            channel: _rayleigh_correct_reflectance(
+                values, channel, solar_vectors, satellite_vectors
+            )
+            for channel, values in reflectances.items()
+        }
+        del solar_vectors, satellite_vectors
+
+    red = reflectances["Channel02"]
+    blue = reflectances["Channel01"]
+    veggie = reflectances["Channel03"]
+    # This is the established CIMSS/Kaba simulated-green approximation.  The
+    # atmospheric correction is applied before the channels are combined.
+    green = np.clip(0.45 * blue + 0.45 * red + 0.10 * veggie, 0.0, 1.0)
+    stretched = _rgb(
+        cira_visible_stretch(red),
+        cira_visible_stretch(green),
+        cira_visible_stretch(blue),
+    )
+    return _boost_saturation(stretched, amount=1.08), solar_up
+
+
+def _geocolor_day_weight(
+    day_rgb: np.ndarray,
+    observation_time: datetime | None,
+    lon_grid: np.ndarray | None,
+    lat_grid: np.ndarray | None,
+    solar_up: np.ndarray | None = None,
+) -> np.ndarray:
+    if solar_up is not None:
+        return _solar_day_weight_from_up(solar_up)
+    if observation_time is not None and lon_grid is not None and lat_grid is not None:
+        return _solar_day_weight(observation_time, lon_grid, lat_grid)
+    # Preserve legacy behavior for non-GOES sources that do not yet expose
+    # frame-time metadata. GOES rendering always uses the solar geometry path.
+    return np.clip((day_rgb[:, :, 0] - 0.06) / 0.16, 0.0, 1.0).astype(np.float32)
+
+
+def _geocolor(
+    channels: dict[str, np.ndarray],
+    lon_grid: np.ndarray | None = None,
+    lat_grid: np.ndarray | None = None,
+    observation_time: datetime | None = None,
+    satellite_longitude: float | None = None,
+    satellite_height_km: float | None = None,
+    instrument: str | None = None,
+) -> np.ndarray:
+    day_rgb, solar_up = _geocolor_day_rgb(
+        channels,
+        lon_grid,
+        lat_grid,
+        observation_time,
+        satellite_longitude,
+        satellite_height_km,
+        instrument,
+    )
     bt13 = channels["Channel13"]
     bt07 = channels.get("Channel07", bt13)
 
@@ -88,20 +377,22 @@ def _geocolor(channels: dict[str, np.ndarray]) -> np.ndarray:
 
     night_rgb = np.zeros((*bt13.shape, 3), dtype=np.float32)
     night_rgb[:, :, 0] = 0.03
-    night_rgb[:, :, 1] = 0.05
-    night_rgb[:, :, 2] = 0.10
-    night_rgb *= 0.5
+    night_rgb[:, :, 1] = 0.06
+    night_rgb[:, :, 2] = 0.16
+    night_rgb *= 0.6
 
     cold_boost = normalize(bt13, 260.0, 200.0)
-    night_rgb[:, :, 2] += 0.12 * cold_boost
-    night_rgb[:, :, 0] += 0.30 * low_cloud
-    night_rgb[:, :, 1] += 0.45 * low_cloud
-    night_rgb[:, :, 2] += 0.55 * low_cloud
+    night_rgb[:, :, 2] += 0.14 * cold_boost
+    night_rgb[:, :, 0] += 0.28 * low_cloud
+    night_rgb[:, :, 1] += 0.42 * low_cloud
+    night_rgb[:, :, 2] += 0.60 * low_cloud
     for channel_index in range(3):
-        night_rgb[:, :, channel_index] += 1.3 * high_cloud
+        night_rgb[:, :, channel_index] += 1.4 * high_cloud
     night_rgb = np.clip(night_rgb, 0.0, 1.0)
 
-    day_weight = np.clip((red_ref - 0.05) / 0.15, 0.0, 1.0)
+    day_weight = _geocolor_day_weight(
+        day_rgb, observation_time, lon_grid, lat_grid, solar_up
+    )
     blended = day_rgb * day_weight[:, :, np.newaxis] + \
         night_rgb * (1.0 - day_weight[:, :, np.newaxis])
     return np.clip(blended, 0.0, 1.0).astype(np.float32)
@@ -160,12 +451,29 @@ def _geocolor_black_marble(
     channels: dict[str, np.ndarray],
     lon_grid: np.ndarray | None,
     lat_grid: np.ndarray | None,
+    observation_time: datetime | None = None,
+    satellite_longitude: float | None = None,
+    satellite_height_km: float | None = None,
+    instrument: str | None = None,
 ) -> np.ndarray:
     if lon_grid is None or lat_grid is None:
-        return _geocolor(channels)
+        return _geocolor(
+            channels,
+            observation_time=observation_time,
+            satellite_longitude=satellite_longitude,
+            satellite_height_km=satellite_height_km,
+            instrument=instrument,
+        )
 
-    day_rgb = _true_color(channels)
-    red_ref = day_rgb[:, :, 0]
+    day_rgb, solar_up = _geocolor_day_rgb(
+        channels,
+        lon_grid,
+        lat_grid,
+        observation_time,
+        satellite_longitude,
+        satellite_height_km,
+        instrument,
+    )
     bt13 = channels["Channel13"]
     bt07 = channels.get("Channel07", bt13)
 
@@ -178,8 +486,9 @@ def _geocolor_black_marble(
     night_rgb[:, :, 2] += 0.50 * low_cloud + 1.1 * high_cloud
     night_rgb = gamma_correction(np.clip(night_rgb * 1.1, 0.0, 1.0), 0.8)
 
-    day_signal_pct = red_ref * 100.0
-    day_weight = np.clip((day_signal_pct - 7.8) / (8.8 - 7.8), 0.0, 1.0)
+    day_weight = _geocolor_day_weight(
+        day_rgb, observation_time, lon_grid, lat_grid, solar_up
+    )
     blended = day_rgb * day_weight[:, :, np.newaxis] + \
         night_rgb * (1.0 - day_weight[:, :, np.newaxis])
     return np.clip(blended, 0.0, 1.0).astype(np.float32)
@@ -210,14 +519,33 @@ def render_composite_rgb(
     lon_grid: np.ndarray | None = None,
     lat_grid: np.ndarray | None = None,
     instrument: str | None = None,
+    observation_time: datetime | None = None,
+    satellite_longitude: float | None = None,
+    satellite_height_km: float | None = None,
 ) -> np.ndarray:
     use_eumetsat_recipe = instrument in _EUMETSAT_RECIPE_INSTRUMENTS
     if product_key in {"TrueColor", "NaturalColor"}:
         return _true_color(channels)
     if product_key == "GeoColor":
-        return _geocolor(channels)
+        return _geocolor(
+            channels,
+            lon_grid,
+            lat_grid,
+            observation_time,
+            satellite_longitude,
+            satellite_height_km,
+            instrument,
+        )
     if product_key == "GeoColorBlkMar":
-        return _geocolor_black_marble(channels, lon_grid, lat_grid)
+        return _geocolor_black_marble(
+            channels,
+            lon_grid,
+            lat_grid,
+            observation_time,
+            satellite_longitude,
+            satellite_height_km,
+            instrument,
+        )
     if product_key == "DayNightHybrid":
         return _day_night_hybrid(channels)
     if product_key == "Sandwich":

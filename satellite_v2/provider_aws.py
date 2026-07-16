@@ -149,6 +149,8 @@ def _aws_family_prefix(source_channel: str, sector_key: str) -> str:
         family = "ADP"
     elif source_channel == "AOD":
         family = "AOD"
+    elif source_channel == "FRP":
+        family = "FDC"
     else:
         return aws_product_prefix_for_sector(sector_key)
     return f"ABI-L2-{family}{_SECTOR_PREFIX_SUFFIX.get(sector_key, 'C')}"
@@ -161,9 +163,13 @@ def _list_recent_channel_frames(
     hours: int,
 ) -> dict[str, SourceFrame]:
     product_prefix = _aws_family_prefix(source_channel, sector_key)
-    # ADP/AOD are single-file-per-scene products with no C## channel token in
-    # the filename, so they skip the imagery token filter.
-    token = None if source_channel in ("ADP", "AOD") else source_channel_token(source_channel)
+    # ADP/AOD/FRP are single-file-per-scene products with no C## channel token
+    # in the filename, so they skip the imagery token filter.
+    token = (
+        None
+        if source_channel in ("ADP", "AOD", "FRP")
+        else source_channel_token(source_channel)
+    )
     bucket = _bucket_name(sat_key)
 
     frames: dict[str, SourceFrame] = {}

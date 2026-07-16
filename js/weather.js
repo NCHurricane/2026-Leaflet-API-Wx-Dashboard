@@ -1130,6 +1130,7 @@
     // mode (removeOldAfterFade:false), so it can stay near-instant.
     const RADAR_CROSSFADE_MS = 3;
     const SATELLITE_CROSSFADE_MS = 5;
+    const SATELLITE_LAYER_OPACITY = 1.0;
     const SATELLITE_LOOKBACK_HOURS_MAX = 12;
     const SATELLITE_FRAME_REQUEST_MAX = 360;
     const SATELLITE_LOOKBACK_RELOAD_DEBOUNCE_MS = 250;
@@ -7011,7 +7012,7 @@
         return _crossfadeOverlays(
             oldLayer,
             newLayer,
-            0.92,
+            SATELLITE_LAYER_OPACITY,
             () => _isTypeEnabled('satellite'),
             canContinue,
             SATELLITE_CROSSFADE_MS,
@@ -8086,6 +8087,7 @@
         },
         AerosolDetection: {
             title: 'Smoke & Dust (ADP)',
+            subtitle: 'Opacity indicates detection confidence',
             items: [
                 { color: '#39d0d8', label: 'Smoke detected' },
                 { color: '#e8a33d', label: 'Dust detected' },
@@ -8138,7 +8140,12 @@
 
             const title = legend.title ? `Satellite: ${legend.title}` : 'Satellite';
             const axisLabel = legend.axis_label || (legend.units ? `Brightness Temperature (${legend.units})` : 'Brightness Temperature');
-            setLegend(renderContinuousLegend(title, axisLabel, legend.anchors, legend.ticks));
+            // AOD mirrors the NESDIS convention: a discrete "No Data" swatch
+            // left of the 0–1 gradient (no-retrieval pixels render transparent).
+            const options = legend.kind === 'aod'
+                ? { leadingSwatch: { color: '#000000', label: 'No Data' } }
+                : {};
+            setLegend(renderContinuousLegend(title, axisLabel, legend.anchors, legend.ticks, options));
         } catch (err) {
             console.warn('[satellite-v2] Legend unavailable:', err?.message || err);
             if (_isTypeEnabled('satellite') && _activeSatelliteChannel() === channel) setLegend(null);
@@ -8929,7 +8936,7 @@
             const layer = _getOrCreateSatelliteLayer(frameKey);
             if (!map.hasLayer(layer)) layer.addTo(map);
             if (typeof layer.setOpacity === 'function') {
-                layer.setOpacity(idx === active ? 0.92 : 0);
+                layer.setOpacity(idx === active ? SATELLITE_LAYER_OPACITY : 0);
             }
             _setSatelliteLayerZIndex(layer, idx === active);
             hotLayers.add(layer);
@@ -9099,7 +9106,7 @@
 
         if (!map.hasLayer(nextLayer)) nextLayer.addTo(map);
         if (typeof nextLayer.setOpacity === 'function') {
-            nextLayer.setOpacity(prevLayer ? 0 : 0.92);
+            nextLayer.setOpacity(prevLayer ? 0 : SATELLITE_LAYER_OPACITY);
         }
         _setSatelliteLayerZIndex(nextLayer, true);
         _hideInactiveSatelliteAnimationLayers(nextLayer, prevLayer);
@@ -9129,7 +9136,7 @@
                 return false;
             }
         } else if (typeof nextLayer.setOpacity === 'function') {
-            nextLayer.setOpacity(0.92);
+            nextLayer.setOpacity(SATELLITE_LAYER_OPACITY);
         }
 
         if (swapToken !== _satellitePendingSwapToken || !_canApplySatelliteFrame(renderSeq)) {
@@ -9164,7 +9171,7 @@
                 maxZoom: 19,
                 ...(Number.isFinite(maxNativeZoom) ? { maxNativeZoom } : {}),
                 minNativeZoom,
-                opacity: 0.92,
+                opacity: SATELLITE_LAYER_OPACITY,
                 updateWhenIdle: false,
                 updateWhenZooming: false,
                 keepBuffer: 4,
@@ -11960,7 +11967,7 @@
         return Number.isInteger(value) ? String(value) : value.toFixed(1);
     }
 
-    function renderContinuousLegend(title, axisLabel, anchors, ticks = null) {
+    function renderContinuousLegend(title, axisLabel, anchors, ticks = null, options = {}) {
         const normalized = (Array.isArray(anchors) ? anchors : [])
             .map((item) => Array.isArray(item)
                 ? [Number(item[0]), item[1], item[2]]
@@ -11984,11 +11991,26 @@
             `<span class="legend-text surface-colorbar-tick">${escapeHtml(label ?? _formatSurfaceTick(value))}</span>`
         )).join('');
 
+        const barHtml =
+            `<div class="surface-colorbar-bar" style="background: linear-gradient(to right, ${gradient});"></div>` +
+            `<div class="surface-colorbar-ticks">${tickHtml}</div>`;
+
+        // Optional discrete swatch (e.g. AOD "No Data") shown left of the bar.
+        const swatch = options?.leadingSwatch;
+        const barBlock = swatch
+            ? `<div class="legend-colorbar-row">` +
+                `<div class="legend-colorbar-swatch">` +
+                    `<div class="legend-colorbar-swatch-box" style="background: ${swatch.color};"></div>` +
+                    `<span class="legend-text legend-colorbar-swatch-label">${escapeHtml(swatch.label)}</span>` +
+                `</div>` +
+                `<div class="legend-colorbar-main">${barHtml}</div>` +
+              `</div>`
+            : barHtml;
+
         return (
             `<h4 class="legend-title">${escapeHtml(title)}</h4>` +
             `<div class="surface-colorbar">` +
-            `<div class="surface-colorbar-bar" style="background: linear-gradient(to right, ${gradient});"></div>` +
-            `<div class="surface-colorbar-ticks">${tickHtml}</div>` +
+            barBlock +
             `<div class="legend-text surface-colorbar-label">${escapeHtml(axisLabel)}</div>` +
             `</div>`
         );

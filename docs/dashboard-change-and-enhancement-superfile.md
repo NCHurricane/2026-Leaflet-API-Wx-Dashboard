@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-10 (Meteosat standard composites: Night Micro, Dust, Ash)
+Last updated: 2026-07-16 (GOES aerosol/fire products: ADP smoke & dust, AOD, FRP)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -378,6 +378,14 @@ Completed enhancements (2026-06-28):
   with frontend fallback metadata so legends remain visible through
   satellite/sector/product switches without requiring a hard refresh. Scalar
   colorbars remain limited to brightness-temperature channels.
+
+Completed enhancements (2026-07-16):
+
+- GOES aerosol/fire products added for GOES-18/19: **AerosolDetection** (ADP
+  smoke & dust, confidence-graded), **AerosolOpticalDepth** (AOD, high/medium
+  DQF quality with a "No Data" legend swatch), and **FireRadiativePower** (FRP,
+  ABI-L2-FDC). See the dated "GOES aerosol and fire products: ADP, AOD, FRP"
+  section below for the full implementation.
 
 Planned/enhancement direction:
 
@@ -1200,6 +1208,82 @@ the wide West Pacific fallback:
   Target Area" re-tiled the map to a tight z5 cluster bracketing the
   target's actual longitude/latitude box, instead of the wide West Pacific
   fallback extent.
+
+### GOES aerosol and fire products: ADP, AOD, FRP — added 2026-07-16
+
+Three new single-instant GOES ABI L2 products were added for GOES-18/19 to
+support a live Canadian-wildfire smoke event. All three reuse the existing
+GOES geostationary georeferencing (`goes_imager_projection` + `x`/`y` scan
+coords, 2 km grid) — identical to CMIP imagery — so no new projection code was
+needed. They are GOES-only: NOAA publishes no AHI/SEVIRI/FCI aerosol or fire
+equivalent (the `noaa-himawari9` bucket has only AHI-L2 Clouds/ISatSS/Winds),
+so `js/satellite-page.js` gates all three behind a new `GOES_ONLY_CHANNELS`
+set (visible for goes18/goes19, hidden for every other platform).
+
+- **AerosolDetection (ABI-L2-ADP, "Smoke & Dust")** — categorical smoke/dust
+  mask. `_load_adp_source_raster` folds the binary Smoke and Dust flags plus
+  their DQF confidence into one code band (`category*10 + confidence`; category
+  1/2/3 = smoke/dust/both, confidence 0/1/2 = high/medium/low decoded from DQF
+  bit-fields — smoke `(DQF>>2)&3`, dust `(DQF>>4)&3`; a DQF field == 3 "bad" is
+  treated as no detection). `_colorize_categorical` maps category → hue (smoke
+  teal `#39d0d8`, dust amber `#e8a33d`, both purple `#c44dff`) and confidence →
+  opacity (`_ADP_CONFIDENCE_ALPHA = (210, 140, 80)`) so high-confidence cores
+  read solid and low-confidence edges read faint. Categorical products render
+  with `Resampling.nearest` so the integer codes never blend into fractional
+  values. Interpretive legend in `SATELLITE_V2_INTERPRETIVE_LEGENDS` (config)
+  and its JS mirror `_SATELLITE_INTERPRETIVE_LEGENDS` (js/weather.js).
+- **AerosolOpticalDepth (ABI-L2-AOD, "AOD")** — continuous 550 nm field, turbo
+  colormap, norm 0–1.0. `_load_aod_source_raster` filters to high+medium DQF
+  quality (drops `DQF > 1` to NaN — low-quality was the main clear-sky speckle
+  source, matching NESDIS AerosolWatch imagery). `_colorize_aod` applies a
+  value-driven alpha ramp (transparent at/below 0.10, opaque at/above 0.40 AOD)
+  so clear air stays see-through and plumes read opaque as an overlay. Scalar
+  legend (kind `aod`) with numeric ticks and axis label. The AOD legend also
+  renders a discrete black "No Data" swatch left of the gradient (NESDIS
+  convention) via a new optional `leadingSwatch` param on
+  `renderContinuousLegend` in js/weather.js + `.legend-colorbar-*` CSS —
+  no-retrieval pixels render transparent on the map, not black.
+- **FireRadiativePower (ABI-L2-FDC, "FRP")** — sparse fire field (MW). Not an
+  aerosol product, but the same single-instant architecture and directly
+  relevant as the smoke's source fires. `_load_frp_source_raster` reads the
+  `Power` variable (finite only at fire pixels) and `_dilate_sparse(radius=1)`
+  grows each 2 km fire to a ~6 km block so it is visible at CONUS zoom. Flows
+  through the default `_colorize_scalar` (valid mask = fire pixels), YlOrRd
+  colormap, norm 0–150 MW, scalar legend kind `frp` (MW ticks).
+
+Shared plumbing (all inside the existing single-instant path — no new render
+model was introduced):
+
+- Pseudo source-channels `ADP`/`AOD`/`FRP` (the same trick SEVIRI/FCI bundle
+  tokens use) registered in `normalize_source_channel`; each product's `req`
+  list points at its pseudo-channel. `_product_kind` returns
+  `categorical`/`aod`/`frp` *before* calling `channel_number_from_key`, which
+  would otherwise throw on a numberless key.
+- `provider_aws._aws_family_prefix` maps the pseudo-channel to its ABI-L2
+  family prefix (`ADPC/ADPF/ADPM`, `AODC/AODF`, `FDCC/FDCF`); these products
+  skip the `C##` imagery token filter, and `_filename_matches_sector` was
+  generalized from `CMIPM1/CMIPM2` to `M1-M`/`M2-M` so it matches both CMIP and
+  ADP mesoscale files. AOD has no mesoscale on AWS (AODM 404s); ADP and FDC do.
+- `renderer._load_source_raster` dispatches on the pseudo-channel to the new
+  loaders; the shared `_geos_scan_source_raster` helper builds the SourceRaster
+  (deliberately duplicating ~25 lines of georef rather than refactoring the hot
+  CMIP path).
+- No render-version bump: the tile cache path already keys on channel
+  (`tiles/{render_version}/{sat}/{sector}/{channel}/...`), so changed AOD/ADP
+  output was invalidated surgically by deleting the two product tile dirs under
+  `tiles/products-v3/goes*/`, not by forcing a global re-render.
+- Skipped as not worth it: the AOD file's Angstrom Exponent (particle size,
+  fine smoke vs coarse dust) is over-water only (~24% coverage), useless over
+  CONUS land smoke.
+
+Verified (static + backend render, per project convention — browser smoke is
+user-owned): all four Python modules `py_compile`; `node --check` on
+js/weather.js passes; catalog → download → render for ADP/AOD/FRP on both
+GOES-18 and GOES-19 returns non-blank tiles. Live values 2026-07-16 (GOES-19):
+ADP 26k smoke / 106k dust pixels, AOD max 5.0 with ~405k px > 0.5, FDC 41 fires
+up to 552 MW in the Pacific NW. Cache-busters bumped in `weather.html`:
+`weather.js?v=20260716c`, `satellite-page.js?v=20260716b`,
+`dashboard.css?v=20260716a`.
 
 ### International radar
 

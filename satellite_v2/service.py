@@ -140,6 +140,22 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
         }
 
     is_aod = product.kind == "aod"
+    is_frp = product.kind == "frp"
+
+    def _scalar_label(value: float) -> str:
+        if is_frp:
+            return f"{value:.0f}"
+        if is_aod:
+            return f"{value:.2f}"
+        return _brightness_temperature_label(value)
+
+    if is_frp:
+        units, axis_label = "MW", "Fire Radiative Power (MW)"
+    elif is_aod:
+        units, axis_label = "", "Aerosol Optical Depth (550 nm)"
+    else:
+        units, axis_label = "°C", None
+
     anchors = [
         {
             "value": round(float(value), 3),
@@ -150,11 +166,7 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
     ticks = [
         {
             "value": round(float(value), 3),
-            "label": (
-                f"{float(value):.2f}"
-                if is_aod
-                else _brightness_temperature_label(float(value))
-            ),
+            "label": _scalar_label(float(value)),
         }
         for value in np.linspace(vmin_f, vmax_f, SATELLITE_V2_LEGEND_TICK_COUNT)
     ]
@@ -164,8 +176,8 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
         "channel": channel_key,
         "title": product.label,
         "kind": product.kind,
-        "units": "" if is_aod else "°C",
-        "axis_label": "Aerosol Optical Depth (550 nm)" if is_aod else None,
+        "units": units,
+        "axis_label": axis_label,
         "value_units": product.units,
         "vmin": vmin_f,
         "vmax": vmax_f,

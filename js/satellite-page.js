@@ -64,7 +64,7 @@
 
     // Products that only exist for GOES ABI (NOAA aerosol L2). No AHI/SEVIRI
     // equivalent is published, so these stay hidden for every other platform.
-    const GOES_ONLY_CHANNELS = new Set(['AerosolDetection', 'AerosolOpticalDepth']);
+    const GOES_ONLY_CHANNELS = new Set(['AerosolDetection', 'AerosolOpticalDepth', 'FireRadiativePower']);
     const isGoesPlatform = (satId) => satId === 'goes18' || satId === 'goes19';
 
     // Platforms with a live data pipeline.

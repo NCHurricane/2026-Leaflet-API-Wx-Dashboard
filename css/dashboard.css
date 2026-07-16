@@ -2093,6 +2093,43 @@ body.wx-standalone-product .weather-header-right {
     text-align: center;
 }
 
+/* Optional discrete "No Data" swatch shown left of a continuous colorbar
+   (e.g. AOD), mirroring the NESDIS AerosolWatch convention. */
+.legend-colorbar-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.legend-colorbar-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.legend-colorbar-swatch {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.legend-colorbar-swatch-box {
+    height: 20px;
+    width: 26px;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    border-radius: 3px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+.legend-colorbar-swatch-label {
+    margin-top: 9px;
+    text-align: center;
+    white-space: nowrap;
+}
+
 .leaflet-container {
     background-color: var(--primary);
 }

@@ -113,6 +113,15 @@ ABI_CHANNELS = {
         "cmap": plt.get_cmap("turbo"),
         "norm": mcolors.Normalize(vmin=0.0, vmax=1.0, clip=True),
     },
+    # GOES ABI L2 Fire/Hot-Spot Characterization (FDC). Fire Radiative Power
+    # is a sparse field — only actual fire pixels carry a value — so it renders
+    # as hot points over a transparent background via the scalar colorizer.
+    "FireRadiativePower": {
+        "name": "Fire Radiative Power (MW)",
+        "req": ["FRP"],
+        "cmap": plt.get_cmap("YlOrRd"),
+        "norm": mcolors.Normalize(vmin=0.0, vmax=150.0, clip=True),
+    },
     "Channel03": {
         "name": "Veggie (Near-IR)",
         "cmap": plt.cm.Greys_r,
@@ -459,6 +468,7 @@ SATELLITE_V2_DASHBOARD_PRODUCTS = (
     "Channel13",
     "AerosolDetection",
     "AerosolOpticalDepth",
+    "FireRadiativePower",
     "FireTemperature",
     "AirMass",
     "GeoColor",
@@ -563,7 +573,7 @@ SATELLITE_V2_INTERPRETIVE_LEGENDS = {
         ),
     },
     "AerosolDetection": {
-        "subtitle": "GOES ABI Aerosol Detection Product (categorical)",
+        "subtitle": "GOES ABI Aerosol Detection — opacity indicates confidence",
         "items": (
             {"color": "#39d0d8", "label": "Smoke detected"},
             {"color": "#e8a33d", "label": "Dust detected"},
@@ -616,6 +626,8 @@ def _product_kind(product_key: str, source_channels: tuple[str, ...]) -> str:
         return "categorical"
     if source == "AOD":
         return "aod"
+    if source == "FRP":
+        return "frp"
     channel_number = channel_number_from_key(source_channels[0])
     if channel_number <= 6:
         return "reflectance"
@@ -631,6 +643,8 @@ def _product_units(kind: str) -> str:
         return "flag"
     if kind == "aod":
         return "1"
+    if kind == "frp":
+        return "MW"
     return "K"
 
 
@@ -779,11 +793,13 @@ SATELLITE_V2_DEFAULT_MAX_FRAMES = 360
 
 SATELLITE_V2_PROVIDER = "aws"
 SATELLITE_V2_CACHE_NAMESPACE = "satellite"
-SATELLITE_V2_RENDER_VERSION = "products-v3"
-SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi2"
-# fci2 retains the Meteosat-12 east-west mirror invalidation from fci1 and
-# invalidates tiles rendered before the shared scalar-reflectance stretch.
-SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci2"
+# These versions invalidate tiles rendered with the former 230/255 image
+# alpha so each platform picks up the filled-image opacity policy immediately.
+SATELLITE_V2_RENDER_VERSION = "products-v4"
+SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi3"
+# fci3 retains the Meteosat-12 east-west mirror invalidation from fci1 and
+# invalidates tiles rendered before the full-opacity imagery policy.
+SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci3"
 SATELLITE_V2_TILE_SIZE = 256
 SATELLITE_V2_CATALOG_MAX_AGE_SECONDS = 20 * 60
 
@@ -993,6 +1009,10 @@ def normalize_source_channel(channel_key: str | None) -> str:
     if value.upper() == "AOD":
         # Pseudo-channel: one ABI-L2-AOD file holds the optical-depth field.
         return "AOD"
+    if value.upper() == "FRP":
+        # Pseudo-channel: one ABI-L2-FDC file holds the fire characterization
+        # variables; FRP extracts the Fire Radiative Power field.
+        return "FRP"
     if value.lower().startswith("channel"):
         digits = "".join(ch for ch in value if ch.isdigit())
         if digits:

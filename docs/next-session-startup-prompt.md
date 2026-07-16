@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date prepared: 2026-07-11
+Date prepared: 2026-07-16
 
 Start in:
 
@@ -33,8 +33,25 @@ Current status:
   behavior should stay in services/*_service.py, and upstream/cache refresh
   behavior should stay in workers/*_worker.py.
 
-Satellite v2 status (2026-07-11) — Meteosat recipe work is DONE, next focus
-is GK2A + GMGSI:
+Satellite v2 status (2026-07-16) — Meteosat recipe work DONE; GOES aerosol/fire
+products (ADP/AOD/FRP) added 2026-07-16; next focus is GK2A + GMGSI:
+- DONE 2026-07-16 (GOES-18/19 only): three new single-instant GOES ABI L2
+  products. AerosolDetection (ABI-L2-ADP smoke/dust mask, confidence-graded via
+  DQF bit-fields -> opacity), AerosolOpticalDepth (ABI-L2-AOD, high+medium DQF
+  quality, turbo 0-1 with a value-driven alpha ramp + a discrete "No Data"
+  legend swatch), and FireRadiativePower (ABI-L2-FDC Power, sparse fires dilated
+  for CONUS-zoom visibility, YlOrRd 0-150 MW). All reuse the GOES geos georef
+  and the single-instant render path via pseudo source-channels ADP/AOD/FRP
+  (registered in normalize_source_channel; kinds categorical/aod/frp resolved
+  in _product_kind before channel_number_from_key). provider_aws._aws_family_
+  prefix maps them to ABI-L2 family prefixes (ADPC/F/M, AODC/F, FDCC/F), token
+  filter skipped, _filename_matches_sector generalized to M1-M/M2-M. Gated
+  GOES-only in satellite-page.js (GOES_ONLY_CHANNELS) — no AHI/SEVIRI/FCI
+  equivalent is published. Changed AOD/ADP tiles were cleared surgically by
+  deleting tiles/products-v3/goes*/{AerosolDetection,AerosolOpticalDepth} (no
+  render-version bump). Full detail in the superfile's "GOES aerosol and fire
+  products: ADP, AOD, FRP" section. weather.js?v=20260716c,
+  satellite-page.js?v=20260716b, dashboard.css?v=20260716a.
 - GOES (goes18/goes19), Himawari-9, Meteosat-9 (SEVIRI), Meteosat-12 (FCI),
   and Meteosat-11 (RSS) are all implemented and browser-smoke-tested.
   Meteosat-11 RSS full product set (4 scalars + Night Microphysics/Dust/Ash)

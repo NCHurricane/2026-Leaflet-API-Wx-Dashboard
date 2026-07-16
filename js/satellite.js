@@ -10,6 +10,7 @@
     };
 
     const SATELLITE_AUTO_REFRESH_MS = 300000; // 5 minutes
+    const SATELLITE_LAYER_OPACITY = 1.0;
 
     let mapInstance = null;
     let baseLayer = null;
@@ -127,7 +128,7 @@
         if (!satelliteLayer) {
             satelliteLayer = L.tileLayer(urlTemplate, {
                 maxZoom: 19,
-                opacity: 0.92,
+                opacity: SATELLITE_LAYER_OPACITY,
                 updateWhenIdle: false,
                 updateWhenZooming: false,
                 keepBuffer: 4,
