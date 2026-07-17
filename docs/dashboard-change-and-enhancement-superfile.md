@@ -1,7 +1,8 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-16 (Frontend Split Stage 2 + Severe Weather Workspace
-plan injected; radar requested-lookback and GeoColor display updates merged)
+Last updated: 2026-07-16 (Frontend Split Stage 2 Phase 19 Drought migration
+completed; radar requested-lookback, GeoColor display updates, and GOES
+aerosol/fire products ADP/AOD/FRP merged)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -27,7 +28,8 @@ the plan for some future items; re-evaluate later tracks against the
 post-split structure, not the monolith.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
-   this file (section below).
+   this file (section below). Phases 18-19 are complete; Phase 20 Surface is
+   next.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
@@ -68,8 +70,8 @@ post-split structure, not the monolith.
   rendered product overlay. Current exceptions are Alerts, which renders Severe
   Weather Warnings with TOR/SVR/FFW filters enabled, and Tropical, which starts
   in the Atlantic basin and features the first active storm when present or the
-  Tropical Outlook when no active storm exists. Drought loads release-week date
-  metadata without drawing a drought layer.
+  Tropical Outlook when no active storm exists. Drought is also an exception:
+  its standalone page selects and draws the latest available release on load.
 - Startup controls now reflect intentional always/default-on context: state and
   country borders are checked by default but remain user-selectable; Surface
   networks start all-on with no selected surface product; Radar Sites start on;
@@ -88,8 +90,8 @@ post-split structure, not the monolith.
   pages from retaining stale gradient PNGs after the worker replaces files.
 - SPC probabilistic hazards auto-enable their matching Significant/CIG hatch
   layer when selected, while Significant toggles remain unavailable on their
-  own. Drought release-week metadata loads without a highlighted week; selecting
-  a week turns on all five drought categories before drawing the layer.
+  own. Drought selects the latest release week on startup and turns on all five
+  drought categories; selecting another week resets all five categories on.
 - User browser smoke passed on 2026-07-04 for the startup/default-control
   changes above.
 - Shared categorical legends now wrap whole swatch/label items using
@@ -209,25 +211,25 @@ end as a composition of the same modules.
 ### Target structure
 
 ```text
-core/                  the ONLY shared frontend code
-  api.js               apiUrl(), fetch wrappers, progress polling
-  map-core.js          Leaflet init, basemap toggle, region fitBounds
-  scrubber.js          generic single-product frame scrubber COMPONENT
+frontend/              browser-only assets; avoids the existing Python lib/
+  core/                the ONLY shared frontend code
+    api.js             apiUrl(), fetch wrappers, progress polling
+    map-core.js        Leaflet init, basemap toggle, region fitBounds
+    scrubber.js        generic single-product frame scrubber COMPONENT
                        (per-page instances; no global modes)
-  legend.js            legend builder
-  status.js            status line + staleness/timestamp helpers
-  nav.js               product nav (absorbs product-page-shell.js)
-  settings.js          user settings load/save
-  core.css             app chrome (shared.css + shared part of dashboard.css)
-pages/
-  alerts/              alerts.html, alerts-page.js, alerts-engine.js,
-                       alerts-tools.js (Arrival Tool / Speed Estimator),
-                       alerts-panel.js, alerts.css
-  radar/ satellite/ spc/ surface/ mrms/ rtma/ drought/ tropical/ wpc/ water/
+    legend.js          legend builder
+    status.js          status line + staleness/timestamp helpers
+    nav.js             product nav (absorbs product-page-shell.js)
+    settings.js        user settings load/save
+    core.css           app chrome (shared.css + shared dashboard CSS)
+  pages/
+    alerts/            alerts.html, alerts-page.js, alerts-engine.js,
+                       alerts-tools.js, alerts-panel.js, alerts.css
+    radar/ satellite/ spc/ surface/ mrms/ rtma/ drought/ tropical/ wpc/ water/
                        same pattern: {page}.html, {page}-page.js,
                        {page}-engine.js, {page}.css
-  workspace/           combined severe-weather view; built LAST
-lib/                   vendored Leaflet, topojson-client, tz-lookup
+    workspace/         combined severe-weather view; built LAST
+  lib/                 vendored Leaflet, topojson-client, tz-lookup
 ```
 
 Deleted at completion: `js/weather.js`, `weather.html`,
@@ -242,11 +244,11 @@ remains compatible without changes to this plan.
 
 ### Ownership rules
 
-1. A page's HTML loads exactly `lib/*`, `core/*`, and its own directory —
-   never a sibling page's files.
+1. A page's HTML loads exactly `frontend/lib/*`, `frontend/core/*`, and its
+   own `frontend/pages/{product}/` directory — never a sibling page's files.
 2. Core only accepts code that two or more pages already use (not "might
    use someday" — that is how `weather.js` happened).
-3. Workspace exception: `pages/workspace/` may import sibling pages'
+3. Workspace exception: `frontend/pages/workspace/` may import sibling pages'
    `*-engine.js` files (and engine-side tool modules), never their
    `*-page.js` controllers. It is the single sanctioned cross-page consumer.
 
@@ -275,10 +277,41 @@ delete that product's code from `js/weather.js`. Each step is independently
 shippable, so an interrupted session still leaves the repo better than it
 found it.
 
-- Phase 18: core API inventory. Audit the ~206 context members into
-  "genuinely shared" vs "belongs to one product"; define the `core/*`
-  surfaces before moving any code.
-- Phase 19: drought (smallest product) as proof-of-pattern.
+- Phase 18: **COMPLETE 2026-07-16.** Core API inventory and interface contract
+  are in `docs/frontend-stage2-core-api-inventory.md`. The audit found 578
+  injected entries / 390 unique names, defined the `core/*`, page, engine, and
+  workspace boundaries, and identified the cross-product scrubber coupling
+  that must not survive migration.
+- Phase 19: **COMPLETE 2026-07-16.** Drought is the proof-of-pattern at
+  `frontend/pages/drought/`. `/drought` now serves its own HTML, ES-module page
+  controller, DOM-free engine, and Drought CSS with only the minimum shared
+  API/settings/map/nav/legend/status core. The old Drought controller/engine,
+  HTML controls, and `js/weather.js` implementation were removed after parity.
+  Browser smoke proved date loading, NC statistics, category filtering,
+  opacity, basemap changes, five rendered GeoJSON paths, and no console errors;
+  the remaining `weather.html` shell also loaded without errors. Follow-up
+  parity corrections added shared Lat/Lon, state, country, and county overlay
+  controls; restored the map logo and global last-updated HUD; moved Data
+  Status into the controls sidebar; moved the expandable legend onto the map;
+  restored the Off/US/World city source, bounded density, and font-size controls
+  through the shared map core; and made the initially highlighted latest release
+  load automatically. A final pre-split UI audit restored the Data Age row,
+  reset-view control, numeric zoom indicator, USGS and no-label basemap choices,
+  dashboard attribution, and product-navigation icons. Unrelated WWA/product
+  panes and the developer-only test-alert button are intentionally not part of
+  the standalone Drought page. Boundary startup was then corrected after a
+  hard-refresh regression exposed ~53 MB of repeated GeoJSON downloads:
+  generated boundary files remain in the gitignored `cache/overlays/` runtime
+  cache, the server now retains decoded payloads in memory and serves week-long
+  immutable cache headers, and `frontend/core/api.js` persists versioned map
+  payloads in browser Cache Storage. State startup requests no longer include
+  county geometry; counties download only when enabled. The client also filters
+  returned U.S. features by their declared layer and uses boundary cache version
+  4, preventing a response cached from an older unfiltered API process from
+  crossing state and county toggle behavior. Dark (No Labels) is the standalone
+  page and shared map-core default basemap, matching the pre-split shell. The
+  corrected wiring passed module syntax, focused lint, six standalone tests,
+  and live local API payload checks; user browser re-smoke is pending.
 - Phase 20: surface.
 - Phase 21: spc, wpc.
 - Phase 22: mrms + rtma, including the scrubber-as-component rewrite.
@@ -286,12 +319,16 @@ found it.
 - Phase 24: radar.
 - Phase 25: alerts (immersive panel plus Arrival Tool / Speed Estimator
   move to engine-side modules).
-- Phase 26: tropical (already closest to the target pattern).
+- Phase 26: tropical (already closest to the target pattern), then Water as a
+  separate independently shippable migration. Water stays excluded from the
+  initial workspace, but must leave `js/weather.js` before Phase 27.
 - Phase 27: workspace assembly; retire `weather.html`; delete the monolith.
 
 Definition of done (mechanically checkable): each product route loads only
-`lib/* + core/* + pages/{product}/*`; no engine references another
-product's functions; `js/weather.js` no longer exists.
+third-party libraries plus `frontend/core/* + frontend/pages/{product}/*`;
+no engine references another product's functions; `js/weather.js` no longer
+exists. The currently pinned Leaflet CDN asset must move to `frontend/lib/`
+before Phase 27 completes.
 
 ### Severe Weather Workspace spec
 
@@ -610,6 +647,15 @@ Completed display updates (2026-07-16):
   (Meteosat-12). These bumps prevent older partially transparent/corrected
   tiles from masking the new output. `weather.js?v=20260716d` forces the
   matching frontend opacity policy to load.
+
+Completed enhancements (2026-07-16, GOES aerosol/fire products):
+
+- Three new single-instant GOES ABI L2 products added for GOES-18/19:
+  **AerosolDetection** (ABI-L2-ADP smoke & dust mask, confidence-graded),
+  **AerosolOpticalDepth** (ABI-L2-AOD, high/medium DQF quality, with a discrete
+  "No Data" legend swatch), and **FireRadiativePower** (ABI-L2-FDC). Gated
+  GOES-only in `js/satellite-page.js`. See the dated "GOES aerosol and fire
+  products: ADP, AOD, FRP" section below for the full implementation.
 
 Planned/enhancement direction:
 
@@ -1464,6 +1510,84 @@ Rayleigh correction left the result flatter than the NOAA/CIRA reference.
   Ruff, Python compilation, and `node --check` for both satellite viewer paths.
   Browser visual proof is user-owned; corrected colors and opacity are
   user-confirmed, while the final white-point lift awaits confirmation.
+
+#### GOES aerosol and fire products: ADP, AOD, FRP — added 2026-07-16
+
+Three new single-instant GOES ABI L2 products for GOES-18/19, added to support a
+live Canadian-wildfire smoke event. All three reuse the existing GOES
+geostationary georeferencing (`goes_imager_projection` + `x`/`y` scan coords,
+2 km grid) — identical to CMIP imagery — so no new projection code was needed.
+They are GOES-only: NOAA publishes no AHI/SEVIRI/FCI aerosol or fire equivalent
+(the `noaa-himawari9` bucket has only AHI-L2 Clouds/ISatSS/Winds), so
+`js/satellite-page.js` gates all three behind a `GOES_ONLY_CHANNELS` set
+(visible for goes18/goes19, hidden for every other platform).
+
+- **AerosolDetection (ABI-L2-ADP, "Smoke & Dust")** — categorical smoke/dust
+  mask. `_load_adp_source_raster` folds the binary Smoke and Dust flags plus
+  their DQF confidence into one code band (`category*10 + confidence`; category
+  1/2/3 = smoke/dust/both, confidence 0/1/2 = high/medium/low decoded from DQF
+  bit-fields — smoke `(DQF>>2)&3`, dust `(DQF>>4)&3`; a DQF field == 3 "bad" is
+  treated as no detection). `_colorize_categorical` maps category → hue (smoke
+  teal `#39d0d8`, dust amber `#e8a33d`, both purple `#c44dff`) and confidence →
+  opacity (`_ADP_CONFIDENCE_ALPHA = (210, 140, 80)`). Categorical products
+  render with `Resampling.nearest` so the integer codes never blend into
+  fractional values. Interpretive legend in `SATELLITE_V2_INTERPRETIVE_LEGENDS`
+  (config) and its JS mirror `_SATELLITE_INTERPRETIVE_LEGENDS` (js/weather.js).
+- **AerosolOpticalDepth (ABI-L2-AOD, "AOD")** — continuous 550 nm field, turbo
+  colormap, norm 0–1.0. `_load_aod_source_raster` filters to high+medium DQF
+  quality (drops `DQF > 1` to NaN — low-quality was the main clear-sky speckle
+  source, matching NESDIS AerosolWatch imagery). `_colorize_aod` applies a
+  value-driven alpha ramp (transparent at/below 0.10, opaque at/above 0.40 AOD)
+  so clear air stays see-through and plumes read opaque as an overlay. Scalar
+  legend (kind `aod`) with numeric ticks and axis label. The AOD legend also
+  renders a discrete black "No Data" swatch left of the gradient (NESDIS
+  convention) via a new optional `leadingSwatch` param on
+  `renderContinuousLegend` in js/weather.js plus `.legend-colorbar-*` CSS —
+  no-retrieval pixels render transparent on the map, not black.
+- **FireRadiativePower (ABI-L2-FDC, "FRP")** — sparse fire field (MW). Not an
+  aerosol product, but the same single-instant architecture and directly
+  relevant as the smoke's source fires. `_load_frp_source_raster` reads the
+  `Power` variable (finite only at fire pixels) and `_dilate_sparse(radius=1)`
+  grows each 2 km fire to a ~6 km block so it is visible at CONUS zoom. Flows
+  through the default `_colorize_scalar` (valid mask = fire pixels), YlOrRd
+  colormap, norm 0–150 MW, scalar legend kind `frp` (MW ticks).
+
+Shared plumbing (all inside the existing single-instant render path — no new
+render model was introduced):
+
+- Pseudo source-channels `ADP`/`AOD`/`FRP` (the same trick SEVIRI/FCI bundle
+  tokens use) registered in `normalize_source_channel`; each product's `req`
+  list points at its pseudo-channel. `_product_kind` returns
+  `categorical`/`aod`/`frp` *before* calling `channel_number_from_key`, which
+  would otherwise throw on a numberless key.
+- `provider_aws._aws_family_prefix` maps the pseudo-channel to its ABI-L2
+  family prefix (`ADPC/ADPF/ADPM`, `AODC/AODF`, `FDCC/FDCF`); these products
+  skip the `C##` imagery token filter, and `_filename_matches_sector` was
+  generalized from `CMIPM1/CMIPM2` to `M1-M`/`M2-M` so it matches both CMIP and
+  ADP mesoscale files. AOD has no mesoscale on AWS (AODM 404s); ADP and FDC do.
+- `renderer._load_source_raster` dispatches on the pseudo-channel to the new
+  loaders; the shared `_geos_scan_source_raster` helper builds the SourceRaster
+  (deliberately duplicating ~25 lines of georef rather than refactoring the hot
+  CMIP path).
+- The aerosol/fire products themselves needed no render-version bump: the tile
+  cache path keys on channel, so changed AOD/ADP output was cleared surgically
+  by deleting `tiles/products-v3/goes*/{AerosolDetection,AerosolOpticalDepth}`.
+  The same-day GeoColor recipe change (above) separately re-namespaced all GOES
+  tiles to `products-v5`, so current aerosol/fire tiles live under that
+  namespace.
+- Skipped as not worth it: the AOD file's Angstrom Exponent (particle size,
+  fine smoke vs coarse dust) is over-water only (~24% coverage), useless over
+  CONUS land smoke.
+
+Verified (static + backend render, per project convention — browser smoke is
+user-owned): all four Python modules `py_compile`; `node --check` on
+js/weather.js passes; catalog → download → render for ADP/AOD/FRP on both
+GOES-18 and GOES-19 returns non-blank tiles. Live values 2026-07-16 (GOES-19):
+ADP 26k smoke / 106k dust pixels, AOD max 5.0 with ~405k px > 0.5, FDC 41 fires
+up to 552 MW in the Pacific NW. Frontend cachebusters at add time:
+`weather.js?v=20260716c`, `satellite-page.js?v=20260716b`,
+`dashboard.css?v=20260716a` (weather.js later advanced to `v=20260716d` by the
+GeoColor opacity work).
 
 ### Satellite render pipeline latency optimization — registered 2026-07-16
 
