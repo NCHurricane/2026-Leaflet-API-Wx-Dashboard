@@ -39,7 +39,7 @@ def read_spc_page():
 
 @router.get("/surface")
 def read_surface_page():
-    return serve_product_shell_page("surface")
+    return serve_page("frontend/pages/surface/surface.html")
 
 
 @router.get("/drought")

@@ -1,8 +1,9 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-16 (Frontend Split Stage 2 Phase 19 Drought migration and
-accepted sidebar/legend UI reference completed; radar requested-lookback,
-GeoColor display updates, and GOES aerosol/fire products ADP/AOD/FRP merged)
+Last updated: 2026-07-17 (Frontend Split Stage 2 Phase 20 Surface migration
+completed: /surface is a true standalone page, all surface code was deleted
+from js/weather.js and weather.html, and surface archive support was retired
+with the old archive scrubber rather than rebuilt)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -21,15 +22,15 @@ Keep separate:
 - `docs/satellite-radar-render-pipeline-files.md` for the satellite/radar
   render pipeline file reference (companion to the optimization plan).
 
-## Active Tracks (2026-07-16)
+## Active Tracks (2026-07-17)
 
 Priority order for upcoming work. Track 1 goes first because it may alter
 the plan for some future items; re-evaluate later tracks against the
 post-split structure, not the monolith.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
-   this file (section below). Phases 18-19 are complete; Phase 20 Surface is
-   next.
+   this file (section below). Phases 18-20 are complete; Phase 21 (SPC, WPC)
+   is next.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
@@ -45,9 +46,10 @@ post-split structure, not the monolith.
 - The backend route/service refactor is complete enough that product routes and
   services should remain modular. Do not add route logic back to `main.py`.
 - The fixed map-first dashboard shell is accepted.
-- Canonical product routes serve the shared dashboard shell in product-only mode:
-  `/surface`, `/alerts`, `/radar`, `/satellite`, `/spc`, `/rtma`, `/mrms`,
-  `/drought`, `/tropical`, `/wpc`, and `/water`.
+- `/drought` and `/surface` serve true standalone pages from
+  `frontend/pages/`. The remaining canonical product routes serve the shared
+  dashboard shell in product-only mode: `/alerts`, `/radar`, `/satellite`,
+  `/spc`, `/rtma`, `/mrms`, `/tropical`, `/wpc`, and `/water`.
 - `weather.html` remains the combined workspace and should keep working until
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
@@ -333,8 +335,30 @@ found it.
   `core.css` owns the shared family declaration and product CSS inherits it.
   The corrected wiring passed module syntax, focused lint, eleven standalone and
   boundary-cache tests, and live local API payload checks.
-- Phase 20: surface. Reuse the accepted tabbed sidebar shell and prove the
-  second consumer before expanding the shared API further.
+- Phase 20: **COMPLETE 2026-07-17.** Surface is the second consumer of the
+  accepted shells at `frontend/pages/surface/` (Option 1A tabbed sidebar,
+  ES-module page controller, DOM-free engine, page-local renderer module,
+  per-page CSS). Ported from the monolith with parity: colored value markers
+  with zoom scaling and station popups, ASOS/COOP/DCP/RWIS network filters
+  (hidden on CONUS/WORLD), zoom-aware station-density thinning with a km
+  readout, worker-PNG gradient overlays with 5-minute metadata TTL and URL
+  cache-busting, the IDW client-canvas gradient fallback with the 32F
+  isotherm diagnostic, and a continuous-colorbar legend on the shared
+  core-legend primitives with a Stations count. The Gradient Blur control was
+  intentionally dropped after user review: worker PNGs never blurred, so the
+  slider only affected the rarely-seen canvas fallback, which now uses a
+  fixed `FALLBACK_BLUR_SCALE = 1.0`. Decision (Option B): the surface archive
+  mode was NOT rebuilt on the standalone page — surface support was removed
+  from the shared archive scrubber entirely (product type list, archive load
+  branch, frame rendering); the scrubber-as-component rewrite remains
+  Phase 22. After user parity smoke, ~1,000 lines of surface implementation
+  were deleted from `js/weather.js` (shared helpers kept because RTMA,
+  cities, and satellite legends use them: `windDirectionBarbIcon`,
+  `surfaceColoredTextIcon`, `_filterByMinDistKm`, `_haversineKm`,
+  `renderContinuousLegend`, `_formatSurfaceTick`), the `wx-section-current`
+  controls and `wx-side-group-current` styling blocks were removed from
+  `weather.html`, and `js/surface-engine.js` + `js/surface-page.js` were
+  deleted. `weather.js?v=20260717a`.
 - Phase 21: spc, wpc.
 - Phase 22: mrms + rtma, including the scrubber-as-component rewrite.
 - Phase 23: satellite.

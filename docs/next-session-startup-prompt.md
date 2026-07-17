@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date prepared: 2026-07-16
+Date prepared: 2026-07-17
 
 Start in:
 
@@ -20,8 +20,9 @@ Read first:
 
 Current status:
 - The fixed map-first dashboard shell is accepted.
-- Canonical product routes serve product-only dashboard mode: /surface, /alerts,
-  /radar, /satellite, /spc, /rtma, /mrms, /drought, /tropical, /wpc, and /water.
+- /drought and /surface serve true standalone pages from frontend/pages/. The
+  remaining canonical product routes serve product-only dashboard mode:
+  /alerts, /radar, /satellite, /spc, /rtma, /mrms, /tropical, /wpc, and /water.
 - /weather.html remains the combined workspace and must keep working until it is
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
@@ -33,22 +34,23 @@ Current status:
   behavior should stay in services/*_service.py, and upstream/cache refresh
   behavior should stay in workers/*_worker.py.
 
-Active track order (2026-07-16):
-1. Frontend True Split Stage 2. Phases 18-19 are complete; `/drought` is the
-   first true standalone page under `frontend/`. Its parity fixes and persistent
-   boundary caching are in place. The accepted shared sidebar reference is now
-    Option 1A: pinned status/region, accessible mounted Data/Overlays/Style tabs,
-    and pinned message/Refresh footer via `frontend/core/sidebar-tabs.js`.
-    Automated browser smoke passed switching, keyboard navigation, retained
-    state, pinned geometry, Dark default, and latest-release display. The shared
-    legend is now a collapsible dark tray confined to the map panel, with
-    left/center/right alignment and categorical/continuous primitives. Drought
-    uses bottom-left placement and expands for state statistics; browser smoke
-    passed national, collapsed, and NC-stat layouts with no sidebar overlap.
-    Core typography uses the existing self-hosted Montserrat normal/italic
-    variable fonts; pages should inherit it rather than registering duplicates.
-    Phase 20 Surface is next and should be the second consumer of the accepted
-    sidebar and legend shells.
+Active track order (2026-07-17):
+1. Frontend True Split Stage 2. Phases 18-20 are complete; `/drought` and
+   `/surface` are true standalone pages under `frontend/`. The accepted shared
+    sidebar reference is Option 1A (pinned status/region, Data/Overlays/Style
+    tabs via `frontend/core/sidebar-tabs.js`, pinned message/Refresh footer)
+    and the shared legend is the collapsible dark map-panel tray in
+    `frontend/core/legend.js`. Surface (Phase 20, user-smoked 2026-07-17)
+    proved the second consumer: page-local renderer module, worker-PNG
+    gradients with client-canvas IDW fallback, network filters, density
+    thinning, and a continuous-colorbar legend on the core primitives.
+    Decisions to remember: the Gradient Blur control was dropped (fallback
+    uses fixed FALLBACK_BLUR_SCALE 1.0) and surface archive was retired
+    entirely rather than rebuilt — surface no longer participates in the
+    shared archive scrubber, whose component rewrite remains Phase 22. All
+    surface code was deleted from js/weather.js and weather.html
+    (weather.js?v=20260717a); shared helpers used by RTMA/cities/satellite
+    legends were kept. Phase 21 (SPC, WPC) is next.
 2. Satellite render-pipeline latency optimization. This backend-only track may
    interleave with Track 1 while their files remain disjoint.
 3. GK2A + GMGSI after the satellite-page migration boundary is safe.

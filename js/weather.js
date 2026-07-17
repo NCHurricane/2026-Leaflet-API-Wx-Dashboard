@@ -14,8 +14,6 @@
     const _mrmsPageController = window.NCHMrmsPage || null;
     const _rtmaEngineFactory = window.NCHRtmaEngine || null;
     const _rtmaPageController = window.NCHRtmaPage || null;
-    const _surfaceEngineFactory = window.NCHSurfaceEngine || null;
-    const _surfacePageController = window.NCHSurfacePage || null;
     const _spcEngineFactory = window.NCHSpcEngine || null;
     const _spcPageController = window.NCHSpcPage || null;
     const _tropicalEngineFactory = window.NCHTropicalEngine || null;
@@ -28,7 +26,6 @@
     let _radarEngine = null;
     let _mrmsEngine = null;
     let _rtmaEngine = null;
-    let _surfaceEngine = null;
     let _spcEngine = null;
     let _tropicalEngine = null;
     let _wpcEngine = null;
@@ -875,7 +872,6 @@
     let localStormReportsLayer = null;
     let spcLayer = null;
     let _spcWatchFeatures = [];
-    let surfaceLayer = null;
     let radarLiveOverlay = null;
     const _radarLiveImageOverlays = new Set();
     let satelliteOverlay = null;
@@ -1014,9 +1010,7 @@
     const _citiesDataBySource = new Map();
     let _citiesSource = null;
     let _citiesDensity = 1;
-    let _surfaceDensity = 1;
     let _rtmaDensity = 1;
-    let _gradientBlurScale = 0;
     const CITY_LABEL_CHAR_PX = 5.2;
     const CITY_LABEL_HEIGHT_PX = 11;
     const CITY_LABEL_X_PAD = 4;
@@ -1069,8 +1063,6 @@
     let alertsOpacity = 0.75;
     let spcOpacity = 1.0;
     let spcStrokeOpacity = 1.0;
-    let surfaceValueOpacity = 0.9;
-    let surfaceGradientOpacity = 0.9;
     let rtmaOpacity = 0.82;
     let rtmaGradientOpacity = 0.9;
     // _rtmaGradientBlurScale removed — RTMA gradients are pre-rendered PNGs, no canvas blur.
@@ -1078,7 +1070,6 @@
     let _alertsRequestSeq = 0;
     let _spcRequestSeq = 0;
     let _spcAbortController = null;
-    let _surfaceRequestSeq = 0;
     let _rtmaRequestSeq = 0;
     let _rtmaPointsSeq = 0;
     let _rtmaPointsDebounceTimer = null;
@@ -1150,8 +1141,6 @@
         rtma_hourly: 24,
         rtma_rapid_update: 6,
     };
-    const _FREEZING_ISOTHERM_ENABLED = true; // temporary diagnostic overlay
-    const _FREEZING_ISOTHERM_PRODUCTS = new Set(['station_plot', 'temperature', 'feels_like', 'dew_point']);
 
     // ── Style functions ──────────────────────────────────────────────────────
     function alertStyle(feat) {
@@ -3672,7 +3661,6 @@
         if (_isTypeEnabled('drought')) return 'drought';
         if (_isTypeEnabled('tropical')) return 'tropical';
         if (_isTypeEnabled('wpc')) return 'wpc';
-        if (_isTypeEnabled('current') && _activeSurfaceProduct()) return 'surface';
         if (_isTypeEnabled('satellite') && _satelliteFrames.length) return 'satellite';
         return 'global';
     }
@@ -5584,7 +5572,6 @@
         fitRegion('CONUS');
         buildRadarSiteMarkerLegend();
         _updateObsDensityLabel();
-        _updateGradientBlurControlVisibility();
         _clearSpeedOverride();
         _clearRadarCalLine();
         _showRadarLookbackSlider(false);
@@ -5651,36 +5638,6 @@
     // ── Top type controls and product visibility ─────────────────────────────
     function _isTypeEnabled(type) {
         return !!byId(`weather-type-${type}`)?.checked;
-    }
-
-    function _updateGradientBlurLabel() {
-        const label = document.querySelector('label[for="weather-gradient-blur"]');
-        if (!label) return;
-        const baseLabel = label.dataset.baseLabel || 'Gradient Blur';
-        label.dataset.baseLabel = baseLabel;
-        label.textContent = `${baseLabel} (${_gradientBlurScale.toFixed(2)}x)`;
-    }
-
-    function _activeSurfaceProduct() {
-        return _surfacePageController?.activeSurfaceProduct()
-            ?? document.querySelector('.weather-surface-product:checked')?.value
-            ?? null;
-    }
-
-    function _activeSurfaceGradient() {
-        return _surfacePageController?.activeSurfaceGradient()
-            ?? (() => {
-                const product = _activeSurfaceProduct();
-                if (!product) return false;
-                return !!document.querySelector(`.weather-surface-gradient[data-product="${product}"]`)?.checked;
-            })();
-    }
-
-    function _updateGradientBlurControlVisibility() {
-        const wrap = byId('weather-gradient-blur-wrap');
-        if (!wrap) return;
-        const show = _isTypeEnabled('current') && _activeSurfaceGradient();
-        wrap.style.display = show ? '' : 'none';
     }
 
     function _invalidateMapSizeSoon() {
@@ -5776,7 +5733,6 @@
         }
 
         if (spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
-        if (surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
         if (radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
         if (satelliteOverlay && map.hasLayer(satelliteOverlay)) map.removeLayer(satelliteOverlay);
         if (radarBackdropLayer && map.hasLayer(radarBackdropLayer)) map.removeLayer(radarBackdropLayer);
@@ -5794,7 +5750,6 @@
         localStormReportsLayer = null;
         spcLayer = null;
         _spcWatchFeatures = [];
-        surfaceLayer = null;
         _radarLiveImageOverlays.clear();
         _clearRadarScrubOverlayPool();
         radarLiveOverlay = null;
@@ -5809,7 +5764,6 @@
         mrmsOverlay = null;
         _satelliteFrames = [];
         _satelliteFrameIndex = 0;
-        _surfaceStations = [];
         _waterStations = [];
         _waterSelectedSiteId = '';
         _activeTropicalStorm = null;
@@ -5952,11 +5906,6 @@
                 if (typeof _stopSatelliteScrubPlay === 'function') _stopSatelliteScrubPlay();
                 if (satelliteOverlay && map.hasLayer(satelliteOverlay)) map.removeLayer(satelliteOverlay);
                 satelliteOverlay = null;
-                break;
-
-            case 'current':
-                if (surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
-                surfaceLayer = null;
                 break;
 
             case 'alerts':
@@ -9664,8 +9613,6 @@
         const alertsEnabled = _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0;
         const lsrEnabled = _isTypeEnabled('alerts') && !!document.querySelectorAll('.weather-lsr-category:checked').length > 0;
         const spcEnabled = _isTypeEnabled('spc') && byId('weather-show-spc')?.checked;
-        const surfaceProduct = _activeSurfaceProduct();
-        const surfaceEnabled = _isTypeEnabled('current') && !!surfaceProduct;
         const radarEnabled = _isTypeEnabled('radar');
         const satelliteEnabled = _isTypeEnabled('satellite');
         const rtmaEnabled = _isTypeEnabled('rtma') && !!_activeRtmaStream() && !!_activeRtmaProduct();
@@ -9684,7 +9631,6 @@
             localStormReportsLayer = null;
         }
         if (!spcEnabled && spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
-        if (!surfaceEnabled && surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
         if (!radarEnabled && radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
         if (!radarEnabled) _clearRadarScrubOverlayPool();
         if (!satelliteEnabled && satelliteOverlay && map.hasLayer(satelliteOverlay)) map.removeLayer(satelliteOverlay);
@@ -9730,10 +9676,6 @@
         }
         if (spcEnabled) {
             refreshSpc();
-        }
-        if (surfaceEnabled) {
-            const region = byId('weather-region')?.value || 'NC';
-            _surfaceEngine?.loadSurface(region, surfaceProduct || 'temperature');
         }
         if (radarEnabled) {
             _loadRadarSites();
@@ -10972,20 +10914,6 @@
     }
 
     // ── Surface layer state ───────────────────────────────────────────────────
-    let _surfaceStations = [];   // full unfiltered station list for re-thinning on zoom
-    let _surfaceGradientStations = []; // cached source stations for gradient interpolation
-    let _surfaceGradientProduct = null;
-    let _surfaceGradientRegion = null;
-    const _surfaceGradientOverlayCache = new Map();
-    const _surfaceGradientOverlayInflight = new Map();
-    const _SURFACE_GRADIENT_META_TTL_MS = 5 * 60 * 1000;
-
-    function _getGradientSourceRegion(regionCode = null) {
-        const region = (regionCode || byId('weather-region')?.value || 'CONUS').toUpperCase();
-        // WORLD should interpolate from WORLD observations, not CONUS.
-        return region === 'WORLD' ? 'WORLD' : 'CONUS';
-    }
-
     // ── Wind direction barb icon ─────────────────────────────────────────────
     // Renders a meteorological arrow: shaft + arrowhead pointing FROM the wind
     // origin (e.g. dirDeg=270 → westerly wind → arrow points left/west).
@@ -11062,40 +10990,6 @@
         const a = Math.sin(dLat / 2) ** 2
             + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    }
-
-    function _wrappedLonDeltaDeg(a, b) {
-        const raw = Math.abs(a - b);
-        return raw > 180 ? 360 - raw : raw;
-    }
-
-    function _haversineKmWrapped(lat1, lon1, lat2, lon2) {
-        const R = 6371;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = _wrappedLonDeltaDeg(lon2, lon1) * Math.PI / 180;
-        const phi1 = lat1 * Math.PI / 180;
-        const phi2 = lat2 * Math.PI / 180;
-        const a = Math.sin(dLat / 2) ** 2
-            + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLon / 2) ** 2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    }
-
-    // Returns base minimum separation (km) based on zoom level.
-    // CONUS-level zooms use large defaults; state-level zooms use tighter ones.
-    function _baseDistKm(zoom, regionCode = null) {
-        const region = (regionCode || byId('weather-region')?.value || '').toUpperCase();
-        // WORLD needs an additional coarse thinning tier due very dense global obs.
-        if (region === 'WORLD') {
-            if (zoom >= 9) return 20;
-            if (zoom >= 7) return 40;
-            if (zoom >= 5) return 60;
-            if (zoom >= 3) return 420;
-            return 320;
-        }
-        if (zoom >= 9) return 10;
-        if (zoom >= 7) return 30;
-        if (zoom >= 5) return 50;
-        return 150;
     }
 
     // RTMA's slider tops out at 2, so these base values yield the configured
@@ -11176,664 +11070,6 @@
         return accepted;
     }
 
-    function _thinStations(stations) {
-        const zoom = map.getZoom();
-        const region = (byId('weather-region')?.value || '').toUpperCase();
-        const minDistKm = _baseDistKm(zoom, region) / _surfaceDensity;
-        return _filterByMinDistKm(stations, s => s.lat, s => s.lon, minDistKm);
-    }
-
-    // Keep gradient interpolation denser than marker plots so large-scale fields
-    // track station values more closely at low zoom/world extents.
-    function _thinGradientStations(stations) {
-        const zoom = map.getZoom();
-        const region = (byId('weather-region')?.value || '').toUpperCase();
-        // Gradient thinning is independent of the density slider so that the
-        // interpolated surface stays stable when the user adjusts marker density.
-        const baseKm = _baseDistKm(zoom, region);
-        const factor = region === 'WORLD'
-            ? (zoom <= 3 ? 0.42 : zoom <= 5 ? 0.40 : 0.38)
-            : (zoom <= 5 ? 0.36 : 0.28);
-        const floorKm = region === 'WORLD' ? (zoom <= 3 ? 16 : 14) : 8;
-        const minDistKm = Math.max(floorKm, baseKm * factor);
-        return _filterByMinDistKm(stations, s => s.lat, s => s.lon, minDistKm);
-    }
-
-    function _gradientNeighborConfig() {
-        const zoom = map.getZoom();
-        const region = (byId('weather-region')?.value || '').toUpperCase();
-        if (region === 'WORLD') {
-            if (zoom <= 3) {
-                // Sector-balanced: 2 per 8 sectors → directionally fair selection.
-                // Wide influence so sparse cold stations are reachable.
-                return { maxNeighbors: 16, maxInfluenceKm: 1200, idwPower: 2.5, prefilterMultiplier: 1.3, sectorBalance: true };
-            }
-            if (zoom <= 5) {
-                return { maxNeighbors: 16, maxInfluenceKm: 1000, idwPower: 2.5, prefilterMultiplier: 1.3, sectorBalance: true };
-            }
-            return { maxNeighbors: 12, maxInfluenceKm: 950, idwPower: 2.4, prefilterMultiplier: 1.2 };
-        }
-        if (zoom <= 5) return { maxNeighbors: 14, maxInfluenceKm: 900, idwPower: 2.0, prefilterMultiplier: 1.35 };
-        return { maxNeighbors: 16, maxInfluenceKm: 1100, idwPower: 2.0, prefilterMultiplier: 1.35 };
-    }
-
-    function _gradientGridResolution() {
-        const zoom = map.getZoom();
-        const region = (byId('weather-region')?.value || '').toUpperCase();
-        if (region === 'WORLD') {
-            // WORLD default extent: larger cells to cap render cost.
-            if (zoom <= 3) return 10;
-            // Mid-world zoom: slightly coarser than regional views.
-            if (zoom <= 5) return 12;
-            // Higher world zoom: tighten grid for better local fidelity.
-            return 8;
-        }
-        // Non-world low zoom: moderate coarsening for responsiveness.
-        if (zoom <= 5) return 8;
-        // Regional/state zoom: finer cells for best detail.
-        return 6;
-    }
-
-    // ── Gradient Interpolation Functions ──────────────────────────────────────
-
-    // ── Mercator helpers (match Leaflet's EPSG:3857 projection) ─────────────
-    function _latToMercY(latDeg) {
-        const latRad = latDeg * Math.PI / 180;
-        return Math.log(Math.tan(Math.PI / 4 + latRad / 2));
-    }
-    function _mercYToLat(mercY) {
-        return (2 * Math.atan(Math.exp(mercY)) - Math.PI / 2) * 180 / Math.PI;
-    }
-
-    /**
-     * IDW (Inverse Distance Weighting) interpolation for a single point.
-     * @param {number} x - target x (longitude)
-     * @param {number} y - target y (latitude)
-     * @param {Array} stations - array of {lat, lon, value}
-     * @param {Object} cfg - pre-resolved config from _gradientNeighborConfig()
-     * @returns {number} interpolated value
-     */
-    function _idwInterpolate(x, y, stations, cfg) {
-        if (!stations.length) return NaN;
-
-        const {
-            maxNeighbors,
-            maxInfluenceKm,
-            idwPower = 2,
-            prefilterMultiplier = 1.35,
-            sectorBalance = false,
-            _maxLatDeltaDeg,
-            _prefilterKm,
-        } = cfg;
-        const nearStationKm = 8;
-        const maxLatDeg = _maxLatDeltaDeg;
-        const preKm = _prefilterKm;
-        let fallbackApproxKm = Infinity;
-        let fallbackValue = NaN;
-
-        // Sector-balanced mode: maintain 8 angular sector buffers so that
-        // sparse cold-latitude stations get equal representation against
-        // dense warm-latitude clusters.
-        const NUM_SECTORS = 8;
-        const SECTOR_SIZE = (2 * Math.PI) / NUM_SECTORS;
-        const perSector = Math.max(1, Math.ceil(maxNeighbors / NUM_SECTORS));
-        const sectors = sectorBalance
-            ? Array.from({ length: NUM_SECTORS }, () => [])
-            : null;
-        // Standard mode: flat nearest-N buffer.
-        const nearest = sectorBalance ? null : [];
-
-        const cosLat = Math.max(0.2, Math.cos(y * Math.PI / 180));
-
-        for (const s of stations) {
-            const latDelta = Math.abs(s.lat - y);
-            if (latDelta > maxLatDeg) continue;
-
-            const lonDelta = _wrappedLonDeltaDeg(s.lon, x);
-            const approxKm = Math.sqrt(latDelta ** 2 + (lonDelta * cosLat) ** 2) * 111;
-
-            // Fast prefilter before expensive trig distance.
-            if (approxKm > preKm) {
-                if (approxKm < fallbackApproxKm) {
-                    fallbackApproxKm = approxKm;
-                    fallbackValue = s.value;
-                }
-                continue;
-            }
-
-            if (approxKm < fallbackApproxKm) {
-                fallbackApproxKm = approxKm;
-                fallbackValue = s.value;
-            }
-
-            const distKm = _haversineKmWrapped(y, x, s.lat, s.lon);
-            if (!Number.isFinite(distKm)) continue;
-            if (distKm <= nearStationKm) return s.value;
-
-            if (sectorBalance) {
-                // Assign station to an angular compass sector.
-                let dLon = s.lon - x;
-                if (dLon > 180) dLon -= 360;
-                if (dLon < -180) dLon += 360;
-                let angle = Math.atan2(s.lat - y, dLon * cosLat);
-                if (angle < 0) angle += 2 * Math.PI;
-                const sIdx = Math.min(NUM_SECTORS - 1, Math.floor(angle / SECTOR_SIZE));
-
-                const sector = sectors[sIdx];
-                if (sector.length < perSector) {
-                    sector.push({ distKm, value: s.value });
-                } else {
-                    let farIdx = 0;
-                    for (let i = 1; i < sector.length; i++) {
-                        if (sector[i].distKm > sector[farIdx].distKm) farIdx = i;
-                    }
-                    if (distKm < sector[farIdx].distKm) {
-                        sector[farIdx] = { distKm, value: s.value };
-                    }
-                }
-            } else {
-                // Standard nearest-N selection.
-                if (nearest.length < maxNeighbors) {
-                    nearest.push({ distKm, value: s.value });
-                    continue;
-                }
-                let farIdx = 0;
-                let farDist = nearest[0].distKm;
-                for (let i = 1; i < nearest.length; i++) {
-                    if (nearest[i].distKm > farDist) {
-                        farDist = nearest[i].distKm;
-                        farIdx = i;
-                    }
-                }
-                if (distKm < farDist) {
-                    nearest[farIdx] = { distKm, value: s.value };
-                }
-            }
-        }
-
-        const finalNearest = sectorBalance ? sectors.flat() : nearest;
-
-        if (!finalNearest.length) {
-            return Number.isFinite(fallbackValue) ? fallbackValue : NaN;
-        }
-
-        let sumWeights = 0;
-        let sumWeightedValues = 0;
-        for (const item of finalNearest) {
-            if (item.distKm > maxInfluenceKm) continue;
-            const weight = 1 / (item.distKm ** idwPower);
-            sumWeights += weight;
-            sumWeightedValues += item.value * weight;
-        }
-
-        if (sumWeights > 0) return sumWeightedValues / sumWeights;
-
-        // Fallback if all nearest stations were beyond influence radius.
-        let best = finalNearest[0];
-        for (let i = 1; i < finalNearest.length; i++) {
-            if (finalNearest[i].distKm < best.distKm) best = finalNearest[i];
-        }
-        return best.value;
-    }
-
-    /**
-     * Interpolate values on a grid across map bounds.
-     * @param {Array} stations - array of {lat, lon, value}
-     * @param {number} gridResolution - pixels per grid cell (lower = more detail but slower)
-     * @returns {Object} {grid: 2D array, bounds: LatLngBounds, minVal, maxVal}
-     */
-    function _interpolateGridValues(stations, gridResolution = 0) {
-        if (!stations.length) return null;
-
-        const bounds = map.getBounds();
-        const sw = bounds.getSouthWest();
-        const ne = bounds.getNorthEast();
-
-        const canvasSize = map.getSize();
-        const cols = Math.ceil(canvasSize.x / gridResolution);
-        const rows = Math.ceil(canvasSize.y / gridResolution);
-
-        const lonRange = ne.lng - sw.lng;
-
-        // Sample latitudes in Mercator Y space so canvas pixels align
-        // with Leaflet's Web Mercator (EPSG:3857) projection.  Linear
-        // latitude stepping causes an increasing northward shift at
-        // high latitudes because Mercator stretches polar regions.
-        const neMercY = _latToMercY(Math.min(ne.lat, 85));
-        const swMercY = _latToMercY(Math.max(sw.lat, -85));
-        const mercYRange = neMercY - swMercY;
-
-        // Resolve config once for the entire grid rather than per-cell.
-        const cfg = _gradientNeighborConfig();
-        cfg._maxLatDeltaDeg = cfg.maxInfluenceKm / 111;
-        cfg._prefilterKm = cfg.maxInfluenceKm * (cfg.prefilterMultiplier || 1.35);
-
-        const grid = [];
-        let minVal = Infinity;
-        let maxVal = -Infinity;
-
-        for (let row = 0; row < rows; row++) {
-            const gridRow = [];
-            const mercY = neMercY - (row / rows) * mercYRange;
-            const lat = _mercYToLat(mercY);
-
-            for (let col = 0; col < cols; col++) {
-                const lon = sw.lng + (col / cols) * lonRange;
-                const val = _idwInterpolate(lon, lat, stations, cfg);
-
-                if (!isNaN(val)) {
-                    gridRow.push(val);
-                    minVal = Math.min(minVal, val);
-                    maxVal = Math.max(maxVal, val);
-                } else {
-                    gridRow.push(null);
-                }
-            }
-            grid.push(gridRow);
-        }
-
-        return { grid, bounds, minVal, maxVal, cols, rows };
-    }
-
-    /**
-     * Map a value to a color using the current surface colormap anchors.
-     * @param {number} value - data value
-     * @param {number} minVal - minimum value in dataset
-     * @param {number} maxVal - maximum value in dataset
-     * @param {string} product - product key (e.g., 'temperature')
-     * @returns {string} hex color
-     */
-    function _getColorAtValue(value, minVal, maxVal, product) {
-        const anchors = _SURFACE_COLORMAPS[product] || _SURFACE_COLORMAPS['temperature'];
-        if (!anchors.length) return '#cccccc';
-
-        const min = anchors[0][0];
-        const max = anchors[anchors.length - 1][0];
-
-        // Clamp value to colormap range
-        const clampedVal = Math.max(min, Math.min(max, value));
-
-        // Find surrounding anchor colors
-        for (let i = 0; i < anchors.length - 1; i++) {
-            const [v0, c0] = anchors[i];
-            const [v1, c1] = anchors[i + 1];
-
-            if (clampedVal >= v0 && clampedVal <= v1) {
-                if (v1 === v0) return c0;
-                const frac = (clampedVal - v0) / (v1 - v0);
-                return _interpolateHexColor(c0, c1, frac);
-            }
-        }
-
-        return anchors[anchors.length - 1][1];
-    }
-
-    /**
-     * Interpolate between two hex colors.
-     * @param {string} hex1 - start color (e.g., '#ff0000')
-     * @param {string} hex2 - end color
-     * @param {number} frac - interpolation factor [0, 1]
-     * @returns {string} interpolated hex color
-     */
-    function _interpolateHexColor(hex1, hex2, frac) {
-        const h1 = hex1.replace('#', '');
-        const h2 = hex2.replace('#', '');
-
-        const r = parseInt(h1.substr(0, 2), 16);
-        const g = parseInt(h1.substr(2, 2), 16);
-        const b = parseInt(h1.substr(4, 2), 16);
-
-        const r2 = parseInt(h2.substr(0, 2), 16);
-        const g2 = parseInt(h2.substr(2, 2), 16);
-        const b2 = parseInt(h2.substr(4, 2), 16);
-
-        const newR = Math.round(r + (r2 - r) * frac);
-        const newG = Math.round(g + (g2 - g) * frac);
-        const newB = Math.round(b + (b2 - b) * frac);
-
-        return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
-    }
-
-    function _drawIsothermFromGrid(ctx, grid, cols, rows, cellWidth, cellHeight, thresholdF) {
-        const lerpPoint = (a, b, va, vb) => {
-            if (va === vb) return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-            const t = (thresholdF - va) / (vb - va);
-            return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-        };
-
-        ctx.save();
-        ctx.strokeStyle = 'rgba(0, 22, 122, 0.9)';
-        ctx.lineWidth = 0.75;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-
-        for (let row = 0; row < rows - 1; row++) {
-            for (let col = 0; col < cols - 1; col++) {
-                const v00 = grid[row][col];
-                const v10 = grid[row][col + 1];
-                const v01 = grid[row + 1][col];
-                const v11 = grid[row + 1][col + 1];
-
-                if (![v00, v10, v01, v11].every(v => Number.isFinite(v))) continue;
-
-                const x0 = col * cellWidth;
-                const y0 = row * cellHeight;
-                const x1 = (col + 1) * cellWidth;
-                const y1 = (row + 1) * cellHeight;
-
-                const pTopL = [x0, y0];
-                const pTopR = [x1, y0];
-                const pBotL = [x0, y1];
-                const pBotR = [x1, y1];
-
-                const points = [];
-                const crosses = (a, b) => (a - thresholdF) * (b - thresholdF) <= 0 && a !== b;
-
-                if (crosses(v00, v10)) points.push(lerpPoint(pTopL, pTopR, v00, v10));
-                if (crosses(v10, v11)) points.push(lerpPoint(pTopR, pBotR, v10, v11));
-                if (crosses(v01, v11)) points.push(lerpPoint(pBotL, pBotR, v01, v11));
-                if (crosses(v00, v01)) points.push(lerpPoint(pTopL, pBotL, v00, v01));
-
-                if (points.length === 2) {
-                    ctx.moveTo(points[0][0], points[0][1]);
-                    ctx.lineTo(points[1][0], points[1][1]);
-                } else if (points.length === 4) {
-                    ctx.moveTo(points[0][0], points[0][1]);
-                    ctx.lineTo(points[1][0], points[1][1]);
-                    ctx.moveTo(points[2][0], points[2][1]);
-                    ctx.lineTo(points[3][0], points[3][1]);
-                }
-            }
-        }
-
-        ctx.stroke();
-        ctx.restore();
-    }
-
-    /**
-     * Render an interpolated gradient surface on canvas.
-     * @param {Array} stations - array of {lat, lon, value}
-     * @param {string} product - product key for colormap
-     */
-    function _renderGradientSurface(stations, product, canvasAlpha = surfaceGradientOpacity, blurScale = _gradientBlurScale) {
-        if (!stations.length) return null;
-
-        // Use denser thinning for interpolation than for markers.
-        const thin = _thinGradientStations(stations);
-        if (!thin.length) return null;
-
-        // Interpolate grid values
-        const gridResolution = _gradientGridResolution();
-        const gridData = _interpolateGridValues(thin, gridResolution);
-        if (!gridData) return null;
-
-        const { grid, bounds, minVal, maxVal, cols, rows } = gridData;
-
-        // Create canvas
-        const canvas = document.createElement('canvas');
-        const canvasSize = map.getSize();
-        canvas.width = canvasSize.x;
-        canvas.height = canvasSize.y;
-
-        const ctx = canvas.getContext('2d');
-        const cellWidth = canvas.width / cols;
-        const cellHeight = canvas.height / rows;
-
-        // Render gradient cells to an offscreen canvas, then composite with
-        // a Gaussian blur to eliminate hard cell-boundary seams (vertical lines).
-        const offscreen = document.createElement('canvas');
-        offscreen.width = canvas.width;
-        offscreen.height = canvas.height;
-        const offCtx = offscreen.getContext('2d');
-
-        for (let row = 0; row < rows; row++) {
-            for (let col = 0; col < cols; col++) {
-                const val = grid[row][col];
-                if (val !== null && !isNaN(val)) {
-                    offCtx.fillStyle = _getColorAtValue(val, minVal, maxVal, product);
-                    offCtx.fillRect(col * cellWidth, row * cellHeight, Math.ceil(cellWidth), Math.ceil(cellHeight));
-                }
-            }
-        }
-
-        // Blur radius ~= cell size to fully dissolve seams
-        const blurPx = Math.round(Math.max(cellWidth, cellHeight) * 1.2 * blurScale);
-        ctx.filter = blurPx > 0 ? `blur(${blurPx}px)` : 'none';
-        ctx.globalAlpha = Math.max(0, Math.min(1, canvasAlpha));
-        ctx.drawImage(offscreen, 0, 0);
-        ctx.filter = 'none';
-        ctx.globalAlpha = 1.0;
-
-        // Temporary 32F isotherm line for gradient diagnostics.
-        if (_FREEZING_ISOTHERM_ENABLED && _FREEZING_ISOTHERM_PRODUCTS.has(product)) {
-            _drawIsothermFromGrid(ctx, grid, cols, rows, cellWidth, cellHeight, 32);
-        }
-
-        // Convert canvas to ImageOverlay and return it
-        const imageUrl = canvas.toDataURL();
-        return L.imageOverlay(imageUrl, bounds, {
-            opacity: 1.0,
-            className: 'surface-gradient-overlay'
-        });
-    }
-
-    function _surfaceGradientCacheKey(product, regionCode = null) {
-        const sourceRegion = _getGradientSourceRegion(regionCode);
-        return `${sourceRegion}|${product}`;
-    }
-
-    function _surfaceGradientCacheEntryIsFresh(meta) {
-        const fetchedAt = Number(meta?._fetchedAtMs || 0);
-        return fetchedAt > 0 && (Date.now() - fetchedAt) < _SURFACE_GRADIENT_META_TTL_MS;
-    }
-
-    function _surfaceGradientImageUrl(meta) {
-        const imageUrl = meta?.image_url;
-        if (!imageUrl) return '';
-        const version = meta.timestamp || meta.generated_at || meta.updated_at || '';
-        if (!version) return apiUrl(imageUrl);
-        const separator = String(imageUrl).includes('?') ? '&' : '?';
-        return apiUrl(`${imageUrl}${separator}v=${encodeURIComponent(version)}`);
-    }
-
-    async function _primeSurfaceGradientOverlayCache(product, regionCode = null) {
-        if (_archiveMode || !product) return null;
-        const key = _surfaceGradientCacheKey(product, regionCode);
-        const cached = _surfaceGradientOverlayCache.get(key) || null;
-        if (cached && _surfaceGradientCacheEntryIsFresh(cached)) {
-            return cached;
-        }
-        if (_surfaceGradientOverlayInflight.has(key)) {
-            return _surfaceGradientOverlayInflight.get(key);
-        }
-
-        const sourceRegion = _getGradientSourceRegion(regionCode);
-        const fetchPromise = (async () => {
-            try {
-                const url = apiUrl(`/api/data/surface-gradient?region=${encodeURIComponent(sourceRegion)}&product=${encodeURIComponent(product)}`);
-                const resp = await fetch(url, { cache: 'no-cache' });
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const meta = await resp.json();
-                if (meta && meta.image_url && Array.isArray(meta.bounds) && meta.bounds.length === 4) {
-                    meta._fetchedAtMs = Date.now();
-                    _surfaceGradientOverlayCache.set(key, meta);
-                    return meta;
-                }
-            } catch (_err) {
-                // Keep silent and allow client-side fallback interpolation.
-            }
-            return cached;
-        })();
-
-        _surfaceGradientOverlayInflight.set(key, fetchPromise);
-        try {
-            return await fetchPromise;
-        } finally {
-            _surfaceGradientOverlayInflight.delete(key);
-        }
-    }
-
-    function _renderSurfaceMarkers(stations) {
-        if (surfaceLayer) { map.removeLayer(surfaceLayer); surfaceLayer = null; }
-        if (!stations.length) return;
-
-        const product = _activeSurfaceProduct();
-        if (!product) return;
-
-        // Build layer group containing gradient (if enabled) + markers
-        const layers = [];
-
-        // Add gradient background if enabled
-        if (_activeSurfaceGradient()) {
-            const currentRegion = (byId('weather-region')?.value || 'CONUS').toUpperCase();
-            const gradientSourceRegion = _getGradientSourceRegion(currentRegion);
-            const gradientCacheKey = _surfaceGradientCacheKey(product, gradientSourceRegion);
-            const cachedGradientMeta = _surfaceGradientOverlayCache.get(gradientCacheKey) || null;
-            const gradientStations = _archiveMode
-                ? stations
-                : (
-                    _surfaceGradientProduct === product
-                        && _surfaceGradientRegion === gradientSourceRegion
-                        && _surfaceGradientStations.length
-                        ? _surfaceGradientStations
-                        : stations
-                );
-            let gradientLayer = null;
-
-            if (
-                cachedGradientMeta
-                && cachedGradientMeta.image_url
-                && Array.isArray(cachedGradientMeta.bounds)
-                && cachedGradientMeta.bounds.length === 4
-            ) {
-                const b = cachedGradientMeta.bounds;
-                const leafletBounds = [[b[2], b[0]], [b[3], b[1]]];
-                gradientLayer = L.imageOverlay(_surfaceGradientImageUrl(cachedGradientMeta), leafletBounds, {
-                    opacity: surfaceGradientOpacity,
-                    className: 'surface-gradient-overlay',
-                });
-            } else if (gradientStations.length) {
-                gradientLayer = _renderGradientSurface(gradientStations, product);
-            }
-            if (gradientLayer) {
-                layers.push(gradientLayer);
-            }
-        }
-
-        // Add colored text value markers (works for both gradient and standard modes)
-        const thin = _thinStations(stations);
-        const markerGroup = L.layerGroup(
-            thin.map(s => {
-                const icon = surfaceColoredTextIcon(s.value, s.unit, surfaceValueOpacity);
-                const m = L.marker([s.lat, s.lon], { icon });
-                const wdir = s.wind_dir != null ? `${Math.round(s.wind_dir)}°` : '—';
-                const wspd = s.wind_speed != null ? `${Math.round(s.wind_speed)} kt` : '—';
-                const gust = s.wind_gust != null ? ` G${Math.round(s.wind_gust)}` : '';
-                const vis = s.visibility != null ? `${s.visibility} mi` : '—';
-                const stationName = s.name ? `${s.name} (${s.id})` : s.id;
-                const stationId = String(s.id || '').trim().toUpperCase();
-                const timeseriesSite = stationId.length === 3 ? `K${stationId}` : stationId;
-                const timeseriesUrl = `https://www.weather.gov/wrh/timeseries?site=${encodeURIComponent(timeseriesSite)}`;
-                m.bindPopup(
-                    `<strong>${stationName}</strong><br>` +
-                    `Temp: ${s.temperature != null ? s.temperature + '°F' : '—'}<br>` +
-                    `Feels Like: ${s.feels_like != null ? s.feels_like + '°F' : '—'}<br>` +
-                    `Dew Point: ${s.dew_point != null ? s.dew_point + '°F' : '—'}<br>` +
-                    `RH: ${s.rh != null ? s.rh + '%' : '—'}<br>` +
-                    `Wind: ${wdir} @ ${wspd}${gust}<br>` +
-                    `Visibility: ${vis}<br>` +
-                    `<a href="${timeseriesUrl}" target="_blank" rel="noopener" style="color:#7dd3fc;text-decoration:none;">View Time Series</a>`
-                );
-                return m;
-            })
-        );
-        layers.push(markerGroup);
-
-        // Combine all layers into a single layer group
-        surfaceLayer = L.layerGroup(layers);
-        if (_isTypeEnabled('current') && _activeSurfaceProduct()) {
-            surfaceLayer.addTo(map);
-        }
-    }
-
-    function _clearSurfaceLayer() {
-        _surfaceRequestSeq += 1;
-        if (surfaceLayer && map.hasLayer(surfaceLayer)) map.removeLayer(surfaceLayer);
-        surfaceLayer = null;
-        _surfaceStations = [];
-        const countEl = byId('weather-surface-count');
-        if (countEl) countEl.textContent = '0 station(s)';
-        setLegend(null);
-    }
-
-    async function _ensureGradientStations(product, regionCode = null, prefetchedStations = null) {
-        if (_archiveMode || !product) return;
-        const sourceRegion = _getGradientSourceRegion(regionCode);
-        if (
-            _surfaceGradientProduct === product
-            && _surfaceGradientRegion === sourceRegion
-            && _surfaceGradientStations.length
-        ) {
-            return;
-        }
-
-        try {
-            let allStations;
-            if (prefetchedStations) {
-                // Reuse stations already fetched by loadSurface — avoids a duplicate request.
-                allStations = prefetchedStations;
-            } else {
-                const url = apiUrl(`/api/data/surface?region=${encodeURIComponent(sourceRegion)}&product=${encodeURIComponent(product)}`);
-                const resp = await fetch(url);
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const data = await resp.json();
-                allStations = Array.isArray(data?.stations) ? data.stations : [];
-            }
-            // Use ASOS-only for gradient interpolation — more reliable sensors,
-            // fewer outliers from COOP/DCP/RWIS that can distort the surface.
-            _surfaceGradientStations = allStations.filter(s => (s.network || 'ASOS') === 'ASOS');
-            _surfaceGradientProduct = product;
-            _surfaceGradientRegion = sourceRegion;
-        } catch (err) {
-            console.warn(`[surface] ${sourceRegion} gradient source unavailable, falling back to regional stations:`, err);
-        }
-    }
-
-    function _canApplySurfaceResponse(region, product) {
-        return !_archiveMode
-            && _isTypeEnabled('current')
-            && _activeSurfaceProduct() === product
-            && (byId('weather-region')?.value || '').toUpperCase() === String(region || '').toUpperCase();
-    }
-
-    // Client-side colormap anchors for the legend (mirror of server-side _SURFACE_PRODUCTS)
-    const _SURFACE_COLORMAPS = {
-        station_plot: [[-60, '#00352C'], [-20, '#c4c4d4'], [0, '#570057'], [32, '#0000ff'], [50, '#c4c403'], [80, '#c20303'], [130, '#000000']],
-        temperature: [[-60, '#00352C'], [-20, '#c4c4d4'], [0, '#570057'], [32, '#0000ff'], [50, '#c4c403'], [80, '#c20303'], [130, '#000000']],
-        temperature_change_24h: [[-40, '#4c1d95'], [-30, '#312e81'], [-20, '#1d4ed8'], [-10, '#0ea5e9'], [0, '#f8fafc'], [10, '#f59e0b'], [20, '#ef4444'], [30, '#b91c1c'], [40, '#7f1d1d']],
-        feels_like: [[-60, '#00352C'], [-20, '#c4c4d4'], [0, '#570057'], [32, '#0000ff'], [50, '#c4c403'], [80, '#c20303'], [130, '#000000']],
-        dew_point: [[-60, '#00352C'], [-20, '#c4c4d4'], [0, '#570057'], [32, '#0000ff'], [50, '#c4c403'], [80, '#c20303'], [130, '#000000']],
-        relative_humidity: [[0, '#c8a000'], [20, '#f5dd72'], [40, '#69bb6d'], [60, '#0099cc'], [80, '#0055aa'], [100, '#003377']],
-        wind_speed: [[0, '#b0d4f0'], [10, '#70b0e0'], [20, '#3090d0'], [30, '#f5dd72'], [45, '#ff9d2e'], [60, '#ff4f4f']],
-        wind_gust: [[0, '#b0d4f0'], [10, '#70b0e0'], [20, '#3090d0'], [30, '#f5dd72'], [45, '#ff9d2e'], [60, '#ff4f4f']],
-        altimeter: [[29.5, '#5b1a8f'], [30.0, '#2a6db3'], [30.2, '#2ca58d'], [30.4, '#f5dd72'], [30.6, '#ff9d2e'], [30.8, '#bf2c2c']],
-        mslp: [[990, '#5b1a8f'], [1000, '#2a6db3'], [1010, '#2ca58d'], [1020, '#f5dd72'], [1030, '#ff9d2e'], [1040, '#bf2c2c']],
-        visibility: [[0, '#7f1d1d'], [1, '#b45309'], [3, '#d97706'], [5, '#65a30d'], [7, '#16a34a'], [10, '#0ea5e9']],
-    };
-
-    const _SURFACE_PRODUCT_LABELS = {
-        temperature: 'Temperature',
-        feels_like: 'Feels Like',
-        dew_point: 'Dew Point',
-        relative_humidity: 'Relative Humidity',
-        wind_speed: 'Wind Speed',
-        wind_gust: 'Wind Gust',
-        altimeter: 'Altimeter',
-        mslp: 'MSLP',
-        visibility: 'Visibility',
-    };
-
     function _formatSurfaceTick(value) {
         return Number.isInteger(value) ? String(value) : value.toFixed(1);
     }
@@ -11886,38 +11122,10 @@
             `</div>`
         );
     }
-
-    function buildSurfaceLegend(unit, anchors, product) {
-        if (!anchors?.length) {
-            setLegend(null);
-            return;
-        }
-
-        const label = _SURFACE_PRODUCT_LABELS[product] || product.replace(/_/g, ' ');
-        const axisLabel = unit ? `${label} (${unit})` : label;
-        setLegend(renderContinuousLegend(`Surface: ${label}`, axisLabel, anchors));
-    }
-
-    function applySurfaceValueOpacity(val) {
-        surfaceValueOpacity = parseFloat(val);
-        // Re-render markers/values with new opacity baked into rendering
-        if (_surfaceStations.length) _renderSurfaceMarkers(_surfaceStations);
-    }
-
-    function applySurfaceGradientOpacity(val) {
-        surfaceGradientOpacity = parseFloat(val);
-        // Re-render gradient with new opacity baked into rendering
-        if (_surfaceStations.length) _renderSurfaceMarkers(_surfaceStations);
-    }
-
-    // Re-thin on zoom change if surface layer is active
     map.on('zoomend', () => {
         _updateObsDensityLabel();
         _updateCitiesDensityLabel();
         _refreshCitiesIfVisible();
-        if (_surfaceStations.length && _isTypeEnabled('current') && _activeSurfaceProduct()) {
-            _renderSurfaceMarkers(_surfaceStations);
-        }
         if (_isTypeEnabled('rtma')) {
             if (_rtmaPointsAll.length) _renderRtmaPoints();
             else _scheduleRtmaPointsLoad();
@@ -13097,12 +12305,11 @@
     const ARCHIVE_PLAY_INTERVAL_MS = 800;
 
     function _activeArchiveProduct() {
-        // Returns the active archive-supported product type: 'mrms', 'alerts', 'spc', 'surface', or null.
+        // Returns the active archive-supported product type: 'mrms', 'alerts', 'spc', or null.
         // Satellite is intentionally excluded (live-only type).
         if (_isTypeEnabled('mrms') && _activeMrmsProduct()) return 'mrms';
         if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length) return 'alerts';
         if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) return 'spc';
-        if (_isTypeEnabled('current') && _activeSurfaceProduct()) return 'surface';
         return null;
     }
 
@@ -13310,8 +12517,6 @@
             _renderArchiveGeoJsonFrame(frame, 'alerts');
         } else if (_archiveProductType === 'spc') {
             _spcPageController?.renderArchiveFrame(frame);
-        } else if (_archiveProductType === 'surface') {
-            _surfacePageController?.renderArchiveFrame(frame);
         }
         _preloadArchiveNeighbors(_archiveFrameIndex);
     }
@@ -13355,19 +12560,6 @@
         }
     }
 
-    const _SURFACE_PRODUCTS_UNITS = {
-        station_plot: '\u00b0F',
-        temperature: '\u00b0F',
-        feels_like: '\u00b0F',
-        dew_point: '\u00b0F',
-        relative_humidity: '%',
-        wind_speed: 'kt',
-        wind_gust: 'kt',
-        altimeter: 'inHg',
-        mslp: 'hPa',
-        visibility: 'mi',
-    };
-
     async function loadArchive() {
         const group = _activeArchiveProduct();
         const dtFromLocal = byId('archive-from')?.value;
@@ -13393,14 +12585,12 @@
         stopScrubberPlay();
 
         if (!group) {
-            setStatus('Enable a supported data type (Surface, MRMS, Alerts, or SPC) before loading archive.');
+            setStatus('Enable a supported data type (MRMS, Alerts, or SPC) before loading archive.');
             _setArchiveProgress(false);
             return;
         }
         if (group === 'mrms') {
             await _mrmsEngine?.loadArchive(dtFrom, dtTo);
-        } else if (group === 'surface') {
-            await _surfaceEngine?.loadArchive();
         } else if (group === 'alerts') {
             await _alertsEngine?.loadArchiveAlerts(dtFrom, dtTo);
         } else if (group === 'spc') {
@@ -13848,25 +13038,6 @@
         label.textContent = `${baseLabel} (${distKm} km)`;
     }
 
-    function _readObsDensity() {
-        const raw = parseFloat(byId('weather-obs-density')?.value || '1');
-        if (!Number.isFinite(raw)) return 1;
-        return Math.max(0.01, Math.min(1, raw));
-    }
-
-    function _setObsDensity(rawValue) {
-        const raw = parseFloat(String(rawValue));
-        if (!Number.isFinite(raw)) return;
-        const clamped = Math.max(0.01, Math.min(1, raw));
-        const primary = byId('weather-obs-density');
-        if (primary) primary.value = String(clamped);
-        _surfaceDensity = clamped;
-        _updateObsDensityLabel();
-        if (_surfaceStations?.length) {
-            _renderSurfaceMarkers(_surfaceStations);
-        }
-    }
-
     function _setRtmaDensity(rawValue) {
         const raw = parseFloat(String(rawValue));
         if (!Number.isFinite(raw)) return;
@@ -13880,23 +13051,9 @@
         }
     }
 
-    function _readGradientBlurScale() {
-        const raw = parseFloat(byId('weather-gradient-blur')?.value || '0');
-        if (!Number.isFinite(raw)) return 0.35;
-        return Math.max(0, Math.min(2, raw));
-    }
-
     function _updateObsDensityLabel() {
         const zoom = map?.getZoom() ?? 5;
-        const region = (byId('weather-region')?.value || '').toUpperCase();
-        const surfaceLabel = document.querySelector('label[for="weather-obs-density"]');
         const rtmaLabel = document.querySelector('label[for="weather-rtma-obs-density"]');
-        if (surfaceLabel) {
-            const distKm = Math.round(_baseDistKm(zoom, region) / _surfaceDensity);
-            const baseLabel = surfaceLabel.dataset.baseLabel || 'Station Density';
-            surfaceLabel.dataset.baseLabel = baseLabel;
-            surfaceLabel.textContent = `${baseLabel} (${distKm} km)`;
-        }
         if (rtmaLabel) {
             const distKm = Math.round(_rtmaBaseDistKm(zoom) / _rtmaDensity);
             const label = rtmaLabel;
@@ -14001,15 +13158,6 @@
     }
 
     // Helper function to show/hide network filters based on region
-    function _updateNetworkFiltersVisibility(region) {
-        const filtersContainer = byId('weather-network-filters');
-        const filtersTitle = byId('weather-network-filters-title');
-        const isWorldOrConus = region === 'WORLD' || region === 'CONUS';
-
-        if (filtersContainer) filtersContainer.style.display = isWorldOrConus ? 'none' : '';
-        if (filtersTitle) filtersTitle.style.display = isWorldOrConus ? 'none' : '';
-    }
-
     byId('weather-region')?.addEventListener('change', (e) => {
         const nextRegion = String(e.target.value || '').toUpperCase();
         const regionSelect = byId('weather-region');
@@ -14022,15 +13170,12 @@
             if (alertSentinel) alertSentinel.remove();
         }
 
-        _updateNetworkFiltersVisibility(nextRegion);
-
         if (nextRegion === 'CONUS') {
             _clearRadarSiteAndZoomConus();
             return;
         }
         fitRegion(nextRegion);
         _updateObsDensityLabel();
-        _updateGradientBlurControlVisibility();
         _clearSpeedOverride();
         _clearRadarCalLine();
         _syncRtmaStreamForRegion();
@@ -14112,57 +13257,6 @@
         section.setAttribute('data-open', isOpen ? 'false' : 'true');
     });
 
-    // Network filter initialization and event listeners
-    const NETWORKS = ['ASOS', 'COOP', 'DCP', 'RWIS'];
-    let _networkFilters = {};
-
-    // Product pages should start with all networks visible; user changes still apply during the session.
-    function _loadNetworkFilters() {
-        _networkFilters = Object.fromEntries(NETWORKS.map(n => [n, true]));
-    }
-
-    function _saveNetworkFilters() {
-        localStorage.setItem('wxNetworkFilters', JSON.stringify(_networkFilters));
-    }
-
-    function _getFilteredStations(stations) {
-        if (!Array.isArray(stations)) return [];
-        return stations.filter(s => _networkFilters[s.network || 'ASOS']);
-    }
-
-    // Load and apply saved filter state to checkboxes
-    _loadNetworkFilters();
-    NETWORKS.forEach(net => {
-        const checkbox = document.querySelector(`.weather-network-filter input[value="${net}"]`);
-        if (checkbox) {
-            checkbox.checked = _networkFilters[net];
-        }
-    });
-
-    // Initialize network filters visibility based on current region
-    const initialRegion = (byId('weather-region')?.value || 'CONUS').toUpperCase();
-    _updateNetworkFiltersVisibility(initialRegion);
-
-    // Add event listeners to network filter checkboxes
-    document.querySelectorAll('.weather-network-filter input[type="checkbox"]').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
-            _networkFilters[e.target.value] = e.target.checked;
-            _saveNetworkFilters();
-            // Re-render surface markers with updated filter
-                if (_surfaceStations.length) {
-                    _renderSurfaceMarkers(_getFilteredStations(_surfaceStations));
-                } else if (!_activeSurfaceProduct()) {
-                    _clearSurfaceLayer();
-                }
-            });
-        });
-
-    // Wrap _renderSurfaceMarkers to apply network filtering
-    const _originalRenderSurfaceMarkers = _renderSurfaceMarkers;
-    _renderSurfaceMarkers = function (stations) {
-        const filtered = _getFilteredStations(stations);
-        _originalRenderSurfaceMarkers(filtered);
-    };
 
     ['current', 'alerts', 'radar', 'satellite', 'spc', 'rtma', 'mrms', 'drought', 'tropical', 'wpc', 'water'].forEach((type) => {
         byId(`weather-type-${type}`)?.addEventListener('change', (e) => {
@@ -14322,8 +13416,6 @@
     byId('weather-opacity-alerts')?.addEventListener('input', (e) => applyAlertsOpacity(e.target.value));
     byId('weather-opacity-spc')?.addEventListener('input', (e) => applySpcOpacity(e.target.value));
     byId('weather-opacity-spc-stroke')?.addEventListener('input', (e) => applySpcStrokeOpacity(e.target.value));
-    byId('weather-opacity-surface-values')?.addEventListener('input', (e) => applySurfaceValueOpacity(e.target.value));
-    byId('weather-opacity-surface-gradient')?.addEventListener('input', (e) => applySurfaceGradientOpacity(e.target.value));
     byId('weather-opacity-mrms')?.addEventListener('input', (e) => applyMrmsOpacity(e.target.value));
     byId('weather-opacity-wpc')?.addEventListener('input', (e) => {
         const opacity = parseFloat(e.target.value);
@@ -14337,17 +13429,6 @@
     });
 
 
-    byId('weather-gradient-blur')?.addEventListener('input', () => {
-        _gradientBlurScale = _readGradientBlurScale();
-        _updateGradientBlurLabel();
-        if (_surfaceStations?.length && _activeSurfaceGradient()) {
-            _renderSurfaceMarkers(_surfaceStations);
-        }
-    });
-
-    byId('weather-obs-density')?.addEventListener('input', (e) => {
-        _setObsDensity(e.target.value);
-    });
     byId('weather-rtma-obs-density')?.addEventListener('input', (e) => {
         _setRtmaDensity(e.target.value);
     });
@@ -14593,17 +13674,6 @@
         _armProductRendering();
         refreshSpc();
     });
-    byId('weather-refresh-surface')?.addEventListener('click', () => {
-        _armProductRendering();
-        const region = byId('weather-region')?.value || 'NC';
-        const product = _activeSurfaceProduct();
-        if (!product) {
-            setStatus('Select a surface observation type first.');
-            return;
-        }
-        _surfaceEngine?.loadSurface(region, product);
-    });
-
     // Left sidebar satellite lookback and scrubber controls removed - functionality moved to bottom archive bar
 
 
@@ -14632,15 +13702,6 @@
 
     map.on('moveend', () => {
         _refreshCitiesIfVisible();
-        if (
-            _surfaceStations.length
-            && _isTypeEnabled('current')
-            && _activeSurfaceProduct()
-            && _activeSurfaceGradient()
-        ) {
-            // Gradient is a bounds-sized image overlay; rebuild it after panning.
-            _renderSurfaceMarkers(_surfaceStations);
-        }
         if (_productRenderArmed && _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0 && _allAlertFeatures.length) {
             buildAlertsLegend(_allAlertFeatures);
         }
@@ -14818,15 +13879,11 @@
         _updateWarningFilterRowVisibility();
         _citiesDensity = _readCitiesDensity();
         _updateCitiesDensityLabel();
-        _surfaceDensity = _readObsDensity();
         _rtmaDensity = Math.max(
             0.01,
             Math.min(2, parseFloat(byId('weather-rtma-obs-density')?.value || '0.25'))
         );
         _updateObsDensityLabel();
-        _gradientBlurScale = _readGradientBlurScale();
-        _updateGradientBlurLabel();
-        _updateGradientBlurControlVisibility();
         _syncRtmaStreamForRegion();
         _syncRtmaProductForStream();
         await _loadUserSettingsDefaults();
@@ -15057,31 +14114,6 @@
                 setStatus,
             });
             _rtmaPageController.wireControls?.();
-        }
-
-        if (_surfacePageController?.configureSurfacePage) {
-            _surfacePageController.configureSurfacePage({
-                applyGradientChange: () => {
-                    _armProductRendering();
-                    return _surfaceEngine?.applyGradientChange();
-                },
-                buildSurfaceLegend: (product, unit) => buildSurfaceLegend(
-                    unit || _SURFACE_PRODUCTS_UNITS[product] || '',
-                    _SURFACE_COLORMAPS[product] || _SURFACE_COLORMAPS.temperature,
-                    product,
-                ),
-                clearSurface: _clearSurfaceLayer,
-                getRegionValue: () => byId('weather-region')?.value,
-                isTypeEnabled: _isTypeEnabled,
-                loadSurface: (region, product) => {
-                    _armProductRendering();
-                    return _surfaceEngine?.loadSurface(region, product);
-                },
-                renderSurfaceMarkers: _renderSurfaceMarkers,
-                setSurfaceStations: (stations) => { _surfaceStations = stations; },
-                updateGradientBlurVisibility: _updateGradientBlurControlVisibility,
-            });
-            _surfacePageController.wireControls?.();
         }
 
         if (_spcPageController?.configureSpcPage) {
@@ -15607,53 +14639,6 @@
         });
         if (rtmaContext && _rtmaEngineFactory?.createRtmaEngine) {
             _rtmaEngine = _rtmaEngineFactory.createRtmaEngine(rtmaContext);
-        }
-
-        const surfaceContext = _productAppContexts?.registerProductContext('surface', {
-            activeSurfaceGradient: _activeSurfaceGradient,
-            activeSurfaceProduct: _activeSurfaceProduct,
-            apiUrl,
-            getArchiveFromValue: () => byId('archive-from')?.value || '',
-            getArchiveToValue: () => byId('archive-to')?.value || '',
-            getRegionValue: () => byId('weather-region')?.value,
-            buildSurfaceLegend: (product, stations) => buildSurfaceLegend(
-                _SURFACE_PRODUCTS_UNITS[product] || '',
-                _SURFACE_COLORMAPS[product] || _SURFACE_COLORMAPS.temperature,
-                product,
-            ),
-            canApplySurfaceResponse: _canApplySurfaceResponse,
-            ensureGradientStations: _ensureGradientStations,
-            formatValidTimeLabel: _formatValidTimeLabel,
-            getSurfaceStations: () => _surfaceStations,
-            hasGradientCache: (product, region) => _surfaceGradientOverlayCache.has(_surfaceGradientCacheKey(product, region)),
-            isCurrentRequestSeq: (seq) => seq === _surfaceRequestSeq,
-            isTypeEnabled: _isTypeEnabled,
-            nextRequestSeq: () => { _surfaceRequestSeq += 1; return _surfaceRequestSeq; },
-            onArchiveFramesReady: _onArchiveFramesReady,
-            primeSurfaceGradientCache: _primeSurfaceGradientOverlayCache,
-            renderSurfaceMarkers: _renderSurfaceMarkers,
-            resolveTimestampMs: _resolveDataTimestampMs,
-            setArchiveFromValue: (value) => {
-                const el = byId('archive-from');
-                if (el) el.value = value;
-            },
-            setArchiveProduct: (product) => _surfacePageController?.setArchiveProduct(product),
-            setArchiveProgress: _setArchiveProgress,
-            setArchiveToValue: (value) => {
-                const el = byId('archive-to');
-                if (el) el.value = value;
-            },
-            setReliability: _setReliability,
-            setSurfaceStations: (stations) => { _surfaceStations = stations; },
-            setStatus,
-            setTimestampSource: _setTimestampSource,
-            setViewerTimestamp: _setViewerTimestamp,
-            snapToHour: _snapToHour,
-            staleNoteForTimestamp: _staleNoteForTimestamp,
-            toArchiveApiDatetime: _toArchiveApiDatetime,
-        });
-        if (surfaceContext && _surfaceEngineFactory?.createSurfaceEngine) {
-            _surfaceEngine = _surfaceEngineFactory.createSurfaceEngine(surfaceContext);
         }
 
         const spcContext = _productAppContexts?.registerProductContext('spc', {

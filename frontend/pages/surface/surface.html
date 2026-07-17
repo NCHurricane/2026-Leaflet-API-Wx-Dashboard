@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Current Conditions — NCHurricane Dashboard</title>
+    <link rel="icon" href="/img/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260717a">
+    <link rel="stylesheet" href="/frontend/pages/surface/surface.css?v=20260717a">
+</head>
+<body>
+    <header class="core-header">
+        <div class="core-brand">NCHURRICANE</div>
+        <nav id="product-nav" class="core-nav" aria-label="Weather products"></nav>
+    </header>
+
+    <main class="surface-app">
+        <aside id="surface-sidebar-tabs" class="core-sidebar surface-controls">
+            <h1 class="core-visually-hidden">Current Surface Conditions</h1>
+
+            <div class="core-sidebar-header">
+                <div class="core-card surface-status-card">
+                    <div class="surface-status-title">Data status</div>
+                    <dl class="core-status-grid">
+                        <dt>Valid</dt><dd id="surface-updated">—</dd>
+                        <dt>Data Age</dt><dd id="surface-age">—</dd>
+                        <dt>Provider</dt><dd id="surface-provider">—</dd>
+                        <dt>Source</dt><dd id="surface-source">—</dd>
+                        <dt>Stations</dt><dd id="surface-station-count">0</dd>
+                    </dl>
+                </div>
+
+                <div class="core-field">
+                    <label for="surface-region">Region</label>
+                    <select id="surface-region"></select>
+                </div>
+            </div>
+
+            <div class="core-sidebar-tabs" role="tablist" aria-label="Surface controls">
+                <button id="surface-tab-data" class="core-sidebar-tab is-active" type="button"
+                    role="tab" aria-selected="true" aria-controls="surface-panel-data"
+                    data-sidebar-tab="data">
+                    <i class="fas fa-database" aria-hidden="true"></i><span class="core-sidebar-tab-label">Data</span>
+                </button>
+                <button id="surface-tab-overlays" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="surface-panel-overlays" tabindex="-1"
+                    data-sidebar-tab="overlays">
+                    <i class="fas fa-layer-group" aria-hidden="true"></i><span class="core-sidebar-tab-label">Overlays</span>
+                </button>
+                <button id="surface-tab-style" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="surface-panel-style" tabindex="-1"
+                    data-sidebar-tab="style">
+                    <i class="fas fa-sliders" aria-hidden="true"></i><span class="core-sidebar-tab-label">Style</span>
+                </button>
+            </div>
+
+            <div class="core-sidebar-content">
+                <section id="surface-panel-data" class="core-sidebar-panel surface-panel-stack"
+                    role="tabpanel" aria-labelledby="surface-tab-data" data-sidebar-panel="data">
+                    <div id="surface-networks-wrap">
+                    <h2>Networks</h2>
+                    <div class="surface-check-list">
+                        <label class="surface-check"><span>ASOS</span><input data-surface-network type="checkbox" value="ASOS" checked></label>
+                        <label class="surface-check"><span>COOP</span><input data-surface-network type="checkbox" value="COOP" checked></label>
+                        <label class="surface-check"><span>DCP</span><input data-surface-network type="checkbox" value="DCP" checked></label>
+                        <label class="surface-check"><span>RWIS</span><input data-surface-network type="checkbox" value="RWIS" checked></label>
+                    </div>
+                    </div>
+
+                    <div class="core-adjustment">
+                        <label id="surface-density-label" for="surface-density">Station Density</label>
+                        <input id="surface-density" type="range" min="0.01" max="1" step="0.005" value="0.25">
+                    </div>
+
+                    <div>
+                    <h2>Products</h2>
+                    <div class="surface-check-list">
+                        <label class="surface-product-row"><span>Temperature</span>
+                            <input data-surface-product type="checkbox" value="temperature">
+                            <span class="surface-grad-label">Grad</span>
+                            <input data-surface-gradient type="checkbox" data-product="temperature"></label>
+                        <label class="surface-product-row"><span>Feels Like</span>
+                            <input data-surface-product type="checkbox" value="feels_like">
+                            <span class="surface-grad-label">Grad</span>
+                            <input data-surface-gradient type="checkbox" data-product="feels_like"></label>
+                        <label class="surface-product-row"><span>Dew Point</span>
+                            <input data-surface-product type="checkbox" value="dew_point">
+                            <span class="surface-grad-label">Grad</span>
+                            <input data-surface-gradient type="checkbox" data-product="dew_point"></label>
+                        <label class="surface-product-row"><span>Relative Humidity</span>
+                            <input data-surface-product type="checkbox" value="relative_humidity">
+                            <span class="surface-grad-label">Grad</span>
+                            <input data-surface-gradient type="checkbox" data-product="relative_humidity"></label>
+                        <label class="surface-product-row"><span>Wind Speed</span>
+                            <input data-surface-product type="checkbox" value="wind_speed">
+                            <span class="surface-grad-label">Grad</span>
+                            <input data-surface-gradient type="checkbox" data-product="wind_speed"></label>
+                        <label class="surface-product-row"><span>Wind Gust</span>
+                            <input data-surface-product type="checkbox" value="wind_gust">
+                            <span class="surface-grad-label">Grad</span>
+                            <input data-surface-gradient type="checkbox" data-product="wind_gust"></label>
+                        <label class="surface-product-row"><span>Altimeter</span>
+                            <input data-surface-product type="checkbox" value="altimeter">
+                            <span class="surface-grad-label">Grad</span>
+                            <input data-surface-gradient type="checkbox" data-product="altimeter"></label>
+                        <label class="surface-product-row"><span>MSLP</span>
+                            <input data-surface-product type="checkbox" value="mslp">
+                            <span class="surface-grad-label">Grad</span>
+                            <input data-surface-gradient type="checkbox" data-product="mslp"></label>
+                        <label class="surface-product-row"><span>Visibility</span>
+                            <input data-surface-product type="checkbox" value="visibility">
+                            <span class="surface-grad-label">Grad</span>
+                            <input data-surface-gradient type="checkbox" data-product="visibility"></label>
+                    </div>
+                    </div>
+                </section>
+
+                <section id="surface-panel-overlays" class="core-sidebar-panel surface-panel-stack"
+                    role="tabpanel" aria-labelledby="surface-tab-overlays" data-sidebar-panel="overlays" hidden>
+                    <div>
+                    <h2>Cities</h2>
+                    <div class="core-segmented" role="radiogroup" aria-label="Cities">
+                        <label><input name="surface-cities-source" type="radio" value="off" checked><span>Off</span></label>
+                        <label><input name="surface-cities-source" type="radio" value="us"><span>US</span></label>
+                        <label><input name="surface-cities-source" type="radio" value="world"><span>World</span></label>
+                    </div>
+                    <div class="core-adjustment" data-city-adjustment>
+                        <label id="surface-city-density-label" for="surface-city-density">City Density</label>
+                        <input id="surface-city-density" type="range" min="0.01" max="1" step="0.005" value="0.25">
+                    </div>
+                    <div class="core-adjustment" data-city-adjustment>
+                        <label id="surface-city-font-size-label" for="surface-city-font-size">City Font Size (0.6)</label>
+                        <input id="surface-city-font-size" type="range" min="0.4" max="1.2" step="0.05" value="0.6">
+                    </div>
+                    </div>
+
+                    <div>
+                    <h2>Map overlays</h2>
+                    <div class="surface-check-list">
+                        <label class="surface-check"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
+                        <label class="surface-check"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
+                        <label class="surface-check"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
+                        <label class="surface-check"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                    </div>
+                    </div>
+                </section>
+
+                <section id="surface-panel-style" class="core-sidebar-panel surface-panel-stack"
+                    role="tabpanel" aria-labelledby="surface-tab-style" data-sidebar-panel="style" hidden>
+                    <div class="core-adjustment">
+                        <label for="surface-value-opacity">Value Opacity (0.9)</label>
+                        <input id="surface-value-opacity" type="range" min="0.1" max="1" step="0.05" value="0.9">
+                    </div>
+                    <div class="core-adjustment" data-gradient-adjustment>
+                        <label for="surface-gradient-opacity">Gradient Opacity (0.9)</label>
+                        <input id="surface-gradient-opacity" type="range" min="0.1" max="1" step="0.05" value="0.9">
+                    </div>
+
+                    <div class="core-field">
+                        <label for="surface-basemap">Basemap</label>
+                        <select id="surface-basemap">
+                            <option>Dark (No Labels)</option><option>Light (No Labels)</option>
+                            <option>Voyager</option><option>USGS</option><option>Satellite</option>
+                        </select>
+                    </div>
+                </section>
+            </div>
+
+            <div class="core-sidebar-footer">
+                <div id="surface-message" class="core-message" aria-live="polite"></div>
+                <button id="surface-refresh" class="surface-refresh" type="button">Refresh</button>
+            </div>
+        </aside>
+
+        <section class="core-map-panel surface-map-wrap" aria-label="Surface conditions map">
+            <div id="surface-map"></div>
+            <div id="global-timestamp" class="core-global-timestamp">Last Updated: —</div>
+            <div id="surface-legend" class="surface-legend" data-legend-align="left" hidden></div>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="/frontend/pages/surface/surface-page.js?v=20260717b"></script>
+</body>
+</html>

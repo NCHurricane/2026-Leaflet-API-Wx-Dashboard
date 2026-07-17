@@ -177,76 +177,6 @@
                         </select>
                     </div>
 
-                    <div id="wx-section-current" class="wx-block" data-type="current">
-
-                        <div id="weather-surface-opts">
-                            <label id="weather-network-filters-title" class="label-small">Networks</label>
-                            <div id="weather-network-filters">
-                                <label class="weather-network-filter">
-                                    <input type="checkbox" value="ASOS" checked> ASOS
-                                </label>
-                                <label class="weather-network-filter">
-                                    <input type="checkbox" value="COOP" checked> COOP
-                                </label>
-                                <label class="weather-network-filter">
-                                    <input type="checkbox" value="DCP" checked> DCP
-                                </label>
-                                <label class="weather-network-filter">
-                                    <input type="checkbox" value="RWIS" checked> RWIS
-                                </label>
-                            </div>
-                            <div class="wx-obs-density-head">
-                                <label for="weather-obs-density">Station Density</label>
-                            </div>
-                            <input id="weather-obs-density" type="range" min="0.01" max="1" step="0.005" value="0.25">
-                            <div class="wx-check-row"><span>Temperature</span><input class="weather-surface-product"
-                                    type="checkbox" value="temperature">
-                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
-                                    type="checkbox" data-product="temperature">
-                            </div>
-                            <div class="wx-check-row"><span>Feels Like</span><input class="weather-surface-product"
-                                    type="checkbox" value="feels_like">
-                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
-                                    type="checkbox" data-product="feels_like">
-                            </div>
-                            <div class="wx-check-row"><span>Dew Point</span><input class="weather-surface-product"
-                                    type="checkbox" value="dew_point">
-                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
-                                    type="checkbox" data-product="dew_point">
-                            </div>
-                            <div class="wx-check-row"><span>Relative Humidity</span><input
-                                    class="weather-surface-product" type="checkbox" value="relative_humidity">
-                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
-                                    type="checkbox" data-product="relative_humidity">
-                            </div>
-                            <div class="wx-check-row"><span>Wind Speed</span><input class="weather-surface-product"
-                                    type="checkbox" value="wind_speed">
-                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
-                                    type="checkbox" data-product="wind_speed">
-                            </div>
-                            <div class="wx-check-row"><span>Wind Gust</span><input class="weather-surface-product"
-                                    type="checkbox" value="wind_gust">
-                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
-                                    type="checkbox" data-product="wind_gust">
-                            </div>
-                            <div class="wx-check-row"><span>Altimeter</span><input class="weather-surface-product"
-                                    type="checkbox" value="altimeter">
-                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
-                                    type="checkbox" data-product="altimeter">
-                            </div>
-                            <div class="wx-check-row"><span>MSLP</span><input class="weather-surface-product"
-                                    type="checkbox" value="mslp">
-                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
-                                    type="checkbox" data-product="mslp">
-                            </div>
-                            <div class="wx-check-row"><span>Visibility</span><input class="weather-surface-product"
-                                    type="checkbox" value="visibility">
-                                <span class="wx-gradient-label">Grad</span><input class="weather-surface-gradient"
-                                    type="checkbox" data-product="visibility">
-                            </div>
-
-                        </div>
-                    </div>
 
                     <div id="wx-section-alerts" class="wx-block" data-type="alerts" style="display:none;">
                         <div id="weather-alerts-opts">
@@ -1360,22 +1290,6 @@
                         <div id="wx-side-groups-empty" class="wx-block wx-small" style="display:none;">
                             Enable a product group to see style controls.
                         </div>
-                        <div id="wx-side-group-current" class="wx-block wx-side-group" data-type="current">
-                            <h3>Styling</h3>
-                            <div class="wx-block">
-                                <div id="weather-gradient-blur-wrap" style="display:none;">
-                                    <label for="weather-gradient-blur">Gradient Blur</label>
-                                    <input id="weather-gradient-blur" type="range" min="0" max="2" step="0.05"
-                                        value="0">
-                                    <label for="weather-opacity-surface-gradient">Gradient Opacity</label>
-                                    <input id="weather-opacity-surface-gradient" type="range" min="0.1" max="1"
-                                        step="0.05" value="0.9">
-                                </div>
-                                <label for="weather-opacity-surface-values">Value Opacity</label>
-                                <input id="weather-opacity-surface-values" type="range" min="0.1" max="1" step="0.05"
-                                    value="0.9">
-                            </div>
-                        </div>
                         <div id="wx-side-group-alerts" class="wx-block wx-side-group" data-type="alerts"
                             style="display:none;">
                             <h3>Styling</h3>
@@ -1635,8 +1549,6 @@
         <script src="js/satellite-page.js?v=20260716b"></script>
         <script src="js/radar-engine.js?v=20260704a"></script>
         <script src="js/radar-page.js?v=20260716a"></script>
-        <script src="js/surface-engine.js?v=20260617a"></script>
-        <script src="js/surface-page.js?v=20260704b"></script>
         <script src="js/mrms-engine.js?v=20260617a"></script>
         <script src="js/mrms-page.js?v=20260617a"></script>
         <script src="js/rtma-engine.js?v=20260617a"></script>
@@ -1648,7 +1560,7 @@
         <script src="js/scrubber.js?v=20260619a"></script>
         <script src="js/wpc-engine.js?v=20260618j"></script>
         <script src="js/wpc-page.js?v=20260704c"></script>
-        <script src="js/weather.js?v=20260716d"></script>
+        <script src="js/weather.js?v=20260717a"></script>
         <script>initNav('weather');</script>
     </body>
 
