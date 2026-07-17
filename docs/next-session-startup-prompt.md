@@ -45,6 +45,8 @@ Active track order (2026-07-16):
     left/center/right alignment and categorical/continuous primitives. Drought
     uses bottom-left placement and expands for state statistics; browser smoke
     passed national, collapsed, and NC-stat layouts with no sidebar overlap.
+    Core typography uses the existing self-hosted Montserrat normal/italic
+    variable fonts; pages should inherit it rather than registering duplicates.
     Phase 20 Surface is next and should be the second consumer of the accepted
     sidebar and legend shells.
 2. Satellite render-pipeline latency optimization. This backend-only track may

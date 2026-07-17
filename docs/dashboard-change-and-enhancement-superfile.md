@@ -1,8 +1,8 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-16 (Frontend Split Stage 2 Phase 19 Drought migration
-completed; radar requested-lookback, GeoColor display updates, and GOES
-aerosol/fire products ADP/AOD/FRP merged)
+Last updated: 2026-07-16 (Frontend Split Stage 2 Phase 19 Drought migration and
+accepted sidebar/legend UI reference completed; radar requested-lookback,
+GeoColor display updates, and GOES aerosol/fire products ADP/AOD/FRP merged)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -328,6 +328,9 @@ found it.
   visible, and expands in place for state cumulative/individual percentages and
   DSCI. Browser smoke verified national, collapsed, and NC-stat states and proved
   the tray remained wholly inside the map panel without crossing the sidebar.
+  The standalone core shell also retains the dashboard's original Montserrat
+  typography through the existing self-hosted normal and italic variable fonts;
+  `core.css` owns the shared family declaration and product CSS inherits it.
   The corrected wiring passed module syntax, focused lint, eleven standalone and
   boundary-cache tests, and live local API payload checks.
 - Phase 20: surface. Reuse the accepted tabbed sidebar shell and prove the

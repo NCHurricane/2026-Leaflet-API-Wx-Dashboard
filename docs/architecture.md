@@ -42,6 +42,10 @@ Active root pages and their JS in this checkout:
   `frontend/core/core.css` supplies the shared dark tray, categorical-item, and
   continuous-colorbar/tick primitives; product engines retain ownership of
   legend content, thresholds, colors, labels, and values.
+- `frontend/core/core.css` also owns the standalone shell's typography. It loads
+  the existing normal and italic Montserrat variable fonts from the root
+  `/fonts` static mount and applies the family through `:root`, allowing product
+  pages and controls to inherit the original dashboard type treatment.
 
 Planned product-page migration:
 

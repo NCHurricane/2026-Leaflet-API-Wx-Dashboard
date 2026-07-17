@@ -60,7 +60,7 @@ than mounting or exposing backend Python files.
 | `frontend/core/status.js` | Status message, viewer timestamp, reliability/source metadata, valid-time formatting, staleness helpers | Product freshness thresholds or product wording |
 | `frontend/core/nav.js` | Product navigation and active-page state | Product controls or layer state |
 | `frontend/core/settings.js` | Namespaced load/save and change notification | Product defaults that belong in a page config |
-| `frontend/core/core.css` | Application chrome, shared structural primitives, and reusable categorical/continuous legend presentation | Product thresholds, legend copy/data, markers, or tool styling |
+| `frontend/core/core.css` | Application chrome, self-hosted Montserrat typography, shared structural primitives, and reusable categorical/continuous legend presentation | Product thresholds, legend copy/data, markers, or product-specific tool styling |
 
 The initial exports may be smaller than this table. Phase 19 creates only the
 parts Drought actually consumes; later phases extend a core module only when a
@@ -187,3 +187,8 @@ thresholds, and values. Drought defaults the tray to bottom-left, renders all
 five USDM classes, and adds cumulative/individual state statistics and DSCI when
 a state is selected. Browser smoke verified the expanded national, collapsed,
 and NC-stat layouts remained completely inside the map panel.
+
+Shared typography is also part of the accepted shell boundary. `core.css`
+registers the existing normal and italic Montserrat variable files from the
+root `/fonts` static mount, applies Montserrat through `:root`, and lets page CSS
+inherit it. Pages should not register duplicate product-local font families.
