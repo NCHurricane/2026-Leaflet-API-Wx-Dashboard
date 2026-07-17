@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Drought — NCHurricane Dashboard</title>
+    <link rel="icon" href="/img/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260716j">
+    <link rel="stylesheet" href="/frontend/pages/drought/drought.css?v=20260716j">
+</head>
+<body>
+    <header class="core-header">
+        <div class="core-brand">NCHURRICANE</div>
+        <nav id="product-nav" class="core-nav" aria-label="Weather products"></nav>
+    </header>
+
+    <main class="drought-app">
+        <aside id="drought-sidebar-tabs" class="core-sidebar drought-controls">
+            <h1 class="core-visually-hidden">U.S. Drought Monitor</h1>
+
+            <div class="core-sidebar-header">
+                <div class="core-card drought-status-card">
+                    <div class="drought-status-title">Data status</div>
+                    <dl class="core-status-grid">
+                        <dt>Valid</dt><dd id="drought-updated">—</dd>
+                        <dt>Data Age</dt><dd id="drought-age">—</dd>
+                        <dt>Provider</dt><dd id="drought-provider">—</dd>
+                        <dt>Source</dt><dd id="drought-source">—</dd>
+                    </dl>
+                </div>
+
+                <div class="core-field">
+                    <label for="drought-region">Region</label>
+                    <select id="drought-region"></select>
+                </div>
+            </div>
+
+            <div class="core-sidebar-tabs" role="tablist" aria-label="Drought controls">
+                <button id="drought-tab-data" class="core-sidebar-tab is-active" type="button"
+                    role="tab" aria-selected="true" aria-controls="drought-panel-data"
+                    data-sidebar-tab="data">
+                    <i class="fas fa-database" aria-hidden="true"></i><span class="core-sidebar-tab-label">Data</span>
+                </button>
+                <button id="drought-tab-overlays" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="drought-panel-overlays" tabindex="-1"
+                    data-sidebar-tab="overlays">
+                    <i class="fas fa-layer-group" aria-hidden="true"></i><span class="core-sidebar-tab-label">Overlays</span>
+                </button>
+                <button id="drought-tab-style" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="drought-panel-style" tabindex="-1"
+                    data-sidebar-tab="style">
+                    <i class="fas fa-sliders" aria-hidden="true"></i><span class="core-sidebar-tab-label">Style</span>
+                </button>
+            </div>
+
+            <div class="core-sidebar-content">
+                <section id="drought-panel-data" class="core-sidebar-panel drought-panel-stack"
+                    role="tabpanel" aria-labelledby="drought-tab-data" data-sidebar-panel="data">
+                    <div>
+                    <h2>Release week</h2>
+                    <div id="drought-dates" class="drought-dates"></div>
+                    <div id="drought-date-note" class="drought-note"></div>
+                    </div>
+
+                    <div>
+                    <h2>Drought categories</h2>
+                    <div class="drought-category-list">
+                        <label class="drought-category"><span>D0 — Abnormally Dry</span><input data-drought-category type="checkbox" value="0" checked></label>
+                        <label class="drought-category"><span>D1 — Moderate</span><input data-drought-category type="checkbox" value="1" checked></label>
+                        <label class="drought-category"><span>D2 — Severe</span><input data-drought-category type="checkbox" value="2" checked></label>
+                        <label class="drought-category"><span>D3 — Extreme</span><input data-drought-category type="checkbox" value="3" checked></label>
+                        <label class="drought-category"><span>D4 — Exceptional</span><input data-drought-category type="checkbox" value="4" checked></label>
+                    </div>
+                    </div>
+                </section>
+
+                <section id="drought-panel-overlays" class="core-sidebar-panel drought-panel-stack"
+                    role="tabpanel" aria-labelledby="drought-tab-overlays" data-sidebar-panel="overlays" hidden>
+                    <div>
+                    <h2>Cities</h2>
+                    <div class="core-segmented" role="radiogroup" aria-label="Cities">
+                        <label><input name="drought-cities-source" type="radio" value="off" checked><span>Off</span></label>
+                        <label><input name="drought-cities-source" type="radio" value="us"><span>US</span></label>
+                        <label><input name="drought-cities-source" type="radio" value="world"><span>World</span></label>
+                    </div>
+                    <div class="core-adjustment" data-city-adjustment>
+                        <label id="drought-city-density-label" for="drought-city-density">City Density</label>
+                        <input id="drought-city-density" type="range" min="0.01" max="1" step="0.005" value="0.25">
+                    </div>
+                    <div class="core-adjustment" data-city-adjustment>
+                        <label id="drought-city-font-size-label" for="drought-city-font-size">City Font Size (0.6)</label>
+                        <input id="drought-city-font-size" type="range" min="0.4" max="1.2" step="0.05" value="0.6">
+                    </div>
+                    </div>
+
+                    <div>
+                    <h2>Map overlays</h2>
+                    <div class="drought-category-list">
+                        <label class="drought-category"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
+                        <label class="drought-category"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
+                        <label class="drought-category"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
+                        <label class="drought-category"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                    </div>
+                    </div>
+                </section>
+
+                <section id="drought-panel-style" class="core-sidebar-panel drought-panel-stack"
+                    role="tabpanel" aria-labelledby="drought-tab-style" data-sidebar-panel="style" hidden>
+                    <div class="core-field">
+                        <label for="drought-opacity">Fill opacity</label>
+                        <input id="drought-opacity" type="range" min="0.1" max="1" step="0.05" value="0.75">
+                    </div>
+
+                    <div class="core-field">
+                        <label for="drought-basemap">Basemap</label>
+                        <select id="drought-basemap">
+                            <option>Dark (No Labels)</option><option>Light (No Labels)</option>
+                            <option>Voyager</option><option>USGS</option><option>Satellite</option>
+                        </select>
+                    </div>
+                </section>
+            </div>
+
+            <div class="core-sidebar-footer">
+                <div id="drought-message" class="core-message" aria-live="polite"></div>
+                <button id="drought-refresh" class="drought-refresh" type="button">Refresh</button>
+            </div>
+        </aside>
+
+        <section class="core-map-panel drought-map-wrap" aria-label="Drought map">
+            <div id="drought-map"></div>
+            <div id="global-timestamp" class="core-global-timestamp">Last Updated: —</div>
+            <div id="drought-legend" class="drought-legend" data-legend-align="left" hidden></div>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="/frontend/pages/drought/drought-page.js?v=20260716j"></script>
+</body>
+</html>

@@ -1045,29 +1045,6 @@
                         <button id="weather-refresh-mrms" type="button">Refresh</button>
                     </div>
 
-                    <div id="wx-section-drought" class="wx-block" data-type="drought" style="display:none;">
-                        <div id="weather-drought-opts">
-                            <label>Release Week</label>
-                            <div id="weather-drought-dates"
-                                style="display:grid; grid-template-columns:repeat(5,1fr); gap:4px;"></div>
-                            <div id="weather-drought-date-status" class="wx-small" style="margin-top:4px;"></div>
-
-                            <label style="margin-top:12px;">Drought Categories</label>
-                            <div class="wx-check-row"><span>D0 &ndash; Abnormally Dry</span><input
-                                    class="drought-cat-check" type="checkbox" value="0"></div>
-                            <div class="wx-check-row"><span>D1 &ndash; Moderate</span><input class="drought-cat-check"
-                                    type="checkbox" value="1"></div>
-                            <div class="wx-check-row"><span>D2 &ndash; Severe</span><input class="drought-cat-check"
-                                    type="checkbox" value="2"></div>
-                            <div class="wx-check-row"><span>D3 &ndash; Extreme</span><input class="drought-cat-check"
-                                    type="checkbox" value="3"></div>
-                            <div class="wx-check-row"><span>D4 &ndash; Exceptional</span><input
-                                    class="drought-cat-check" type="checkbox" value="4"></div>
-
-                            <button id="weather-refresh-drought" type="button" style="margin-top:10px;">Refresh</button>
-                        </div>
-                    </div>
-
                     <div id="wx-section-wpc" class="wx-block" data-type="wpc" style="display:none;">
                         <div id="weather-wpc-opts">
 
@@ -1467,17 +1444,6 @@
                                     value="0.9">
                             </div>
                         </div>
-                        <div id="wx-side-group-drought" class="wx-block wx-side-group" data-type="drought"
-                            style="display:none;">
-                            <h3>Styling</h3>
-                            <h4>Drought Styling</h4>
-                            <div class="wx-block">
-                                <label for="weather-opacity-drought">Fill Opacity</label>
-                                <input id="weather-opacity-drought" type="range" min="0.1" max="1" step="0.05"
-                                    value="0.75">
-                            </div>
-                        </div>
-
                         <div id="wx-side-group-wpc" class="wx-block wx-side-group" data-type="wpc"
                             style="display:none;">
                             <h3>Styling</h3>
@@ -1669,8 +1635,6 @@
         <script src="js/satellite-page.js?v=20260716b"></script>
         <script src="js/radar-engine.js?v=20260704a"></script>
         <script src="js/radar-page.js?v=20260716a"></script>
-        <script src="js/drought-engine.js?v=20260704b"></script>
-        <script src="js/drought-page.js?v=20260617a"></script>
         <script src="js/surface-engine.js?v=20260617a"></script>
         <script src="js/surface-page.js?v=20260704b"></script>
         <script src="js/mrms-engine.js?v=20260617a"></script>

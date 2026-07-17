@@ -44,7 +44,7 @@ def read_surface_page():
 
 @router.get("/drought")
 def read_drought_page():
-    return serve_product_shell_page("drought")
+    return serve_page("frontend/pages/drought/drought.html")
 
 
 @router.get("/satellite")

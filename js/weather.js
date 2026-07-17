@@ -10,8 +10,6 @@
     const _satellitePageController = window.NCHSatellitePage || null;
     const _radarEngineFactory = window.NCHRadarEngine || null;
     const _radarPageController = window.NCHRadarPage || null;
-    const _droughtEngineFactory = window.NCHDroughtEngine || null;
-    const _droughtPageController = window.NCHDroughtPage || null;
     const _mrmsEngineFactory = window.NCHMrmsEngine || null;
     const _mrmsPageController = window.NCHMrmsPage || null;
     const _rtmaEngineFactory = window.NCHRtmaEngine || null;
@@ -28,7 +26,6 @@
     let _alertsEngine = null;
     let _satelliteEngine = null;
     let _radarEngine = null;
-    let _droughtEngine = null;
     let _mrmsEngine = null;
     let _rtmaEngine = null;
     let _surfaceEngine = null;
@@ -971,7 +968,6 @@
     let _rtmaSecondaryUnits = '';
     let _rtmaPointsKey = null;
     let mrmsOverlay = null;
-    let droughtLayer = null;
     let wpcLayer = null;
     let _wpcRequestSeq = 0;
     let waterLayer = null;
@@ -1010,11 +1006,6 @@
     let _outlookFeatureMap = {};
     let _tropicalMapViewMode = 'outlook'; // 'outlook', 'system', or 'both'
     let _tropicalOutlookIssuedTime = null;
-    let _droughtDates = [];
-    let _activeDroughtDate = null;
-    let _lastDroughtStateStats = null;
-    let _lastDroughtStateCode = null;
-    const _droughtStateStatsCache = new Map();
     let statesLayer = null;
     let countiesLayer = null;
     let countriesLayer = null;
@@ -3392,80 +3383,6 @@
         setLegend(html);
     }
 
-    const _DROUGHT_COLORS = {
-        0: '#FFFF00',
-        1: '#FCD37F',
-        2: '#FFAA00',
-        3: '#E60000',
-        4: '#730000',
-    };
-    const _DROUGHT_LABELS = {
-        0: 'D0 – Abnormally Dry',
-        1: 'D1 – Moderate Drought',
-        2: 'D2 – Severe Drought',
-        3: 'D3 – Extreme Drought',
-        4: 'D4 – Exceptional Drought',
-    };
-
-    function _activeDroughtRegionState() {
-        return _droughtPageController?.activeDroughtRegionState()
-            ?? ((/^[A-Z]{2}$/.test(String(byId('weather-region')?.value || '').toUpperCase()))
-                ? String(byId('weather-region')?.value || '').toUpperCase() : null);
-    }
-
-    function _formatDroughtPct(value) {
-        const num = Number(value);
-        return Number.isFinite(num) ? `${num.toFixed(1)}%` : '—';
-    }
-
-    function buildDroughtLegend(enabledCats, stateStats, stateCode) {
-        const cats = [0, 1, 2, 3, 4];
-        const activeCats = enabledCats || cats;
-
-        // CONUS/non-state views use the original levels-only legend.
-        if (!stateCode) {
-            const simpleRows = activeCats
-                .map((dm) => swatch(_DROUGHT_COLORS[dm], _DROUGHT_LABELS[dm]))
-                .join('');
-            setLegend('<h4 class="legend-title">U.S. Drought Monitor</h4><div class="legend-flow">' + simpleRows + '</div>');
-            return;
-        }
-
-        const cumulative = stateStats?.cumulative || {};
-        const individual = stateStats?.individual || {};
-        const headers = cats.map((dm) => (
-            `<div class="drought-legend-cell is-header${activeCats.includes(dm) ? '' : ' is-disabled'}">D${dm}</div>`
-        )).join('');
-        const levels = cats.map((dm) => (
-            `<div class="drought-legend-cell is-level${activeCats.includes(dm) ? '' : ' is-disabled'}">`
-            + `<span class="legend-swatch" style="background:${_DROUGHT_COLORS[dm]}"></span>`
-            + `${_DROUGHT_LABELS[dm]}</div>`
-        )).join('');
-        const cumulativeValues = cats.map((dm) => {
-            const key = dm === 4 ? 'D4' : `D${dm}-D4`;
-            return `<div class="drought-legend-cell is-value">${_formatDroughtPct(cumulative[key])}</div>`;
-        }).join('');
-        const individualValues = cats.map((dm) => (
-            `<div class="drought-legend-cell is-value">${_formatDroughtPct(individual[`D${dm}`])}</div>`
-        )).join('');
-
-        const dsci = Number(stateStats?.dsci);
-        const dsciText = Number.isFinite(dsci) ? dsci.toFixed(1) : '—';
-        const subtitle = `<div class="drought-legend-subtitle">${escapeHtml(stateCode)} stats for ${escapeHtml(_activeDroughtDate || '')}</div>`;
-
-        setLegend(
-            '<h4 class="legend-title">U.S. Drought Monitor</h4>'
-            + subtitle
-            + '<div class="drought-legend-matrix">'
-            + '<div class="drought-legend-cell is-label"></div>' + headers
-            + '<div class="drought-legend-cell is-label">Level</div>' + levels
-            + '<div class="drought-legend-cell is-label">Cumulative</div>' + cumulativeValues
-            + '<div class="drought-legend-cell is-label">Individual</div>' + individualValues
-            + '</div>'
-            + `<div class="drought-legend-dsci"><span>DSCI</span><span>${dsciText}</span></div>`,
-        );
-    }
-
     // WPC Excessive Rainfall Outlook — mirrors config/wpc_config.py ERO tables.
     const _WPC_ERO_COLORS = { MRGL: '#00FF00', SLGT: '#FFFF00', MDT: '#EE2C2C', HIGH: '#FF00FF' };
     const _WPC_ERO_LABELS = {
@@ -3583,40 +3500,6 @@
             `<h4 class="legend-title">${label || `WPC Excessive Rainfall — Day ${day}`}</h4>`
             + `<div class="legend-flow">${rows}</div>`,
         );
-    }
-
-    function _activeDroughtCategories() {
-        return _droughtPageController?.activeDroughtCategories()
-            ?? Array.from(document.querySelectorAll('.drought-cat-check'))
-                .filter((el) => el.checked)
-                .map((el) => Number(el.value));
-    }
-
-    function _renderDroughtDateButtons() {
-        const container = byId('weather-drought-dates');
-        if (!container) return;
-        container.innerHTML = '';
-        _droughtDates.forEach((d) => {
-            const btn = document.createElement('button');
-            btn.className = 'wx-drought-date-btn' + (d === _activeDroughtDate ? ' active' : '');
-            btn.type = 'button';
-            // Show as MM/DD (short label)
-            const [y, mo, day] = d.split('-');
-            btn.textContent = `${mo}/${day}`;
-            btn.title = d;
-            btn.dataset.date = d;
-            btn.addEventListener('click', () => {
-                _activeDroughtDate = d;
-                container.querySelectorAll('.wx-drought-date-btn').forEach((b) => {
-                    b.classList.toggle('active', b.dataset.date === d);
-                });
-                document.querySelectorAll('.drought-cat-check').forEach((el) => {
-                    el.checked = true;
-                });
-                if (_isTypeEnabled('drought')) _droughtEngine?.loadDroughtLayer();
-            });
-            container.appendChild(btn);
-        });
     }
 
     // Authoritative SPC probabilistic fill colors (per-hazard scale).
@@ -5902,11 +5785,9 @@
         if (rtmaGradientLayer && map.hasLayer(rtmaGradientLayer)) map.removeLayer(rtmaGradientLayer);
         if (rtmaPointLayer && map.hasLayer(rtmaPointLayer)) map.removeLayer(rtmaPointLayer);
         if (mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
-        if (droughtLayer && map.hasLayer(droughtLayer)) map.removeLayer(droughtLayer);
         if (waterLayer && map.hasLayer(waterLayer)) map.removeLayer(waterLayer);
         _tropicalEngine?.clearLayer?.();
         if (tropicalOutlookLayer && map.hasLayer(tropicalOutlookLayer)) map.removeLayer(tropicalOutlookLayer);
-        droughtLayer = null;
         waterLayer = null;
         tropicalOutlookLayer = null;
         alertsLayer = null;
@@ -6092,11 +5973,6 @@
                 if (spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
                 spcLayer = null;
                 setMapEmptyMessage(null);
-                break;
-
-            case 'drought':
-                if (droughtLayer && map.hasLayer(droughtLayer)) map.removeLayer(droughtLayer);
-                droughtLayer = null;
                 break;
 
             case 'wpc':
@@ -9795,7 +9671,6 @@
         const rtmaEnabled = _isTypeEnabled('rtma') && !!_activeRtmaStream() && !!_activeRtmaProduct();
         const mrmsEnabled = _isTypeEnabled('mrms') && !!_activeMrmsProduct();
 
-        const droughtEnabled = _isTypeEnabled('drought');
         const wpcEnabled = _isTypeEnabled('wpc');
         const waterEnabled = _isTypeEnabled('water');
         const tropicalEnabled = _isTypeEnabled('tropical');
@@ -9822,7 +9697,6 @@
         if (!rtmaEnabled && rtmaPointLayer && map.hasLayer(rtmaPointLayer)) { map.removeLayer(rtmaPointLayer); rtmaPointLayer = null; }
         if (!rtmaEnabled) { _rtmaSecondaryPoints = []; _rtmaSecondaryUnits = ''; }
         if (!mrmsEnabled && mrmsOverlay && map.hasLayer(mrmsOverlay)) map.removeLayer(mrmsOverlay);
-        if (!droughtEnabled && droughtLayer && map.hasLayer(droughtLayer)) { map.removeLayer(droughtLayer); droughtLayer = null; }
         if (!waterEnabled && waterLayer && map.hasLayer(waterLayer)) {
             map.removeLayer(waterLayer);
         }
@@ -9885,9 +9759,6 @@
             if (!_mrmsScrubFrames.length) {
                 _mrmsEngine?.loadScrubberFrames();
             }
-        }
-        if (droughtEnabled) {
-            _droughtEngine?.loadDroughtLayer();
         }
         if (wpcEnabled) {
             _wpcEngine?.loadWpcLayer();
@@ -14403,11 +14274,6 @@
         _mrmsEngine?.loadMrms();
     });
 
-    byId('weather-refresh-drought')?.addEventListener('click', () => {
-        _armProductRendering();
-        if (_isTypeEnabled('drought')) _droughtEngine?.loadDroughtLayer();
-    });
-
     byId('weather-refresh-water')?.addEventListener('click', () => {
         _armProductRendering();
         if (_isTypeEnabled('water')) _loadWaterStations({ force: true });
@@ -14450,19 +14316,6 @@
         if (_waterFloodFilter !== 'all') {
             const visible = _applyWaterFloodFilter(_waterStations).length;
             _setWaterStatus(`Flood filter: ${visible} of ${_waterStations.length} river gauges shown.`);
-        }
-    });
-
-    byId('weather-opacity-drought')?.addEventListener('input', (e) => {
-        const opacity = parseFloat(e.target.value);
-        if (droughtLayer) {
-            const enabledCats = _activeDroughtCategories();
-            droughtLayer.eachLayer((l) => {
-                const dm = Number(l.feature?.properties?.DM);
-                if (enabledCats.includes(dm)) {
-                    l.setStyle({ fillOpacity: opacity, opacity: 0.8 });
-                }
-            });
         }
     });
 
@@ -15000,9 +14853,6 @@
         _syncRtmaProductForStream();
         _updateSpcReportFilterState();
         refreshActiveLayers({ startup: true });
-        if (_standaloneProductType === 'drought') {
-            _droughtEngine?.loadDroughtDates?.();
-        }
         if (!_productRenderArmed && _isTypeEnabled('tropical') && _configuredPageAutoLoadCatalog()) {
             _tropicalEngine?.loadArchiveCatalog();
         }
@@ -15141,22 +14991,6 @@
                 updateWarningFilterCounts: _updateWarningFilterCounts,
                 warningPanelEmptyText: _warningPanelEmptyText,
             });
-        }
-
-        if (_droughtPageController?.configureDroughtPage) {
-            _droughtPageController.configureDroughtPage({
-                applyDroughtFilter: () => {
-                    _armProductRendering();
-                    return _droughtEngine?.applyDroughtFilter();
-                },
-                isTypeEnabled: _isTypeEnabled,
-                loadDroughtDates: () => _droughtEngine?.loadDroughtDates(),
-                loadDroughtLayer: () => {
-                    _armProductRendering();
-                    return _droughtEngine?.loadDroughtLayer();
-                },
-            });
-            _droughtPageController.wireControls?.();
         }
 
         if (_wpcPageController?.configureWpcPage) {
@@ -15611,38 +15445,6 @@
             });
         if (radarContext && _radarEngineFactory?.createRadarEngine) {
             _radarEngine = _radarEngineFactory.createRadarEngine(radarContext);
-        }
-
-        const droughtContext = _productAppContexts?.registerProductContext('drought', {
-            activeDroughtCategories: _activeDroughtCategories,
-            activeDroughtRegionState: _activeDroughtRegionState,
-            apiUrl,
-            buildDroughtLegend,
-            getDroughtDates: () => _droughtDates,
-            setDroughtDates: (dates) => { _droughtDates = Array.isArray(dates) ? dates : []; },
-            getActiveDroughtDate: () => _activeDroughtDate,
-            setActiveDroughtDate: (date) => { _activeDroughtDate = date || null; },
-            getDroughtOpacity: () => parseFloat(byId('weather-opacity-drought')?.value ?? 0.75),
-            getDroughtStateStatsCache: () => _droughtStateStatsCache,
-            getDroughtLayer: () => droughtLayer,
-            getLastDroughtState: () => ({ code: _lastDroughtStateCode, stats: _lastDroughtStateStats }),
-            setDroughtLayer: (layer) => { droughtLayer = layer; },
-            setLastDroughtState: (code, stats) => {
-                _lastDroughtStateCode = code;
-                _lastDroughtStateStats = stats;
-            },
-            isTypeEnabled: _isTypeEnabled,
-            leaflet: L,
-            map,
-            renderDateButtons: _renderDroughtDateButtons,
-            resolveTimestampMs: _resolveDataTimestampMs,
-            setLegend,
-            setReliability: _setReliability,
-            setTimestampSource: _setTimestampSource,
-            setViewerTimestamp: _setViewerTimestamp,
-        });
-        if (droughtContext && _droughtEngineFactory?.createDroughtEngine) {
-            _droughtEngine = _droughtEngineFactory.createDroughtEngine(droughtContext);
         }
 
         const wpcContext = _productAppContexts?.registerProductContext('wpc', {

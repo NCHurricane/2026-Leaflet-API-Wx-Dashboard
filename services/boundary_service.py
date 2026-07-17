@@ -10,14 +10,19 @@ from app_core.paths import CACHE_ROOT
 _WORLD_BORDERS_CACHE_PATH = os.path.join(CACHE_ROOT, "overlays", "world_borders.geojson")
 _WORLD_BORDERS_CACHE_VERSION = 3
 _world_borders_lock = threading.Lock()
+_world_borders_data: dict | None = None
 
 _US_BOUNDARIES_CACHE_PATH = os.path.join(CACHE_ROOT, "overlays", "us_boundaries.geojson")
 _US_BOUNDARIES_CACHE_VERSION = 3
 _us_boundaries_lock = threading.Lock()
+_us_boundaries_data: dict | None = None
 
 
 def get_world_borders_geojson() -> dict:
+    global _world_borders_data
     with _world_borders_lock:
+        if _world_borders_data is not None:
+            return _world_borders_data
         if os.path.exists(_WORLD_BORDERS_CACHE_PATH):
             try:
                 with open(_WORLD_BORDERS_CACHE_PATH, "r", encoding="utf-8") as fh:
@@ -25,6 +30,7 @@ def get_world_borders_geojson() -> dict:
                 props = data.get("properties") if isinstance(data, dict) else {}
                 props = props if isinstance(props, dict) else {}
                 if props.get("cache_version") == _WORLD_BORDERS_CACHE_VERSION:
+                    _world_borders_data = data
                     return data
             except Exception:
                 pass
@@ -35,11 +41,15 @@ def get_world_borders_geojson() -> dict:
                 json.dump(data, fh, separators=(",", ":"))
         except Exception as exc:
             print(f"[world-borders] Cache write failed: {exc}")
+        _world_borders_data = data
         return data
 
 
 def get_us_boundaries_geojson() -> dict:
+    global _us_boundaries_data
     with _us_boundaries_lock:
+        if _us_boundaries_data is not None:
+            return _us_boundaries_data
         if os.path.exists(_US_BOUNDARIES_CACHE_PATH):
             try:
                 with open(_US_BOUNDARIES_CACHE_PATH, "r", encoding="utf-8") as fh:
@@ -47,6 +57,7 @@ def get_us_boundaries_geojson() -> dict:
                 props = data.get("properties") if isinstance(data, dict) else {}
                 props = props if isinstance(props, dict) else {}
                 if props.get("cache_version") == _US_BOUNDARIES_CACHE_VERSION:
+                    _us_boundaries_data = data
                     return data
             except Exception:
                 pass
@@ -57,6 +68,7 @@ def get_us_boundaries_geojson() -> dict:
                 json.dump(data, fh, separators=(",", ":"))
         except Exception as exc:
             print(f"[us-boundaries] Cache write failed: {exc}")
+        _us_boundaries_data = data
         return data
 
 

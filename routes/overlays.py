@@ -14,6 +14,8 @@ from services.overlay_service import (
     get_overlay_latest as get_overlay_latest_payload,
 )
 
+_BOUNDARY_CACHE_HEADERS = {"Cache-Control": "public, max-age=604800, immutable"}
+
 
 def create_overlays_router(rtma_bootstrap: Callable[..., object] | None = None) -> APIRouter:
     router = APIRouter()
@@ -22,15 +24,30 @@ def create_overlays_router(rtma_bootstrap: Callable[..., object] | None = None) 
     def get_world_borders():
         try:
             data = get_world_borders_geojson()
-            return JSONResponse(content=data)
+            return JSONResponse(content=data, headers=_BOUNDARY_CACHE_HEADERS)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
     @router.get("/api/overlay/us-boundaries")
-    def get_us_boundaries():
+    def get_us_boundaries(layer: str | None = None):
         try:
             data = get_us_boundaries_geojson()
-            return JSONResponse(content=data)
+            if layer is not None:
+                selected = layer.strip().lower()
+                if selected not in {"state", "county"}:
+                    raise HTTPException(status_code=400, detail="layer must be state or county")
+                data = {
+                    "type": "FeatureCollection",
+                    "properties": data.get("properties", {}),
+                    "features": [
+                        feature
+                        for feature in data.get("features", [])
+                        if feature.get("properties", {}).get("layer") == selected
+                    ],
+                }
+            return JSONResponse(content=data, headers=_BOUNDARY_CACHE_HEADERS)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 

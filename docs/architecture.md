@@ -18,12 +18,44 @@ Active root pages and their JS in this checkout:
 
 - `index.html` — main landing page for the dashboard
 - `weather.html` / `js/weather.js` — Leaflet map, alerts + SPC GeoJSON layers, RTMA pre-rendered overlays, RTMA scrubber, radar live multi-site + time-mode playback
+- `/drought` — first true Stage 2 standalone page, served from
+  `frontend/pages/drought/drought.html`; it loads ES modules from
+  `frontend/core/` and its own directory and does not load `js/weather.js`.
+  Shared `map-core.js` owns the Leaflet map, basemaps, logo, region fitting,
+  Lat/Lon/state/country/county overlays, and cached US/World city-label layers
+  with bounded density filtering. It also supplies the shared reset-view and
+  numeric-zoom controls. The Drought page owns its controls and supplies the
+  product-specific content for a bottom-left expandable legend;
+  `frontend/core/nav.js` owns the icon-bearing
+  product navigation. Large static map payloads use `fetchCachedJson()` and
+  versioned browser Cache Storage. Boundary builders retain decoded runtime
+  cache data in memory, while the routes expose state/county filtering and
+  long-lived immutable response caching.
+- `frontend/core/sidebar-tabs.js` is the shared standalone-page sidebar
+  controller. It keeps tab panels mounted, manages accessible selected/hidden
+  state and roving focus, and allows a page-defined optional fourth tab. Shared
+  pinned header, tab bar, scrollable content, and pinned footer primitives live
+  in `frontend/core/core.css`; product CSS supplies only panel-specific layout.
+- `frontend/core/legend.js` owns the standalone-page legend host lifecycle,
+  left/center/right alignment, and accessible collapsed state. The host is
+  absolutely confined to `.core-map-panel`, so it cannot render over a sidebar.
+  `frontend/core/core.css` supplies the shared dark tray, categorical-item, and
+  continuous-colorbar/tick primitives; product engines retain ownership of
+  legend content, thresholds, colors, labels, and values.
 
 Planned product-page migration:
 
 - Product-specific pages are the intended post-refactor direction:
   `/alerts`, `/radar`, `/satellite`, `/spc`, `/surface`, `/mrms`, `/rtma`,
-  `/drought`, and `/tropical`.
+  `/drought`, `/tropical`, `/wpc`, and `/water`.
+- The Stage 2 frontend interface contract is recorded in
+  `docs/frontend-stage2-core-api-inventory.md`. It prohibits a replacement
+  global context: pages import narrow `core/*` capabilities, engines own
+  product data/layers, and the workspace composes engine APIs without loading
+  sibling page controllers.
+- Browser-only Stage 2 assets live under `frontend/` and are mounted at
+  `/frontend`. Root `lib/` remains a backend Python package and is not exposed
+  as static content.
 - Legacy `.html` product URLs may be kept as redirects or compatibility routes
   during the transition, but clean extensionless URLs should become canonical.
 - `main.py` already exposes `/radar.html`, but `radar.html` is not present in

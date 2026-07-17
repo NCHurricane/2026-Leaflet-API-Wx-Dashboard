@@ -4,7 +4,8 @@
     "homeRegion": "NC",
     "cityLabels": {
       "source": "off",
-      "density": 5
+      "density": 0.25,
+      "fontSize": 0.6
     }
   },
   "pages": {
@@ -46,7 +47,7 @@
     },
     "drought": {
       "mapView": "CONUS",
-      "autoLoad": false
+      "autoLoad": true
     },
     "satellite": {
       "mapView": "WORLD",

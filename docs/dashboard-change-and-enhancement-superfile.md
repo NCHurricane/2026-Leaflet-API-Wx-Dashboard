@@ -309,10 +309,29 @@ found it.
   returned U.S. features by their declared layer and uses boundary cache version
   4, preventing a response cached from an older unfiltered API process from
   crossing state and county toggle behavior. Dark (No Labels) is the standalone
-  page and shared map-core default basemap, matching the pre-split shell. The
-  corrected wiring passed module syntax, focused lint, six standalone tests,
-  and live local API payload checks; user browser re-smoke is pending.
-- Phase 20: surface.
+  page and shared map-core default basemap, matching the pre-split shell.
+  Option 1A from the Drought sidebar design handoff is now the accepted shared
+  sidebar reference: a 300px shell with pinned Data Status/Region header,
+  accessible Data/Overlays/Style tabs, a scrollable mounted-panel area, and a
+  pinned message/Refresh footer. `frontend/core/sidebar-tabs.js` owns stable-DOM
+  switching plus click and keyboard navigation; pages may add an opt-in fourth
+  tab without changing the controller. Drought keeps Release Week/categories
+  under Data, cities/map layers under Overlays, and opacity/basemap under Style.
+  Browser smoke passed tab switching, keyboard Home navigation, retained control
+  state, default Dark basemap, automatic latest-release data, and pinned layout
+  geometry. The accepted legend treatment is now a shared, map-panel-confined
+  dark glass tray in `frontend/core/legend.js` and `core.css`. It supports
+  left/center/right alignment, an accessible collapse control, compact
+  categorical entries, and reusable continuous-colorbar/tick primitives while
+  leaving product labels, thresholds, and values with the product engine.
+  Drought uses the bottom-left alignment, keeps all five official USDM classes
+  visible, and expands in place for state cumulative/individual percentages and
+  DSCI. Browser smoke verified national, collapsed, and NC-stat states and proved
+  the tray remained wholly inside the map panel without crossing the sidebar.
+  The corrected wiring passed module syntax, focused lint, eleven standalone and
+  boundary-cache tests, and live local API payload checks.
+- Phase 20: surface. Reuse the accepted tabbed sidebar shell and prove the
+  second consumer before expanding the shared API further.
 - Phase 21: spc, wpc.
 - Phase 22: mrms + rtma, including the scrubber-as-component rewrite.
 - Phase 23: satellite.

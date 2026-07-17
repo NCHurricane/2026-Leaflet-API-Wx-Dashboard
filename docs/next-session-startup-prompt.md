@@ -34,7 +34,19 @@ Current status:
   behavior should stay in workers/*_worker.py.
 
 Active track order (2026-07-16):
-1. Frontend True Split Stage 2, starting with Phase 18 core API inventory.
+1. Frontend True Split Stage 2. Phases 18-19 are complete; `/drought` is the
+   first true standalone page under `frontend/`. Its parity fixes and persistent
+   boundary caching are in place. The accepted shared sidebar reference is now
+    Option 1A: pinned status/region, accessible mounted Data/Overlays/Style tabs,
+    and pinned message/Refresh footer via `frontend/core/sidebar-tabs.js`.
+    Automated browser smoke passed switching, keyboard navigation, retained
+    state, pinned geometry, Dark default, and latest-release display. The shared
+    legend is now a collapsible dark tray confined to the map panel, with
+    left/center/right alignment and categorical/continuous primitives. Drought
+    uses bottom-left placement and expands for state statistics; browser smoke
+    passed national, collapsed, and NC-stat layouts with no sidebar overlap.
+    Phase 20 Surface is next and should be the second consumer of the accepted
+    sidebar and legend shells.
 2. Satellite render-pipeline latency optimization. This backend-only track may
    interleave with Track 1 while their files remain disjoint.
 3. GK2A + GMGSI after the satellite-page migration boundary is safe.
