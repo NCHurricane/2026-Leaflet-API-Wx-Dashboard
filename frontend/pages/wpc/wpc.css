@@ -1,0 +1,611 @@
+.wpc-app {
+    height: calc(100vh - 58px);
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-areas: "controls map";
+    min-height: 0;
+}
+
+.wpc-controls { grid-area: controls; }
+.wpc-map-wrap { grid-area: map; position: relative; min-height: 0; }
+#wpc-map { width: 100%; height: 100%; background: #dbe7ef; }
+
+.wpc-controls h2 {
+    margin: 0 0 8px;
+    color: var(--core-muted);
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.wpc-panel-stack { display: grid; gap: 14px; align-content: start; }
+
+.wpc-check-list { display: grid; gap: 6px; }
+.wpc-check {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    color: #d7e6f5;
+    font-size: 0.78rem;
+}
+.wpc-check input { width: 16px; height: 16px; margin: 0; }
+
+.wpc-panel-note {
+    margin: 0 0 4px;
+    color: var(--core-muted);
+    font-size: 0.74rem;
+}
+
+.wpc-refresh {
+    width: 100%;
+    padding: 10px;
+    background: #174a67;
+    border-color: #2f8fb8;
+    font-size: 0.81rem;
+    font-weight: 800;
+}
+.core-sidebar-footer .core-message { margin-bottom: 6px; }
+
+.wpc-status-card { padding: 10px 12px; }
+.wpc-status-title {
+    margin-bottom: 7px;
+    color: var(--core-muted);
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.wpc-status-card .core-status-grid { gap: 4px 10px; font-size: 0.75rem; }
+.wpc-status-card .core-status-grid dt { white-space: nowrap; }
+
+/* ── Group pills and panels ─────────────────────────────────────────────── */
+.wpc-group-pills {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--core-line);
+}
+
+.wpc-group-pill {
+    min-width: 0;
+    padding: 5px 4px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #cbd5e1;
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1.05;
+    text-align: center;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.wpc-group-pill[aria-selected="true"] {
+    border-color: rgba(34, 211, 238, 0.68);
+    background: rgba(14, 116, 144, 0.36);
+    color: #f8fafc;
+}
+
+.wpc-group-panel { display: none; }
+.wpc-group-panel.is-active { display: block; }
+
+/* ── Day pills (ERO, Winter snow) ───────────────────────────────────────── */
+.wpc-day-pills {
+    display: flex;
+    gap: 4px;
+    margin: 0 0 8px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+}
+
+.wpc-day-pill {
+    padding: 4px 6px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #cbd5e1;
+    font-size: 0.68rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.wpc-day-pill[aria-selected="true"] {
+    border-color: rgba(34, 211, 238, 0.68);
+    background: rgba(14, 116, 144, 0.36);
+    color: #f8fafc;
+}
+
+/* ── Sub-tabs (QPF, Winter) ─────────────────────────────────────────────── */
+.wpc-subtabs {
+    display: flex;
+    gap: 4px;
+    margin: 0 0 8px;
+}
+
+.wpc-subtab-button {
+    min-width: 0;
+    padding: 5px 6px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #cbd5e1;
+    font-size: 0.66rem;
+    font-weight: 800;
+    line-height: 1.05;
+    text-align: center;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.wpc-subtab-button[aria-selected="true"] {
+    border-color: rgba(34, 211, 238, 0.68);
+    background: rgba(14, 116, 144, 0.36);
+    color: #f8fafc;
+}
+
+.wpc-subtab-panel { display: none; }
+.wpc-subtab-panel.is-active { display: block; }
+
+/* ── Radio lists (label left, control right) ────────────────────────────── */
+.wpc-radio-list {
+    list-style: none;
+    margin: 0 0 6px;
+    padding: 0;
+}
+
+.wpc-radio-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20px;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.08;
+    text-transform: uppercase;
+    color: var(--core-text);
+    cursor: pointer;
+}
+
+.wpc-radio-list .wpc-radio-item label {
+    display: block;
+    margin: 0;
+    padding: 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--core-text);
+    text-align: left;
+    cursor: pointer;
+}
+
+.wpc-radio-item input[type="radio"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 3px;
+    background: rgba(15, 23, 42, 0.72);
+    cursor: pointer;
+    justify-self: end;
+    flex-shrink: 0;
+}
+
+.wpc-radio-item input[type="radio"]:checked {
+    background: #22d3ee url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%230f172a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' d='M3 8l3.5 3.5L13 4.5'/%3E%3C/svg%3E") center/14px no-repeat;
+    border-color: #22d3ee;
+}
+
+/* ── Legend content (inside the shared core legend tray) ────────────────── */
+.wpc-legend .core-legend-body { padding: 10px 14px 12px; }
+
+.wpc-legend-flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+}
+
+.wpc-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.wpc-legend-item.is-disabled { opacity: 0.4; }
+
+.wpc-legend-swatch {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    border: 1px solid rgba(2, 6, 23, 0.55);
+}
+
+.wpc-legend-text {
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.15;
+    min-width: 0;
+    overflow-wrap: break-word;
+}
+
+/* ── Center-of-map empty state ──────────────────────────────────────────── */
+.wpc-map-empty {
+    position: absolute;
+    top: 40%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 500;
+    pointer-events: none;
+    background: rgba(15, 20, 30, 0.82);
+    color: #f5f8fc;
+    border: 1px solid rgb(217, 255, 0);
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    text-align: center;
+    max-width: 70%;
+}
+.wpc-map-empty[hidden] { display: none; }
+
+/* ── Hover tooltip ──────────────────────────────────────────────────────── */
+.leaflet-tooltip.wpc-hover-tip {
+    background: rgba(4, 14, 30, 0.95);
+    border: 1px solid #35538b;
+    border-radius: 4px;
+    color: #e8eaf6;
+    font-size: 0.72rem;
+    padding: 5px 9px;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+.leaflet-tooltip.wpc-hover-tip::before { display: none; }
+
+/* ── Bottom scrubber bar (forecast charts, QPF 6-hr) ────────────────────── */
+#wpc-scrubber-bar {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 620;
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 6px 10px;
+    min-width: 0;
+}
+#wpc-scrubber-bar[hidden] { display: none; }
+
+.nch-scrubber {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.nch-scrubber-controls { display: contents; }
+
+.nch-scrubber-btn {
+    width: auto;
+    flex: 0 0 auto;
+    min-width: 32px;
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 0.7rem;
+    line-height: 1;
+    padding: 3px 8px;
+    cursor: pointer;
+}
+
+.nch-scrubber-btn:hover {
+    background: #3b82f6;
+    border-color: #3b82f6;
+}
+
+.nch-scrubber-speed {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex: 0 0 auto;
+    margin-left: 2px;
+}
+
+.nch-scrubber-speed-btn {
+    min-width: 26px;
+    width: 26px;
+    padding: 3px 0;
+    font-size: 0.75rem;
+    font-weight: 800;
+}
+
+.nch-scrubber-speed-label {
+    min-width: 34px;
+    padding: 3px 6px;
+    border: 1px solid rgba(71, 85, 105, 0.85);
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.75);
+    color: #f7f81b;
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.nch-scrubber-slider {
+    flex: 1;
+    width: auto;
+    min-width: 120px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    accent-color: #22e8ff;
+    cursor: pointer;
+    height: 20px;
+}
+
+.nch-scrubber-slider::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #1e3a8a, #22e8ff);
+    border: 1px solid #1d4e89;
+}
+
+.nch-scrubber-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: -5px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #f7f81b;
+    border: 1px solid #0f172a;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.nch-scrubber-slider::-moz-range-track {
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #1e3a8a, #22e8ff);
+    border: 1px solid #1d4e89;
+}
+
+.nch-scrubber-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #f7f81b;
+    border: 1px solid #0f172a;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.nch-scrubber-info { display: contents; }
+
+.nch-scrubber-timestamp {
+    font-size: 0.7rem;
+    color: #e2e8f0;
+    font-weight: 700;
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+.nch-scrubber-frame-count {
+    font-size: 0.65rem;
+    color: #f7f81b;
+    font-weight: 800;
+    flex: 0 0 auto;
+}
+
+/* ── Detail panel (MPDs, ERO/winter areas) ──────────────────────────────── */
+.wpc-detail {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: min(520px, 38vw);
+    max-height: 85%;
+    display: flex;
+    flex-direction: column;
+    z-index: 700;
+    background: rgba(2, 6, 23, 0.92);
+    border: 1px solid #475569;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+    color: #e2e8f0;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    backdrop-filter: blur(2px);
+    animation: wpc-detail-fade 180ms ease-out;
+}
+
+@keyframes wpc-detail-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.wpc-detail.is-right { right: 24px; }
+.wpc-detail.is-left { left: 60px; }
+
+.wpc-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 2px solid;
+}
+
+.wpc-detail-title {
+    font-weight: 800;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+}
+
+.wpc-detail-close {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    border: 1px solid #475569;
+    background: rgba(15, 23, 42, 0.85);
+    color: #e2e8f0;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.wpc-detail-close:hover { background: #1e293b; color: #fff; }
+
+.wpc-detail-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px 0;
+}
+
+.wpc-detail-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-radius: 3px;
+    background: rgba(148, 163, 184, 0.18);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.wpc-detail-issued { padding: 8px 12px 2px; font-size: 0.7rem; color: #cbd5e1; }
+.wpc-detail-expires { padding: 0 12px 4px; font-size: 0.72rem; font-style: italic; color: #cbd5e1; }
+.wpc-detail-countdown { color: #fbbf24; font-weight: 700; font-style: normal; }
+.wpc-detail-meta { padding: 6px 2px; }
+
+.wpc-detail-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 10px;
+}
+
+.wpc-detail-chips-title {
+    margin: 6px 0 2px;
+    padding: 0 10px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #fbbf24;
+}
+
+.wpc-detail-chip {
+    padding: 3px 8px;
+    font-size: 0.78rem;
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    border-radius: 3px;
+    color: #fde68a;
+}
+.wpc-detail-chip strong { color: #fbbf24; margin-right: 3px; }
+
+.wpc-detail-scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 4px 12px;
+    max-height: 48vh;
+}
+.wpc-detail-scroll::-webkit-scrollbar { width: 8px; }
+.wpc-detail-scroll::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.3);
+    border-radius: 4px;
+}
+
+.wpc-detail-section { margin: 8px 0; }
+.wpc-detail-section h4 {
+    margin: 0 0 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #fbbf24;
+}
+.wpc-detail-section p { margin: 0 0 6px; color: #e2e8f0; }
+
+.wpc-detail-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    border-top: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.wpc-detail-fulllink {
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-decoration: none;
+    color: #fef08a;
+}
+.wpc-detail-fulllink:hover,
+.wpc-detail-fulllink:focus-visible { color: #fff16f; text-decoration: underline; }
+
+.wpc-detail-zoomlink {
+    padding: 4px 10px;
+    border: 1px solid #475569;
+    border-radius: 5px;
+    background: rgba(15, 23, 42, 0.78);
+    color: #cbd5e1;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.wpc-detail-zoomlink:hover { color: #fff; border-color: #94a3b8; }
+
+.wpc-detail-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-top: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.wpc-detail-nav-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    border: 1px solid #475569;
+    background: rgba(15, 23, 42, 0.85);
+    color: #e2e8f0;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.wpc-detail-nav-btn:hover { background: #1e293b; color: #fff; }
+
+.wpc-detail-counter {
+    font-size: 0.7rem;
+    color: #94a3b8;
+}
+
+@media (max-width: 820px) {
+    .wpc-app { height: calc(100vh - 92px); grid-template-columns: 220px minmax(0, 1fr); }
+    .core-global-timestamp { top: 48px; font-size: 0.66rem; letter-spacing: 0.04em; }
+    .wpc-detail { width: min(420px, 72vw); }
+}

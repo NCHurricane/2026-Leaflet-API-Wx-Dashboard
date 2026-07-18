@@ -29,8 +29,8 @@ the plan for some future items; re-evaluate later tracks against the
 post-split structure, not the monolith.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
-   this file (section below). Phases 18-20 are complete; Phase 21 (SPC, WPC)
-   is next.
+   this file (section below). Phases 18-21 are complete; Phase 22 (MRMS +
+   RTMA + the scrubber-as-component rewrite) is next.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
@@ -359,7 +359,93 @@ found it.
   controls and `wx-side-group-current` styling blocks were removed from
   `weather.html`, and `js/surface-engine.js` + `js/surface-page.js` were
   deleted. `weather.js?v=20260717a`.
-- Phase 21: spc, wpc.
+- Phase 21: spc, wpc. **SPC half COMPLETE 2026-07-18.** User parity smoke
+  passed 2026-07-17 (minor UI spacing issues noted; deferred with the other
+  pages' polish to the end of the superplan). The monolith deletion then
+  landed: ~1,700 lines of SPC implementation removed from `js/weather.js`
+  (colors, style fns, CIG pattern defs, legends, control-state/sync
+  functions, fetchers, refreshSpc, opacity appliers, auto-refresh interval,
+  archive branches — archive product types are now MRMS and Alerts only),
+  the `wx-section-spc` controls and `wx-side-group-spc` styling blocks
+  removed from `weather.html`, and `js/spc-engine.js` + `js/spc-page.js`
+  deleted (`weather.js?v=20260718a`). Kept in the monolith because the
+  alerts/WPC detail panel uses them: `_extractSpcMdPeakChips`,
+  `_buildSpcWatchChips`, `_spcWatchTitle`, `_extractSpcMdSections`,
+  `_renderSpcMdBodyHtml`, and `_openSpcTextDetail` (WPC's `openWpcDetail`).
+  The hidden `weather-type-spc` input and nav link remain per the retained
+  shell rules. The SPC standalone page is at `frontend/pages/spc/` on the
+  accepted shells: Option 1A tabbed sidebar, ES-module page controller, a
+  DOM-free engine (`spc-engine.js`, which also exports the SPC colors and
+  DN/CIG predicates the renderer shares), a page-local Leaflet renderer
+  (`spc-render.js`), a page-local detail-panel module (`spc-detail.js`), and
+  per-page CSS. Ported with parity: Day 1-8 convective outlooks with the
+  base-hazard/Day-3 cat-prob exclusivity rules, Significant (CIG) auto-enable
+  and SVG hatch patterns, fire weather outlooks (categorical rows Days 3-8),
+  storm reports (dedupe + Font Awesome markers + popups), mesoscale
+  discussions, watches (polygon/counties mutual exclusion), the exclusive
+  product-family clearing across the four SPC subtabs, the outlook/MD/watch
+  detail panel (Outlook/Impacts tabs, impacts table, Most Probable Peak and
+  Watch Probability chips, source links), all five legend variants on the
+  shared core-legend tray (categorical, per-hazard probabilistic with hatch
+  intensity swatches, fire, reports, watches-in-view with moveend refresh),
+  the center-map empty state with SPC placeholder wording, fill/stroke
+  opacity, and the 60 s MD/watch auto-refresh (which now keeps an open detail
+  panel open). `/spc` serves the standalone HTML (routes/pages.py). SPC code
+  has NOT yet been deleted from `js/weather.js`/`weather.html` — deletion
+  happens after user smoke, per the strangler-fig rule. Deliberate deltas to
+  review during smoke: (a) SPC archive mode was not rebuilt (same Option B
+  treatment as Surface; the single-date `/api/archive/spc` UI remains only in
+  weather.html until the Phase 22 scrubber decision), (b) detail-panel drag
+  and prev/next alert-stack navigation were dropped (SPC details are always
+  single-feature), (c) "Zoom to Outlook Area" fits the clicked feature's
+  bounds instead of flyTo(center, z9), (d) the boundary bring-to-front hack
+  is unnecessary because the core boundary pane (z-420) already sits above
+  the overlay pane. **WPC half BUILT 2026-07-18 (awaiting user parity
+  smoke).** The WPC standalone page is at `frontend/pages/wpc/` on the same
+  shells: `wpc.html` (Option 1A sidebar; Data tab hosts the 8 group pills —
+  Excess Rain / QPF / Winter / River Flood / Meso Disc / SigWx / Surface /
+  Forecast — with per-group panels), `wpc-page.js` (controller; ports the
+  shell's selection state, group-pill navigation-only semantics, QPF/Winter
+  sub-tabs, ERO/snow day pills, catalog-driven radio lists, and the
+  forecast/QPF-6hr bottom scrubber), `wpc-engine.js` (drought-style engine:
+  fetch + Leaflet render for both vector GeoJSON and raster image-overlay
+  products, legend HTML on the core tray incl. ERO/MPD/FOP/winter/QPF
+  variants with is-disabled dimming, cached/stale/unavailable status notes),
+  `wpc-detail.js` (page-local detail panel for MPDs and ERO/winter areas:
+  MD Summary/Discussion sections, WFO/RFC and Forecast Details chips,
+  prev/next nav across winter probability areas, zoom-to-bounds),
+  `wpc-scrubber.js` (ES-module port of the shell's NCHScrubber; promote to
+  core in the Phase 22 scrubber-component rewrite), and `wpc.css`. `/wpc`
+  now serves the standalone HTML. Static checks passed (node --check all
+  modules, py_compile, serve_page resolution); the dev server was down at
+  the end of the session so live route curls could not be re-run — restart
+  it before smoking. WPC monolith code (~330 lines in js/weather.js incl.
+  buildWpcLegend, the wx-section-wpc/wx-side-group-wpc blocks in
+  weather.html, js/wpc-engine.js, js/wpc-page.js, js/scrubber.js if nothing
+  else uses it) is deleted only after user smoke, same as SPC. FOP/MPD/
+  Surface groups load via the Refresh button (parity with the shell's
+  group-pills-are-navigation-only decision). **WPC half COMPLETE
+  2026-07-18 — monolith deletion landed WITHOUT the user parity smoke, on
+  explicit user authorization ("Delete without smoke tests. Do this for any
+  other completed phases until I return"). The standalone /wpc page has
+  therefore NOT been parity-smoked yet: any gaps found later are fixed
+  forward in `frontend/pages/wpc/`, not by restoring monolith code.**
+  Deleted: ~230 lines of WPC implementation from `js/weather.js` (engine/
+  page factory refs, `wpcLayer`/`_wpcRequestSeq` state, `_openSpcTextDetail`
+  (its only remaining caller was WPC; the alerts detail path uses the
+  MD/watch chip helpers directly, which are kept), the `_WPC_*` legend
+  tables + `buildWpcLegend`, the reliability-chain branch, the
+  `_cleanupPreviousTabState` case, the refreshActiveLayers branches, the
+  opacity handler, `configureWpcPage` wiring, and the wpc product context +
+  engine creation), the `wx-section-wpc` controls, `wx-side-group-wpc`
+  styling block, and `#wpc-scrubber-bar` from `weather.html`, and files
+  `js/wpc-engine.js`, `js/wpc-page.js`, `js/scrubber.js` (NCHScrubber's
+  only consumer was js/wpc-page.js). Kept per the retained-shell rules: the
+  `/wpc` nav link, hidden `weather-type-wpc` input, `'wpc'` entries in the
+  shared type arrays/label maps/reliability dicts, the inert
+  `isWpcMpd`/`isWpcForecast` branches inside the shared alert detail
+  renderer, and the dead WPC rules in `css/dashboard.css` (same treatment
+  as SPC's). `weather.js?v=20260718b`. This completes Phase 21.
 - Phase 22: mrms + rtma, including the scrubber-as-component rewrite.
 - Phase 23: satellite.
 - Phase 24: radar.

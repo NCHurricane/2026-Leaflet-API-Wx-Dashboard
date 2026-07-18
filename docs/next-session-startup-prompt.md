@@ -50,7 +50,21 @@ Active track order (2026-07-17):
     shared archive scrubber, whose component rewrite remains Phase 22. All
     surface code was deleted from js/weather.js and weather.html
     (weather.js?v=20260717a); shared helpers used by RTMA/cities/satellite
-    legends were kept. Phase 21 (SPC, WPC) is next.
+    legends were kept. Phase 21 (SPC, WPC) is COMPLETE. SPC: standalone
+    page at frontend/pages/spc/, user smoke passed 2026-07-17, ~1,700
+    lines of monolith SPC code deleted (weather.js?v=20260718a; MD/watch
+    text chip helpers kept for the alerts detail path). WPC: standalone
+    page at frontend/pages/wpc/, monolith WPC code deleted 2026-07-18
+    (~230 lines from js/weather.js, the wx-section-wpc/wx-side-group-wpc/
+    wpc-scrubber-bar blocks from weather.html, plus js/wpc-engine.js,
+    js/wpc-page.js, and js/scrubber.js; weather.js?v=20260718b). WARNING:
+    the WPC deletion was explicitly user-authorized WITHOUT a parity smoke
+    ("Delete without smoke tests") — /wpc still needs its first user
+    smoke; fix any gaps forward in frontend/pages/wpc/, do not restore
+    monolith code. Phase 22 (MRMS + RTMA + the scrubber-as-component
+    rewrite) is next. Minor UI spacing polish across
+    the new standalone pages is deferred to the end of the superplan by
+    user decision.
 2. Satellite render-pipeline latency optimization. This backend-only track may
    interleave with Track 1 while their files remain disjoint.
 3. GK2A + GMGSI after the satellite-page migration boundary is safe.

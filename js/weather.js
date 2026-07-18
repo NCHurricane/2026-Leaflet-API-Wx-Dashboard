@@ -14,21 +14,15 @@
     const _mrmsPageController = window.NCHMrmsPage || null;
     const _rtmaEngineFactory = window.NCHRtmaEngine || null;
     const _rtmaPageController = window.NCHRtmaPage || null;
-    const _spcEngineFactory = window.NCHSpcEngine || null;
-    const _spcPageController = window.NCHSpcPage || null;
     const _tropicalEngineFactory = window.NCHTropicalEngine || null;
     const _tropicalPageController = window.NCHTropicalPage || null;
-    const _wpcEngineFactory = window.NCHWpcEngine || null;
-    const _wpcPageController = window.NCHWpcPage || null;
     const _standaloneProductType = _productPageShell?.standaloneProductType() || null;
     let _alertsEngine = null;
     let _satelliteEngine = null;
     let _radarEngine = null;
     let _mrmsEngine = null;
     let _rtmaEngine = null;
-    let _spcEngine = null;
     let _tropicalEngine = null;
-    let _wpcEngine = null;
 
     function _isStandaloneProductPage(type = _standaloneProductType) {
         return _productPageShell?.isStandaloneProductPage(type) || !!type;
@@ -157,38 +151,6 @@
         if (!b) return null;
         return [[b[2], b[0]], [b[3], b[1]]]; // [[south, west], [north, east]]
     }
-
-    // ── SPC risk colors ──────────────────────────────────────────────────────
-    const SPC_CAT_COLORS = {
-        TSTM: { fill: '#b5dcb3', stroke: '#5a9e61' },
-        MRGL: { fill: '#69bb6d', stroke: '#2d7a32' },
-        SLGT: { fill: '#f5dd72', stroke: '#c8a000' },
-        ENH: { fill: '#ff9d2e', stroke: '#c85a00' },
-        MDT: { fill: '#ff4f4f', stroke: '#a00000' },
-        HIGH: { fill: '#ff66ff', stroke: '#880088' },
-    };
-
-    const SPC_PROB_COLORS = {
-        '2': { fill: '#b5dcb3', stroke: '#5a9e61' },
-        '5': { fill: '#69bb6d', stroke: '#2d7a32' },
-        '10': { fill: '#f5dd72', stroke: '#c8a000' },
-        '15': { fill: '#ff9d2e', stroke: '#c85a00' },
-        '30': { fill: '#ff4f4f', stroke: '#a00000' },
-        '45': { fill: '#ff66ff', stroke: '#880088' },
-        '60': { fill: '#ff00ff', stroke: '#880088' },
-        // CIG intensity levels (SPC March 2026 enhancement)
-        'CIG1': { fill: '#ffa040', stroke: '#cc5500' },
-        'CIG2': { fill: '#ff3300', stroke: '#aa0000' },
-        'CIG3': { fill: '#cc0099', stroke: '#880066' },
-    };
-
-    const SPC_FIRE_COLORS = {
-        'Elevated': { fill: '#FFBF80', stroke: '#FF7F00' },
-        'Critical': { fill: '#FF8080', stroke: '#FF0000' },
-        'Extremely Critical': { fill: '#FF80FF', stroke: '#FF00FF' },
-        'Isolated': { fill: '#FFBF80', stroke: '#FF7F00' },
-        'Scattered': { fill: '#FF8080', stroke: '#FF0000' },
-    };
 
     // ── Alert colors (synced from config/alerts_config.py ALERT_COLORS) ────
     const ALERT_COLORS = {
@@ -577,86 +539,6 @@
 
     _initLeafletZoomIndicator();
 
-    function _ensureSpcCigPatternDefs(svgRoot) {
-        if (!svgRoot) return;
-        let defs = svgRoot.querySelector('defs');
-        if (!defs) {
-            defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-            svgRoot.insertBefore(defs, svgRoot.firstChild);
-        }
-
-        const hasPattern = (id) => !!defs.querySelector(`#${id}`);
-
-        if (!hasPattern('hatch-cig-1')) {
-            // Intensity 1: dashed diagonal lines at 45°
-            const pattern1 = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
-            pattern1.setAttribute('id', 'hatch-cig-1');
-            pattern1.setAttribute('patternUnits', 'userSpaceOnUse');
-            pattern1.setAttribute('width', '10');
-            pattern1.setAttribute('height', '10');
-            pattern1.setAttribute('patternTransform', 'rotate(45)');
-            const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line1.setAttribute('x1', '0');
-            line1.setAttribute('y1', '0');
-            line1.setAttribute('x2', '0');
-            line1.setAttribute('y2', '10');
-            line1.setAttribute('stroke', 'black');
-            line1.setAttribute('stroke-width', '4');
-            line1.setAttribute('stroke-dasharray', '4,6');
-            pattern1.appendChild(line1);
-            defs.appendChild(pattern1);
-        }
-
-        if (!hasPattern('hatch-cig-2')) {
-            // Intensity 2: solid diagonal lines at 45° (matches Intensity 1 spacing/width)
-            const pattern2 = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
-            pattern2.setAttribute('id', 'hatch-cig-2');
-            pattern2.setAttribute('patternUnits', 'userSpaceOnUse');
-            pattern2.setAttribute('width', '18');
-            pattern2.setAttribute('height', '18');
-            pattern2.setAttribute('patternTransform', 'rotate(-45)');
-            const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line2.setAttribute('x1', '0');
-            line2.setAttribute('y1', '0');
-            line2.setAttribute('x2', '0');
-            line2.setAttribute('y2', '18');
-            line2.setAttribute('stroke', 'black');
-            line2.setAttribute('stroke-width', '4');
-            pattern2.appendChild(line2);
-            defs.appendChild(pattern2);
-        }
-
-        if (!hasPattern('hatch-cig-3')) {
-            // Intensity 3: cross-hatch (two perpendicular sets of solid 45° diagonals)
-            const pattern3 = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
-            pattern3.setAttribute('id', 'hatch-cig-3');
-            pattern3.setAttribute('patternUnits', 'userSpaceOnUse');
-            pattern3.setAttribute('width', '18');
-            pattern3.setAttribute('height', '18');
-            pattern3.setAttribute('patternTransform', 'rotate(45)');
-
-            const lineA = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            lineA.setAttribute('x1', '0');
-            lineA.setAttribute('y1', '0');
-            lineA.setAttribute('x2', '0');
-            lineA.setAttribute('y2', '18');
-            lineA.setAttribute('stroke', 'black');
-            lineA.setAttribute('stroke-width', '4');
-
-            const lineB = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            lineB.setAttribute('x1', '0');
-            lineB.setAttribute('y1', '0');
-            lineB.setAttribute('x2', '18');
-            lineB.setAttribute('y2', '0');
-            lineB.setAttribute('stroke', 'black');
-            lineB.setAttribute('stroke-width', '4');
-
-            pattern3.appendChild(lineA);
-            pattern3.appendChild(lineB);
-            defs.appendChild(pattern3);
-        }
-    }
-
     const baseLayers = {
         'Dark (No Labels)': tilesDarkNoLabels,
         'Light (No Labels)': tilesLightNoLabels,
@@ -870,8 +752,6 @@
     // ── Layer state ──────────────────────────────────────────────────────────
     let alertsLayer = null;
     let localStormReportsLayer = null;
-    let spcLayer = null;
-    let _spcWatchFeatures = [];
     let radarLiveOverlay = null;
     const _radarLiveImageOverlays = new Set();
     let satelliteOverlay = null;
@@ -964,8 +844,6 @@
     let _rtmaSecondaryUnits = '';
     let _rtmaPointsKey = null;
     let mrmsOverlay = null;
-    let wpcLayer = null;
-    let _wpcRequestSeq = 0;
     let waterLayer = null;
     let _waterStations = [];
     let _waterRequestSeq = 0;
@@ -1061,15 +939,11 @@
     const _STORM_TRACK_PIVOT_MAX_DEG = 45;
     const _STORM_TRACK_MAX_PLACE_ROWS = 50;
     let alertsOpacity = 0.75;
-    let spcOpacity = 1.0;
-    let spcStrokeOpacity = 1.0;
     let rtmaOpacity = 0.82;
     let rtmaGradientOpacity = 0.9;
     // _rtmaGradientBlurScale removed — RTMA gradients are pre-rendered PNGs, no canvas blur.
     let mrmsOpacity = 0.8;
     let _alertsRequestSeq = 0;
-    let _spcRequestSeq = 0;
-    let _spcAbortController = null;
     let _rtmaRequestSeq = 0;
     let _rtmaPointsSeq = 0;
     let _rtmaPointsDebounceTimer = null;
@@ -1089,14 +963,6 @@
     const _rtmaScrubFrameCache = new Map();
     const _rtmaScrubFrameErrors = new Set();
     let _mrmsRequestSeq = 0;
-    const _SPC_PRIMARY_TIMEOUT_MS = 10_000;
-    const _SPC_SUPPLEMENTAL_TIMEOUT_MS = 20_000;
-    const _SPC_REPORT_COLORS = {
-        torn: '#ff4d4f',
-        wind: '#26a9ff',
-        hail: '#66e06a',
-        other: '#f5d06b',
-    };
     const RTMA_POINTS_DEBOUNCE_MS = 180;
     const RTMA_POINTS_MIN_FETCH_INTERVAL_MS = 500;
     const SCRUBBER_PLAYBACK_SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3, 4];
@@ -1145,59 +1011,6 @@
     // ── Style functions ──────────────────────────────────────────────────────
     function alertStyle(feat) {
         return _alertsEngine?.alertStyle(feat);
-    }
-
-    function _spcFeatureColors(feat, fallback) {
-        const stroke = feat?.properties?.stroke || feat?.properties?.STROKE || fallback.stroke;
-        const fill = feat?.properties?.fill || feat?.properties?.FILL || fallback.fill;
-        return { stroke, fill };
-    }
-
-    function spcCatStyle(feat) {
-        const label = (feat?.properties?.LABEL || feat?.properties?.label || '').toUpperCase();
-        const c = _spcFeatureColors(feat, SPC_CAT_COLORS[label] || { fill: '#aaaaaa', stroke: '#555' });
-        return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: spcStrokeOpacity };
-    }
-
-    function spcFireStyle(feat) {
-        const label = feat?.properties?.LABEL || feat?.properties?.label || '';
-        const c = _spcFeatureColors(feat, SPC_FIRE_COLORS[label] || { fill: '#aaaaaa', stroke: '#555' });
-        return { color: c.stroke, weight: 1, fillColor: c.fill, fillOpacity: spcOpacity, opacity: spcStrokeOpacity };
-    }
-
-    // Style function for both probability and CIG zones
-    // CIG zones get SVG hatch pattern fills based on intensity level (1, 2, or 3)
-    // Probabilistic zones get solid fills
-    function _spcProbCigStyle(feat) {
-        const dn = String(feat?.properties?.dn ?? feat?.properties?.DN ?? '').trim();
-        const label = String(feat?.properties?.LABEL || feat?.properties?.label || '').toUpperCase();
-        const label2 = String(feat?.properties?.LABEL2 || feat?.properties?.label2 || '').toUpperCase();
-        const labelDigits = (label.match(/CIG\s*([123])/) || [])[1] || '';
-        const isCig = !!labelDigits || label2.includes('CONDITIONAL INTENSITY');
-        const key = isCig
-            ? `CIG${labelDigits || '1'}`
-            : (dn || label.replace('%', ''));
-        const c = _spcFeatureColors(feat, SPC_PROB_COLORS[key] || { fill: '#aaaaaa', stroke: '#555555' });
-
-        // For CIG zones, apply hatching pattern with base color underneath
-        // For probabilistic zones, use solid fill
-        if (isCig) {
-            return {
-                color: c.stroke,
-                weight: 2,
-                fillColor: c.fill,
-                fillOpacity: spcOpacity,
-                opacity: spcStrokeOpacity,
-            };
-        }
-
-        return {
-            color: c.stroke,
-            weight: 1,
-            fillColor: c.fill,
-            fillOpacity: spcOpacity,
-            opacity: spcStrokeOpacity,
-        };
     }
 
     // ── Popup builders ───────────────────────────────────────────────────────
@@ -2715,23 +2528,8 @@
         if (!ctx) return;
         const { panel, features, latlng } = ctx;
         const idx = ctx.index;
-        panel.innerHTML = ctx.spcOutlook
-            ? _buildSpcOutlookDetailHtml(features[idx], ctx.spcOutlook)
-            : _buildNewAlertDetailHtml(features[idx], idx, features.length);
+        panel.innerHTML = _buildNewAlertDetailHtml(features[idx], idx, features.length);
         panel.querySelector('.wx-nad-close')?.addEventListener('click', _closeNewAlertDetail);
-        panel.querySelectorAll('[data-spc-outlook-tab]').forEach((button) => {
-            button.addEventListener('click', () => {
-                ctx.activeTab = button.getAttribute('data-spc-outlook-tab') || 'outlook';
-                panel.querySelectorAll('[data-spc-outlook-tab]').forEach((tabButton) => {
-                    const isActive = tabButton.getAttribute('data-spc-outlook-tab') === ctx.activeTab;
-                    tabButton.classList.toggle('is-active', isActive);
-                    tabButton.setAttribute('aria-selected', isActive ? 'true' : 'false');
-                });
-                panel.querySelectorAll('[data-spc-outlook-panel]').forEach((tabPanel) => {
-                    tabPanel.hidden = tabPanel.getAttribute('data-spc-outlook-panel') !== ctx.activeTab;
-                });
-            });
-        });
         const zoomBtn = panel.querySelector('[data-nad-zoom]');
         if (zoomBtn) {
             zoomBtn.addEventListener('click', () => {
@@ -2870,7 +2668,6 @@
             mapMoveHandler: null,
             dragCleanup,
             _positioned: false,
-            spcOutlook: options.spcOutlook || null,
             activeTab: 'outlook',
         };
         _renderNewAlertDetail();
@@ -2895,233 +2692,6 @@
             document.addEventListener('pointermove', onDragMove);
             document.addEventListener('pointerup', onDragUp);
         });
-    }
-
-    function _spcReportTypeKey(eventText) {
-        const event = String(eventText || '').toLowerCase();
-        if (event.includes('torn')) return 'torn';
-        if (event.includes('wind')) return 'wind';
-        if (event.includes('hail')) return 'hail';
-        return 'other';
-    }
-
-    const _SPC_REPORT_FA_ICON = {
-        torn: 'fa-solid fa-tornado',
-        wind: 'fa-solid fa-wind',
-        hail: 'fa-solid fa-caret-up',
-    };
-
-    function _spcReportMarker(feat, latlng) {
-        const key = _spcReportTypeKey(feat?.properties?.event);
-        const color = _SPC_REPORT_COLORS[key] || _SPC_REPORT_COLORS.other;
-        const faClass = _SPC_REPORT_FA_ICON[key];
-        if (faClass) {
-            const icon = L.divIcon({
-                className: '',
-                html: `<i class="${faClass}" style="color:${color};font-size:16px;-webkit-text-stroke:0.5px #08111d;text-shadow:0 0 3px rgba(0,0,0,0.7);"></i>`,
-                iconSize: [16, 16],
-                iconAnchor: [8, 8],
-                popupAnchor: [0, -10],
-            });
-            return L.marker(latlng, { icon });
-        }
-        return L.circleMarker(latlng, {
-            radius: 5,
-            color: '#08111d',
-            weight: 1,
-            fillColor: color,
-            fillOpacity: 0.95,
-            opacity: 1,
-        });
-    }
-
-    function _spcReportPopup(feat) {
-        const p = feat?.properties || {};
-        const event = p.event || 'Storm Report';
-        const magnitude = p.magnitude ? ` (${_escapeHtml(p.magnitude)})` : '';
-        const place = [p.location, p.county, p.state].filter(Boolean).join(', ');
-        const when = p.time ? `<br><em>Time:</em> ${_escapeHtml(p.time)}` : '';
-        const where = place ? `<br><em>Location:</em> ${_escapeHtml(place)}` : '';
-        const remarks = p.remarks ? `<br><small>${_escapeHtml(p.remarks)}</small>` : '';
-        return `<strong>${_escapeHtml(event)}${magnitude}</strong>${when}${where}${remarks}`;
-    }
-
-    function _openSpcTextDetail(latlng, feat, features = null) {
-        if (!latlng || !feat) return;
-        _openNewAlertDetail(latlng, feat, {
-            useAlertStack: false,
-            features: Array.isArray(features) && features.length ? features : undefined,
-        });
-    }
-
-    function _spcOutlookRiskKey(value) {
-        const raw = String(value || '').trim().toUpperCase();
-        const categorical = {
-            TSTM: 'GENERAL THUNDERSTORMS',
-            MRGL: 'MARGINAL',
-            SLGT: 'SLIGHT',
-            ENH: 'ENHANCED',
-            MDT: 'MODERATE',
-            HIGH: 'HIGH',
-            ELEV: 'ELEVATED',
-            CRIT: 'CRITICAL',
-            EXTM: 'EXTREMELY CRITICAL',
-            IDRT: 'ISOLATED DRY THUNDERSTORM',
-            SDRT: 'SCATTERED DRY THUNDERSTORM',
-        };
-        if (categorical[raw]) return categorical[raw];
-        const numeric = Number.parseFloat(raw);
-        if (Number.isFinite(numeric)) {
-            return String(Math.round(numeric <= 1 ? numeric * 100 : numeric));
-        }
-        const percent = raw.match(/(\d+(?:\.\d+)?)\s*%/);
-        if (percent) return String(Number(percent[1]));
-        return raw.replace(/\s+/g, ' ');
-    }
-
-    function _spcOutlookProductLabel(hazard) {
-        const labels = {
-            cat: 'Categorical',
-            torn: 'Tornado',
-            wind: 'Wind',
-            hail: 'Hail',
-            prob: 'Probabilistic',
-            windrh: 'Wind / RH',
-            dryt: 'Dry Thunderstorm',
-            windrhcat: 'Wind / RH Categorical',
-            windrhprob: 'Wind / RH Probabilistic',
-            drytcat: 'Dry Thunderstorm Categorical',
-            drytprob: 'Dry Thunderstorm Probabilistic',
-        };
-        return labels[hazard] || 'Outlook';
-    }
-
-    function _buildSpcOutlookImpactsHtml(rows, clickedRisk) {
-        if (!Array.isArray(rows) || !rows.length) {
-            return '<p class="wx-spc-outlook-empty">SPC impact estimates are unavailable.</p>';
-        }
-        const clickedKey = _spcOutlookRiskKey(clickedRisk);
-        const body = rows.map((row) => {
-            const isSelected = _spcOutlookRiskKey(row?.risk) === clickedKey;
-            const centers = Array.isArray(row?.population_centers)
-                ? row.population_centers.join(' · ')
-                : '';
-            return `<tr${isSelected ? ' class="is-selected"' : ''}>
-                <td>${_escapeHtml(row?.risk || '')}</td>
-                <td>${_escapeHtml(row?.area_sq_mi || '')}</td>
-                <td>${_escapeHtml(row?.population || '')}</td>
-                <td>${_escapeHtml(centers)}</td>
-            </tr>`;
-        }).join('');
-        return `<div class="wx-spc-outlook-table-wrap">
-            <table class="wx-spc-outlook-table">
-                <thead><tr><th scope="col">Risk</th><th scope="col">Area (sq. mi.)</th><th scope="col">Population</th><th scope="col">Population Centers</th></tr></thead>
-                <tbody>${body}</tbody>
-            </table>
-        </div>`;
-    }
-
-    function _buildSpcOutlookDetailHtml(feat, context) {
-        const p = feat?.properties || {};
-        const detail = context?.detail || {};
-        const day = Number(context?.day || 1);
-        const hazard = String(context?.hazard || 'cat');
-        const productLabel = _spcOutlookProductLabel(hazard);
-        const clickedRisk = String(p.LABEL || p.label || p.LABEL2 || p.label2 || '').trim();
-        const riskLabel = String(p.LABEL2 || p.label2 || p.LABEL || p.label || 'Outlook Area').trim();
-        const significantLabel = String(
-            context?.significantFeature?.properties?.LABEL
-            || context?.significantFeature?.properties?.label
-            || '',
-        ).trim();
-        const { sent, expires } = _formatSentExpires({
-            sent: p.ISSUE_ISO || p.issue_iso,
-            expires: p.EXPIRE_ISO || p.expire_iso,
-        });
-        const color = String(p.stroke || p.fill || '#fbbf24');
-        const title = context?.isFire
-            ? `Day ${day} Fire Weather Outlook`
-            : `Day ${day} ${productLabel} Outlook`;
-        const chips = day >= 4
-            ? [{ label: 'Probability', value: riskLabel }]
-            : [
-                { label: 'Risk', value: riskLabel },
-                { label: 'Product', value: productLabel },
-                ...(significantLabel ? [{ label: 'Significant', value: significantLabel }] : []),
-            ];
-        const chipsHtml = `<div class="wx-nad-section"><div class="wx-nad-chips">${chips.map((chip) => (
-            `<span class="wx-nad-chip"><strong>${_escapeHtml(chip.label)}:</strong> ${_escapeHtml(chip.value)}</span>`
-        )).join('')}</div></div>`;
-        const hasImpactsTab = day <= 3;
-        const tabsHtml = hasImpactsTab
-            ? `<div class="wx-spc-outlook-tabs" role="tablist" aria-label="SPC outlook details">
-                <button type="button" class="wx-spc-outlook-tab is-active" role="tab" aria-selected="true" data-spc-outlook-tab="outlook">Outlook</button>
-                <button type="button" class="wx-spc-outlook-tab" role="tab" aria-selected="false" data-spc-outlook-tab="impacts">Impacts</button>
-            </div>`
-            : '';
-        const outlookText = detail?.text
-            ? _formatTextBlock(detail.text)
-            : '<p>SPC outlook text is unavailable.</p>';
-        const impactsHtml = _buildSpcOutlookImpactsHtml(detail?.impacts, clickedRisk);
-        const sourceUrl = String(detail?.source_url || '');
-        const linkHtml = sourceUrl
-            ? `<a class="wx-nad-fulllink" href="${_escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">View Full SPC ${context?.isFire ? 'Fire Weather ' : ''}Outlook</a>`
-            : '';
-
-        return [
-            `<div class="wx-nad-header" style="border-color:${_escapeHtml(color)}">`,
-            `  <div class="wx-nad-title" style="color:${_escapeHtml(color)}">${_escapeHtml(title)}</div>`,
-            `  <button type="button" class="wx-nad-close" aria-label="Close">×</button>`,
-            `</div>`,
-            sent ? `<div class="wx-nad-issued">Issued ${_escapeHtml(sent)}${expires ? ` · Valid until ${_escapeHtml(expires)}` : ''}</div>` : '',
-            chipsHtml,
-            tabsHtml,
-            `<div class="wx-nad-scroll wx-spc-outlook-scroll">`,
-            `<section role="tabpanel" data-spc-outlook-panel="outlook">${outlookText}</section>`,
-            hasImpactsTab
-                ? `<section role="tabpanel" data-spc-outlook-panel="impacts" hidden>${impactsHtml}</section>`
-                : '',
-            `</div>`,
-            `<div class="wx-nad-footer">${linkHtml}<button type="button" class="wx-nad-zoomlink" data-nad-zoom="1">Zoom to Outlook Area</button></div>`,
-        ].join('');
-    }
-
-    function _openSpcOutlookDetail(latlng, feat, context) {
-        if (!latlng || !feat) return;
-        _openNewAlertDetail(latlng, feat, {
-            useAlertStack: false,
-            spcOutlook: context,
-        });
-    }
-
-    function _spcWatchStyle(feat) {
-        const type = String(feat?.properties?.watch_type || feat?.properties?.event || '').toLowerCase();
-        const isTor = type.includes('tornado');
-        const edge = isTor ? '#ffe066' : '#ff8ec7';
-        const fill = isTor ? '#ffe066' : '#ff8ec7';
-        return {
-            color: edge,
-            weight: 2,
-            fillColor: fill,
-            fillOpacity: 0.16,
-            opacity: 1,
-        };
-    }
-
-    function _spcMdStyle() {
-        return {
-            color: '#63d8ff',
-            weight: 1.8,
-            fillColor: '#63d8ff',
-            fillOpacity: 0.12,
-            opacity: 1,
-        };
-    }
-
-    function spcPopup(feat) {
-        const p = feat.properties || {};
-        const label = p.LABEL2 || p.label2 || p.LABEL || p.label || p.dn || '';
-        return `<strong>${label}</strong>`;
     }
 
     // ── Colorbar helpers ─────────────────────────────────────────────────────
@@ -3229,75 +2799,6 @@
         setLegend('<h4 class="legend-title">Alerts In View</h4><div class="legend-grid legend-grid-5">' + rows + '</div>');
     }
 
-    function buildSpcCatLegend() {
-        const items = [
-            ['#ff66ff', 'High'], ['#ff4f4f', 'Moderate'], ['#ff9d2e', 'Enhanced'],
-            ['#f5dd72', 'Slight'], ['#69bb6d', 'Marginal'], ['#b5dcb3', 'General Thunderstorms'],
-        ].map(([c, l]) => swatch(c, l)).join('');
-        setLegend('<h4 class="legend-title">SPC Categorical</h4><div class="legend-flow">' + items + '</div>');
-    }
-
-    function buildSpcFireLegend(hazard) {
-        if (hazard === 'dryt') {
-            const rows = [swatch('#FF8080', 'Scattered Dry T-Storm'), swatch('#FFBF80', 'Isolated Dry T-Storm')].join('');
-            setLegend('<h4 class="legend-title">SPC Fire Wx (Dry T-Storm)</h4><div class="legend-flow">' + rows + '</div>');
-        } else {
-            const rows = [swatch('#FF80FF', 'Extremely Critical'), swatch('#FF8080', 'Critical'), swatch('#FFBF80', 'Elevated')].join('');
-            setLegend('<h4 class="legend-title">SPC Fire Wx (Wind/RH)</h4><div class="legend-flow">' + rows + '</div>');
-        }
-    }
-
-    function buildSpcReportsLegend(reportTypes) {
-        const allTypes = ['torn', 'wind', 'hail'];
-        const active = Array.isArray(reportTypes) && reportTypes.length ? reportTypes : allTypes;
-        const labels = { torn: 'Tornado', wind: 'Wind', hail: 'Hail', other: 'Other' };
-        const rows = active.map((t) => {
-            const color = _SPC_REPORT_COLORS[t] || _SPC_REPORT_COLORS.other;
-            const label = labels[t] || t;
-            const faClass = _SPC_REPORT_FA_ICON[t];
-            if (faClass) {
-                return `<div class="legend-item"><i class="legend-swatch is-icon ${faClass}" style="color:${color};font-size:14px;text-align:center;"></i><span class="legend-text">${label}</span></div>`;
-            }
-            return swatch(color, label);
-        }).join('');
-        setLegend('<h4 class="legend-title">SPC Storm Reports</h4><div class="legend-flow">' + rows + '</div>');
-    }
-
-    function buildSpcWatchesLegend(features = _spcWatchFeatures) {
-        const bounds = map.getBounds();
-        const watchesInView = new Map();
-        (features || []).forEach((feature) => {
-            if (!_featureIntersectsBounds(feature, bounds)) return;
-            const properties = feature?.properties || {};
-            const type = String(properties.watch_type || properties.event || '').toLowerCase();
-            const watchKind = type.includes('tornado') ? 'tornado'
-                : type.includes('severe thunderstorm') ? 'severe'
-                    : '';
-            if (!watchKind) return;
-            const watchKey = String(
-                properties.watch_number
-                || properties.id
-                || feature?.id
-                || `${watchKind}:${properties.sent || ''}`,
-            );
-            watchesInView.set(`${watchKind}:${watchKey}`, watchKind);
-        });
-
-        const counts = { tornado: 0, severe: 0 };
-        watchesInView.forEach((watchKind) => {
-            counts[watchKind] += 1;
-        });
-        const rows = [
-            counts.tornado ? swatch('#ffe066', `Tornado Watch (${counts.tornado})`) : '',
-            counts.severe ? swatch('#ff8ec7', `Severe Thunderstorm Watch (${counts.severe})`) : '',
-        ].filter(Boolean).join('');
-        if (!rows) {
-            setLegend(null);
-            return;
-        }
-        setLegend(`<h4 class="legend-title">Watches In View</h4><div class="legend-flow">${rows}</div>`);
-    }
-
     function buildRadarSiteMarkerLegend() {
         if (!_isTypeEnabled('radar') || !byId('weather-radar-show-sites')?.checked) {
             setLegend(null);
@@ -3372,241 +2873,6 @@
         setLegend(html);
     }
 
-    // WPC Excessive Rainfall Outlook — mirrors config/wpc_config.py ERO tables.
-    const _WPC_ERO_COLORS = { MRGL: '#00FF00', SLGT: '#FFFF00', MDT: '#EE2C2C', HIGH: '#FF00FF' };
-    const _WPC_ERO_LABELS = {
-        MRGL: 'Marginal (≥5%)',
-        SLGT: 'Slight (≥15%)',
-        MDT: 'Moderate (≥40%)',
-        HIGH: 'High (≥70%)',
-    };
-    const _WPC_ERO_ORDER = ['MRGL', 'SLGT', 'MDT', 'HIGH'];
-    const _WPC_WINTER_PROBABILITIES = [
-        [10, '#00C5F1'],
-        [40, '#008A00'],
-        [70, '#FF0000'],
-    ];
-    const _WPC_FOP_CATEGORIES = [
-        ['POSSIBLE', '#FFFF00', 'Possible'],
-        ['LIKELY', '#FFAA00', 'Likely'],
-        ['OCCURRING', '#E60000', 'Occurring'],
-    ];
-    const _WPC_MPD_CATEGORIES = [
-        ['LIKELY', '#E60000', 'Flash Flooding Likely'],
-        ['POSSIBLE', '#F59E0B', 'Flash Flooding Possible'],
-        ['UNLIKELY', '#64748B', 'Flash Flooding Unlikely'],
-    ];
-
-    function buildWpcLegend({ group, day, label, features }) {
-        if (group === 'mpd') {
-            const present = new Set(
-                (features || []).map((feature) => feature.properties?.category),
-            );
-            const rows = _WPC_MPD_CATEGORIES.map(([category, color, categoryLabel]) => {
-                const row = swatch(color, categoryLabel);
-                return present.size && !present.has(category)
-                    ? row.replace('legend-item', 'legend-item is-disabled')
-                    : row;
-            }).join('');
-            setLegend(
-                `<h4 class="legend-title">${label || 'Active Mesoscale Precipitation Discussions'}</h4>`
-                + `<div class="legend-flow">${rows}</div>`,
-            );
-            return;
-        }
-
-        if (group === 'fop') {
-            const featureColors = new Map(
-                (features || []).map((feature) => [
-                    String(feature.properties?.category || '').toUpperCase(),
-                    feature.properties?.color,
-                ]),
-            );
-            const rows = _WPC_FOP_CATEGORIES.map(([category, fallbackColor, categoryLabel]) => (
-                swatch(featureColors.get(category) || fallbackColor, categoryLabel)
-            )).join('');
-            setLegend(
-                `<h4 class="legend-title">${label || '5-Day River Flood Outlook'}</h4>`
-                + `<div class="legend-flow">${rows}</div>`,
-            );
-            return;
-        }
-
-        if (group === 'winter') {
-            const featureColors = new Map(
-                (features || []).map((feature) => [
-                    Number(feature.properties?.probability),
-                    feature.properties?.color,
-                ]),
-            );
-            const rows = _WPC_WINTER_PROBABILITIES.map(([probability, fallbackColor]) => (
-                swatch(
-                    featureColors.get(probability) || fallbackColor,
-                    `≥ ${probability}%`,
-                )
-            )).join('');
-            setLegend(
-                `<h4 class="legend-title">${label || `WPC Winter Weather — Day ${day}`}</h4>`
-                + `<div class="legend-flow">${rows}</div>`,
-            );
-            return;
-        }
-
-        if (group === 'qpf') {
-            const bins = new Map();
-            (features || []).forEach((feature) => {
-                const properties = feature.properties || {};
-                const threshold = Number(properties.threshold);
-                if (!Number.isFinite(threshold)) return;
-                bins.set(threshold, {
-                    color: properties.color || '#888888',
-                    label: properties.label || `≥ ${threshold} in`,
-                });
-            });
-            const rows = [...bins.entries()]
-                .sort(([a], [b]) => a - b)
-                .map(([, bin]) => swatch(bin.color, bin.label))
-                .join('');
-            setLegend(
-                `<h4 class="legend-title">${label || `WPC QPF — Day ${day}`}</h4>`
-                + `<div class="legend-flow">${rows}</div>`,
-            );
-            return;
-        }
-
-        const present = new Set(
-            (features || [])
-                .map((feature) => String(feature.properties?.category || '').toUpperCase())
-                .filter((category) => _WPC_ERO_ORDER.includes(category)),
-        );
-        const rows = _WPC_ERO_ORDER.map((category) => {
-            const row = swatch(_WPC_ERO_COLORS[category], _WPC_ERO_LABELS[category]);
-            return present.size && !present.has(category)
-                ? row.replace('legend-item', 'legend-item is-disabled')
-                : row;
-        }).join('');
-        setLegend(
-            `<h4 class="legend-title">${label || `WPC Excessive Rainfall — Day ${day}`}</h4>`
-            + `<div class="legend-flow">${rows}</div>`,
-        );
-    }
-
-    // Authoritative SPC probabilistic fill colors (per-hazard scale).
-    // Colors taken from SPC's published outlook legends.
-    const _SPC_PROB_HAZARD_COLORS = {
-        torn: [
-            ['60%', '#104E8B'],
-            ['45%', '#912CEE'],
-            ['30%', '#FF00FF'],
-            ['15%', '#FF9696'],
-            ['10%', '#FFEB7F'],
-            ['5%', '#BD998A'],
-            ['2%', '#79BA7A'],
-        ],
-        hail: [
-            ['60%', '#912CEE'],
-            ['45%', '#FF00FF'],
-            ['30%', '#FF0000'],
-            ['15%', '#FFEB7F'],
-            ['5%', '#C5A392'],
-        ],
-        wind: [
-            ['90%', '#00FFFF'],
-            ['75%', '#104E8B'],
-            ['60%', '#912CEE'],
-            ['45%', '#FF00FF'],
-            ['30%', '#FF0000'],
-            ['15%', '#FFEB7F'],
-            ['5%', '#C5A392'],
-        ],
-    };
-
-    const _SPC_HAZARD_TITLES = { torn: 'Tornado', hail: 'Hail', wind: 'Wind' };
-
-    // How many CIG intensity levels exist for each hazard (hail has 1-2, others 1-3).
-    const _SPC_HAZARD_CIG_LEVELS = { torn: 3, hail: 2, wind: 3 };
-
-    function _spcInlineSwatch(color, label) {
-        return `<span class="legend-item">`
-            + `<span class="legend-swatch" style="background:${color}"></span>`
-            + `<span class="legend-text">${label}</span></span>`;
-    }
-
-    // Small inline swatch rendering the SVG hatch pattern used on the map, so
-    // the legend matches the polygon fill exactly.
-    function _spcHatchSwatch(intensity, label) {
-        const size = 22;
-        const patternId = `legend-hatch-cig-${intensity}`;
-        let patternBody = '';
-        if (intensity === 1) {
-            // Legend: 25% tighter than map pattern (tile 10 → 7.5, dasharray scaled)
-            patternBody = `
-                <pattern id="${patternId}" patternUnits="userSpaceOnUse" width="7.5" height="7.5" patternTransform="rotate(45)">
-                    <line x1="0" y1="0" x2="0" y2="7.5" stroke="black" stroke-width="4" stroke-dasharray="3,4.5"/>
-                </pattern>`;
-        } else if (intensity === 2) {
-            // Legend: 50% tighter than map pattern (tile 18 → 9)
-            patternBody = `
-                <pattern id="${patternId}" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(-45)">
-                    <line x1="0" y1="0" x2="0" y2="9" stroke="black" stroke-width="4"/>
-                </pattern>`;
-        } else {
-            // Legend: 50% tighter than map pattern (tile 18 → 9)
-            patternBody = `
-                <pattern id="${patternId}" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(45)">
-                    <line x1="0" y1="0" x2="0" y2="9" stroke="black" stroke-width="4"/>
-                    <line x1="0" y1="0" x2="9" y2="0" stroke="black" stroke-width="4"/>
-                </pattern>`;
-        }
-        const svg = `<svg width="${size}" height="${size}" style="vertical-align:middle;border:1px solid rgba(0,0,0,0.4);border-radius:2px;background:#fff;">`
-            + `<defs>${patternBody}</defs>`
-            + `<rect width="${size}" height="${size}" fill="url(#${patternId})"/>`
-            + `</svg>`;
-        return `<span class="spc-cig-item">${svg}${label}</span>`;
-    }
-
-    function buildSpcProbLegend(hazard, day = null) {
-        // Allow day override for Day 3 and Days 4-8
-        let title = _SPC_HAZARD_TITLES[hazard] || 'Probabilistic';
-        let colors = _SPC_PROB_HAZARD_COLORS[hazard] || [];
-        let cigLevels = _SPC_HAZARD_CIG_LEVELS[hazard] || 0;
-
-        // Day 3 Probabilistic: 60, 45, 30, 15, 5; Intensity 1 & 2 only
-        if (day === 3) {
-            colors = [
-                ['60%', '#104E8B'],
-                ['45%', '#912CEE'],
-                ['30%', '#FF00FF'],
-                ['15%', '#FF9696'],
-                ['5%', '#BD998A'],
-            ];
-            cigLevels = 2;
-        }
-        // Days 4-8: Only 30% and 15%, no intensity
-        if (day >= 4 && day <= 8) {
-            colors = [
-                ['30%', '#FF00FF'],
-                ['15%', '#FF9696'],
-            ];
-            cigLevels = 0;
-            title = 'Severe Weather Outlook';
-        }
-
-        const probRow = colors.map(([label, color]) => _spcInlineSwatch(color, label)).join('');
-        const intensityRow = Array.from({ length: cigLevels }, (_, i) => i + 1)
-            .map((lvl) => _spcHatchSwatch(lvl, String(lvl)))
-            .join('');
-
-        let html = `<h4 class="legend-title">SPC ${title}</h4>`;
-        html += `<div class="legend-text legend-section-label">Probability</div>`;
-        html += `<div class="legend-inline">${probRow}</div>`;
-        if (intensityRow) {
-            html += `<div class="legend-text legend-section-label">Intensity</div>`;
-            html += `<div class="legend-inline">${intensityRow}</div>`;
-        }
-        setLegend(html);
-    }
-
     // ── Data loaders ─────────────────────────────────────────────────────────
     function setStatus(msg) {
         const el = byId('weather-map-status');
@@ -3656,11 +2922,9 @@
     function _activeReliabilityType() {
         if (_isTypeEnabled('mrms') && _activeMrmsProduct()) return 'mrms';
         if (_isTypeEnabled('rtma') && _activeRtmaStream() && _activeRtmaProduct()) return 'rtma';
-        if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) return 'spc';
         if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length) return 'alerts';
         if (_isTypeEnabled('drought')) return 'drought';
         if (_isTypeEnabled('tropical')) return 'tropical';
-        if (_isTypeEnabled('wpc')) return 'wpc';
         if (_isTypeEnabled('satellite') && _satelliteFrames.length) return 'satellite';
         return 'global';
     }
@@ -3770,13 +3034,6 @@
         _reliabilityTickerStarted = true;
         _renderReliability();
         setInterval(_renderReliability, 5000);
-    }
-
-    function _canApplySpcResponse() {
-        return !_archiveMode
-            && !_rtmaScrubFrames.length
-            && _isTypeEnabled('spc')
-            && !!byId('weather-show-spc')?.checked;
     }
 
     function _canApplyMrmsResponse() {
@@ -4506,942 +3763,6 @@
         return `${base}${sep}${params.toString()}`;
     }
 
-    const _SPC_CONVECTIVE_LABELS = {
-        cat: 'Categorical',
-        torn: 'Tornado Probabilistic',
-        cigtorn: 'Tornado Significant',
-        wind: 'Wind Probabilistic',
-        cigwind: 'Wind Significant',
-        hail: 'Hail Probabilistic',
-        cighail: 'Hail Significant',
-        prob: 'Probabilistic',
-    };
-
-    const _SPC_CIG_OVERLAY_BY_HAZARD = {
-        torn: 'cigtorn',
-        wind: 'cigwind',
-        hail: 'cighail',
-    };
-
-    function _isSpcFireHazard(hazard) {
-        return ['windrh', 'dryt', 'drytcat', 'drytprob', 'windrhcat', 'windrhprob'].includes(hazard);
-    }
-
-    function _getSpcStyleFn(hazard) {
-        if (_isSpcFireHazard(hazard)) return spcFireStyle;
-        if (hazard === 'prob' || hazard === 'torn' || hazard === 'wind' || hazard === 'hail' || _isSpcCigOverlayHazard(hazard)) {
-            return _spcProbCigStyle;
-        }
-        return spcCatStyle;
-    }
-
-    function _isSpcCigOverlayHazard(hazard) {
-        // CIG hazards (cigtorn/cigwind/cighail) render with hatch patterns and
-        // always require non-zero DN filtering (their .lyr.geojson includes a
-        // placeholder DN=0 feature when no Sig threat exists).
-        return hazard === 'cigtorn' || hazard === 'cigwind' || hazard === 'cighail';
-    }
-
-    // Map the user's selected hazards to the single hazard whose prob legend
-    // should be shown. cigtorn/cigwind/cighail map back to their base hazard.
-    function _getSpcProbLegendHazard(hazards) {
-        const cigToBase = { cigtorn: 'torn', cigwind: 'wind', cighail: 'hail' };
-        const probHazards = ['torn', 'wind', 'hail', 'prob'];
-        for (const h of hazards) {
-            if (probHazards.includes(h)) return h === 'prob' ? 'torn' : h;
-            if (cigToBase[h]) return cigToBase[h];
-        }
-        return null;
-    }
-
-    function _spcNonZeroDn(feat) {
-        const raw = feat?.properties?.DN ?? feat?.properties?.dn;
-        const value = Number(raw);
-        return Number.isFinite(value) ? value !== 0 : true;
-    }
-
-    function _spcFeatureIsCig(feat) {
-        const label = String(feat?.properties?.LABEL || feat?.properties?.label || '').toUpperCase();
-        const label2 = String(feat?.properties?.LABEL2 || feat?.properties?.label2 || '').toUpperCase();
-        return /CIG\s*[123]/.test(label) || label2.includes('CONDITIONAL INTENSITY');
-    }
-
-    function _highestSpcFeatureAtPoint(features, latlng, scoreFeature) {
-        return (features || []).reduce((best, candidate) => {
-            if (!_featureContainsLatLng(candidate, latlng)) return best;
-            if (!best) return candidate;
-            return scoreFeature(candidate) > scoreFeature(best) ? candidate : best;
-        }, null);
-    }
-
-    function _spcCigIntensity(feat) {
-        const label = String(feat?.properties?.LABEL || feat?.properties?.label || '').toUpperCase();
-        return Number((label.match(/CIG\s*([123])/) || [])[1] || 0);
-    }
-
-    function _applySpcCigPattern(feat, layer) {
-        // Extract CIG intensity from feature properties
-        const label = String(feat?.properties?.LABEL || feat?.properties?.label || '').toUpperCase();
-        const label2 = String(feat?.properties?.LABEL2 || feat?.properties?.label2 || '').toUpperCase();
-        const labelDigits = (label.match(/CIG\s*([123])/) || [])[1] || '';
-        const isCig = !!labelDigits || label2.includes('CONDITIONAL INTENSITY');
-
-        if (!isCig) return; // Only apply patterns to CIG zones
-
-        const intensity = labelDigits || '1';
-        const patternUrl = `url(#hatch-cig-${intensity})`;
-
-        if (layer?._path) {
-            const svgRoot = layer._path.ownerSVGElement;
-            _ensureSpcCigPatternDefs(svgRoot);
-            layer._path.setAttribute('fill', patternUrl);
-            layer._path.setAttribute('fill-opacity', String(spcOpacity));
-        }
-    }
-
-    function _applySpcCigPatternsToGroup(group) {
-        if (!group || typeof group.eachLayer !== 'function') return;
-        group.eachLayer((child) => {
-            if (typeof child.eachLayer === 'function') {
-                child.eachLayer((sub) => _applySpcCigPattern(sub?.feature, sub));
-            } else {
-                _applySpcCigPattern(child?.feature, child);
-            }
-        });
-    }
-
-    function _buildSpcRequestHazards(day, hazards) {
-        // Each requested hazard is fetched directly. CIG hazards (cigtorn/cigwind/cighail)
-        // are independent selections in the UI, not auto-overlays, so no derived requests
-        // are added here.
-        return hazards.map((hazard) => ({ hazard, overlay: false }));
-    }
-
-    function _getSpcDay() {
-        if (_spcPageController?.getSpcDay) return _spcPageController.getSpcDay();
-        return parseInt(byId('weather-spc-day')?.value || '1', 10);
-    }
-
-    function _getSpcFireDay() {
-        if (_spcPageController?.getSpcFireDay) return _spcPageController.getSpcFireDay();
-        return parseInt(byId('weather-spc-fire-day')?.value || '1', 10);
-    }
-
-    function _getAllowedSpcConvectiveHazards(day = _getSpcDay()) {
-        if (day <= 2) return ['cat', 'torn', 'cigtorn', 'wind', 'cigwind', 'hail', 'cighail'];
-        if (day === 3) return ['cat', 'prob'];
-        return ['cat'];
-    }
-
-    function _getDefaultSpcConvectiveHazards(day = _getSpcDay()) {
-        return [];
-    }
-
-    function _getSpcConvectiveLabel(hazard, day = _getSpcDay()) {
-        if (hazard === 'cat' && day >= 4) return 'Severe Weather Outlook';
-        return _SPC_CONVECTIVE_LABELS[hazard] || hazard;
-    }
-
-    function _getCheckedSpcConvectiveHazards() {
-        return Array.from(document.querySelectorAll('.weather-spc-convective-toggle:checked')).map((el) => el.value);
-    }
-
-    function _getCheckedSpcFireHazards() {
-        return Array.from(document.querySelectorAll('.weather-spc-fire-toggle:checked')).map((el) => el.value);
-    }
-
-    function _getSelectedSpcHazards(day = _getSpcDay()) {
-        if (_spcPageController?.getSelectedHazards) return _spcPageController.getSelectedHazards(day);
-        const fireHazards = _getCheckedSpcFireHazards();
-        if (fireHazards.length) return fireHazards;
-        const allowed = new Set(_getAllowedSpcConvectiveHazards(day));
-        return _getCheckedSpcConvectiveHazards().filter((hazard) => allowed.has(hazard));
-    }
-
-    function _getPrimarySpcHazard(day = _getSpcDay()) {
-        return _getSelectedSpcHazards(day)[0] || _getDefaultSpcConvectiveHazards(day)[0] || 'cat';
-    }
-
-    function _syncSpcConvectiveOptions(resetSelection = false) {
-        if (_spcPageController?.syncConvectiveOptions) {
-            _spcPageController.syncConvectiveOptions(resetSelection);
-            return;
-        }
-        const day = _getSpcDay();
-        const allowed = new Set(_getAllowedSpcConvectiveHazards(day));
-        const defaults = new Set(_getDefaultSpcConvectiveHazards(day));
-        document.querySelectorAll('.weather-spc-convective-row').forEach((row) => {
-            const hazard = row.dataset.hazard || '';
-            const enabled = allowed.has(hazard);
-            row.style.display = enabled ? '' : 'none';
-
-            const input = row.querySelector('.weather-spc-convective-toggle');
-            if (input) {
-                if (!enabled) input.checked = false;
-                else if (resetSelection) input.checked = defaults.has(hazard);
-            }
-
-            const label = row.querySelector('.weather-spc-convective-label');
-            if (label) label.textContent = _getSpcConvectiveLabel(hazard, day);
-        });
-
-        if (resetSelection) {
-            // Clear all fire weather checkboxes
-            document.querySelectorAll('.weather-spc-fire-toggle').forEach((el) => { el.checked = false; });
-        }
-    }
-
-    function _syncSpcFireWeatherOptions(resetSelection = false) {
-        if (_spcPageController?.syncFireWeatherOptions) {
-            _spcPageController.syncFireWeatherOptions(resetSelection);
-            return;
-        }
-        const fireDay = parseInt(byId('weather-spc-fire-day')?.value || '1', 10);
-        const fireList = byId('weather-spc-fire-list');
-        if (!fireList) return;
-
-        // Show categorical fire weather products only for Days 3–8
-        fireList.querySelectorAll('.weather-spc-fire-row[data-categorical="1"]').forEach((row) => {
-            const visible = fireDay >= 3 && fireDay <= 8;
-            row.style.display = visible ? '' : 'none';
-            if (!visible) {
-                const input = row.querySelector('input[type="checkbox"]');
-                if (input) input.checked = false;
-            }
-        });
-
-        if (resetSelection) {
-            fireList.querySelectorAll('.weather-spc-fire-toggle').forEach((el) => { el.checked = false; });
-        }
-    }
-
-    function _spcSupplementalSelections() {
-        if (_spcPageController?.getSupplementalSelections) return _spcPageController.getSupplementalSelections();
-        const reportsDays = [];
-        if (byId('weather-spc-reports-today')?.checked) reportsDays.push('today');
-        if (byId('weather-spc-reports-yesterday')?.checked) reportsDays.push('yesterday');
-
-        const reportTypes = [];
-        if (byId('weather-spc-report-type-torn')?.checked) reportTypes.push('torn');
-        if (byId('weather-spc-report-type-wind')?.checked) reportTypes.push('wind');
-        if (byId('weather-spc-report-type-hail')?.checked) reportTypes.push('hail');
-
-        const watchLayers = [];
-        if (byId('weather-spc-watch-tor-polygon')?.checked) watchLayers.push({ type: 'tor', mode: 'polygon' });
-        else if (byId('weather-spc-watch-tor-counties')?.checked) watchLayers.push({ type: 'tor', mode: 'counties' });
-        if (byId('weather-spc-watch-svr-polygon')?.checked) watchLayers.push({ type: 'svr', mode: 'polygon' });
-        else if (byId('weather-spc-watch-svr-counties')?.checked) watchLayers.push({ type: 'svr', mode: 'counties' });
-
-        return {
-            reportsEnabled: reportsDays.length > 0 && reportTypes.length > 0,
-            reportsDays,
-            reportTypes,
-            mdsEnabled: !!byId('weather-spc-show-mds')?.checked,
-            watchesEnabled: watchLayers.length > 0,
-            watchLayers,
-        };
-    }
-
-    function _clearSpcConvectiveSelections() {
-        document.querySelectorAll('.weather-spc-convective-toggle').forEach((el) => {
-            el.checked = false;
-        });
-    }
-
-    function _clearSpcWatchSelections() {
-        [
-            'weather-spc-watch-tor-polygon',
-            'weather-spc-watch-tor-counties',
-            'weather-spc-watch-svr-polygon',
-            'weather-spc-watch-svr-counties',
-        ].forEach((id) => {
-            const el = byId(id);
-            if (el) el.checked = false;
-        });
-    }
-
-    function _clearSpcMdSelection() {
-        const el = byId('weather-spc-show-mds');
-        if (el) el.checked = false;
-    }
-
-    function _updateSpcReportFilterState() {
-        if (_spcPageController?.updateReportFilterState) {
-            _spcPageController.updateReportFilterState();
-            return;
-        }
-        const hasReportDay = !!byId('weather-spc-reports-today')?.checked
-            || !!byId('weather-spc-reports-yesterday')?.checked;
-        ['weather-spc-report-type-torn', 'weather-spc-report-type-wind', 'weather-spc-report-type-hail']
-            .forEach((filterId) => {
-                const filterEl = byId(filterId);
-                if (!filterEl) return;
-                if (!hasReportDay) filterEl.checked = false;
-                filterEl.disabled = !hasReportDay;
-            });
-    }
-
-    function _clearSpcReportSelections() {
-        ['weather-spc-reports-today', 'weather-spc-reports-yesterday'].forEach((id) => {
-            const el = byId(id);
-            if (el) el.checked = false;
-        });
-        _updateSpcReportFilterState();
-    }
-
-    function _clearSpcFireSelections(keepTarget = null) {
-        document.querySelectorAll('.weather-spc-fire-toggle').forEach((el) => {
-            if (keepTarget && el === keepTarget) return;
-            el.checked = false;
-        });
-    }
-
-    function _clearSpcExclusivePeers(group, options = {}) {
-        if (group !== 'convective') _clearSpcConvectiveSelections();
-        if (group !== 'watches') _clearSpcWatchSelections();
-        if (group !== 'mds') _clearSpcMdSelection();
-        if (group !== 'reports') _clearSpcReportSelections();
-        if (group !== 'fire') _clearSpcFireSelections(options.keepFireTarget || null);
-    }
-
-    function _setSpcSubtab(tabKey) {
-        _closeNewAlertDetail();
-        const buttons = Array.from(document.querySelectorAll('.spc-subtab-button'));
-        const panels = Array.from(document.querySelectorAll('.spc-subtab-panel'));
-        if (!buttons.length || !panels.length) return;
-
-        const selectedKey = buttons.some((button) => button.dataset.spcSubtab === tabKey)
-            ? tabKey
-            : 'outlooks';
-
-        buttons.forEach((button) => {
-            const isSelected = button.dataset.spcSubtab === selectedKey;
-            button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-            button.tabIndex = isSelected ? 0 : -1;
-        });
-
-        panels.forEach((panel) => {
-            panel.classList.toggle('is-active', panel.dataset.spcPanel === selectedKey);
-        });
-    }
-
-    function _syncSpcSubtabForSelection(preferredTab = null) {
-        if (preferredTab) {
-            _setSpcSubtab(preferredTab);
-            return;
-        }
-
-        const supplemental = _spcSupplementalSelections();
-        if (_getCheckedSpcFireHazards().length) {
-            _setSpcSubtab('fire');
-        } else if (supplemental.watchesEnabled) {
-            _setSpcSubtab('watches');
-        } else if (supplemental.reportsEnabled || supplemental.mdsEnabled) {
-            _setSpcSubtab('reports');
-        } else {
-            _setSpcSubtab('outlooks');
-        }
-    }
-
-    function _normalizeSpcWatchLayersForKey(watchLayers) {
-        return (watchLayers || [])
-            .map((w) => `${String(w?.type || '').toLowerCase()}:${String(w?.mode || '').toLowerCase()}`)
-            .sort();
-    }
-
-    function _spcSelectionKey(day, fireDay, hazards, supplemental) {
-        const sortedHazards = (hazards || []).map((h) => String(h)).sort();
-        const watchLayers = _normalizeSpcWatchLayersForKey(supplemental?.watchLayers || []);
-        const reportsDays = [...(supplemental?.reportsDays || [])].map((d) => String(d)).sort();
-        const reportTypes = [...(supplemental?.reportTypes || [])].map((t) => String(t)).sort();
-        return JSON.stringify({
-            day: Number(day || 1),
-            fireDay: Number(fireDay || 1),
-            hazards: sortedHazards,
-            reportsDays,
-            reportTypes,
-            mdsEnabled: !!supplemental?.mdsEnabled,
-            watchesEnabled: !!supplemental?.watchesEnabled,
-            watchLayers,
-        });
-    }
-
-    function _currentSpcSelectionKey() {
-        const day = _getSpcDay();
-        const fireDay = _getSpcFireDay();
-        const hazards = _getSelectedSpcHazards(day);
-        const supplemental = _spcSupplementalSelections();
-        return _spcSelectionKey(day, fireDay, hazards, supplemental);
-    }
-
-    function _isActiveSpcRequest(requestSeq, selectionKey) {
-        return requestSeq === _spcRequestSeq
-            && _canApplySpcResponse()
-            && selectionKey === _currentSpcSelectionKey();
-    }
-
-    function _isAbortLikeError(err) {
-        if (!err) return false;
-        const name = String(err.name || '');
-        if (name === 'AbortError' || name === 'TimeoutError') return true;
-        const msg = String(err.message || '').toLowerCase();
-        return msg.includes('abort') || msg.includes('timed out');
-    }
-
-    async function _fetchJsonWithTimeout(url, options = {}) {
-        const parentSignal = options.signal || null;
-        const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 10_000;
-        const controller = new AbortController();
-        let timeoutId = null;
-        const abortFromParent = () => controller.abort();
-
-        if (parentSignal) {
-            if (parentSignal.aborted) controller.abort();
-            else parentSignal.addEventListener('abort', abortFromParent, { once: true });
-        }
-
-        if (timeoutMs > 0) {
-            timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        }
-
-        try {
-            const resp = await fetch(url, { signal: controller.signal, cache: 'no-store' });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            return await resp.json();
-        } catch (err) {
-            const parentAborted = !!(parentSignal && parentSignal.aborted);
-            const timedOut = !!(timeoutId && !parentAborted && controller.signal.aborted);
-            if (timedOut) {
-                const timeoutErr = new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`);
-                timeoutErr.name = 'TimeoutError';
-                throw timeoutErr;
-            }
-            throw err;
-        } finally {
-            if (timeoutId) clearTimeout(timeoutId);
-            if (parentSignal) parentSignal.removeEventListener('abort', abortFromParent);
-        }
-    }
-
-    async function _fetchSpcReportsGeoJson(requestSeq, selectionKey, signal, dayKey, reportType) {
-        const url = apiUrl(
-            `/api/data/spc/reports?day=${encodeURIComponent(dayKey)}`
-            + `&report_type=${encodeURIComponent(reportType || 'all')}`
-            + `&report_mode=filtered`
-        );
-        const geojson = await _fetchJsonWithTimeout(url, {
-            signal,
-            timeoutMs: _SPC_SUPPLEMENTAL_TIMEOUT_MS,
-        });
-        if (!_isActiveSpcRequest(requestSeq, selectionKey)) return null;
-        return geojson;
-    }
-
-    async function _fetchSpcActiveProductGeoJson(requestSeq, selectionKey, signal, product, query = '') {
-        const url = apiUrl(`/api/data/spc/active?product=${encodeURIComponent(product)}${query}`);
-        const geojson = await _fetchJsonWithTimeout(url, {
-            signal,
-            timeoutMs: _SPC_SUPPLEMENTAL_TIMEOUT_MS,
-        });
-        if (!_isActiveSpcRequest(requestSeq, selectionKey)) return null;
-        return geojson;
-    }
-
-    async function _fetchSpcHazardGeoJson(requestSeq, selectionKey, signal, day, hazard) {
-        const geojson = await _fetchJsonWithTimeout(
-            apiUrl(`/api/data/spc?day=${day}&hazard=${hazard}`),
-            {
-                signal,
-                timeoutMs: _SPC_PRIMARY_TIMEOUT_MS,
-            },
-        );
-        if (!_isActiveSpcRequest(requestSeq, selectionKey)) return null;
-        return { hazard, geojson };
-    }
-
-    function _latestSpcTimestampValue(values) {
-        let latestValue = null;
-        let latestTimestampMs = null;
-        (values || []).forEach((value) => {
-            const timestampMs = _resolveDataTimestampMs(value);
-            if (!Number.isFinite(timestampMs)) return;
-            if (latestTimestampMs === null || timestampMs > latestTimestampMs) {
-                latestTimestampMs = timestampMs;
-                latestValue = value;
-            }
-        });
-        return latestValue;
-    }
-
-    async function refreshSpc() {
-        if (_spcEngine?.refreshSpc) return _spcEngine.refreshSpc();
-        return _doRefreshSpcInternal();
-    }
-
-    async function _doRefreshSpcInternal() {
-        const day = _getSpcDay();
-        const fireDay = _getSpcFireDay();
-        const hazards = _getSelectedSpcHazards(day);
-        const supplemental = _spcSupplementalSelections();
-        const hasSupplementalLayers = supplemental.reportsEnabled
-            || supplemental.mdsEnabled
-            || supplemental.watchesEnabled;
-        const requestSeq = ++_spcRequestSeq;
-        const selectionKey = _spcSelectionKey(day, fireDay, hazards, supplemental);
-        if (_spcAbortController) {
-            _spcAbortController.abort();
-        }
-        _spcAbortController = new AbortController();
-        const requestSignal = _spcAbortController.signal;
-        if (spcLayer) { map.removeLayer(spcLayer); spcLayer = null; }
-        _spcWatchFeatures = [];
-
-        const countEl = byId('weather-spc-count');
-        if (!hazards.length && !hasSupplementalLayers) {
-            if (countEl) countEl.textContent = '0 feature(s)';
-            setLegend(null);
-            setMapEmptyMessage(null);
-            setStatus('SPC selection cleared.');
-            return;
-        }
-
-        // Fire hazards use the fire day selector; convective hazards use the convective day
-        const areFireHazards = hazards.length > 0 && hazards.every((h) => _isSpcFireHazard(h));
-        const effectiveDay = areFireHazards ? fireDay : day;
-        const loadingParts = [];
-        if (hazards.length) loadingParts.push(`day ${effectiveDay} (${hazards.join(', ')})`);
-        if (supplemental.reportsEnabled) {
-            const reportTypesLabel = supplemental.reportTypes.length === 3
-                ? 'all'
-                : supplemental.reportTypes.join(',');
-            loadingParts.push(`reports:${supplemental.reportsDays.join('+')}/${reportTypesLabel}`);
-        }
-        if (supplemental.mdsEnabled) loadingParts.push('mds');
-        if (supplemental.watchesEnabled) {
-            loadingParts.push(`watches:${supplemental.watchLayers.map((w) => `${w.type}-${w.mode}`).join(',')}`);
-        }
-        setStatus(`Loading SPC ${loadingParts.join(' + ')}...`);
-        if (!hazards.length && hasSupplementalLayers) {
-            setMapEmptyMessage('Loading SPC supplemental overlays...');
-        }
-        try {
-            const requestedHazards = hazards.length ? _buildSpcRequestHazards(effectiveDay, hazards) : [];
-            const results = requestedHazards.length
-                ? await Promise.allSettled(
-                    requestedHazards.map((item) =>
-                        _fetchSpcHazardGeoJson(requestSeq, selectionKey, requestSignal, effectiveDay, item.hazard)
-                            .then((value) => ({ ...item, value }))
-                    )
-                )
-                : [];
-
-            if (!_isActiveSpcRequest(requestSeq, selectionKey)) return;
-
-            const failures = results.filter((result) => result.status === 'rejected');
-            failures.forEach((result) => {
-                if (_isAbortLikeError(result.reason)) return;
-                console.error('[spc] Load error:', result.reason);
-            });
-
-            const payloads = results
-                .filter((result) => result.status === 'fulfilled' && result.value?.value)
-                .map((result) => result.value);
-
-            const reportsFeatureMap = new Map();
-            let reportsGeojson = null;
-            let mdsGeojson = null;
-            const watchFeatureMap = new Map();
-            let watchesGeojson = null;
-            const supplementalFetches = [];
-            const supplementalUpdatedValues = [];
-            const reportsUpdatedValues = [];
-            const watchesUpdatedValues = [];
-            let supplementalTimedOut = false;
-            if (supplemental.reportsEnabled) {
-                const reportTypeQueries = supplemental.reportTypes.length === 3
-                    ? ['all']
-                    : supplemental.reportTypes;
-                supplemental.reportsDays.forEach((dayKey) => {
-                    reportTypeQueries.forEach((reportType) => {
-                        supplementalFetches.push(
-                            _fetchSpcReportsGeoJson(requestSeq, selectionKey, requestSignal, dayKey, reportType)
-                                .then((geojson) => {
-                                    if (geojson?._updated) {
-                                        supplementalUpdatedValues.push(geojson._updated);
-                                        reportsUpdatedValues.push(geojson._updated);
-                                    }
-                                    (geojson?.features || []).forEach((feat) => {
-                                        const props = feat?.properties || {};
-                                        const coords = Array.isArray(feat?.geometry?.coordinates)
-                                            ? feat.geometry.coordinates
-                                            : [];
-                                        const dedupeKey = [
-                                            dayKey,
-                                            props.event || '',
-                                            props.time || '',
-                                            coords[0] ?? '',
-                                            coords[1] ?? '',
-                                            props.location || '',
-                                            props.county || '',
-                                            props.state || '',
-                                        ].join('|');
-                                        if (!reportsFeatureMap.has(dedupeKey)) {
-                                            reportsFeatureMap.set(dedupeKey, {
-                                                ...feat,
-                                                properties: { ...props, report_day: props.report_day || dayKey },
-                                            });
-                                        }
-                                    });
-                                })
-                        );
-                    });
-                });
-            }
-            if (supplemental.mdsEnabled) {
-                supplementalFetches.push(
-                    _fetchSpcActiveProductGeoJson(requestSeq, selectionKey, requestSignal, 'mds')
-                        .then((geojson) => {
-                            mdsGeojson = geojson;
-                            if (geojson?._updated) supplementalUpdatedValues.push(geojson._updated);
-                        })
-                );
-            }
-            if (supplemental.watchesEnabled) {
-                supplemental.watchLayers.forEach((watchCfg) => {
-                    const q = `&watch_mode=${encodeURIComponent(watchCfg.mode)}`
-                        + `&watch_types=${encodeURIComponent(watchCfg.type)}`;
-                    supplementalFetches.push(
-                        _fetchSpcActiveProductGeoJson(requestSeq, selectionKey, requestSignal, 'watches', q)
-                            .then((geojson) => {
-                                if (geojson?._updated) {
-                                    supplementalUpdatedValues.push(geojson._updated);
-                                    watchesUpdatedValues.push(geojson._updated);
-                                }
-                                (geojson?.features || []).forEach((feat) => {
-                                    const props = feat?.properties || {};
-                                    const dedupeKey = String(
-                                        feat?.id
-                                        || `${props.id || ''}|${props.watch_type || ''}|${watchCfg.type}|${watchCfg.mode}`,
-                                    );
-                                    if (!watchFeatureMap.has(dedupeKey)) watchFeatureMap.set(dedupeKey, feat);
-                                });
-                            })
-                    );
-                });
-            }
-            if (supplementalFetches.length) {
-                const supplementalResults = await Promise.allSettled(supplementalFetches);
-                supplementalResults
-                    .filter((r) => r.status === 'rejected')
-                    .forEach((r) => {
-                        if (_isAbortLikeError(r.reason)) {
-                            if (String(r.reason?.name || '') === 'TimeoutError') {
-                                supplementalTimedOut = true;
-                            }
-                            return;
-                        }
-                        console.error('[spc] Supplemental overlay load error:', r.reason);
-                    });
-            }
-
-            if (!_isActiveSpcRequest(requestSeq, selectionKey)) return;
-
-            if (reportsFeatureMap.size) {
-                reportsGeojson = {
-                    type: 'FeatureCollection',
-                    features: Array.from(reportsFeatureMap.values()),
-                    _updated: _latestSpcTimestampValue(reportsUpdatedValues),
-                };
-            }
-            if (watchFeatureMap.size) {
-                watchesGeojson = {
-                    type: 'FeatureCollection',
-                    features: Array.from(watchFeatureMap.values()),
-                    _updated: _latestSpcTimestampValue(watchesUpdatedValues),
-                };
-            }
-            _spcWatchFeatures = watchesGeojson?.features || [];
-
-            if (!payloads.length && !hasSupplementalLayers) {
-                const err = failures[0]?.reason || new Error('No SPC data returned');
-                throw err;
-            }
-
-            const layerGroup = L.layerGroup();
-            let count = 0;
-            const outlookPayloadByHazard = new Map(
-                payloads.map((payload) => [payload.hazard, payload.value?.geojson]),
-            );
-
-            // Base probabilistic layers (torn/wind/hail) frequently include embedded
-            // CIG features in their .lyr.geojson source. Always strip them so they only
-            // render when the dedicated cigtorn/cigwind/cighail layer is also selected.
-            const baseStripsCig = new Set(Object.keys(_SPC_CIG_OVERLAY_BY_HAZARD));
-
-            // When all features get filtered out because of DN=0 placeholders,
-            // capture the SPC LABEL text (e.g. "Less Than 2% All Areas") so we
-            // can surface SPC's own wording in the empty-state overlay.
-            const placeholderLabels = [];
-
-            payloads.forEach(({ hazard, overlay, value }) => {
-                const geojson = value.geojson;
-                const isFireHazard = _isSpcFireHazard(hazard);
-                const isCigOverlay = overlay || _isSpcCigOverlayHazard(hazard);
-                const stripCigFromBase = !overlay && baseStripsCig.has(hazard);
-                const isBaseProbOrCat = !overlay && ['cat', 'torn', 'wind', 'hail', 'prob'].includes(hazard);
-                const visibleFeatures = (geojson.features || []).filter((feat) => {
-                    if (isFireHazard) return _spcNonZeroDn(feat);
-                    if (isCigOverlay) {
-                        if (!_spcNonZeroDn(feat)) {
-                            const lbl = String(feat?.properties?.LABEL || '').trim();
-                            if (lbl) placeholderLabels.push(lbl);
-                            return false;
-                        }
-                        return true;
-                    }
-                    // Base categorical/probabilistic outlooks include a DN=0 placeholder
-                    // feature (e.g. "Less Than 2% All Areas") when no threat is present.
-                    // Treat it as empty so the no-data overlay can be shown.
-                    if (isBaseProbOrCat && !_spcNonZeroDn(feat)) {
-                        const lbl = String(feat?.properties?.LABEL || '').trim();
-                        if (lbl) placeholderLabels.push(lbl);
-                        return false;
-                    }
-                    if (stripCigFromBase && _spcFeatureIsCig(feat)) return false;
-                    return true;
-                });
-                if (!isCigOverlay) count += visibleFeatures.length;
-
-                const styleFn = isCigOverlay ? _spcProbCigStyle : _getSpcStyleFn(hazard);
-
-                const geoLayer = L.geoJSON(geojson, {
-                    style: styleFn,
-                    filter: (feat) => {
-                        if (isFireHazard) return _spcNonZeroDn(feat);
-                        if (isCigOverlay) return _spcNonZeroDn(feat);
-                        if (isBaseProbOrCat && !_spcNonZeroDn(feat)) return false;
-                        if (stripCigFromBase && _spcFeatureIsCig(feat)) return false;
-                        return true;
-                    },
-                    onEachFeature: (feat, layer) => {
-                        if (isFireHazard) {
-                            layer.on('click', (evt) => {
-                                if (!evt?.latlng) return;
-                                _openSpcOutlookDetail(evt.latlng, feat, {
-                                    day: effectiveDay,
-                                    hazard,
-                                    detail: geojson?._outlook_detail || {},
-                                    significantFeature: null,
-                                    isFire: true,
-                                });
-                            });
-                            layer.bindTooltip(
-                                String(feat?.properties?.LABEL2 || feat?.properties?.LABEL || 'Fire Weather Outlook'),
-                                {
-                                    sticky: true,
-                                    opacity: 0.9,
-                                    className: 'wx-alert-hover-tip',
-                                },
-                            );
-                        } else {
-                            layer.on('click', (evt) => {
-                                const clickLatLng = evt?.latlng;
-                                if (!clickLatLng) return;
-
-                                let modalFeature = feat;
-                                let modalHazard = hazard;
-                                let significantFeature = null;
-                                let detail = geojson?._outlook_detail || {};
-
-                                if (isCigOverlay) {
-                                    modalHazard = hazard.replace(/^cig/, '');
-                                    significantFeature = _highestSpcFeatureAtPoint(
-                                        geojson?.features || [],
-                                        clickLatLng,
-                                        _spcCigIntensity,
-                                    ) || feat;
-                                    const baseGeojson = outlookPayloadByHazard.get(modalHazard);
-                                    const baseFeatures = (baseGeojson?.features || []).filter(
-                                        (candidate) => (
-                                            _spcNonZeroDn(candidate)
-                                            && !_spcFeatureIsCig(candidate)
-                                        ),
-                                    );
-                                    const baseFeature = _highestSpcFeatureAtPoint(
-                                        baseFeatures,
-                                        clickLatLng,
-                                        (candidate) => Number(candidate?.properties?.DN || 0),
-                                    );
-                                    if (baseFeature) modalFeature = baseFeature;
-                                    if (baseGeojson?._outlook_detail) {
-                                        detail = baseGeojson._outlook_detail;
-                                    }
-                                } else {
-                                    const significantHazard = _SPC_CIG_OVERLAY_BY_HAZARD[hazard];
-                                    const significantGeojson = outlookPayloadByHazard.get(significantHazard);
-                                    significantFeature = _highestSpcFeatureAtPoint(
-                                        significantGeojson?.features || [],
-                                        clickLatLng,
-                                        _spcCigIntensity,
-                                    );
-                                }
-
-                                _openSpcOutlookDetail(clickLatLng, modalFeature, {
-                                    day: effectiveDay,
-                                    hazard: modalHazard,
-                                    detail,
-                                    significantFeature,
-                                });
-                            });
-                            layer.bindTooltip(
-                                String(feat?.properties?.LABEL2 || feat?.properties?.LABEL || 'SPC Outlook'),
-                                {
-                                    sticky: true,
-                                    opacity: 0.9,
-                                    className: 'wx-alert-hover-tip',
-                                },
-                            );
-                        }
-                        // _path is created when layer is added to map; defer pattern application
-                        layer.on('add', () => _applySpcCigPattern(feat, layer));
-                    },
-                });
-                geoLayer._spcHazard = hazard;
-                geoLayer._spcStyleFn = styleFn;
-                layerGroup.addLayer(geoLayer);
-            });
-
-            if (reportsGeojson?.features?.length) {
-                const reportsLayer = L.geoJSON(reportsGeojson, {
-                    pointToLayer: (feat, latlng) => _spcReportMarker(feat, latlng),
-                    onEachFeature: (feat, layer) => {
-                        layer.bindPopup(_spcReportPopup(feat));
-                    },
-                });
-                count += reportsGeojson.features.length;
-                layerGroup.addLayer(reportsLayer);
-            }
-
-            if (watchesGeojson?.features?.length) {
-                const watchesLayer = L.geoJSON(watchesGeojson, {
-                    style: _spcWatchStyle,
-                    onEachFeature: (feat, layer) => {
-                        layer.on('click', (evt) => _openSpcTextDetail(evt?.latlng, feat));
-                        layer.bindTooltip(String(feat?.properties?.short_label || feat?.properties?.event || 'Watch'), {
-                            sticky: true,
-                            opacity: 0.9,
-                            className: 'wx-alert-hover-tip',
-                        });
-                    },
-                });
-                count += watchesGeojson.features.length;
-                layerGroup.addLayer(watchesLayer);
-            }
-
-            if (mdsGeojson?.features?.length) {
-                const mdsLayer = L.geoJSON(mdsGeojson, {
-                    style: _spcMdStyle,
-                    onEachFeature: (feat, layer) => {
-                        layer.on('click', (evt) => _openSpcTextDetail(evt?.latlng, feat));
-                        layer.bindTooltip(String(feat?.properties?.short_label || feat?.properties?.event || 'MD'), {
-                            sticky: true,
-                            opacity: 0.9,
-                            className: 'wx-alert-hover-tip',
-                        });
-                    },
-                });
-                count += mdsGeojson.features.length;
-                layerGroup.addLayer(mdsLayer);
-            }
-
-            spcLayer = layerGroup;
-            if (byId('weather-show-spc')?.checked) {
-                spcLayer.addTo(map);
-                _applySpcCigPatternsToGroup(spcLayer);
-                _bringBoundaryLayersAboveSpcOverlays();
-            }
-
-            if (supplemental.reportsEnabled && !hazards.length) {
-                buildSpcReportsLegend(supplemental.reportTypes);
-            } else if (supplemental.watchesEnabled && !hazards.length) {
-                buildSpcWatchesLegend();
-            } else if (hazards.length === 1 && _isSpcFireHazard(hazards[0])) {
-                buildSpcFireLegend(hazards[0]);
-            } else {
-                if (hazards.includes('cat')) {
-                    // For Day 4–8, use unique legend; otherwise, use categorical
-                    if (effectiveDay >= 4 && effectiveDay <= 8) {
-                        buildSpcProbLegend('cat', effectiveDay);
-                    } else {
-                        buildSpcCatLegend();
-                    }
-                } else {
-                    // Pick a single hazard-specific prob legend based on the base
-                    // probabilistic hazard selected (cigtorn etc. map back to torn).
-                    const baseProbHazard = _getSpcProbLegendHazard(hazards);
-                    if (baseProbHazard) buildSpcProbLegend(baseProbHazard, effectiveDay);
-                    else setLegend(null);
-                }
-            }
-
-            if (countEl) countEl.textContent = `${count} feature(s)`;
-            if (count === 0) {
-                // Prefer the SPC source LABEL (e.g. "Less Than 2% All Areas")
-                // when the outlook returned a placeholder feature.
-                const uniqueLabels = Array.from(new Set(placeholderLabels));
-                const hazardLabels = hazards.map((h) => _getSpcConvectiveLabel(h, effectiveDay) || h).join(', ');
-                let msg = '';
-                if (hazards.length > 0) {
-                    msg = uniqueLabels.length
-                        ? `SPC Day ${effectiveDay} ${hazardLabels}: ${uniqueLabels.join(' · ')}`
-                        : `No SPC data available for Day ${effectiveDay} ${hazardLabels}`;
-                } else {
-                    msg = supplementalTimedOut
-                        ? 'SPC supplemental overlays timed out. Try again.'
-                        : 'No SPC supplemental overlays available for the current selection.';
-                }
-                if (_isActiveSpcRequest(requestSeq, selectionKey)) {
-                    setMapEmptyMessage(msg);
-                }
-            } else {
-                if (_isActiveSpcRequest(requestSeq, selectionKey)) {
-                    setMapEmptyMessage(null);
-                }
-            }
-            const statusBits = [];
-            if (hazards.length) statusBits.push(`Day ${effectiveDay}: ${hazards.join(', ')}`);
-            if (supplemental.reportsEnabled) {
-                const reportTypesLabel = supplemental.reportTypes.length === 3
-                    ? 'all'
-                    : supplemental.reportTypes.join(',');
-                statusBits.push(`Reports ${supplemental.reportsDays.join('+')}/${reportTypesLabel}`);
-            }
-            if (supplemental.mdsEnabled) statusBits.push('MDs');
-            if (supplemental.watchesEnabled) {
-                statusBits.push(`Watches ${supplemental.watchLayers.map((w) => `${w.type}-${w.mode}`).join(',')}`);
-            }
-            const spcUpdatedRaw = _latestSpcTimestampValue([
-                ...payloads.map(({ value }) => value?.geojson?._updated),
-                ...supplementalUpdatedValues,
-                reportsGeojson?._updated,
-                mdsGeojson?._updated,
-                watchesGeojson?._updated,
-            ]);
-            const spcTsMs = _resolveDataTimestampMs(spcUpdatedRaw);
-            const spcStaleNote = _staleNoteForTimestamp(spcTsMs);
-            setStatus(`SPC ${statusBits.join(' + ')} valid ${_formatValidTimeLabel(spcTsMs)}.${spcStaleNote}`);
-            _setViewerTimestamp(spcTsMs);
-            _setReliability('spc', `SPC ${statusBits.join(' + ')}`, 'NOAA SPC', spcTsMs);
-            _setTimestampSource('spc', 'spc_cache_updated', spcTsMs);
-        } catch (err) {
-            if (!_isActiveSpcRequest(requestSeq, selectionKey)) return;
-            if (_isAbortLikeError(err)) return;
-            console.error('[spc] Load error:', err);
-            setMapEmptyMessage(null);
-            setStatus(`SPC error: ${err.message}`);
-        }
-    }
-
     // ── Region → fitBounds ───────────────────────────────────────────────────
     function fitRegion(code, options = {}) {
         const regionCode = (code || 'CONUS').toUpperCase();
@@ -5715,9 +4036,6 @@
     }
 
     function _updateSubOptionVisibility() {
-        const spcOpts = byId('weather-spc-opts');
-        if (spcOpts) spcOpts.style.display = byId('weather-show-spc')?.checked ? '' : 'none';
-
         const surfaceOpts = byId('weather-surface-opts');
         if (surfaceOpts) surfaceOpts.style.display = '';
 
@@ -5732,7 +4050,6 @@
             map.removeLayer(localStormReportsLayer);
         }
 
-        if (spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
         if (radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
         if (satelliteOverlay && map.hasLayer(satelliteOverlay)) map.removeLayer(satelliteOverlay);
         if (radarBackdropLayer && map.hasLayer(radarBackdropLayer)) map.removeLayer(radarBackdropLayer);
@@ -5748,8 +4065,6 @@
         tropicalOutlookLayer = null;
         alertsLayer = null;
         localStormReportsLayer = null;
-        spcLayer = null;
-        _spcWatchFeatures = [];
         _radarLiveImageOverlays.clear();
         _clearRadarScrubOverlayPool();
         radarLiveOverlay = null;
@@ -5916,19 +4231,6 @@
                 }
                 alertsLayer = null;
                 localStormReportsLayer = null;
-                break;
-
-            case 'spc':
-                if (spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
-                spcLayer = null;
-                setMapEmptyMessage(null);
-                break;
-
-            case 'wpc':
-                _wpcRequestSeq += 1;
-                if (wpcLayer && map.hasLayer(wpcLayer)) map.removeLayer(wpcLayer);
-                wpcLayer = null;
-                setMapEmptyMessage(null);
                 break;
 
             case 'water':
@@ -6522,13 +4824,6 @@
         // Keep boundary lines above radar image overlays only while on Radar tab,
         // so layering in other weather tabs remains unchanged.
         if (_activeWeatherType() !== 'radar') return;
-        _bringBoundaryLayersToFront();
-    }
-
-    function _bringBoundaryLayersAboveSpcOverlays() {
-        // SPC outlook/watch/MD polygons share the overlay pane with the boundary
-        // vectors, so each SPC re-render lands above them; restore borders on top.
-        if (!_isTypeEnabled('spc')) return;
         _bringBoundaryLayersToFront();
     }
 
@@ -9612,13 +7907,11 @@
         if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length || _satelliteScrubMode) return;
         const alertsEnabled = _isTypeEnabled('alerts') && _getCheckedAlertCategories().length > 0;
         const lsrEnabled = _isTypeEnabled('alerts') && !!document.querySelectorAll('.weather-lsr-category:checked').length > 0;
-        const spcEnabled = _isTypeEnabled('spc') && byId('weather-show-spc')?.checked;
         const radarEnabled = _isTypeEnabled('radar');
         const satelliteEnabled = _isTypeEnabled('satellite');
         const rtmaEnabled = _isTypeEnabled('rtma') && !!_activeRtmaStream() && !!_activeRtmaProduct();
         const mrmsEnabled = _isTypeEnabled('mrms') && !!_activeMrmsProduct();
 
-        const wpcEnabled = _isTypeEnabled('wpc');
         const waterEnabled = _isTypeEnabled('water');
         const tropicalEnabled = _isTypeEnabled('tropical');
 
@@ -9630,7 +7923,6 @@
             map.removeLayer(localStormReportsLayer);
             localStormReportsLayer = null;
         }
-        if (!spcEnabled && spcLayer && map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
         if (!radarEnabled && radarLiveOverlay && map.hasLayer(radarLiveOverlay)) map.removeLayer(radarLiveOverlay);
         if (!radarEnabled) _clearRadarScrubOverlayPool();
         if (!satelliteEnabled && satelliteOverlay && map.hasLayer(satelliteOverlay)) map.removeLayer(satelliteOverlay);
@@ -9646,23 +7938,10 @@
         if (!waterEnabled && waterLayer && map.hasLayer(waterLayer)) {
             map.removeLayer(waterLayer);
         }
-        if (!wpcEnabled) {
-            if (wpcLayer && map.hasLayer(wpcLayer)) map.removeLayer(wpcLayer);
-            wpcLayer = null;
-            setMapEmptyMessage(null);
-        }
         if (!tropicalEnabled) {
             _clearTropicalLayer();
             _closeOutlookDetail();
             _closeTropicalDetail();
-        }
-
-        if (!spcEnabled) {
-            if (_spcAbortController) {
-                _spcAbortController.abort();
-                _spcAbortController = null;
-            }
-            setMapEmptyMessage(null);
         }
 
         // Hide warnings panel when alerts are disabled.
@@ -9673,9 +7952,6 @@
         }
         if (lsrEnabled) {
             _alertsEngine?.loadLocalStormReports();
-        }
-        if (spcEnabled) {
-            refreshSpc();
         }
         if (radarEnabled) {
             _loadRadarSites();
@@ -9701,9 +7977,6 @@
             if (!_mrmsScrubFrames.length) {
                 _mrmsEngine?.loadScrubberFrames();
             }
-        }
-        if (wpcEnabled) {
-            _wpcEngine?.loadWpcLayer();
         }
         if (waterEnabled) {
             setLegend(_waterLegendHtml());
@@ -9975,8 +8248,8 @@
     }
 
     // Inject the GTWO hatch patterns into the SVG that actually contains the rendered
-    // polygon path (svgRoot = path.ownerSVGElement). Mirrors _ensureSpcCigPatternDefs:
-    // doing this AFTER the layer is on the map avoids a cold-load race in Chromium/Edge
+    // polygon path (svgRoot = path.ownerSVGElement).
+    // Doing this AFTER the layer is on the map avoids a cold-load race in Chromium/Edge
     // where the Leaflet SVG doesn't exist yet and the fill resolves to a missing pattern.
     const _TROPICAL_OUTLOOK_PATTERNS = [
         { key: 'low', color: '#ffd400' },
@@ -10875,42 +9148,6 @@
     function applyAlertsOpacity(val) {
         alertsOpacity = parseFloat(val);
         if (alertsLayer) alertsLayer.setStyle(alertStyle);
-    }
-
-    function applySpcOpacity(val) {
-        spcOpacity = parseFloat(val);
-        if (spcLayer) {
-            if (typeof spcLayer.eachLayer === 'function') {
-                spcLayer.eachLayer((layer) => {
-                    if (typeof layer.setStyle === 'function') {
-                        const styleFn = layer._spcStyleFn || _getSpcStyleFn(layer._spcHazard || 'cat');
-                        layer.setStyle(styleFn);
-                    }
-                });
-                _applySpcCigPatternsToGroup(spcLayer);
-            } else if (typeof spcLayer.setStyle === 'function') {
-                spcLayer.setStyle(_getSpcStyleFn(_getPrimarySpcHazard()));
-            }
-        }
-    }
-
-    function applySpcStrokeOpacity(val) {
-        const parsed = parseFloat(val);
-        if (!Number.isFinite(parsed)) return;
-        spcStrokeOpacity = parsed;
-        if (spcLayer) {
-            if (typeof spcLayer.eachLayer === 'function') {
-                spcLayer.eachLayer((layer) => {
-                    if (typeof layer.setStyle === 'function') {
-                        const styleFn = layer._spcStyleFn || _getSpcStyleFn(layer._spcHazard || 'cat');
-                        layer.setStyle(styleFn);
-                    }
-                });
-                _applySpcCigPatternsToGroup(spcLayer);
-            } else if (typeof spcLayer.setStyle === 'function') {
-                spcLayer.setStyle(_getSpcStyleFn(_getPrimarySpcHazard()));
-            }
-        }
     }
 
     // ── Surface layer state ───────────────────────────────────────────────────
@@ -12305,11 +10542,10 @@
     const ARCHIVE_PLAY_INTERVAL_MS = 800;
 
     function _activeArchiveProduct() {
-        // Returns the active archive-supported product type: 'mrms', 'alerts', 'spc', or null.
+        // Returns the active archive-supported product type: 'mrms', 'alerts', or null.
         // Satellite is intentionally excluded (live-only type).
         if (_isTypeEnabled('mrms') && _activeMrmsProduct()) return 'mrms';
         if (_isTypeEnabled('alerts') && _getCheckedAlertCategories().length) return 'alerts';
-        if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) return 'spc';
         return null;
     }
 
@@ -12515,8 +10751,6 @@
             _mrmsPageController?.renderArchiveFrame(frame);
         } else if (_archiveProductType === 'alerts') {
             _renderArchiveGeoJsonFrame(frame, 'alerts');
-        } else if (_archiveProductType === 'spc') {
-            _spcPageController?.renderArchiveFrame(frame);
         }
         _preloadArchiveNeighbors(_archiveFrameIndex);
     }
@@ -12585,7 +10819,7 @@
         stopScrubberPlay();
 
         if (!group) {
-            setStatus('Enable a supported data type (MRMS, Alerts, or SPC) before loading archive.');
+            setStatus('Enable a supported data type (MRMS or Alerts) before loading archive.');
             _setArchiveProgress(false);
             return;
         }
@@ -12593,8 +10827,6 @@
             await _mrmsEngine?.loadArchive(dtFrom, dtTo);
         } else if (group === 'alerts') {
             await _alertsEngine?.loadArchiveAlerts(dtFrom, dtTo);
-        } else if (group === 'spc') {
-            await _spcEngine?.loadArchive(dtFrom, dtTo);
         } else {
             setStatus('Archive mode not supported for this product type.');
             _setArchiveProgress(false);
@@ -13154,7 +11386,6 @@
         if (_activeWeatherType() === 'radar') {
             _bringRadarSitesAboveRadarOverlays();
         }
-        _bringBoundaryLayersAboveSpcOverlays();
     }
 
     // Helper function to show/hide network filters based on region
@@ -13358,11 +11589,6 @@
         }
     });
 
-    byId('weather-show-spc')?.addEventListener('change', () => {
-        _updateSubOptionVisibility();
-        refreshActiveLayers();
-    });
-
     byId('weather-refresh-mrms')?.addEventListener('click', () => {
         _armProductRendering();
         _mrmsEngine?.loadMrms();
@@ -13414,21 +11640,7 @@
     });
 
     byId('weather-opacity-alerts')?.addEventListener('input', (e) => applyAlertsOpacity(e.target.value));
-    byId('weather-opacity-spc')?.addEventListener('input', (e) => applySpcOpacity(e.target.value));
-    byId('weather-opacity-spc-stroke')?.addEventListener('input', (e) => applySpcStrokeOpacity(e.target.value));
     byId('weather-opacity-mrms')?.addEventListener('input', (e) => applyMrmsOpacity(e.target.value));
-    byId('weather-opacity-wpc')?.addEventListener('input', (e) => {
-        const opacity = parseFloat(e.target.value);
-        if (wpcLayer) {
-            if (typeof wpcLayer.setOpacity === 'function') {
-                wpcLayer.setOpacity(opacity);
-            } else if (typeof wpcLayer.eachLayer === 'function') {
-                wpcLayer.eachLayer((l) => l.setStyle({ fillOpacity: opacity, opacity: 0.9 }));
-            }
-        }
-    });
-
-
     byId('weather-rtma-obs-density')?.addEventListener('input', (e) => {
         _setRtmaDensity(e.target.value);
     });
@@ -13559,10 +11771,6 @@
             if (_isTypeEnabled('alerts') && document.querySelectorAll('.weather-lsr-category:checked').length > 0) {
                 _alertsEngine?.loadLocalStormReports({ silentStatus: true });
             }
-            if (_isTypeEnabled('spc') && byId('weather-show-spc')?.checked) {
-                const supplemental = _spcSupplementalSelections();
-                if (supplemental.mdsEnabled || supplemental.watchesEnabled) refreshSpc();
-            }
         }
     });
 
@@ -13670,10 +11878,6 @@
         if (nowcoastAlertsLayer) nowcoastAlertsLayer.setOpacity(parseFloat(this.value));
     });
 
-    byId('weather-refresh-spc')?.addEventListener('click', () => {
-        _armProductRendering();
-        refreshSpc();
-    });
     // Left sidebar satellite lookback and scrubber controls removed - functionality moved to bottom archive bar
 
 
@@ -13707,14 +11911,6 @@
         }
         if (_productRenderArmed && _isTypeEnabled('alerts') && document.querySelectorAll('.weather-lsr-category:checked').length > 0) {
             _alertsEngine?.loadLocalStormReports({ silentStatus: true });
-        }
-        if (
-            _isTypeEnabled('spc')
-            && byId('weather-show-spc')?.checked
-            && _spcSupplementalSelections().watchesEnabled
-            && _spcWatchFeatures.length
-        ) {
-            buildSpcWatchesLegend();
         }
         if (_productRenderArmed && _isTypeEnabled('rtma') && byId('weather-rtma-show-values')?.checked) {
             if (_rtmaScrubFrames.length) {
@@ -13860,13 +12056,8 @@
         document.querySelectorAll('.weather-surface-product, .weather-surface-gradient').forEach((cb) => {
             cb.checked = cb.defaultChecked;
         });
-        if (_standaloneProductType === 'spc') {
-            _resetTabControlsToDefaults('spc', { silent: true });
-        }
 
         _applyDefaultAlertSelection();
-        _syncSpcConvectiveOptions(false);
-        _syncSpcFireWeatherOptions(false);
         _updateTypeSections();
         _updateRightSidebarGroups();
         _updateSubOptionVisibility();
@@ -13908,7 +12099,6 @@
         _applyInitialMapView();
         _syncRtmaStreamForRegion();
         _syncRtmaProductForStream();
-        _updateSpcReportFilterState();
         refreshActiveLayers({ startup: true });
         if (!_productRenderArmed && _isTypeEnabled('tropical') && _configuredPageAutoLoadCatalog()) {
             _tropicalEngine?.loadArchiveCatalog();
@@ -14050,23 +12240,6 @@
             });
         }
 
-        if (_wpcPageController?.configureWpcPage) {
-            _wpcPageController.configureWpcPage({
-                clearWpcLayer: () => {
-                    if (wpcLayer && map.hasLayer(wpcLayer)) map.removeLayer(wpcLayer);
-                    wpcLayer = null;
-                    setLegend(null);
-                    setMapEmptyMessage(null);
-                },
-                isTypeEnabled: _isTypeEnabled,
-                loadWpcLayer: () => {
-                    _armProductRendering();
-                    return _wpcEngine?.loadWpcLayer();
-                },
-            });
-            _wpcPageController.wireControls?.();
-        }
-
         if (_mrmsPageController?.configureMrmsPage) {
             _mrmsPageController.configureMrmsPage({
                 apiUrl,
@@ -14114,33 +12287,6 @@
                 setStatus,
             });
             _rtmaPageController.wireControls?.();
-        }
-
-        if (_spcPageController?.configureSpcPage) {
-            _spcPageController.configureSpcPage({
-                applySpcCigPattern: _applySpcCigPattern,
-                applySpcCigPatternsToGroup: _applySpcCigPatternsToGroup,
-                bringBoundaryLayersAboveSpcOverlays: _bringBoundaryLayersAboveSpcOverlays,
-                clearSpcExclusivePeers: _clearSpcExclusivePeers,
-                closeAlertDetail: _closeNewAlertDetail,
-                getSpcCigOverlayByHazard: () => _SPC_CIG_OVERLAY_BY_HAZARD,
-                getSpcConvectiveLabels: () => _SPC_CONVECTIVE_LABELS,
-                getPrimarySpcHazard: _getPrimarySpcHazard,
-                getSpcLayer: () => spcLayer,
-                getSpcStyleFn: _getSpcStyleFn,
-                isSpcEnabled: () => _isTypeEnabled('spc') && !!byId('weather-show-spc')?.checked,
-                leaflet: L,
-                map,
-                refreshSpc: (...args) => {
-                    _armProductRendering();
-                    return refreshSpc(...args);
-                },
-                setSpcSubtab: _setSpcSubtab,
-                setSpcLayer: (layer) => { spcLayer = layer; },
-                spcPopup,
-                syncSpcSubtabForSelection: _syncSpcSubtabForSelection,
-            });
-            _spcPageController.wireControls?.();
         }
 
         if (_tropicalPageController?.configureTropicalPage) {
@@ -14479,36 +12625,6 @@
             _radarEngine = _radarEngineFactory.createRadarEngine(radarContext);
         }
 
-        const wpcContext = _productAppContexts?.registerProductContext('wpc', {
-            apiUrl,
-            activeWpcDay: () => _wpcPageController?.activeWpcDay?.()
-                ?? (parseInt(byId('weather-wpc-day')?.value ?? '1', 10) || 1),
-            activeWpcGroup: () => _wpcPageController?.activeWpcGroup?.() ?? 'ero',
-            activeWpcProduct: () => _wpcPageController?.activeWpcProduct?.() ?? '',
-            buildWpcLegend,
-            closeWpcDetail: _closeNewAlertDetail,
-            getWpcLayer: () => wpcLayer,
-            setWpcLayer: (layer) => { wpcLayer = layer; },
-            getWpcOpacity: () => parseFloat(byId('weather-opacity-wpc')?.value ?? 0.55),
-            nextWpcRequestSeq: () => (_wpcRequestSeq += 1),
-            getWpcRequestSeq: () => _wpcRequestSeq,
-            isTypeEnabled: _isTypeEnabled,
-            leaflet: L,
-            map,
-            resolveTimestampMs: _resolveDataTimestampMs,
-            openWpcDetail: _openSpcTextDetail,
-            setLegend,
-            setMapEmptyMessage,
-            setReliability: _setReliability,
-            setTimestampSource: _setTimestampSource,
-            setViewerTimestamp: _setViewerTimestamp,
-            updateWpcCatalog: (catalog) => _wpcPageController?.updateWpcCatalog?.(catalog),
-        });
-        if (wpcContext && _wpcEngineFactory?.createWpcEngine) {
-            _wpcEngine = _wpcEngineFactory.createWpcEngine(wpcContext);
-            _wpcEngine.loadWpcCatalog();
-        }
-
         const mrmsContext = _productAppContexts?.registerProductContext('mrms', {
             apiUrl,
             buildLegend: buildMrmsLegend,
@@ -14639,27 +12755,6 @@
         });
         if (rtmaContext && _rtmaEngineFactory?.createRtmaEngine) {
             _rtmaEngine = _rtmaEngineFactory.createRtmaEngine(rtmaContext);
-        }
-
-        const spcContext = _productAppContexts?.registerProductContext('spc', {
-            apiUrl,
-            canApplySpcResponse: _canApplySpcResponse,
-            doRefreshSpc: _doRefreshSpcInternal,
-            getArchiveFromValue: () => byId('archive-from')?.value || '',
-            getPrimarySpcHazard: _getPrimarySpcHazard,
-            getSpcDay: _getSpcDay,
-            getSpcFireDay: _getSpcFireDay,
-            getSpcRequestSeq: () => _spcRequestSeq,
-            getSelectedHazards: _getSelectedSpcHazards,
-            getSupplementalSelections: _spcSupplementalSelections,
-            isTypeEnabled: _isTypeEnabled,
-            onArchiveFramesReady: _onArchiveFramesReady,
-            setArchiveProgress: _setArchiveProgress,
-            setStatus,
-            spcSelectionKey: _spcSelectionKey,
-        });
-        if (spcContext && _spcEngineFactory?.createSpcEngine) {
-            _spcEngine = _spcEngineFactory.createSpcEngine(spcContext);
         }
 
         const tropicalContext = _productAppContexts?.registerProductContext('tropical', {
@@ -14825,22 +12920,6 @@
             _alertsEngine?.loadLocalStormReports({ silentStatus: true });
         }
     }, ALERTS_LIVE_AUTO_REFRESH_MS);
-
-    // Keep active SPC MD/watch overlays current so newly issued items appear
-    // and expired products are removed without a manual refresh.
-    const SPC_AUTO_REFRESH_MS = 60_000;
-    setInterval(() => {
-        if (document.hidden) return;
-        if (_archiveMode || _rtmaScrubFrames.length || _mrmsScrubFrames.length) return;
-        if (!_isTypeEnabled('spc')) return;
-        if (!_productRenderArmed) return;
-        if (!byId('weather-show-spc')?.checked) return;
-        const supplemental = _spcSupplementalSelections();
-        const needsActiveRefresh = supplemental.mdsEnabled
-            || supplemental.watchesEnabled;
-        if (!needsActiveRefresh) return;
-        refreshSpc();
-    }, SPC_AUTO_REFRESH_MS);
 
     _registerProductAppContexts();
     init().catch((err) => {

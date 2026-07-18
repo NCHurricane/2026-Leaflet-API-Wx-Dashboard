@@ -285,164 +285,6 @@
                         </div>
                     </div>
 
-                    <div id="wx-section-spc" class="wx-block" data-type="spc" style="display:none;">
-                        <input id="weather-show-spc" type="checkbox" checked hidden>
-                        <div id="weather-spc-opts">
-                            <div class="spc-subtabs" role="tablist" aria-label="SPC product groups">
-                                <button id="spc-subtab-outlooks" class="spc-subtab-button" type="button" role="tab"
-                                    aria-selected="true" aria-controls="spc-panel-outlooks"
-                                    data-spc-subtab="outlooks">Outlooks</button>
-                                <button id="spc-subtab-watches" class="spc-subtab-button" type="button" role="tab"
-                                    aria-selected="false" aria-controls="spc-panel-watches"
-                                    data-spc-subtab="watches">Watches</button>
-                                <button id="spc-subtab-reports" class="spc-subtab-button" type="button" role="tab"
-                                    aria-selected="false" aria-controls="spc-panel-reports"
-                                    data-spc-subtab="reports">Reports/MDs</button>
-                                <button id="spc-subtab-fire" class="spc-subtab-button" type="button" role="tab"
-                                    aria-selected="false" aria-controls="spc-panel-fire"
-                                    data-spc-subtab="fire">Fire</button>
-                            </div>
-
-                            <div id="spc-panel-outlooks" class="spc-subtab-panel is-active" role="tabpanel"
-                                aria-labelledby="spc-subtab-outlooks" data-spc-panel="outlooks">
-                                <label for="weather-spc-day">Convective Outlook Day</label>
-                                <select id="weather-spc-day">
-                                    <option value="1" selected>Day 1</option>
-                                    <option value="2">Day 2</option>
-                                    <option value="3">Day 3</option>
-                                    <option value="4">Day 4</option>
-                                    <option value="5">Day 5</option>
-                                    <option value="6">Day 6</option>
-                                    <option value="7">Day 7</option>
-                                    <option value="8">Day 8</option>
-                                </select>
-                                <label>Product</label>
-                                <div id="weather-spc-convective-list">
-                                    <div class="wx-check-row weather-spc-convective-row" data-hazard="cat">
-                                        <span class="weather-spc-convective-label">Categorical</span>
-                                        <input class="weather-spc-convective-toggle" type="checkbox" value="cat">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-convective-row" data-hazard="torn">
-                                        <span class="weather-spc-convective-label">Tornado Probabilistic</span>
-                                        <input class="weather-spc-convective-toggle" type="checkbox" value="torn">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-convective-row" data-hazard="cigtorn">
-                                        <span class="weather-spc-convective-label">Tornado Significant</span>
-                                        <input class="weather-spc-convective-toggle" type="checkbox" value="cigtorn">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-convective-row" data-hazard="wind">
-                                        <span class="weather-spc-convective-label">Wind Probabilistic</span>
-                                        <input class="weather-spc-convective-toggle" type="checkbox" value="wind">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-convective-row" data-hazard="cigwind">
-                                        <span class="weather-spc-convective-label">Wind Significant</span>
-                                        <input class="weather-spc-convective-toggle" type="checkbox" value="cigwind">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-convective-row" data-hazard="hail">
-                                        <span class="weather-spc-convective-label">Hail Probabilistic</span>
-                                        <input class="weather-spc-convective-toggle" type="checkbox" value="hail">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-convective-row" data-hazard="cighail">
-                                        <span class="weather-spc-convective-label">Hail Significant</span>
-                                        <input class="weather-spc-convective-toggle" type="checkbox" value="cighail">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-convective-row" data-hazard="prob">
-                                        <span class="weather-spc-convective-label">Probabilistic</span>
-                                        <input class="weather-spc-convective-toggle" type="checkbox" value="prob">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div id="weather-spc-overlay-opts">
-                                <div id="spc-panel-watches" class="spc-subtab-panel" role="tabpanel"
-                                    aria-labelledby="spc-subtab-watches" data-spc-panel="watches">
-                                    <label>Watches</label>
-                                    <div class="weather-spc-dual-row">
-                                        <span class="weather-spc-dual-label weather-spc-convective-label">Tornado</span>
-                                        <label><input id="weather-spc-watch-tor-polygon" type="checkbox">Polygon</label>
-                                        <label><input id="weather-spc-watch-tor-counties" type="checkbox">Counties</label>
-                                    </div>
-                                    <div class="weather-spc-dual-row">
-                                        <span class="weather-spc-dual-label weather-spc-convective-label">SVR
-                                            T-Storm</span>
-                                        <label><input id="weather-spc-watch-svr-polygon" type="checkbox">Polygon</label>
-                                        <label><input id="weather-spc-watch-svr-counties" type="checkbox">Counties</label>
-                                    </div>
-                                </div>
-
-                                <div id="spc-panel-reports" class="spc-subtab-panel" role="tabpanel"
-                                    aria-labelledby="spc-subtab-reports" data-spc-panel="reports">
-                                    <label>Mesoscale Discussions</label>
-                                    <div class="wx-check-row"><span>Mesoscale Discussions</span><input
-                                            id="weather-spc-show-mds" type="checkbox"></div>
-
-                                    <label style="margin-top: 18px;">Storm Reports</label>
-                                    <div class="wx-check-row"><span>Today</span><input id="weather-spc-reports-today"
-                                            type="checkbox"></div>
-                                    <div class="wx-check-row"><span>Yesterday</span><input
-                                            id="weather-spc-reports-yesterday" type="checkbox"></div>
-
-                                    <div class="weather-spc-inline-filters">
-                                        <label style="padding-top: 0;"><input id="weather-spc-report-type-torn"
-                                                type="checkbox">Tornado</label>
-                                        <label style="padding-top: 0;"><input id="weather-spc-report-type-wind"
-                                                type="checkbox">Wind</label>
-                                        <label style="padding-top: 0;"><input id="weather-spc-report-type-hail"
-                                                type="checkbox">Hail</label>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div id="spc-panel-fire" class="spc-subtab-panel" role="tabpanel"
-                                aria-labelledby="spc-subtab-fire" data-spc-panel="fire">
-                                <label for="weather-spc-fire-day">Fire Weather Day</label>
-                                <select id="weather-spc-fire-day">
-                                    <option value="1" selected>Day 1</option>
-                                    <option value="2">Day 2</option>
-                                    <option value="3">Day 3</option>
-                                    <option value="4">Day 4</option>
-                                    <option value="5">Day 5</option>
-                                    <option value="6">Day 6</option>
-                                    <option value="7">Day 7</option>
-                                    <option value="8">Day 8</option>
-                                </select>
-                                <label>Product</label>
-                                <div id="weather-spc-fire-list">
-                                    <div class="wx-check-row weather-spc-fire-row" data-hazard="windrh">
-                                        <span class="weather-spc-fire-label">Wind / RH</span>
-                                        <input class="weather-spc-fire-toggle" type="checkbox" value="windrh">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-fire-row" data-hazard="dryt">
-                                        <span class="weather-spc-fire-label">Dry Thunderstorm</span>
-                                        <input class="weather-spc-fire-toggle" type="checkbox" value="dryt">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-fire-row" data-hazard="windrhcat"
-                                        data-categorical="1" style="display:none;">
-                                        <span class="weather-spc-fire-label">Wind / RH Categorical</span>
-                                        <input class="weather-spc-fire-toggle" type="checkbox" value="windrhcat">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-fire-row" data-hazard="windrhprob"
-                                        data-categorical="1" style="display:none;">
-                                        <span class="weather-spc-fire-label">Wind / RH Probabilistic</span>
-                                        <input class="weather-spc-fire-toggle" type="checkbox" value="windrhprob">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-fire-row" data-hazard="drytcat"
-                                        data-categorical="1" style="display:none;">
-                                        <span class="weather-spc-fire-label">Dry Thunderstorm Categorical</span>
-                                        <input class="weather-spc-fire-toggle" type="checkbox" value="drytcat">
-                                    </div>
-                                    <div class="wx-check-row weather-spc-fire-row" data-hazard="drytprob"
-                                        data-categorical="1" style="display:none;">
-                                        <span class="weather-spc-fire-label">Dry Thunderstorm Probabilistic</span>
-                                        <input class="weather-spc-fire-toggle" type="checkbox" value="drytprob">
-                                    </div>
-                                </div>
-                            </div>
-                            <span id="weather-spc-count" class="wx-small"></span>
-                            <button id="weather-refresh-spc" type="button">Refresh</button>
-                        </div>
-                    </div>
-
                     <div id="wx-section-radar" class="wx-block" data-type="radar" style="display:none;">
                         <div id="weather-radar-opts">
                             <label for="weather-radar-site">Radar Site</label>
@@ -975,110 +817,6 @@
                         <button id="weather-refresh-mrms" type="button">Refresh</button>
                     </div>
 
-                    <div id="wx-section-wpc" class="wx-block" data-type="wpc" style="display:none;">
-                        <div id="weather-wpc-opts">
-
-                            <!-- Group pills -->
-                            <div class="wpc-group-pills" role="tablist" aria-label="WPC product groups">
-                                <button class="wpc-group-pill" role="tab" aria-selected="false"  aria-controls="wpc-panel-ero"     data-wpc-group="ero">Excess Rain</button>
-                                <button class="wpc-group-pill" role="tab" aria-selected="false" aria-controls="wpc-panel-qpf"     data-wpc-group="qpf">QPF</button>
-                                <button class="wpc-group-pill" role="tab" aria-selected="false" aria-controls="wpc-panel-winter"  data-wpc-group="winter">Winter</button>
-                                <button class="wpc-group-pill" role="tab" aria-selected="false" aria-controls="wpc-panel-fop"     data-wpc-group="fop">River Flood</button>
-                                <button class="wpc-group-pill" role="tab" aria-selected="false" aria-controls="wpc-panel-mpd"     data-wpc-group="mpd">Meso Disc</button>
-                                <button class="wpc-group-pill" role="tab" aria-selected="false" aria-controls="wpc-panel-sigwx"   data-wpc-group="sigwx">SigWx</button>
-                                <button class="wpc-group-pill" role="tab" aria-selected="false" aria-controls="wpc-panel-surface"   data-wpc-group="surface">Surface</button>
-                                <button class="wpc-group-pill" role="tab" aria-selected="false" aria-controls="wpc-panel-forecast" data-wpc-group="forecast">Forecast</button>
-                            </div>
-
-                            <!-- ERO panel -->
-                            <div id="wpc-panel-ero" class="wpc-group-panel is-active" role="tabpanel">
-                                <div class="wpc-day-pills" role="group" aria-label="ERO forecast day">
-                                    <button class="wpc-day-pill" aria-selected="false"  data-wpc-ero-day="1">Day 1</button>
-                                    <button class="wpc-day-pill" aria-selected="false" data-wpc-ero-day="2">Day 2</button>
-                                    <button class="wpc-day-pill" aria-selected="false" data-wpc-ero-day="3">Day 3</button>
-                                    <button class="wpc-day-pill" aria-selected="false" data-wpc-ero-day="4">Day 4</button>
-                                    <button class="wpc-day-pill" aria-selected="false" data-wpc-ero-day="5">Day 5</button>
-                                </div>
-                            </div>
-
-                            <!-- QPF panel -->
-                            <div id="wpc-panel-qpf" class="wpc-group-panel" role="tabpanel">
-                                <!-- QPF sub-tabs -->
-                                <div class="wpc-subtabs" role="tablist" aria-label="QPF sub-products">
-                                    <button class="wpc-subtab-button" role="tab" aria-selected="true"  aria-controls="wpc-qpf-panel-6hr"      data-wpc-qpf-tab="6hr">6 hr</button>
-                                    <button class="wpc-subtab-button" role="tab" aria-selected="false" aria-controls="wpc-qpf-panel-24hr"     data-wpc-qpf-tab="24hr">24 hr</button>
-                                    <button class="wpc-subtab-button" role="tab" aria-selected="false" aria-controls="wpc-qpf-panel-multiday" data-wpc-qpf-tab="multiday">Multi-day</button>
-                                </div>
-                                <!-- QPF 6hr -->
-                                <div id="wpc-qpf-panel-6hr" class="wpc-subtab-panel is-active">
-                                    <ul class="wpc-radio-list" id="wpc-qpf-6hr-list" role="radiogroup"></ul>
-                                </div>
-                                <!-- QPF 24hr -->
-                                <div id="wpc-qpf-panel-24hr" class="wpc-subtab-panel">
-                                    <ul class="wpc-radio-list" id="wpc-qpf-24hr-list" role="radiogroup"></ul>
-                                </div>
-                                <!-- QPF Multi-day -->
-                                <div id="wpc-qpf-panel-multiday" class="wpc-subtab-panel">
-                                    <ul class="wpc-radio-list" id="wpc-qpf-multiday-list" role="radiogroup"></ul>
-                                </div>
-                            </div>
-
-                            <!-- Winter panel -->
-                            <div id="wpc-panel-winter" class="wpc-group-panel" role="tabpanel">
-                                <div class="wpc-subtabs" role="tablist" aria-label="Winter sub-products">
-                                    <button class="wpc-subtab-button" role="tab" aria-selected="true"  aria-controls="wpc-winter-panel-snow" data-wpc-winter-tab="snow">Snow</button>
-                                    <button class="wpc-subtab-button" role="tab" aria-selected="false" aria-controls="wpc-winter-panel-ice"  data-wpc-winter-tab="ice">Ice</button>
-                                </div>
-                                <!-- Snow: day pills + radio list -->
-                                <div id="wpc-winter-panel-snow" class="wpc-subtab-panel is-active">
-                                    <div class="wpc-day-pills" role="group" aria-label="Snow forecast day">
-                                        <button class="wpc-day-pill" aria-selected="true"  data-wpc-snow-day="1">Day 1</button>
-                                        <button class="wpc-day-pill" aria-selected="false" data-wpc-snow-day="2">Day 2</button>
-                                        <button class="wpc-day-pill" aria-selected="false" data-wpc-snow-day="3">Day 3</button>
-                                        <button class="wpc-day-pill" aria-selected="false" data-wpc-snow-day="4">Day 4-5</button>
-                                        <button class="wpc-day-pill" aria-selected="false" data-wpc-snow-day="5">Day 6-7</button>
-                                    </div>
-                                    <ul class="wpc-radio-list" id="wpc-winter-snow-list" role="radiogroup"></ul>
-                                </div>
-                                <!-- Ice: auto-load -->
-                                <div id="wpc-winter-panel-ice" class="wpc-subtab-panel">
-                                    <ul class="wpc-radio-list" id="wpc-winter-ice-list" role="radiogroup"></ul>
-                                </div>
-                            </div>
-
-                            <!-- FOP panel -->
-                            <div id="wpc-panel-fop" class="wpc-group-panel" role="tabpanel">
-                                <p class="wx-small" style="color:#94a3b8;margin:0 0 4px;">River Flood Outlook — auto-loaded</p>
-                            </div>
-
-                            <!-- MPD panel -->
-                            <div id="wpc-panel-mpd" class="wpc-group-panel" role="tabpanel">
-                                <p class="wx-small" style="color:#94a3b8;margin:0 0 4px;">Mesoscale Precipitation Discussions — auto-loaded</p>
-                            </div>
-
-                            <!-- SigWx panel -->
-                            <div id="wpc-panel-sigwx" class="wpc-group-panel" role="tabpanel">
-                                <ul class="wpc-radio-list" id="wpc-sigwx-list" role="radiogroup">
-                                    <li class="wpc-radio-item"><label for="wpc-sigwx-day1">Day 1</label><input type="radio" id="wpc-sigwx-day1" name="wpc-sigwx" value="sigwx_day1"></li>
-                                    <li class="wpc-radio-item"><label for="wpc-sigwx-day2">Day 2</label><input type="radio" id="wpc-sigwx-day2" name="wpc-sigwx" value="sigwx_day2"></li>
-                                    <li class="wpc-radio-item"><label for="wpc-sigwx-day3">Day 3</label><input type="radio" id="wpc-sigwx-day3" name="wpc-sigwx" value="sigwx_day3"></li>
-                                    <li class="wpc-radio-item"><label for="wpc-sigwx-day1-3">Days 1&ndash;3</label><input type="radio" id="wpc-sigwx-day1-3" name="wpc-sigwx" value="sigwx_day1_3"></li>
-                                </ul>
-                            </div>
-
-                            <!-- Surface panel -->
-                            <div id="wpc-panel-surface" class="wpc-group-panel" role="tabpanel"></div>
-
-                            <!-- Forecast panel -->
-                            <div id="wpc-panel-forecast" class="wpc-group-panel" role="tabpanel">
-                                <ul class="wpc-radio-list" id="wpc-forecast-list" role="radiogroup"></ul>
-                            </div>
-
-                            <div id="weather-wpc-status" class="wx-small" style="margin-top:4px;"></div>
-                            <button id="weather-refresh-wpc" type="button" style="margin-top:8px;">Refresh</button>
-                        </div>
-                    </div>
-
                     <div id="wx-section-water" class="wx-block" data-type="water" style="display:none;">
                         <label id="weather-water-network-filters-title" class="label-small">Networks</label>
                         <div id="weather-water-network-filters">
@@ -1329,16 +1067,6 @@
                                 <div id="wx-radarcal-result"></div>
                             </div>
                         </div>
-                        <div id="wx-side-group-spc" class="wx-block wx-side-group" data-type="spc"
-                            style="display:none;">
-                            <h4>SPC</h4>
-                            <div class="wx-block"><label for="weather-opacity-spc">Fill Opacity</label>
-                                <input id="weather-opacity-spc" type="range" min="0" max="1" step="0.05" value="1">
-                                <label for="weather-opacity-spc-stroke">Stroke Opacity</label>
-                                <input id="weather-opacity-spc-stroke" type="range" min="0" max="1" step="0.05"
-                                    value="1">
-                            </div>
-                        </div>
                         <div id="wx-side-group-mrms" class="wx-block wx-side-group" data-type="mrms"
                             style="display:none;">
                             <h3>Styling</h3>
@@ -1356,16 +1084,6 @@
                                 <label for="weather-rtma-gradient-opacity">Overlay Opacity</label>
                                 <input id="weather-rtma-gradient-opacity" type="range" min="0.1" max="1" step="0.05"
                                     value="0.9">
-                            </div>
-                        </div>
-                        <div id="wx-side-group-wpc" class="wx-block wx-side-group" data-type="wpc"
-                            style="display:none;">
-                            <h3>Styling</h3>
-                            <h4>WPC Styling</h4>
-                            <div class="wx-block">
-                                <label for="weather-opacity-wpc">Fill Opacity</label>
-                                <input id="weather-opacity-wpc" type="range" min="0.1" max="1" step="0.05"
-                                    value="1">
                             </div>
                         </div>
                     </div>
@@ -1504,10 +1222,6 @@
                     </div>
                 </div>
 
-                <div id="wpc-scrubber-bar" hidden>
-                    <div id="wpc-bottom-scrubber"></div>
-                </div>
-
                 <div id="wx-tropical-adv-scrubber" hidden>
                     <div id="adv-scrub-mode" class="adv-scrub-mode" role="group"
                         aria-label="Scrub mode" hidden>
@@ -1553,14 +1267,9 @@
         <script src="js/mrms-page.js?v=20260617a"></script>
         <script src="js/rtma-engine.js?v=20260617a"></script>
         <script src="js/rtma-page.js?v=20260704b"></script>
-        <script src="js/spc-engine.js?v=20260617a"></script>
-        <script src="js/spc-page.js?v=20260704b"></script>
         <script src="js/tropical-engine.js?v=20260704a"></script>
         <script src="js/tropical-page.js?v=20260618e"></script>
-        <script src="js/scrubber.js?v=20260619a"></script>
-        <script src="js/wpc-engine.js?v=20260618j"></script>
-        <script src="js/wpc-page.js?v=20260704c"></script>
-        <script src="js/weather.js?v=20260717a"></script>
+        <script src="js/weather.js?v=20260718b"></script>
         <script>initNav('weather');</script>
     </body>
 

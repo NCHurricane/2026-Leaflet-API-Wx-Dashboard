@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SPC Outlooks — NCHurricane Dashboard</title>
+    <link rel="icon" href="/img/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260717a">
+    <link rel="stylesheet" href="/frontend/pages/spc/spc.css?v=20260717a">
+</head>
+<body>
+    <header class="core-header">
+        <div class="core-brand">NCHURRICANE</div>
+        <nav id="product-nav" class="core-nav" aria-label="Weather products"></nav>
+    </header>
+
+    <main class="spc-app">
+        <aside id="spc-sidebar-tabs" class="core-sidebar spc-controls">
+            <h1 class="core-visually-hidden">SPC Outlooks</h1>
+
+            <div class="core-sidebar-header">
+                <div class="core-card spc-status-card">
+                    <div class="spc-status-title">Data status</div>
+                    <dl class="core-status-grid">
+                        <dt>Valid</dt><dd id="spc-updated">—</dd>
+                        <dt>Data Age</dt><dd id="spc-age">—</dd>
+                        <dt>Provider</dt><dd id="spc-provider">—</dd>
+                        <dt>Source</dt><dd id="spc-source">—</dd>
+                        <dt>Features</dt><dd id="spc-feature-count">0</dd>
+                    </dl>
+                </div>
+
+                <div class="core-field">
+                    <label for="spc-region">Region</label>
+                    <select id="spc-region"></select>
+                </div>
+            </div>
+
+            <div class="core-sidebar-tabs" role="tablist" aria-label="SPC controls">
+                <button id="spc-tab-data" class="core-sidebar-tab is-active" type="button"
+                    role="tab" aria-selected="true" aria-controls="spc-panel-data"
+                    data-sidebar-tab="data">
+                    <i class="fas fa-database" aria-hidden="true"></i><span class="core-sidebar-tab-label">Data</span>
+                </button>
+                <button id="spc-tab-overlays" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="spc-panel-overlays" tabindex="-1"
+                    data-sidebar-tab="overlays">
+                    <i class="fas fa-layer-group" aria-hidden="true"></i><span class="core-sidebar-tab-label">Overlays</span>
+                </button>
+                <button id="spc-tab-style" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="spc-panel-style" tabindex="-1"
+                    data-sidebar-tab="style">
+                    <i class="fas fa-sliders" aria-hidden="true"></i><span class="core-sidebar-tab-label">Style</span>
+                </button>
+            </div>
+
+            <div class="core-sidebar-content">
+                <section id="spc-panel-data" class="core-sidebar-panel spc-panel-stack"
+                    role="tabpanel" aria-labelledby="spc-tab-data" data-sidebar-panel="data">
+
+                    <div class="spc-subtabs" role="tablist" aria-label="SPC product groups">
+                        <button id="spc-subtab-outlooks" class="spc-subtab-button" type="button" role="tab"
+                            aria-selected="true" aria-controls="spc-subpanel-outlooks"
+                            data-spc-subtab="outlooks">Outlooks</button>
+                        <button id="spc-subtab-watches" class="spc-subtab-button" type="button" role="tab"
+                            aria-selected="false" aria-controls="spc-subpanel-watches" tabindex="-1"
+                            data-spc-subtab="watches">Watches</button>
+                        <button id="spc-subtab-reports" class="spc-subtab-button" type="button" role="tab"
+                            aria-selected="false" aria-controls="spc-subpanel-reports" tabindex="-1"
+                            data-spc-subtab="reports">Reports/MDs</button>
+                        <button id="spc-subtab-fire" class="spc-subtab-button" type="button" role="tab"
+                            aria-selected="false" aria-controls="spc-subpanel-fire" tabindex="-1"
+                            data-spc-subtab="fire">Fire</button>
+                    </div>
+
+                    <div id="spc-subpanel-outlooks" class="spc-subtab-panel is-active" role="tabpanel"
+                        aria-labelledby="spc-subtab-outlooks" data-spc-panel="outlooks">
+                        <div class="core-field">
+                            <label for="spc-day">Convective Outlook Day</label>
+                            <select id="spc-day">
+                                <option value="1" selected>Day 1</option>
+                                <option value="2">Day 2</option>
+                                <option value="3">Day 3</option>
+                                <option value="4">Day 4</option>
+                                <option value="5">Day 5</option>
+                                <option value="6">Day 6</option>
+                                <option value="7">Day 7</option>
+                                <option value="8">Day 8</option>
+                            </select>
+                        </div>
+                        <h2>Product</h2>
+                        <div class="spc-check-list">
+                            <label class="spc-check spc-convective-row" data-hazard="cat">
+                                <span class="spc-convective-label">Categorical</span>
+                                <input class="spc-convective-toggle" type="checkbox" value="cat"></label>
+                            <label class="spc-check spc-convective-row" data-hazard="torn">
+                                <span class="spc-convective-label">Tornado Probabilistic</span>
+                                <input class="spc-convective-toggle" type="checkbox" value="torn"></label>
+                            <label class="spc-check spc-convective-row" data-hazard="cigtorn">
+                                <span class="spc-convective-label">Tornado Significant</span>
+                                <input class="spc-convective-toggle" type="checkbox" value="cigtorn"></label>
+                            <label class="spc-check spc-convective-row" data-hazard="wind">
+                                <span class="spc-convective-label">Wind Probabilistic</span>
+                                <input class="spc-convective-toggle" type="checkbox" value="wind"></label>
+                            <label class="spc-check spc-convective-row" data-hazard="cigwind">
+                                <span class="spc-convective-label">Wind Significant</span>
+                                <input class="spc-convective-toggle" type="checkbox" value="cigwind"></label>
+                            <label class="spc-check spc-convective-row" data-hazard="hail">
+                                <span class="spc-convective-label">Hail Probabilistic</span>
+                                <input class="spc-convective-toggle" type="checkbox" value="hail"></label>
+                            <label class="spc-check spc-convective-row" data-hazard="cighail">
+                                <span class="spc-convective-label">Hail Significant</span>
+                                <input class="spc-convective-toggle" type="checkbox" value="cighail"></label>
+                            <label class="spc-check spc-convective-row" data-hazard="prob">
+                                <span class="spc-convective-label">Probabilistic</span>
+                                <input class="spc-convective-toggle" type="checkbox" value="prob"></label>
+                        </div>
+                    </div>
+
+                    <div id="spc-subpanel-watches" class="spc-subtab-panel" role="tabpanel"
+                        aria-labelledby="spc-subtab-watches" data-spc-panel="watches">
+                        <h2>Watches</h2>
+                        <div class="spc-dual-row">
+                            <span class="spc-dual-label">Tornado</span>
+                            <label><input id="spc-watch-tor-polygon" type="checkbox">Polygon</label>
+                            <label><input id="spc-watch-tor-counties" type="checkbox">Counties</label>
+                        </div>
+                        <div class="spc-dual-row">
+                            <span class="spc-dual-label">SVR T-Storm</span>
+                            <label><input id="spc-watch-svr-polygon" type="checkbox">Polygon</label>
+                            <label><input id="spc-watch-svr-counties" type="checkbox">Counties</label>
+                        </div>
+                    </div>
+
+                    <div id="spc-subpanel-reports" class="spc-subtab-panel" role="tabpanel"
+                        aria-labelledby="spc-subtab-reports" data-spc-panel="reports">
+                        <h2>Mesoscale Discussions</h2>
+                        <label class="spc-check"><span>Mesoscale Discussions</span>
+                            <input id="spc-show-mds" type="checkbox"></label>
+
+                        <h2 class="spc-heading-gap">Storm Reports</h2>
+                        <label class="spc-check"><span>Today</span>
+                            <input id="spc-reports-today" type="checkbox"></label>
+                        <label class="spc-check"><span>Yesterday</span>
+                            <input id="spc-reports-yesterday" type="checkbox"></label>
+                        <div class="spc-inline-filters">
+                            <label><input id="spc-report-type-torn" type="checkbox" disabled>Tornado</label>
+                            <label><input id="spc-report-type-wind" type="checkbox" disabled>Wind</label>
+                            <label><input id="spc-report-type-hail" type="checkbox" disabled>Hail</label>
+                        </div>
+                    </div>
+
+                    <div id="spc-subpanel-fire" class="spc-subtab-panel" role="tabpanel"
+                        aria-labelledby="spc-subtab-fire" data-spc-panel="fire">
+                        <div class="core-field">
+                            <label for="spc-fire-day">Fire Weather Day</label>
+                            <select id="spc-fire-day">
+                                <option value="1" selected>Day 1</option>
+                                <option value="2">Day 2</option>
+                                <option value="3">Day 3</option>
+                                <option value="4">Day 4</option>
+                                <option value="5">Day 5</option>
+                                <option value="6">Day 6</option>
+                                <option value="7">Day 7</option>
+                                <option value="8">Day 8</option>
+                            </select>
+                        </div>
+                        <h2>Product</h2>
+                        <div id="spc-fire-list" class="spc-check-list">
+                            <label class="spc-check spc-fire-row" data-hazard="windrh">
+                                <span class="spc-fire-label">Wind / RH</span>
+                                <input class="spc-fire-toggle" type="checkbox" value="windrh"></label>
+                            <label class="spc-check spc-fire-row" data-hazard="dryt">
+                                <span class="spc-fire-label">Dry Thunderstorm</span>
+                                <input class="spc-fire-toggle" type="checkbox" value="dryt"></label>
+                            <label class="spc-check spc-fire-row" data-hazard="windrhcat" data-categorical="1" style="display:none;">
+                                <span class="spc-fire-label">Wind / RH Categorical</span>
+                                <input class="spc-fire-toggle" type="checkbox" value="windrhcat"></label>
+                            <label class="spc-check spc-fire-row" data-hazard="windrhprob" data-categorical="1" style="display:none;">
+                                <span class="spc-fire-label">Wind / RH Probabilistic</span>
+                                <input class="spc-fire-toggle" type="checkbox" value="windrhprob"></label>
+                            <label class="spc-check spc-fire-row" data-hazard="drytcat" data-categorical="1" style="display:none;">
+                                <span class="spc-fire-label">Dry Thunderstorm Categorical</span>
+                                <input class="spc-fire-toggle" type="checkbox" value="drytcat"></label>
+                            <label class="spc-check spc-fire-row" data-hazard="drytprob" data-categorical="1" style="display:none;">
+                                <span class="spc-fire-label">Dry Thunderstorm Probabilistic</span>
+                                <input class="spc-fire-toggle" type="checkbox" value="drytprob"></label>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="spc-panel-overlays" class="core-sidebar-panel spc-panel-stack"
+                    role="tabpanel" aria-labelledby="spc-tab-overlays" data-sidebar-panel="overlays" hidden>
+                    <div>
+                    <h2>Cities</h2>
+                    <div class="core-segmented" role="radiogroup" aria-label="Cities">
+                        <label><input name="spc-cities-source" type="radio" value="off" checked><span>Off</span></label>
+                        <label><input name="spc-cities-source" type="radio" value="us"><span>US</span></label>
+                        <label><input name="spc-cities-source" type="radio" value="world"><span>World</span></label>
+                    </div>
+                    <div class="core-adjustment" data-city-adjustment>
+                        <label id="spc-city-density-label" for="spc-city-density">City Density</label>
+                        <input id="spc-city-density" type="range" min="0.01" max="1" step="0.005" value="0.25">
+                    </div>
+                    <div class="core-adjustment" data-city-adjustment>
+                        <label id="spc-city-font-size-label" for="spc-city-font-size">City Font Size (0.6)</label>
+                        <input id="spc-city-font-size" type="range" min="0.4" max="1.2" step="0.05" value="0.6">
+                    </div>
+                    </div>
+
+                    <div>
+                    <h2>Map overlays</h2>
+                    <div class="spc-check-list">
+                        <label class="spc-check"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
+                        <label class="spc-check"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
+                        <label class="spc-check"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
+                        <label class="spc-check"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                    </div>
+                    </div>
+                </section>
+
+                <section id="spc-panel-style" class="core-sidebar-panel spc-panel-stack"
+                    role="tabpanel" aria-labelledby="spc-tab-style" data-sidebar-panel="style" hidden>
+                    <div class="core-adjustment">
+                        <label for="spc-fill-opacity">Fill Opacity (1)</label>
+                        <input id="spc-fill-opacity" type="range" min="0" max="1" step="0.05" value="1">
+                    </div>
+                    <div class="core-adjustment">
+                        <label for="spc-stroke-opacity">Stroke Opacity (1)</label>
+                        <input id="spc-stroke-opacity" type="range" min="0" max="1" step="0.05" value="1">
+                    </div>
+
+                    <div class="core-field">
+                        <label for="spc-basemap">Basemap</label>
+                        <select id="spc-basemap">
+                            <option>Dark (No Labels)</option><option>Light (No Labels)</option>
+                            <option>Voyager</option><option>USGS</option><option>Satellite</option>
+                        </select>
+                    </div>
+                </section>
+            </div>
+
+            <div class="core-sidebar-footer">
+                <div id="spc-message" class="core-message" aria-live="polite"></div>
+                <button id="spc-refresh" class="spc-refresh" type="button">Refresh</button>
+            </div>
+        </aside>
+
+        <section id="spc-map-wrap" class="core-map-panel spc-map-wrap" aria-label="SPC outlook map">
+            <div id="spc-map"></div>
+            <div id="global-timestamp" class="core-global-timestamp">Last Updated: —</div>
+            <div id="spc-map-empty" class="spc-map-empty" role="status" hidden></div>
+            <div id="spc-legend" class="spc-legend" data-legend-align="left" hidden></div>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="/frontend/pages/spc/spc-page.js?v=20260717a"></script>
+</body>
+</html>

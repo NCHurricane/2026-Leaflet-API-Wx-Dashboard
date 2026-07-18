@@ -34,7 +34,7 @@ def read_alerts_page():
 
 @router.get("/spc")
 def read_spc_page():
-    return serve_product_shell_page("spc")
+    return serve_page("frontend/pages/spc/spc.html")
 
 
 @router.get("/surface")
@@ -69,7 +69,7 @@ def read_rtma_page():
 
 @router.get("/wpc")
 def read_wpc_page():
-    return serve_product_shell_page("wpc")
+    return serve_page("frontend/pages/wpc/wpc.html")
 
 
 @router.get("/water")
