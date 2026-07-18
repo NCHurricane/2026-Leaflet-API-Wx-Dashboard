@@ -1,0 +1,272 @@
+/* MRMS standalone page — layout + controls on the shared core shell. */
+
+.mrms-app {
+    height: calc(100vh - 58px);
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-areas: "controls map";
+    min-height: 0;
+}
+
+.mrms-controls { grid-area: controls; }
+.mrms-map-wrap { grid-area: map; position: relative; min-height: 0; }
+#mrms-map { width: 100%; height: 100%; background: #dbe7ef; }
+
+.mrms-controls h2 {
+    margin: 0 0 8px;
+    color: var(--core-muted);
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.mrms-panel-stack { display: grid; gap: 14px; align-content: start; }
+
+.mrms-check-list { display: grid; gap: 6px; }
+.mrms-check {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    color: #d7e6f5;
+    font-size: 0.78rem;
+}
+.mrms-check input { width: 16px; height: 16px; margin: 0; }
+
+.mrms-refresh {
+    width: 100%;
+    padding: 10px;
+    background: #174a67;
+    border-color: #2f8fb8;
+    font-size: 0.81rem;
+    font-weight: 800;
+}
+.core-sidebar-footer .core-message { margin-bottom: 6px; }
+
+.mrms-status-card { padding: 10px 12px; }
+.mrms-status-title {
+    margin-bottom: 7px;
+    color: var(--core-muted);
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.mrms-status-card .core-status-grid { gap: 4px 10px; font-size: 0.75rem; }
+.mrms-status-card .core-status-grid dt { white-space: nowrap; }
+
+/* ── Product group sub-tabs ─────────────────────────────────────────────── */
+.mrms-subtabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--core-line);
+}
+
+.mrms-subtab-button {
+    min-width: 0;
+    padding: 5px 6px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #cbd5e1;
+    font-size: 0.66rem;
+    font-weight: 800;
+    line-height: 1.05;
+    text-align: center;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.mrms-subtab-button[aria-selected="true"] {
+    border-color: rgba(34, 211, 238, 0.68);
+    background: rgba(14, 116, 144, 0.36);
+    color: #f8fafc;
+}
+
+.mrms-subtab-panel { display: none; }
+.mrms-subtab-panel.is-active { display: block; }
+
+/* ── Product rows + sub-option groups (label left, control right) ───────── */
+.mrms-check-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20px;
+    align-items: center;
+    gap: 12px;
+    padding: 2px 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.08;
+    color: var(--core-text);
+}
+
+.mrms-product-row span { text-transform: uppercase; }
+
+.mrms-check-row input[type="checkbox"],
+.mrms-check-row input[type="radio"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 3px;
+    background: rgba(15, 23, 42, 0.72);
+    cursor: pointer;
+    justify-self: end;
+    flex-shrink: 0;
+}
+
+.mrms-check-row input[type="checkbox"]:checked,
+.mrms-check-row input[type="radio"]:checked {
+    background: #22d3ee url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%230f172a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' d='M3 8l3.5 3.5L13 4.5'/%3E%3C/svg%3E") center/14px no-repeat;
+    border-color: #22d3ee;
+}
+
+.mrms-sub-panel {
+    margin: 0 0 4px;
+    padding: 4px 0 2px 12px;
+    border-left: 2px solid rgba(100, 180, 220, 0.22);
+}
+
+.mrms-sub-group { margin-bottom: 6px; }
+
+.mrms-sub-group-label {
+    display: block;
+    font-size: 0.66rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #22d3ee;
+    margin-bottom: 2px;
+    opacity: 0.8;
+}
+
+.mrms-auto-update-row {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--core-line);
+    text-transform: uppercase;
+}
+
+/* ── Lookback slider ────────────────────────────────────────────────────── */
+.mrms-lookback { display: grid; gap: 4px; }
+
+.mrms-lookback-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    color: var(--core-muted);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+#mrms-lookback-value { color: #f7f81b; font-variant-numeric: tabular-nums; }
+
+.mrms-lookback-labels {
+    display: flex;
+    justify-content: space-between;
+    color: var(--core-muted);
+    font-size: 0.62rem;
+    font-weight: 700;
+}
+
+/* ── Legend content (inside the shared core legend tray) ────────────────── */
+.mrms-legend .core-legend-body { padding: 10px 14px 12px; }
+
+.mrms-legend-flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+}
+
+.mrms-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.mrms-legend-swatch {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    border: 1px solid rgba(2, 6, 23, 0.55);
+}
+
+.mrms-legend-text {
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.15;
+    min-width: 0;
+    overflow-wrap: break-word;
+}
+
+.mrms-legend-stat {
+    margin-left: 10px;
+    white-space: nowrap;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--core-muted);
+}
+
+.mrms-legend-scale {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: min(520px, 60vw);
+}
+
+.mrms-legend-units {
+    text-align: right;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.mrms-legend-scale-bar {
+    display: flex;
+    height: 18px;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.mrms-legend-segment {
+    flex: 1 1 0;
+    min-width: 8px;
+}
+
+.mrms-legend-scale-labels {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 4px;
+}
+
+.mrms-legend-tick {
+    text-align: center;
+    line-height: 1.1;
+    font-size: 0.66rem;
+    font-weight: 700;
+}
+
+/* ── Bottom scrubber bar ────────────────────────────────────────────────── */
+#mrms-scrubber-bar {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 620;
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 6px 10px;
+    min-width: 0;
+}
+#mrms-scrubber-bar[hidden] { display: none; }

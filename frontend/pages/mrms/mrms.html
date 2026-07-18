@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MRMS — NCHurricane Dashboard</title>
+    <link rel="icon" href="/img/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260718a">
+    <link rel="stylesheet" href="/frontend/pages/mrms/mrms.css?v=20260718a">
+</head>
+<body>
+    <header class="core-header">
+        <div class="core-brand">NCHURRICANE</div>
+        <nav id="product-nav" class="core-nav" aria-label="Weather products"></nav>
+    </header>
+
+    <main class="mrms-app">
+        <aside id="mrms-sidebar-tabs" class="core-sidebar mrms-controls">
+            <h1 class="core-visually-hidden">Multi-Radar Multi-Sensor Products</h1>
+
+            <div class="core-sidebar-header">
+                <div class="core-card mrms-status-card">
+                    <div class="mrms-status-title">Data status</div>
+                    <dl class="core-status-grid">
+                        <dt>Valid</dt><dd id="mrms-updated">—</dd>
+                        <dt>Data Age</dt><dd id="mrms-age">—</dd>
+                        <dt>Provider</dt><dd id="mrms-provider">—</dd>
+                        <dt>Source</dt><dd id="mrms-source">—</dd>
+                    </dl>
+                </div>
+
+                <div class="core-field">
+                    <label for="mrms-region">Region</label>
+                    <select id="mrms-region"></select>
+                </div>
+            </div>
+
+            <div class="core-sidebar-tabs" role="tablist" aria-label="MRMS controls">
+                <button id="mrms-tab-data" class="core-sidebar-tab is-active" type="button"
+                    role="tab" aria-selected="true" aria-controls="mrms-panel-data"
+                    data-sidebar-tab="data">
+                    <i class="fas fa-database" aria-hidden="true"></i><span class="core-sidebar-tab-label">Data</span>
+                </button>
+                <button id="mrms-tab-overlays" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="mrms-panel-overlays" tabindex="-1"
+                    data-sidebar-tab="overlays">
+                    <i class="fas fa-layer-group" aria-hidden="true"></i><span class="core-sidebar-tab-label">Overlays</span>
+                </button>
+                <button id="mrms-tab-style" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="mrms-panel-style" tabindex="-1"
+                    data-sidebar-tab="style">
+                    <i class="fas fa-sliders" aria-hidden="true"></i><span class="core-sidebar-tab-label">Style</span>
+                </button>
+            </div>
+
+            <div class="core-sidebar-content">
+                <section id="mrms-panel-data" class="core-sidebar-panel mrms-panel-stack"
+                    role="tabpanel" aria-labelledby="mrms-tab-data" data-sidebar-panel="data">
+
+                    <div class="mrms-subtabs" role="tablist" aria-label="MRMS product groups">
+                        <button id="mrms-subtab-precip" class="mrms-subtab-button" type="button" role="tab"
+                            aria-selected="true" aria-controls="mrms-group-precip"
+                            data-mrms-subtab="precip">Precip</button>
+                        <button id="mrms-subtab-reflectivity" class="mrms-subtab-button" type="button" role="tab"
+                            aria-selected="false" aria-controls="mrms-group-reflectivity"
+                            data-mrms-subtab="reflectivity">Reflectivity</button>
+                        <button id="mrms-subtab-storm" class="mrms-subtab-button" type="button" role="tab"
+                            aria-selected="false" aria-controls="mrms-group-storm"
+                            data-mrms-subtab="storm">Storm</button>
+                        <button id="mrms-subtab-hail" class="mrms-subtab-button" type="button" role="tab"
+                            aria-selected="false" aria-controls="mrms-group-hail"
+                            data-mrms-subtab="hail">Hail/Lightning</button>
+                        <button id="mrms-subtab-environment" class="mrms-subtab-button" type="button" role="tab"
+                            aria-selected="false" aria-controls="mrms-group-environment"
+                            data-mrms-subtab="environment">Environment</button>
+                    </div>
+
+                    <div id="mrms-group-precip" class="mrms-subtab-panel is-active" role="tabpanel"
+                        aria-labelledby="mrms-subtab-precip" data-mrms-panel="precip">
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>Precip Type</span>
+                            <input class="mrms-product-check" type="checkbox" value="PrecipFlag">
+                        </div>
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>Precip Rate</span>
+                            <input class="mrms-product-check" type="checkbox" value="PrecipRate">
+                        </div>
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>QPE</span>
+                            <input class="mrms-product-check" type="checkbox" value="QPE">
+                        </div>
+                        <div id="mrms-sub-qpe" class="mrms-sub-panel" style="display:none;">
+                            <div class="mrms-sub-group">
+                                <span class="mrms-sub-group-label">Source</span>
+                                <div class="mrms-check-row"><span>MultiSensor Pass2</span><input type="radio" name="mrms-qpe-source" value="MS2" checked></div>
+                                <div class="mrms-check-row"><span>MultiSensor Pass1</span><input type="radio" name="mrms-qpe-source" value="MS1"></div>
+                                <div class="mrms-check-row"><span>Radar Only</span><input type="radio" name="mrms-qpe-source" value="RO"></div>
+                            </div>
+                            <div class="mrms-sub-group">
+                                <span class="mrms-sub-group-label">Period</span>
+                                <div class="mrms-check-row"><span>1 Hour</span><input type="radio" name="mrms-qpe-period" value="01H" checked></div>
+                                <div class="mrms-check-row"><span>3 Hour</span><input type="radio" name="mrms-qpe-period" value="03H"></div>
+                                <div class="mrms-check-row"><span>6 Hour</span><input type="radio" name="mrms-qpe-period" value="06H"></div>
+                                <div class="mrms-check-row"><span>12 Hour</span><input type="radio" name="mrms-qpe-period" value="12H"></div>
+                                <div class="mrms-check-row"><span>24 Hour</span><input type="radio" name="mrms-qpe-period" value="24H"></div>
+                                <div class="mrms-check-row"><span>48 Hour</span><input type="radio" name="mrms-qpe-period" value="48H"></div>
+                                <div class="mrms-check-row"><span>72 Hour</span><input type="radio" name="mrms-qpe-period" value="72H"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="mrms-group-reflectivity" class="mrms-subtab-panel" role="tabpanel"
+                        aria-labelledby="mrms-subtab-reflectivity" data-mrms-panel="reflectivity">
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>Reflectivity</span>
+                            <input class="mrms-product-check" type="checkbox" value="Reflectivity">
+                        </div>
+                        <div id="mrms-sub-reflectivity" class="mrms-sub-panel" style="display:none;">
+                            <div class="mrms-sub-group">
+                                <span class="mrms-sub-group-label">Variant</span>
+                                <div class="mrms-check-row"><span>Hybrid Scan (HSR)</span><input type="radio" name="mrms-refl-variant" value="HSR" checked></div>
+                                <div class="mrms-check-row"><span>Base (QC)</span><input type="radio" name="mrms-refl-variant" value="BaseQC"></div>
+                                <div class="mrms-check-row"><span>Composite – Low</span><input type="radio" name="mrms-refl-variant" value="CompLow"></div>
+                                <div class="mrms-check-row"><span>Composite – High</span><input type="radio" name="mrms-refl-variant" value="CompHigh"></div>
+                                <div class="mrms-check-row"><span>Composite – Super</span><input type="radio" name="mrms-refl-variant" value="CompSuper"></div>
+                                <div class="mrms-check-row"><span>Base Refl 1hr Max</span><input type="radio" name="mrms-refl-variant" value="BREF_1HR_MAX"></div>
+                                <div class="mrms-check-row"><span>Comp Refl 1hr Max</span><input type="radio" name="mrms-refl-variant" value="CREF_1HR_MAX"></div>
+                            </div>
+                        </div>
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>Echo Top</span>
+                            <input class="mrms-product-check" type="checkbox" value="EchoTop">
+                        </div>
+                        <div id="mrms-sub-echotop" class="mrms-sub-panel" style="display:none;">
+                            <div class="mrms-sub-group">
+                                <span class="mrms-sub-group-label">dBZ Threshold</span>
+                                <div class="mrms-check-row"><span>18 dBZ</span><input type="radio" name="mrms-echotop-threshold" value="18" checked></div>
+                                <div class="mrms-check-row"><span>30 dBZ</span><input type="radio" name="mrms-echotop-threshold" value="30"></div>
+                                <div class="mrms-check-row"><span>50 dBZ</span><input type="radio" name="mrms-echotop-threshold" value="50"></div>
+                                <div class="mrms-check-row"><span>60 dBZ</span><input type="radio" name="mrms-echotop-threshold" value="60"></div>
+                            </div>
+                        </div>
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>VIL</span>
+                            <input class="mrms-product-check" type="checkbox" value="VIL">
+                        </div>
+                        <div id="mrms-sub-vil" class="mrms-sub-panel" style="display:none;">
+                            <div class="mrms-sub-group">
+                                <span class="mrms-sub-group-label">Type</span>
+                                <div class="mrms-check-row"><span>Instant</span><input type="radio" name="mrms-vil-type" value="Instant" checked></div>
+                                <div class="mrms-check-row"><span>Density</span><input type="radio" name="mrms-vil-type" value="Density"></div>
+                                <div class="mrms-check-row"><span>Max 2 hr</span><input type="radio" name="mrms-vil-type" value="Max_120min"></div>
+                                <div class="mrms-check-row"><span>Max 24 hr</span><input type="radio" name="mrms-vil-type" value="Max_1440min"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="mrms-group-storm" class="mrms-subtab-panel" role="tabpanel"
+                        aria-labelledby="mrms-subtab-storm" data-mrms-panel="storm">
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>Rotation Tracks</span>
+                            <input class="mrms-product-check" type="checkbox" value="RotationTrack">
+                        </div>
+                        <div id="mrms-sub-rotation" class="mrms-sub-panel" style="display:none;">
+                            <div class="mrms-sub-group">
+                                <span class="mrms-sub-group-label">Level</span>
+                                <div class="mrms-check-row"><span>Low Level (0-2 km)</span><input type="radio" name="mrms-rotation-level" value="LL" checked></div>
+                                <div class="mrms-check-row"><span>Mid Level (3-6 km)</span><input type="radio" name="mrms-rotation-level" value="ML"></div>
+                            </div>
+                            <div class="mrms-sub-group">
+                                <span class="mrms-sub-group-label">Window</span>
+                                <div class="mrms-check-row"><span>30 min</span><input type="radio" name="mrms-rotation-time" value="30min"></div>
+                                <div class="mrms-check-row"><span>60 min</span><input type="radio" name="mrms-rotation-time" value="60min" checked></div>
+                                <div class="mrms-check-row"><span>2 hr</span><input type="radio" name="mrms-rotation-time" value="120min"></div>
+                                <div class="mrms-check-row"><span>4 hr</span><input type="radio" name="mrms-rotation-time" value="240min"></div>
+                                <div class="mrms-check-row"><span>6 hr</span><input type="radio" name="mrms-rotation-time" value="360min"></div>
+                                <div class="mrms-check-row"><span>24 hr</span><input type="radio" name="mrms-rotation-time" value="1440min"></div>
+                            </div>
+                        </div>
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>Azimuthal Shear</span>
+                            <input class="mrms-product-check" type="checkbox" value="AzShear">
+                        </div>
+                        <div id="mrms-sub-azshear" class="mrms-sub-panel" style="display:none;">
+                            <div class="mrms-sub-group">
+                                <span class="mrms-sub-group-label">Level</span>
+                                <div class="mrms-check-row"><span>Low Level (0-2 km)</span><input type="radio" name="mrms-azshear-level" value="Low" checked></div>
+                                <div class="mrms-check-row"><span>Mid Level (3-6 km)</span><input type="radio" name="mrms-azshear-level" value="Mid"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="mrms-group-hail" class="mrms-subtab-panel" role="tabpanel"
+                        aria-labelledby="mrms-subtab-hail" data-mrms-panel="hail">
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>MESH / Hail</span>
+                            <input class="mrms-product-check" type="checkbox" value="MESH">
+                        </div>
+                        <div id="mrms-sub-mesh" class="mrms-sub-panel" style="display:none;">
+                            <div class="mrms-sub-group">
+                                <span class="mrms-sub-group-label">Window</span>
+                                <div class="mrms-check-row"><span>Instant</span><input type="radio" name="mrms-mesh-time" value="Instant" checked></div>
+                                <div class="mrms-check-row"><span>Max 30 min</span><input type="radio" name="mrms-mesh-time" value="Max_30min"></div>
+                                <div class="mrms-check-row"><span>Max 60 min</span><input type="radio" name="mrms-mesh-time" value="Max_60min"></div>
+                                <div class="mrms-check-row"><span>Max 2 hr</span><input type="radio" name="mrms-mesh-time" value="Max_120min"></div>
+                                <div class="mrms-check-row"><span>Max 4 hr</span><input type="radio" name="mrms-mesh-time" value="Max_240min"></div>
+                                <div class="mrms-check-row"><span>Max 6 hr</span><input type="radio" name="mrms-mesh-time" value="Max_360min"></div>
+                                <div class="mrms-check-row"><span>Max 24 hr</span><input type="radio" name="mrms-mesh-time" value="Max_1440min"></div>
+                            </div>
+                        </div>
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>SHI</span>
+                            <input class="mrms-product-check" type="checkbox" value="SHI">
+                        </div>
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>POSH</span>
+                            <input class="mrms-product-check" type="checkbox" value="POSH">
+                        </div>
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>Lightning Probability</span>
+                            <input class="mrms-product-check" type="checkbox" value="Lightning">
+                        </div>
+                        <div id="mrms-sub-lightning" class="mrms-sub-panel" style="display:none;">
+                            <div class="mrms-sub-group">
+                                <span class="mrms-sub-group-label">Window</span>
+                                <div class="mrms-check-row"><span>Next 30 min</span><input type="radio" name="mrms-lightning-window" value="30min" checked></div>
+                                <div class="mrms-check-row"><span>Next 60 min</span><input type="radio" name="mrms-lightning-window" value="60min"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="mrms-group-environment" class="mrms-subtab-panel" role="tabpanel"
+                        aria-labelledby="mrms-subtab-environment" data-mrms-panel="environment">
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>Model / Environment</span>
+                            <input class="mrms-product-check" type="checkbox" value="Model">
+                        </div>
+                        <div id="mrms-sub-model" class="mrms-sub-panel" style="display:none;">
+                            <div class="mrms-sub-group">
+                                <span class="mrms-sub-group-label">Field</span>
+                                <div class="mrms-check-row"><span>Freezing Level Height</span><input type="radio" name="mrms-model-field" value="FreezingLevel" checked></div>
+                                <div class="mrms-check-row"><span>Surface Temperature</span><input type="radio" name="mrms-model-field" value="SurfaceTemp"></div>
+                                <div class="mrms-check-row"><span>Wet Bulb Temperature</span><input type="radio" name="mrms-model-field" value="WetBulbTemp"></div>
+                            </div>
+                        </div>
+                        <div class="mrms-check-row mrms-product-row">
+                            <span>Radar Quality Index</span>
+                            <input class="mrms-product-check" type="checkbox" value="RadarQualityIndex">
+                        </div>
+                    </div>
+
+                    <div class="mrms-check-row mrms-auto-update-row">
+                        <span>Auto-Update</span>
+                        <input id="mrms-auto-update" type="checkbox">
+                    </div>
+
+                    <div id="mrms-lookback-block" class="mrms-lookback">
+                        <div class="mrms-lookback-header">
+                            <span>Lookback Hours</span>
+                            <span id="mrms-lookback-value">1H</span>
+                        </div>
+                        <input id="mrms-lookback" type="range" min="1" max="12" step="0.5" value="1">
+                        <div class="mrms-lookback-labels"><span>1H</span><span>12H</span></div>
+                    </div>
+                </section>
+
+                <section id="mrms-panel-overlays" class="core-sidebar-panel mrms-panel-stack"
+                    role="tabpanel" aria-labelledby="mrms-tab-overlays" data-sidebar-panel="overlays" hidden>
+                    <div>
+                    <h2>Cities</h2>
+                    <div class="core-segmented" role="radiogroup" aria-label="Cities">
+                        <label><input name="mrms-cities-source" type="radio" value="off" checked><span>Off</span></label>
+                        <label><input name="mrms-cities-source" type="radio" value="us"><span>US</span></label>
+                        <label><input name="mrms-cities-source" type="radio" value="world"><span>World</span></label>
+                    </div>
+                    <div class="core-adjustment" data-city-adjustment>
+                        <label id="mrms-city-density-label" for="mrms-city-density">City Density</label>
+                        <input id="mrms-city-density" type="range" min="0.01" max="1" step="0.005" value="0.25">
+                    </div>
+                    <div class="core-adjustment" data-city-adjustment>
+                        <label id="mrms-city-font-size-label" for="mrms-city-font-size">City Font Size (0.6)</label>
+                        <input id="mrms-city-font-size" type="range" min="0.4" max="1.2" step="0.05" value="0.6">
+                    </div>
+                    </div>
+
+                    <div>
+                    <h2>Map overlays</h2>
+                    <div class="mrms-check-list">
+                        <label class="mrms-check"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
+                        <label class="mrms-check"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
+                        <label class="mrms-check"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
+                        <label class="mrms-check"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                    </div>
+                    </div>
+                </section>
+
+                <section id="mrms-panel-style" class="core-sidebar-panel mrms-panel-stack"
+                    role="tabpanel" aria-labelledby="mrms-tab-style" data-sidebar-panel="style" hidden>
+                    <div class="core-adjustment">
+                        <label for="mrms-opacity">Overlay Opacity (0.8)</label>
+                        <input id="mrms-opacity" type="range" min="0.1" max="1" step="0.05" value="0.8">
+                    </div>
+
+                    <div class="core-field">
+                        <label for="mrms-basemap">Basemap</label>
+                        <select id="mrms-basemap">
+                            <option>Dark (No Labels)</option><option>Light (No Labels)</option>
+                            <option>Voyager</option><option>USGS</option><option>Satellite</option>
+                        </select>
+                    </div>
+                </section>
+            </div>
+
+            <div class="core-sidebar-footer">
+                <div id="mrms-message" class="core-message" aria-live="polite"></div>
+                <button id="mrms-refresh" class="mrms-refresh" type="button">Refresh</button>
+            </div>
+        </aside>
+
+        <section id="mrms-map-wrap" class="core-map-panel mrms-map-wrap" aria-label="MRMS product map">
+            <div id="mrms-map"></div>
+            <div id="global-timestamp" class="core-global-timestamp">Last Updated: —</div>
+            <div id="mrms-legend" class="mrms-legend" data-legend-align="left" hidden></div>
+            <div id="mrms-scrubber-bar" hidden>
+                <div id="mrms-bottom-scrubber"></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="/frontend/pages/mrms/mrms-page.js?v=20260718a"></script>
+</body>
+</html>

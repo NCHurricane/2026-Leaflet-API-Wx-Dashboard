@@ -109,12 +109,19 @@ export function createScrubber(containerEl, options = {}) {
     });
 
     return Object.freeze({
-        setFrames(newFrames) {
-            stopPlay();
+        setFrames(newFrames, options = {}) {
+            const { index = 0, silent = false, keepPlaying = false } = options;
+            if (!keepPlaying) stopPlay();
             frames = Array.isArray(newFrames) ? newFrames : [];
-            currentIndex = 0;
+            currentIndex = Math.max(0, Math.min(frames.length - 1, index));
             updateUI();
-            if (frames.length) onFrame(frames[0], 0);
+            if (frames.length && !silent) onFrame(frames[currentIndex], currentIndex);
+        },
+        getIndex() {
+            return currentIndex;
+        },
+        isPlaying() {
+            return playing;
         },
         goTo,
         play: startPlay,

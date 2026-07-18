@@ -59,7 +59,7 @@ def read_radar_standalone_page():
 
 @router.get("/mrms")
 def read_mrms_page():
-    return serve_product_shell_page("mrms")
+    return serve_page("frontend/pages/mrms/mrms.html")
 
 
 @router.get("/rtma")
