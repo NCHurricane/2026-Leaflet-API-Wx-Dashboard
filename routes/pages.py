@@ -64,7 +64,7 @@ def read_mrms_page():
 
 @router.get("/rtma")
 def read_rtma_page():
-    return serve_product_shell_page("rtma")
+    return serve_page("frontend/pages/rtma/rtma.html")
 
 
 @router.get("/wpc")

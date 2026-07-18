@@ -1,0 +1,164 @@
+/* RTMA standalone page — layout + controls on the shared core shell. */
+
+.rtma-app {
+    height: calc(100vh - 58px);
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-areas: "controls map";
+    min-height: 0;
+}
+
+.rtma-controls { grid-area: controls; }
+.rtma-map-wrap { grid-area: map; position: relative; min-height: 0; }
+#rtma-map { width: 100%; height: 100%; background: #dbe7ef; }
+
+.rtma-controls h2 {
+    margin: 0 0 8px;
+    color: var(--core-muted);
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.rtma-panel-stack { display: grid; gap: 14px; align-content: start; }
+
+.rtma-check-list { display: grid; gap: 6px; }
+.rtma-check {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    color: #d7e6f5;
+    font-size: 0.78rem;
+}
+.rtma-check input { width: 16px; height: 16px; margin: 0; }
+
+.rtma-refresh {
+    width: 100%;
+    padding: 10px;
+    background: #174a67;
+    border-color: #2f8fb8;
+    font-size: 0.81rem;
+    font-weight: 800;
+}
+.core-sidebar-footer .core-message { margin-bottom: 6px; }
+
+.rtma-status-card { padding: 10px 12px; }
+.rtma-status-title {
+    margin-bottom: 7px;
+    color: var(--core-muted);
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.rtma-status-card .core-status-grid { gap: 4px 10px; font-size: 0.75rem; }
+.rtma-status-card .core-status-grid dt { white-space: nowrap; }
+
+/* ── Stream / product rows (label left, control right) ───────────────────── */
+.rtma-check-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20px;
+    align-items: center;
+    gap: 12px;
+    padding: 2px 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.08;
+    color: var(--core-text);
+}
+
+.rtma-product-row span,
+.rtma-stream-row span { text-transform: uppercase; }
+
+.rtma-check-row input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 3px;
+    background: rgba(15, 23, 42, 0.72);
+    cursor: pointer;
+    justify-self: end;
+    flex-shrink: 0;
+}
+
+.rtma-check-row input[type="checkbox"]:checked {
+    background: #22d3ee url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%230f172a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' d='M3 8l3.5 3.5L13 4.5'/%3E%3C/svg%3E") center/14px no-repeat;
+    border-color: #22d3ee;
+}
+
+.rtma-check-row input[type="checkbox"]:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.rtma-sub-group { margin-bottom: 2px; }
+
+.rtma-sub-group-label {
+    display: block;
+    font-size: 0.66rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #22d3ee;
+    margin-bottom: 2px;
+    opacity: 0.8;
+}
+
+.rtma-auto-update-row {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--core-line);
+    text-transform: uppercase;
+}
+
+/* ── Lookback slider ────────────────────────────────────────────────────── */
+.rtma-lookback { display: grid; gap: 4px; }
+
+.rtma-lookback-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    color: var(--core-muted);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+#rtma-lookback-value { color: #f7f81b; font-variant-numeric: tabular-nums; }
+
+.rtma-lookback-labels {
+    display: flex;
+    justify-content: space-between;
+    color: var(--core-muted);
+    font-size: 0.62rem;
+    font-weight: 700;
+}
+
+/* ── Legend content (inside the shared core legend tray) ────────────────── */
+.rtma-legend .core-legend-body { padding: 10px 14px 12px; }
+
+.rtma-legend-range {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--core-text);
+}
+
+/* ── Bottom scrubber bar ────────────────────────────────────────────────── */
+#rtma-scrubber-bar {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 620;
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 6px 10px;
+    min-width: 0;
+}
+#rtma-scrubber-bar[hidden] { display: none; }
