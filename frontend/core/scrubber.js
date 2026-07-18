@@ -1,5 +1,6 @@
-// Page-local frame scrubber (ES-module port of the shell's NCHScrubber).
-// The scrubber-as-shared-component rewrite is Phase 22; promote then.
+// Shared frame scrubber component (promoted from pages/wpc in Phase 22).
+// Per-page instances only — no global modes. Pages own the container element
+// and the frame objects ({label, ...}); onFrame receives (frame, index).
 
 const SPEED_STEPS = [0.5, 1, 2, 4];
 const BASE_INTERVAL_MS = 1000;

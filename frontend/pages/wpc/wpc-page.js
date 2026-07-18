@@ -7,7 +7,7 @@ import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js';
 import { createWpcDetailPanel } from './wpc-detail.js';
 import { createWpcEngine } from './wpc-engine.js';
-import { createScrubber } from './wpc-scrubber.js';
+import { createScrubber } from '../../core/scrubber.js';
 
 const byId = (id) => document.getElementById(id);
 const SELECT_PRODUCT_MESSAGE = 'Pick a WPC product group, then a day or product, to load an overlay.';

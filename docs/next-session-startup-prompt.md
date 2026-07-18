@@ -174,12 +174,10 @@ products (ADP/AOD/FRP) and GeoColor display corrections added 2026-07-16:
   (noaa-gmgsi-pds). No provider/parser work has begun on either. Start this
   after the satellite-page migration boundary is safe so the integration is
   not implemented twice across the frontend split.
-- Untracked file docs/token-saver-maybe.md has been sitting in the working
-  tree for several sessions (a Claude Code skill definition, not dashboard
-  documentation). The .gitignore entry added 2026-07-10 points at
-  .claude/token-saver-maybe.md, which does not match this file's actual path,
-  so it still shows as untracked. Needs a decision: move it, retarget the
-  gitignore line, or commit it intentionally.
+- docs/token-saver-maybe.md (a Claude Code skill definition, not dashboard
+  documentation) is intentionally untracked; the .gitignore entry now
+  correctly targets docs/token-saver-maybe.md. RESOLVED 2026-07-18 — no
+  action needed.
 
 Other recent completed work (pre-satellite-focus, still relevant context):
 - DONE 2026-07-04 (late evening), user-tested: L2 blank velocity/SRV/spectrum
