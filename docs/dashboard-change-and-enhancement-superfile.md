@@ -1,7 +1,7 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-18 (Phases 20-24 user smoke tests PASSED, including the
-Radar one-row legend and complete Home/Region/Clear reset follow-up.)
+Last updated: 2026-07-19 (Phases 20-24 and the Phase 25 standalone Alerts
+parity/follow-up smoke tests PASSED. Legacy Alerts cleanup is next.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -20,15 +20,16 @@ Keep separate:
 - `docs/satellite-radar-render-pipeline-files.md` for the satellite/radar
   render pipeline file reference (companion to the optimization plan).
 
-## Active Tracks (2026-07-17)
+## Active Tracks (2026-07-19)
 
 Priority order for upcoming work. Track 1 goes first because it may alter
 the plan for some future items; re-evaluate later tracks against the
 post-split structure, not the monolith.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
-   this file (section below). Phases 18-24 and Radar's post-smoke UI reset
-   follow-up are complete and user-confirmed.
+   this file (section below). Phases 18-24 are complete and user-confirmed.
+   Phase 25 standalone Alerts is user-confirmed; remove its legacy monolith
+   implementation next, preserving the workspace-owned arrival/speed tools.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
@@ -44,16 +45,16 @@ post-split structure, not the monolith.
 - The backend route/service refactor is complete enough that product routes and
   services should remain modular. Do not add route logic back to `main.py`.
 - The fixed map-first dashboard shell is accepted.
-- `/drought`, `/surface`, `/spc`, `/wpc`, `/mrms`, `/rtma`, `/satellite`, and
-  `/radar` serve true standalone pages from `frontend/pages/`. The remaining
-  canonical product routes serve the shared dashboard shell in product-only
-  mode: `/alerts`, `/tropical`, and `/water`.
+- `/drought`, `/surface`, `/spc`, `/wpc`, `/mrms`, `/rtma`, `/satellite`,
+  `/radar`, and `/alerts` serve true standalone pages from `frontend/pages/`.
+  The remaining canonical product routes serving the shared dashboard shell in
+  product-only mode are `/tropical` and `/water`.
 - `weather.html` remains the combined workspace and should keep working until
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
-  interpretation, and most rendering. `js/weather.js` still owns shared map
-  lifecycle, generic archive orchestration, shared scrubber infrastructure, and
-  injected callbacks where cross-product state is still coupled.
+  interpretation, and most rendering. `js/weather.js` still owns the combined
+  workspace, generic archive/scrubber infrastructure, legacy Alerts code
+  pending cleanup, and coupled Tropical/Water behavior.
 - City labels are controlled from the Layers pane with an `Off | US | World`
   segmented control. `US` loads `data/us-cities-all.json`; `World` loads
   `data/world-cities.json`. Both sources share the same density slider, mapped
@@ -68,7 +69,8 @@ post-split structure, not the monolith.
 - Most per-page `autoLoad` defaults are `false`, so product routes open to the
   configured map view with controls/background metadata initialized but no
   rendered product overlay. Current exceptions are Alerts, which renders Severe
-  Weather Warnings with TOR/SVR/FFW filters enabled, and Tropical, which starts
+  Weather Warnings with TOR/SVR/FFW/SMW filters enabled and starts 60-second
+  auto-update, and Tropical, which starts
   in the Atlantic basin and features the first active storm when present or the
   Tropical Outlook when no active storm exists. Drought is also an exception:
   its standalone page selects and draws the latest available release on load.
@@ -547,8 +549,9 @@ found it.
   serves the standalone HTML. Monolith deletion removed ~2,006 lines from
   `js/weather.js` (now 7,244 lines), `wx-section-radar` and Radar script tags
   from `weather.html`, and obsolete `js/radar-engine.js`, `js/radar-page.js`,
-  and `js/radar-site-locations.js`. The Alerts-owned Arrival Tool / Radar Speed
-  Estimator remains in `weather.html`/`js/weather.js` for Phase 25.
+  and `js/radar-site-locations.js`. The Projected Arrival Tool / Radar Speed
+  Estimator remains in `weather.html`/`js/weather.js` as workspace-reserved
+  functionality for Phase 27; it is no longer part of the Alerts workflow.
   `weather.js?v=20260718e`. Deliberate
   smoke points: (a) a site is now explicitly required instead of showing the
   non-loading `National Composite` sentinel, (b) the dead/unwired multi-site
@@ -563,8 +566,97 @@ found it.
   when site markers are enabled. User browser confirmation PASSED 2026-07-18:
   several radar sites passed the parity smoke, and the one-row legend plus all
   three reset triggers worked correctly while playback was active.
-- Phase 25: alerts (immersive panel plus Arrival Tool / Speed Estimator
-  move to engine-side modules).
+- Phase 25: alerts. **STANDALONE BUILD + USER PARITY/FOLLOW-UP SMOKE PASSED
+  2026-07-19. Remove the legacy Alerts implementation from `weather.html`,
+  `js/weather.js`, and obsolete Alerts modules next; preserve the Projected
+  Arrival Tool and Radar Speed Estimator as workspace-owned Phase 27
+  capabilities. Fix future gaps forward in `frontend/pages/alerts/`.** The
+  standalone page uses the Option 1A core map/sidebar/legend/status/scrubber
+  shell plus a dedicated active-warning rail. Preserved behavior includes the
+  complete alert-category selector with TOR/SVR/FFW subtype filters; viewport-
+  and region-scoped full/display geometry requests; in-memory category changes;
+  active-alert counts and in-view legends; clickable polygons; the immersive
+  detail panel with headline, description, instructions, timing, and official
+  NWS link; active-warning filtering and zoom; LSR categories, map markers,
+  counts, 1/6/12/24 h windows, and legends; bounded visual new-alert notices;
+  polygon opacity; map overlays/cities;
+  manual refresh; default-on 60-second auto-update; and dormant Alerts archive
+  plumbing on the shared scrubber (UI hidden pending the unified archive
+  design). `/alerts` now serves
+  `frontend/pages/alerts/alerts.html` and loads only core + Alerts modules.
+  Clarified scope decision: the Projected Arrival Tool and Radar Speed Estimator
+  depended on the removed IEM radar overlay, so neither is part of standalone
+  Alerts. Preserve their existing implementation as workspace-owned capability
+  for Phase 27, when the severe-weather workspace (eventually the
+  primary `/weather` page) can supply radar imagery and playback context.
+  Initial-smoke follow-up (`alerts.css`/`alerts-page.js?v=20260718b`): the
+  page-specific legend now spans the map width, uses compact responsive
+  auto-fit columns, and allows a taller tray before scrolling; Alert Categories
+  is collapsible like LSRs. Severe subtype controls remain visible whenever
+  either Severe Weather Alerts or Severe Weather Warnings is selected and now
+  include SMW in addition to TOR/SVR/FFW; the warning rail has the same SMW
+  filter. New-alert notices default to those four severe warnings only, with an
+  explicit Style choice for Severe, All Selected, or Off. The immersive detail
+  is height-bounded with an internal scroll area, draggable by its header,
+  restores severity/urgency/certainty badges and NWS threat-detail chips,
+  structures hazard/source/impact and locations/instructions sections, and
+  builds the official `forecast.weather.gov/product.php` text-product URL from
+  the alert event + issuing office instead of linking to the API feature. A
+  second focused follow-up (`alerts.css`/`alerts-page.js?v=20260718c`) nests the
+  TOR/SVR/FFW/SMW controls directly below Severe Weather Warnings and shows them
+  only when that category is checked (including through All Alerts); adds the
+  wired 1-hour LSR window; hides the Alerts Archive mode until archive UI is
+  implemented consistently across pages; and makes event product codes take
+  precedence over continuation/update AWIPS codes so a Severe Thunderstorm
+  Warning always links to SVR rather than SVS. Future unified archive UI must
+  select one target datetime plus a lookback duration, not a from/to range.
+  Third focused follow-up (`alerts.css`/`alerts-page.js?v=20260718d`): the right
+  rail now removes its grid column when neither alert categories nor LSR
+  categories are selected. With one dataset selected it shows only that panel;
+  with both selected it splits into independently scrolling Active Warnings
+  (top) and Latest Storm Reports (bottom). The LSR half reuses the compact pill
+  pattern with All/Tornado/Hail/Wind/Other counts, where Other groups every
+  non-tornado/hail/wind report. Reports sort newest-first; selecting a report
+  zooms to its marker and opens the report popup, including after the resulting
+  viewport refresh replaces the marker layer.
+  Toggle-delay correction (`alerts-page.js`/`alerts-engine.js?v=20260718e`):
+  nesting the severe subtype controls beneath the category list had allowed
+  TOR/SVR/FFW/SMW inputs to leak into category/master queries; category inputs
+  now have a dedicated selector and subtype changes no longer double-fire the
+  category handler. Empty selections hide layers without discarding the last
+  successful alert/LSR payload. Re-enabling categories therefore renders from
+  memory immediately; LSR data is keyed by viewport + time window and only
+  refetched when that scope changes or Refresh/auto-update explicitly requests
+  fresh data. Empty valid responses are cached too. This also prevents the rail
+  grid resize/moveend cycle from erasing cached polygons while products are off.
+  Footer-status correction (`alerts-page.js`/`alerts-engine.js?v=20260718f`):
+  the page now owns one combined status message derived from the currently
+  selected datasets and their displayed counts. Parallel Alert and LSR loads
+  can no longer overwrite each other, and deselecting LSR immediately removes
+  the stale Local Storm Reports-only message.
+  LSR legend refinement (`alerts.css?v=20260718e`/`alerts-engine.js?v=20260718g`):
+  Local Storm Report entries now use the same type-specific Font Awesome icon
+  and color mapping as their map markers instead of generic color swatches.
+  As of `alerts-engine.js?v=20260718h`, entries follow the configured category
+  order rather than report arrival order, keeping Tornado first when present.
+  Severe-polygon pulse restoration (`alerts.css?v=20260718f`/
+  `alerts-engine.js?v=20260718i`): TOR, SVR, FFW, and SMW polygons again pulse
+  both fill and border. A Styles-tab On/Off selector is enabled by default and
+  updates the existing polygon layer immediately without a data reload.
+  Contrast/refresh follow-up (`alerts-page.js?v=20260719a`): Flash Flood Warning
+  text uses a lighter presentation-only red on dark UI surfaces while its
+  official NWS polygon, border, and legend color remains unchanged. Auto-Update
+  is now enabled by default and refreshes the selected live data every 60 seconds.
+  User browser confirmation PASSED 2026-07-19 for the complete focused follow-up,
+  including the final FFW text-contrast correction. This satisfies the smoke
+  gate for legacy Alerts removal; it does not authorize deleting the preserved
+  arrival/speed workspace tools.
+  Final legend sizing polish (`alerts.css?v=20260719b`) remains page-specific:
+  categorical tracks auto-fill at 180-220 px and align left, preventing a small
+  number of cards from stretching across the full-width tray while retaining
+  dense wrapping for many categories. The existing narrow-screen rule keeps
+  two fluid columns, so shared core legends and mobile responsiveness are not
+  changed.
 - Phase 26: tropical (already closest to the target pattern), then Water as a
   separate independently shippable migration. Water stays excluded from the
   initial workspace, but must leave `js/weather.js` before Phase 27.

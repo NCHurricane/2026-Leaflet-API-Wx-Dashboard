@@ -65,6 +65,14 @@ Planned product-page migration:
   as static content.
 - Legacy `.html` product URLs may be kept as redirects or compatibility routes
   during the transition, but clean extensionless URLs should become canonical.
+- `/alerts` serves `frontend/pages/alerts/alerts.html`, which owns active alert
+  and Local Storm Report filtering/rendering, the active-warning rail, immersive
+  alert detail, in-memory off/on restoration, page-owned combined status,
+  severe-warning pulse styling, and default-on 60-second refresh without
+  loading `js/weather.js`. Alerts archive plumbing is dormant and its UI is
+  hidden pending a unified one-target-datetime plus lookback design. The radar-
+  dependent Projected Arrival and Speed Estimator tools remain reserved for the
+  future severe-weather workspace.
 - `/radar` serves `frontend/pages/radar/radar.html`, which owns live site/product
   selection, current and cached-frame playback, NST overlays, legends, and the
   value inspector without loading `js/weather.js`. `/radar.html` remains a
@@ -142,6 +150,8 @@ Future launcher expectation:
 
 ```
 GET /api/data/alerts?state={STATE}   # optional state filter
+GET /api/data/alerts?geometry_mode={full|display}&zoom_bucket={national|regional|local}&west={W}&east={E}&south={S}&north={N}
+GET /api/data/alerts/lsr?west={W}&east={E}&south={S}&north={N}&hours={1|6|12|24}
 GET /api/data/spc?day={1-8}&hazard={cat|torn|wind|hail|prob|windrh|dryt}
 GET /api/overlay/latest?family=rtma&region={REGION}&stream={STREAM}&product={PRODUCT}[&frame_key=YYYY_MM_DD_HH_MM_SS]
 GET /api/overlay/frames?family=rtma&region={REGION}&stream={STREAM}&product={PRODUCT}
@@ -193,7 +203,12 @@ Cache served as static files via `/cache` mount (StaticFiles).
 
 ## Frontend Architecture
 
-`js/weather.js` — IIFE, no framework, ES6+, async/await.
+Standalone product pages use ES modules under `frontend/core/` and
+`frontend/pages/{product}/`. The legacy combined workspace described below is
+transitional and is not the owner of canonical standalone product routes.
+
+`js/weather.js` — transitional combined-workspace IIFE, no framework, ES6+,
+async/await.
 
 Responsibilities:
 
@@ -215,12 +230,22 @@ Responsibilities:
 
 `js/shared.js` — exports `window.apiUrl`, `window.initNav`, and progress/output helpers (progress helpers are no-ops for the weather page since weather no longer uses the render pipeline).
 
-Weather alerts interaction model:
+Standalone Alerts interaction model:
 
-- Clicking an alert polygon opens the immersive alert detail panel.
-- Clicking an alert row in the right WWA list opens the same panel for that row.
+- Clicking an alert polygon or Active Warnings card opens the same draggable,
+  height-bounded immersive detail panel.
+- Clicking a Latest Storm Reports card zooms to its marker and opens its popup.
+- The right rail is absent when neither dataset is selected, shows only the
+  applicable panel for a single dataset, and splits Alerts above LSRs when both
+  are selected.
 - The panel closes on outside map click, Escape, or map move/zoom start.
-- Storm-track projection controls live in the right-side alerts styling group.
+- TOR/SVR/FFW/SMW polygons pulse fill and border by default; the Style selector
+  toggles existing paths without a data reload.
+- Official NWS colors remain the polygon/border/legend source of truth. FFW uses
+  a separate lighter presentation-only text color on dark UI surfaces.
+- Projected Arrival and Radar Speed Estimator controls are no longer part of
+  Alerts. Their implementation is reserved for the future severe-weather
+  workspace, where a radar timeline can provide the required visual context.
 
 ## Pipeline Separation
 

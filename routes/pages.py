@@ -29,7 +29,7 @@ def read_tropical_page():
 
 @router.get("/alerts")
 def read_alerts_page():
-    return serve_product_shell_page("alerts")
+    return serve_page("frontend/pages/alerts/alerts.html")
 
 
 @router.get("/spc")

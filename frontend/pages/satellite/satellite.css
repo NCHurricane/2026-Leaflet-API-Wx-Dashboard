@@ -168,7 +168,7 @@
 .satellite-legend-axis {
     margin-top: 2px;
     font-size: 0.66rem;
-    color: var(--core-muted);
+    color: var(--core-text);
 }
 
 .satellite-legend-colorbar-row {

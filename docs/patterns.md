@@ -76,20 +76,38 @@ handle projects movement intervals from alert-derived motion vectors.
 - Pivot is clamped by `_STORM_TRACK_PIVOT_MAX_DEG` (currently 45 degrees).
 - Place-arrival overlay rows are sorted by arrival time and capped.
 
-Core implementation: `js/weather.js` (`_activateStormTrackDragProjection`,
-`_installStormTrackDragHandle`, `_pivotedBearingDeg`).
+Current preserved implementation: `js/weather.js`
+(`_activateStormTrackDragProjection`, `_installStormTrackDragHandle`,
+`_pivotedBearingDeg`). These controls are intentionally excluded from the
+standalone Alerts page because its former IEM radar overlay was removed. Treat
+them as deferred workspace-owned capabilities for the severe-weather workspace;
+preserve them when deleting the now-user-approved legacy Alerts paths.
 
 ## Alert Detail Open/Close Pattern
 
-Alert polygon clicks and WWA list row clicks open the immersive alert detail
-panel (`_openNewAlertDetail`).
+Standalone alert polygon clicks and Active Warnings cards open the immersive
+alert detail panel owned by `frontend/pages/alerts/alerts-detail.js`.
 
-- Map click closes the panel.
+- The panel is draggable by its header and height-bounded with internal scroll.
+- Map click outside the panel closes it.
 - Map move/zoom start closes the panel.
 - Escape closes the panel.
+- Product links are derived from the alert event and issuing office so an update
+  product code such as SVS does not replace the owning warning code such as SVR.
 
-To avoid immediate close on the opening click, map-level close handlers are
-bound after panel mount (deferred registration).
+Leaflet click/scroll propagation is disabled on the detail root so interaction
+with the panel does not also manipulate or close the map view.
+
+## Standalone Alerts Live-State Pattern
+
+- Alert and LSR payloads remain cached in the engine when their selectors are
+  turned off; empty selection removes layers without discarding good data.
+- Category re-selection filters cached data immediately. LSR cache identity is
+  viewport plus time window; scope changes or explicit refresh fetch new data.
+- The page, not parallel loaders, owns the combined footer message so a later
+  LSR response cannot overwrite active-alert status.
+- The default-on timer explicitly refreshes selected live data every 60 seconds.
+- The right rail derives visibility from selected datasets, not response counts.
 
 ## Endpoint Progress Pattern
 
@@ -243,7 +261,12 @@ Frame-based overlay endpoints use `frame_key` (`YYYY_MM_DD_HH_MM_SS`) for direct
 
 ## Style Config Pattern
 
-Color values for alerts and SPC risk categories are defined as constants in the frontend JS (`ALERT_COLORS`, `SPC_CAT_COLORS`, `SPC_FIRE_COLORS` in `js/weather.js`). These mirror the Python-side `config/alerts_config.py` values.
+Standalone Alerts colors live in
+`frontend/pages/alerts/alerts-config.js`; legacy workspace and SPC colors remain
+in their owning frontend modules. Official alert colors mirror
+`config/alerts_config.py` and remain the source for polygons, borders, and
+legends. A separate `ALERT_TEXT_COLORS` map may provide contrast-only text
+overrides on dark UI surfaces without changing the official core color.
 
 Do not fetch color config from the backend at runtime — embed as JS constants.
 

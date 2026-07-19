@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date prepared: 2026-07-17
+Date prepared: 2026-07-19
 
 Start in:
 
@@ -20,20 +20,21 @@ Read first:
 
 Current status:
 - The fixed map-first dashboard shell is accepted.
-- /drought, /surface, /spc, /wpc, /mrms, /rtma, /satellite, and /radar serve
+- /drought, /surface, /spc, /wpc, /mrms, /rtma, /satellite, /radar, and /alerts serve
   true standalone pages from frontend/pages/. The remaining product-only shell
-  routes are /alerts, /tropical, and /water.
+  routes are /tropical and /water.
 - /weather.html remains the combined workspace and must keep working until it is
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
   interpretation, and most rendering.
-- js/weather.js still owns the combined workspace, Alerts archive orchestration,
-  and injected callbacks where Alerts/Tropical/Water state remains coupled.
+- js/weather.js still owns the combined workspace, legacy Alerts code pending
+  removal, generic archive/scrubber orchestration, and coupled Tropical/Water
+  behavior.
 - Backend route logic should stay in routes/*.py, route-facing cache/response
   behavior should stay in services/*_service.py, and upstream/cache refresh
   behavior should stay in workers/*_worker.py.
 
-Active track order (2026-07-17):
+Active track order (2026-07-19):
 1. Frontend True Split Stage 2. Phases 18-20 are complete; `/drought` and
    `/surface` are true standalone pages under `frontend/`. The accepted shared
     sidebar reference is Option 1A (pinned status/region, Data/Overlays/Style
@@ -91,14 +92,44 @@ Active track order (2026-07-17):
     cell SRV motion, and the value inspector. About 2,006 Radar lines were
     deleted from js/weather.js (now 7,244); the Radar controls/scripts were
     removed from weather.html; js/radar-{engine,page}.js and
-    js/radar-site-locations.js were deleted. Alerts' Arrival Tool / Radar Speed
-    Estimator remains for Phase 25 (`weather.js?v=20260718e`). See the
+    js/radar-site-locations.js were deleted. The Projected Arrival Tool / Radar
+    Speed Estimator remains preserved in the legacy workspace for Phase 27, but
+    is no longer part of Alerts (`weather.js?v=20260718e`). See the
     superfile for the deliberate smoke deltas. Post-smoke UI follow-up makes
     the desktop site-status legend one row and gives Home, Region change, and
-    Clear one complete Radar reset path; this focused reset follow-up awaits a
-    browser spot-check. Phase 25 (alerts) is next. Minor UI
-    spacing polish across the new standalone pages is deferred to the end
-    of the superplan by user decision.
+    Clear one complete Radar reset path; the user confirmed this follow-up.
+    Phase 25 Alerts is BUILT 2026-07-18 at frontend/pages/alerts/ and `/alerts`
+    now serves it. It includes live categories/subtype filtering, LSRs, the
+    active-warning rail, immersive detail, map/style controls, and auto-update.
+    Alerts archive UI is hidden pending the unified archive design. It
+    intentionally excludes the two radar-dependent
+    tools above. Initial user parity smoke PASSED. A focused follow-up now uses
+    a full-width compact Alerts/LSR legend, collapsible Alert Categories,
+    TOR/SVR/FFW/SMW filters, Severe/All/Off new-alert notice selection, and a
+    bounded draggable detail panel with restored threat chips and official NWS
+    text-product links. Follow-up `v=20260718c` nests TOR/SVR/FFW/SMW directly
+    under Severe Weather Warnings, adds the wired 1-hour LSR option, hides
+    Archive, and ensures warning links use the event product (SVR, not an SVS
+    continuation code). Unified archive UI will use one target datetime plus a
+    lookback, not a date range. Follow-up `v=20260718d` makes the right rail
+    disappear when neither Alerts nor LSRs are selected and split into Active
+    Warnings (top) plus Latest Storm Reports (bottom) when both are active. LSR
+    cards are newest-first with All/Tornado/Hail/Wind/Other filters and
+    click-to-zoom/open-popup behavior. `v=20260718e` fixes delayed/missing
+    re-display after off/on toggles: subtype inputs are isolated from category
+    queries, empty selections retain the last successful payload, LSRs filter
+    from a viewport+window cache, and only scope changes/manual refresh/auto-
+    update refetch. Later corrections make the footer status page-owned and
+    selection-aware; use marker icons in a deterministic Tornado-first LSR
+    legend; restore default-on TOR/SVR/FFW/SMW fill/border pulsing with a Style
+    toggle; retain the official FFW color while using a lighter text-only dark-
+    UI presentation color; and enable Auto-Update by default at 60 seconds.
+    User parity and complete focused follow-up smoke PASSED 2026-07-19. Next:
+    delete only the legacy Alerts UI/controller/engine paths from the combined
+    workspace, while preserving the Projected Arrival Tool and Radar Speed
+    Estimator for Phase 27. Then continue to Phase 26. Minor UI spacing polish
+    across the new standalone pages remains deferred to the end of the
+    superplan by user decision.
 2. Satellite render-pipeline latency optimization. This backend-only track may
    interleave with Track 1 while their files remain disjoint.
 3. GK2A + GMGSI after the satellite-page migration boundary is safe.
@@ -250,6 +281,20 @@ Important guardrails:
   strings in weather.html so browser cache does not mask the new behavior.
 - Make bounded, reviewable changes and update the superfile when roadmap or
   phase state materially changes.
+- Standalone Alerts footer status is page-owned as of `v=20260718f`; preserve
+  its combined selected Alerts/LSR count rather than restoring per-loader
+  success messages in `alerts-engine.js`.
+- Standalone Alerts LSR legend entries use the shared marker icon/color mapping
+  and deterministic category ordering (Tornado first when present) as of
+  `alerts-engine.js?v=20260718h`.
+- TOR/SVR/FFW/SMW polygon fill and borders pulse by default as of
+  `alerts-engine.js?v=20260718i`; the Styles-tab selector toggles the animation
+  on the existing layer without refetching.
+- Standalone Alerts uses a presentation-only lighter FFW text color while
+  retaining the official NWS core color, and Auto-Update defaults on at a
+  60-second interval as of `alerts-page.js?v=20260719a`.
+- Alerts category cards use a page-specific 180-220 px auto-fill grid as of
+  `alerts.css?v=20260719b`; do not move that sizing into shared core CSS.
 - Preserve unrelated working-tree changes.
 
 Validation defaults:
