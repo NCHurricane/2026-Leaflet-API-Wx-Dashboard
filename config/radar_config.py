@@ -43,7 +43,7 @@ L3_PRODUCTS = {
 }
 
 
-# Live radar tab cache config (weather.html inline tab)
+# Live radar cache config (standalone Radar page and severe-weather workspace)
 LIVE_RADAR_SITES = [
     "KMHX",
     "KLTX",

@@ -171,10 +171,10 @@ def test_drought_engine_has_no_dom_or_sibling_product_dependencies():
     assert "exitRtma" not in engine
 
 
-def test_legacy_shell_links_to_drought_without_loading_old_drought_modules():
-    shell = (Path(BASE_DIR) / "weather.html").read_text(encoding="utf-8")
+def test_workspace_does_not_load_drought_page_controller():
+    workspace = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.html"
+    ).read_text(encoding="utf-8")
 
-    assert 'href="/drought"' in shell
-    assert "js/drought-engine.js" not in shell
-    assert "js/drought-page.js" not in shell
-    assert 'id="weather-drought-opts"' not in shell
+    assert "drought-page.js" not in workspace
+    assert 'id="weather-drought-opts"' not in workspace

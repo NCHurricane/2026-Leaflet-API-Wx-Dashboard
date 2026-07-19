@@ -62,7 +62,7 @@ _SYNOPTIC_HHMM = {"0000", "0600", "1200", "1800"}
 _CYCLONE_STATUS = {"HU", "TS", "TD", "SS", "SD"}
 
 # HURDAT2 2-letter status codes → short STORMTYPE codes the frontend classifier
-# (_tropicalCategoryKey in js/weather.js) understands on best-track features,
+# (_tropicalCategoryKey in frontend/pages/tropical/tropical-app.js) understands on best-track features,
 # which carry STORMTYPE + SS but no MAXWIND.
 _STATUS_TO_STORMTYPE = {
     "HU": "HU",  # Hurricane

@@ -6,9 +6,9 @@ Private GitHub repository. Rollback via `git restore`/`git revert`. High-risk re
 
 ## Phase 1+ State (Leaflet Map)
 
-The application landing page is `index.html`, served at `/`. The current
-combined weather workspace is `weather.html`, served at `/weather.html`, and it
-hosts a live Leaflet map with mixed layer types:
+The application landing page is `index.html`, served at `/`. The severe-weather
+workspace is `frontend/pages/workspace/workspace.html`, served at `/workspace`;
+`/weather.html` is now a compatibility redirect.
 
 - Vector GeoJSON overlays (alerts, SPC)
 - Pre-rendered raster overlays + frame-locked value points (RTMA)
@@ -17,10 +17,10 @@ hosts a live Leaflet map with mixed layer types:
 Active root pages and their JS in this checkout:
 
 - `index.html` — main landing page for the dashboard
-- `weather.html` / `js/weather.js` — transitional workspace infrastructure plus
-  the Phase 27-reserved Projected Arrival and Radar Speed Estimator
-  implementation. All canonical product routes are standalone; this pair is
-  scheduled for deletion in Phase 27.
+- `/workspace` — Stage 2 composition page. It imports the Alerts and Radar
+  engines (never their page controllers), combines active warnings/LSRs with
+  live radar, and owns the Projected Arrival and Radar Speed Estimator tools in
+  `frontend/pages/workspace/workspace-tools.js`.
 - `/drought` — first true Stage 2 standalone page, served from
   `frontend/pages/drought/drought.html`; it loads ES modules from
   `frontend/core/` and its own directory and does not load `js/weather.js`.
@@ -85,12 +85,10 @@ Planned product-page migration:
 - `/water` serves `frontend/pages/water/water.html`, which owns viewport-aware
   NOAA river/coastal/buoy loading, flood-stage filters, station popups, and the
   Water legend on the shared core utilities without loading `js/weather.js`.
-- `satellite.html` is also not present in the repository root. `js/satellite.js`
-  is dead code — it is not loaded by `weather.html` or any route (confirmed
-  during the 2026-07-11 render pipeline review) and is slated for deletion in
-  Frontend Split Stage 2.
-- `weather.html` remains the combined workspace during the transition and should
-  not be promoted to the application landing page.
+- Browser dependencies are vendored under `frontend/lib/`; all product pages
+  use the local Leaflet 1.9.4 CSS/JS instead of a CDN.
+- The legacy `weather.html`, `js/weather.js`, product-shell/context scripts,
+  dead root JS modules, and `css/dashboard.css` were retired in Phase 27.
 
 Removed in Phase 0:
 

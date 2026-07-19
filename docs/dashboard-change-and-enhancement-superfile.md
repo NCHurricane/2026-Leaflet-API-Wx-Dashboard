@@ -1,7 +1,7 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-19 (Phases 20-26 complete and statically validated.
-Phase 27 workspace assembly and monolith retirement are next.)
+Last updated: 2026-07-19 (Phases 20-27 complete and statically validated.
+Consolidated browser smoke is deferred to the manual checklist.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -14,6 +14,8 @@ Keep separate:
 - `docs/patterns.md` for coding and implementation patterns.
 - `docs/refactor-baseline.md` for the original pre-refactor baseline.
 - `docs/next-session-startup-prompt.md` for the short current handoff.
+- `docs/phases-25-27-manual-smoke-checklist.md` for the deferred consolidated
+  browser gate after the no-intermediate-smoke Phase 25-27 execution.
 - `docs/satellite-render-optimization-plan.md` for the active satellite
   latency execution plan (archive to `docs/archive/` when its phases
   complete).
@@ -28,9 +30,10 @@ post-split structure, not the monolith.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
    this file (section below). Phases 18-24 are complete and user-confirmed.
-   Phases 25-26 are complete, including legacy Alerts, Tropical, and Water
-   monolith cleanup. Continue with Phase 27 workspace assembly, preserving the
-   arrival/speed tools in the new workspace.
+   Phases 25-27 are complete and statically validated. `/workspace` composes
+   Alerts and Radar engine APIs, owns the preserved arrival/speed tools, and
+   replaces the deleted legacy shell/monolith. Run the consolidated browser
+   checklist before expanding the workspace with additional product engines.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
@@ -50,20 +53,18 @@ post-split structure, not the monolith.
   `/radar`, `/alerts`, `/tropical`, and `/water` serve true standalone pages
   from `frontend/pages/`. No canonical product route depends on the shared
   dashboard shell in product-only mode.
-- `weather.html` remains the combined workspace and should keep working until
-  explicitly retired.
+- `/workspace` serves `frontend/pages/workspace/workspace.html`. The compatibility
+  `/weather.html` route redirects there; the old root file no longer exists.
 - Product engines/pages own product-specific controls, requests, response
-  interpretation, and rendering. `js/weather.js` now contains only transitional
-  shared-workspace infrastructure and the preserved arrival/speed tools; it is
-  scheduled for deletion in Phase 27.
-- City labels are controlled from the Layers pane with an `Off | US | World`
-  segmented control. `US` loads `data/us-cities-all.json`; `World` loads
-  `data/world-cities.json`. Both sources share the same density slider, mapped
-  through source/zoom-specific bounded min/max km ranges in `js/weather.js`.
+  interpretation, and rendering. The workspace imports Alerts and Radar engines
+  without importing their page controllers. `weather.html`, `js/weather.js`,
+  the root `js/` modules, and `css/dashboard.css` are deleted.
+- Standalone pages that expose city labels use the shared `map-core.js`
+  Off/US/World source, bounded density, and font-size implementation.
 - `config/user_settings.default.json` is the tracked baseline for user-facing
   dashboard preferences. `GET /api/user-settings/defaults` serves this file,
-  and `js/weather.js` reads it during startup before the first map-default fit
-  and product refresh. It separates global preferences such as home region and
+  and standalone pages read it through `frontend/core/settings.js`. It separates
+  global preferences such as home region and
   city labels from per-page defaults such as Satellite, Tropical, WPC, and
   Drought map views. A future writable user settings file should merge over
   this baseline rather than replacing built-in fallbacks.
@@ -681,7 +682,21 @@ found it.
   removed from `weather.html` and `js/weather.js`. Focused static/automated
   validation passed; browser parity smoke is deferred to the consolidated
   end-of-Phases-25-27 checklist.
-- Phase 27: workspace assembly; retire `weather.html`; delete the monolith.
+- Phase 27: complete. `/workspace` composes Alerts and Radar engine modules,
+  active warnings/LSRs, live radar site/product/elevation controls, NST tracks,
+  and the value inspector on one core map. The validated Projected Arrival Tool
+  and Radar Speed Estimator moved intact to `workspace-tools.js` and are wired
+  to selected workspace alerts. `/weather.html` redirects to `/workspace`;
+  `weather.html`, `js/weather.js`, obsolete root JS modules, and
+  `css/dashboard.css` are deleted. Leaflet 1.9.4, topojson-client 3, and
+  tz-lookup 6.1.25 are vendored under `frontend/lib/`, and all standalone HTML
+  pages use local Leaflet assets. Additional SPC/MRMS/RTMA/Satellite/Drought/WPC
+  engine composition remains an explicit workspace expansion; those standalone
+  pages remain canonical and are linked in navigation. Static boundary tests
+  passed (23 focused tests). The final repository-wide suite reached 58 passed
+  with the same five unrelated Radar expectation failures already recorded
+  above; Phase 27 did not modify those Radar backend/config behaviors. Browser proof is deferred to
+  `docs/phases-25-27-manual-smoke-checklist.md`.
 
 Definition of done (mechanically checkable): each product route loads only
 third-party libraries plus `frontend/core/* + frontend/pages/{product}/*`;

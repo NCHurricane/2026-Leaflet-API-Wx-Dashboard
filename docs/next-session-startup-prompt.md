@@ -22,14 +22,12 @@ Current status:
 - The fixed map-first dashboard shell is accepted.
 - All canonical product routes, including /tropical and /water, now serve true
   standalone pages from frontend/pages/.
-- /weather.html remains the combined workspace and must keep working until it is
-  explicitly retired.
+- /workspace is the new severe-weather workspace. /weather.html redirects to it.
 - Product engines/pages own product-specific controls, requests, response
   interpretation, and most rendering.
-- js/weather.js now contains only transitional shared-workspace infrastructure
-  and the preserved Projected Arrival/Speed Estimator tools. Legacy Alerts,
-  Tropical, and Water paths have been removed; Phase 27 must move the tools into
-  the severe-weather workspace and delete the monolith.
+- weather.html, js/weather.js, the obsolete root js modules, and
+  css/dashboard.css are deleted. The Projected Arrival/Speed Estimator tools now
+  live in frontend/pages/workspace/workspace-tools.js.
 - Backend route logic should stay in routes/*.py, route-facing cache/response
   behavior should stay in services/*_service.py, and upstream/cache refresh
   behavior should stay in workers/*_worker.py.
@@ -134,7 +132,13 @@ Active track order (2026-07-19):
     were removed from the monolith. Browser parity smoke is deferred to the
     consolidated final checklist. Phase 26 Water is also COMPLETE and statically
     validated at frontend/pages/water/; its legacy monolith/UI paths are removed.
-    Next: Phase 27 workspace assembly and monolith retirement. Minor UI spacing polish
+    Phase 27 is COMPLETE and statically validated: /workspace composes Alerts
+    and Radar engine APIs, preserves both radar-dependent tools, redirects the
+    legacy /weather.html URL, vendors browser libraries under frontend/lib, and
+    retires the monolith/root shell assets. Run
+    docs/phases-25-27-manual-smoke-checklist.md next. Additional product-engine
+    composition (SPC/MRMS/RTMA/Satellite/Drought/WPC) remains the next workspace
+    expansion. Minor UI spacing polish
     across the new standalone pages remains deferred to the end of the
     superplan by user decision.
 2. Satellite render-pipeline latency optimization. This backend-only track may

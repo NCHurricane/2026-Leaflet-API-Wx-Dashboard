@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Severe Weather Workspace | NCHurricane</title>
+    <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719a">
+    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260719a">
+</head>
+<body>
+    <header class="core-header">
+        <nav id="product-nav" class="core-product-nav" aria-label="Weather products"></nav>
+        <div class="core-reliability" aria-label="Workspace data status">
+            <span>Updated <strong id="workspace-updated">—</strong></span>
+            <span>Age <strong id="workspace-age">—</strong></span>
+            <span>Provider <strong id="workspace-provider">—</strong></span>
+            <span>Source <strong id="workspace-source">—</strong></span>
+        </div>
+    </header>
+    <main class="core-map-shell workspace-shell">
+        <aside id="workspace-sidebar-tabs" class="core-sidebar workspace-sidebar">
+            <div class="core-sidebar-pinned-head"><h1>Severe Weather Workspace</h1><p>Live radar + active warnings</p></div>
+            <div class="core-sidebar-tablist" role="tablist" aria-label="Workspace controls">
+                <button type="button" data-sidebar-tab="layers" role="tab">Layers</button>
+                <button type="button" data-sidebar-tab="tools" role="tab">Tools</button>
+                <button type="button" data-sidebar-tab="map" role="tab">Map</button>
+            </div>
+            <div class="core-sidebar-scroll">
+                <section data-sidebar-panel="layers">
+                    <div class="workspace-group">
+                        <h2>Radar</h2>
+                        <label class="wx-check-row"><span>Live Radar</span><input id="workspace-radar-enabled" type="checkbox"></label>
+                        <label for="workspace-radar-site">Site</label><select id="workspace-radar-site"><option value="">Select site</option></select>
+                        <label for="workspace-radar-product">Product</label><select id="workspace-radar-product"><option value="L2_REF">Base Reflectivity</option></select>
+                        <label for="workspace-radar-elevation">Elevation</label><select id="workspace-radar-elevation"><option value="auto">Auto</option></select>
+                        <label class="wx-check-row"><span>Radar Sites</span><input id="workspace-radar-sites" type="checkbox" checked></label>
+                        <label class="wx-check-row"><span>Storm Tracks</span><input id="workspace-radar-tracks" type="checkbox"></label>
+                        <label class="wx-check-row"><span>Value Inspector</span><input id="workspace-radar-inspector" type="checkbox"></label>
+                    </div>
+                    <div class="workspace-group">
+                        <h2>Alerts</h2>
+                        <label class="wx-check-row"><span>Active Warnings</span><input id="workspace-alerts-enabled" type="checkbox" checked></label>
+                        <label class="wx-check-row"><span>Storm Reports (24h)</span><input id="workspace-lsr-enabled" type="checkbox" checked></label>
+                        <div class="workspace-counts"><span id="workspace-alert-count">0 warnings</span><span id="workspace-lsr-count">0 reports</span></div>
+                    </div>
+                    <div class="workspace-group workspace-future-layers">
+                        <h2>Additional products</h2>
+                        <p>SPC, MRMS, RTMA, Satellite, Drought, and WPC remain available from their standalone pages; engine composition is reserved for the next workspace expansion.</p>
+                    </div>
+                </section>
+                <section data-sidebar-panel="tools" hidden>
+                    <div class="workspace-group">
+                        <h2>Projected Arrival Tool</h2>
+                        <p class="workspace-help">Select an alert polygon, draw its motion line, then finish the projection. Hold Shift while dragging the handle to pivot.</p>
+                        <div class="wx-stormtrack-tools" id="wx-stormtrack-tools">
+                            <button id="wx-stormtrack-start" type="button">Start Line</button>
+                            <button id="wx-stormtrack-finish" type="button">Finish Line</button>
+                            <button id="wx-stormtrack-clear" type="button">Clear Projection</button>
+                        </div>
+                        <label for="wx-speed-override">Speed Override (kt)</label>
+                        <div class="wx-speed-override-row"><input id="wx-speed-override" type="number" min="1" max="200" step="1" placeholder="—"><button id="wx-speed-override-clear" type="button" title="Clear override">×</button></div>
+                    </div>
+                    <div class="workspace-group">
+                        <h2>Radar Speed Estimator</h2>
+                        <p class="workspace-help">Draw cell displacement across a four-frame, five-minute-step radar loop.</p>
+                        <div class="wx-stormtrack-tools" id="wx-radarcal-tools"><button id="wx-radarcal-start" type="button">Draw Speed Line</button><button id="wx-radarcal-clear" type="button">Clear</button></div>
+                        <div id="wx-radarcal-result"></div>
+                    </div>
+                </section>
+                <section data-sidebar-panel="map" hidden>
+                    <label for="workspace-region">Region</label><select id="workspace-region"><option value="CONUS">CONUS</option><option value="NC">North Carolina</option><option value="WORLD">World</option></select>
+                    <label for="workspace-basemap">Basemap</label><select id="workspace-basemap"><option>Dark (No Labels)</option><option>Dark</option><option>Light</option><option>Street</option></select>
+                    <label class="wx-check-row"><span>Lat/Lon Grid</span><input type="checkbox" data-map-overlay="graticule"></label>
+                    <label class="wx-check-row"><span>State Borders</span><input type="checkbox" data-map-overlay="states" checked></label>
+                    <label class="wx-check-row"><span>Country Borders</span><input type="checkbox" data-map-overlay="countries" checked></label>
+                    <label class="wx-check-row"><span>County Borders</span><input type="checkbox" data-map-overlay="counties"></label>
+                </section>
+            </div>
+            <footer class="core-sidebar-footer"><div id="workspace-message" role="status" aria-live="polite">Loading workspace…</div><button id="workspace-refresh" type="button">Refresh Active Layers</button></footer>
+        </aside>
+        <section class="core-map-panel weather-map-wrap">
+            <div id="workspace-map" class="core-map"></div>
+            <time id="global-timestamp" class="core-map-timestamp"></time>
+            <div id="workspace-legends" class="workspace-legends"><div id="workspace-radar-legend"></div><div id="workspace-alerts-legend"></div></div>
+        </section>
+    </main>
+    <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
+    <script src="/frontend/lib/tz-lookup/tz.js?v=6.1.25"></script>
+    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260719a"></script>
+</body>
+</html>

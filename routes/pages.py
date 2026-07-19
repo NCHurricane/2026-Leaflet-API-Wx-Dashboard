@@ -1,6 +1,7 @@
 """Page-serving routes."""
 
 from fastapi import APIRouter
+from fastapi.responses import RedirectResponse
 
 from app_core.static_assets import serve_page
 
@@ -19,7 +20,12 @@ def read_radar_page():
 
 @router.get("/weather.html")
 def read_weather_page():
-    return serve_page("weather.html")
+    return RedirectResponse(url="/workspace", status_code=307)
+
+
+@router.get("/workspace")
+def read_workspace_page():
+    return serve_page("frontend/pages/workspace/workspace.html")
 
 
 @router.get("/tropical")

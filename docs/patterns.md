@@ -367,17 +367,13 @@ For Tropical backend changes, follow the post-refactor ownership boundaries:
 
 ## Clean-Cut Migration Pattern
 
-During migration, preserve behavior first and keep `weather.html` working as the
-combined workspace. First land the fixed dashboard grid shell, then refine
-Tropical as the reference product layout inside that shell. After each
-standalone product page is verified:
+The clean-cut migration completed in Phase 27. The retained rules are:
 
-1. Remove that product's now-unused code from the combined workspace.
-2. Remove stale exported JS helpers only after no page references them.
-3. Convert temporary `.html` compatibility routes to redirects or remove them
-   only after canonical routes are stable.
-4. Update docs and smoke tests to treat the product page as canonical.
-5. Keep API endpoint compatibility unless a separate API cleanup is planned.
+1. Product pages import only `frontend/core/`, vendored libraries, and their own
+   directory.
+2. `/workspace` may import sibling engine modules, never sibling page controllers.
+3. Keep `/weather.html` only as a redirect to `/workspace`.
+4. Keep API endpoint compatibility unless a separate API cleanup is planned.
 
 ## Radar UX State Pattern (Standalone Page)
 

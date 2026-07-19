@@ -16,9 +16,9 @@ The app combines a Python API backend with static HTML/CSS/JS frontends and gene
 NCHurricane Dashboard 2026 is an operational weather workstation app designed for local Windows use. It focuses on practical analysis speed:
 
 - A main landing page at `index.html`
-- A current combined weather workspace at `weather.html`
-- A planned product-page direction where each major product gets its own clean
-  URL, such as `/radar`, `/satellite`, and `/alerts`
+- A severe-weather workspace at `/workspace`
+- Standalone product pages with clean URLs such as `/radar`, `/satellite`, and
+  `/alerts`
 - Current and archive rendering endpoints
 - Progress tracking for long-running jobs
 - Local caching of downloads and generated products
@@ -85,11 +85,10 @@ Suggested branch protections on `main`:
 
 - `main.py` hosts the FastAPI app, endpoint routing, static mounts, and task progress state.
 - `index.html` is the main dashboard landing page served at `/`.
-- `weather.html` and `js/weather.js` currently host the combined Leaflet weather workspace.
-- Planned canonical product pages include `/alerts`, `/radar`, `/satellite`,
-  `/spc`, `/surface`, `/mrms`, `/rtma`, `/drought`, and `/tropical`; these are
-  not all present in this checkout yet. Legacy `.html` product URLs may remain
-  as redirects or compatibility routes during migration.
+- `/workspace` composes active Alerts and live Radar engines on one Leaflet map;
+  `/weather.html` redirects there.
+- Canonical standalone product pages exist for Alerts, Radar, Satellite, SPC,
+  Surface, MRMS, RTMA, Drought, Tropical, WPC, and Water.
 - Domain modules (`surface/`, `alerts/`, `radar/`, `satellite_v2/`, `mrms/`, `rtma/`, `spc/`, `workers/`) handle download, cache, and render logic.
 - Generated media is stored in workflow-specific directories and served as static content.
 - Frontend pages call API endpoints directly and poll progress for long-running jobs.
@@ -101,8 +100,7 @@ Suggested branch protections on `main`:
   main.py
   requirements.txt
   index.html
-  weather.html
-  js/
+  frontend/
   css/
   config/
   surface/
@@ -196,7 +194,7 @@ Server starts on:
 Open in browser:
 
 - `http://127.0.0.1:8000/`
-- `http://127.0.0.1:8000/weather.html`
+- `http://127.0.0.1:8000/workspace`
 
 ## API Quick Reference
 

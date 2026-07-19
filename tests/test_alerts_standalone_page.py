@@ -25,16 +25,15 @@ def test_alerts_page_uses_only_new_frontend_boundary():
 
 
 def test_legacy_alerts_paths_are_removed_but_workspace_tools_are_preserved():
-    shell = (Path(BASE_DIR) / "weather.html").read_text(encoding="utf-8")
-    monolith = (Path(BASE_DIR) / "js" / "weather.js").read_text(encoding="utf-8")
+    workspace = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.html"
+    ).read_text(encoding="utf-8")
+    tools = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace-tools.js"
+    ).read_text(encoding="utf-8")
 
-    assert 'href="/alerts"' in shell
-    assert 'id="wx-section-alerts"' not in shell
-    assert "js/alerts-engine.js" not in shell
-    assert "js/alerts-page.js" not in shell
-    assert 'id="wx-stormtrack-start"' in shell
-    assert 'id="wx-radarcal-start"' in shell
-    assert "function _activateStormTrackDragProjection" in monolith
-    assert "function _computeRadarCalSpeed" in monolith
-    assert "loadLiveAlerts" not in monolith
-    assert "loadLocalStormReports" not in monolith
+    assert 'id="wx-stormtrack-start"' in workspace
+    assert 'id="wx-radarcal-start"' in workspace
+    assert "function _activateStormTrackDragProjection" in tools
+    assert "function _computeRadarCalSpeed" in tools
+    assert "setAlerts(features)" in tools

@@ -1,5 +1,5 @@
 const PRODUCTS = Object.freeze([
-    ['Home', '/weather.html', 'fa-home', 'Dashboard Home'],
+    ['Home', '/workspace', 'fa-home', 'Severe Weather Workspace'],
     ['Current', '/surface', 'fa-thermometer', 'Current Conditions'],
     ['Alerts', '/alerts', 'fa-exclamation-triangle', 'Weather Alerts'],
     ['Radar', '/radar', 'fa-satellite-dish', 'Radar'],
