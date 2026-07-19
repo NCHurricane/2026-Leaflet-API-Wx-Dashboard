@@ -285,191 +285,6 @@
                         </div>
                     </div>
 
-                    <div id="wx-section-radar" class="wx-block" data-type="radar" style="display:none;">
-                        <div id="weather-radar-opts">
-                            <label for="weather-radar-site">Radar Site</label>
-                            <select id="weather-radar-site" class="wx-sidebar-select">
-                                <option value="">National Composite</option>
-                            </select>
-                            <div class="wx-check-row" style="margin-top:8px;">
-                                <span>Show Radar Sites</span>
-                                <input id="weather-radar-show-sites" type="checkbox" checked>
-                            </div>
-                            <div class="wx-check-row">
-                                <span>Storm Tracks (NST)</span>
-                                <input id="weather-radar-show-storm-tracks" type="checkbox">
-                            </div>
-                            <div class="wx-check-row">
-                                <span>Inspector</span>
-                                <input id="weather-radar-inspector" type="checkbox">
-                            </div>
-                            <label for="weather-radar-product">Product</label>
-                            <div class="wx-radar-select" id="wx-radar-select">
-                                <select id="weather-radar-product" class="wx-sidebar-select">
-                                    <option value="L3_N0B" selected>Loading radar products...</option>
-                                </select>
-                            </div>
-                            <div id="wx-radar-elevation-wrap" style="display:none;">
-                                <label>Elevation</label>
-                                <div id="weather-radar-elevation-pills" class="radar-elevation-pills"
-                                    role="radiogroup" aria-label="Radar elevation angle"></div>
-                                <select id="weather-radar-elevation"
-                                    class="wx-sidebar-select radar-elevation-native-control"
-                                    aria-hidden="true" tabindex="-1">
-                                    <option value="" selected></option>
-                                </select>
-                            </div>
-                            <div class="wx-radar-action-row">
-                                <button id="weather-refresh-radar" type="button">Refresh</button>
-                                <button id="weather-clear-radar" type="button">Clear</button>
-                                <button id="wx-radar-auto-update" type="button">Auto-update</button>
-                            </div>
-                            <div id="radar-animate-window" class="wx-animate-window" style="display:none;">
-                                <div class="wx-animate-slider-container">
-                                    <div class="wx-animate-slider-header">
-                                        <span style="color:#94a3b8;">LOOKBACK HOURS</span>
-                                        <span id="radar-animate-slider-value" class="wx-animate-slider-value">1H</span>
-                                    </div>
-                                    <input id="radar-animate-slider" type="range" min="0.5" max="12" step="0.5" value="1" class="wx-animate-slider">
-                                    <div class="wx-animate-slider-labels">
-                                        <span>30M</span>
-                                        <span>12H</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <span id="weather-radar-status" class="wx-small"></span>
-
-                    </div>
-
-                    <div id="wx-section-satellite" class="wx-block" data-type="satellite" style="display:none;">
-                        <div id="weather-satellite-opts">
-                            <label>Satellite</label>
-                            <div class="satellite-subtabs" role="tablist" aria-label="Satellite platform">
-                                <button id="satellite-subtab-goes18" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sat="goes18">GOES-18</button>
-                                <button id="satellite-subtab-goes19" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sat="goes19">GOES-19</button>
-                                <button id="satellite-subtab-himawari9" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sat="himawari9">Himawari-9</button>
-                                <button id="satellite-subtab-meteosat12" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sat="meteosat12">Meteosat-12</button>
-                                <button id="satellite-subtab-meteosat9" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sat="meteosat9">Meteosat-9</button>
-                                <button id="satellite-subtab-meteosat11" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sat="meteosat11">Meteosat-11 RSS</button>
-                            </div>
-                            <select id="weather-satellite-sat-id" class="wx-sidebar-select satellite-native-control"
-                                aria-hidden="true" tabindex="-1">
-                                <option value="" selected>— Select Satellite —</option>
-                                <option value="goes19">GOES-19 (East)</option>
-                                <option value="goes18">GOES-18 (West)</option>
-                                <option value="himawari9">Himawari-9 (West Pacific)</option>
-                                <option value="meteosat12">Meteosat-12 (Europe/Africa)</option>
-                                <option value="meteosat9">Meteosat-9 (Indian Ocean)</option>
-                                <option value="meteosat11">Meteosat-11 (Rapid Scan)</option>
-                            </select>
-
-                            <label>Sector</label>
-                            <div class="satellite-subtabs" role="tablist" aria-label="Satellite sector">
-                                <button id="satellite-sector-fulldisk" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sector="FullDisk">Full Disk</button>
-                                <button id="satellite-sector-conus" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sector="CONUS">CONUS</button>
-                                <button id="satellite-sector-meso1" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sector="Meso1">Meso 1</button>
-                                <button id="satellite-sector-meso2" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sector="Meso2">Meso 2</button>
-                                <button id="satellite-sector-rss" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sector="RSS"
-                                    style="display:none;">Rapid Scan</button>
-                                <button id="satellite-sector-japan" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sector="Japan"
-                                    style="display:none;">Japan</button>
-                                <button id="satellite-sector-target" class="satellite-subtab-button" type="button"
-                                    role="tab" aria-selected="false" data-satellite-sector="Target"
-                                    style="display:none;">Target Area</button>
-                            </div>
-                            <select id="weather-satellite-sector" class="wx-sidebar-select satellite-native-control"
-                                aria-hidden="true" tabindex="-1">
-                                <option value="" selected>— Select Sector —</option>
-                                <option value="CONUS">CONUS</option>
-                                <option value="FullDisk">Full Disk</option>
-                                <option value="Meso1">Mesoscale 1</option>
-                                <option value="Meso2">Mesoscale 2</option>
-                                <option value="RSS">Rapid Scan</option>
-                                <option value="Japan">Japan</option>
-                                <option value="Target">Target Area</option>
-                            </select>
-
-                            <label for="weather-satellite-view-preset">View</label>
-                            <select id="weather-satellite-view-preset" class="wx-sidebar-select" disabled>
-                                <option value="" selected>— Select View —</option>
-                                <option value="full-disk">Full Disk</option>
-                                <option value="conus">CONUS</option>
-                                <option value="goes-west-full-disk">GOES-West Full Disk</option>
-                                <option value="goes-east-full-disk">GOES-East Full Disk</option>
-                                <option value="west-pacific">West Pacific</option>
-                                <option value="europe-africa">Europe/Africa</option>
-                                <option value="indian-ocean">Indian Ocean</option>
-                                <option value="europe-rss">Europe (Rapid Scan)</option>
-                                <option value="himawari-japan">Japan</option>
-                                <option value="himawari-target-current">Current Target Area</option>
-                            </select>
-
-                            <label for="weather-satellite-channel">Product</label>
-                            <select id="weather-satellite-channel" class="wx-sidebar-select">
-                                <option value="" selected>— Choose Product —</option>
-                                <option value="Channel01">Channel 01 - Blue Visible</option>
-                                <option value="Channel02">Channel 02 - Red Visible</option>
-                                <option value="Channel03">Channel 03 - Veggie Near-IR</option>
-                                <option value="Channel05">Channel 05 - Snow/Ice</option>
-                                <option value="Channel06">Channel 06 - Cloud Particle Size</option>
-                                <option value="Channel07">Channel 07 - Shortwave IR</option>
-                                <option value="Channel07Fire">Channel 07 - Fire Detection</option>
-                                <option value="Channel08RAMSDIS">Channel 08 - RAMSDIS WV</option>
-                                <option value="Channel09RAMSDIS">Channel 09 - RAMSDIS WV</option>
-                                <option value="Channel13">Channel 13 - Clean IR</option>
-                                <option value="Channel14">Channel 14 - Longwave IR</option>
-                                <option value="AerosolDetection">Aerosol — Smoke &amp; Dust (ADP)</option>
-                                <option value="AerosolOpticalDepth">Aerosol Optical Depth (AOD)</option>
-                                <option value="FireRadiativePower">Fire Radiative Power (FRP)</option>
-                                <option value="FireTemperature">Fire Temperature</option>
-                                <option value="AirMass">Air Mass</option>
-                                <option value="GeoColor">GeoColor</option>
-                                <option value="GeoColorBlkMar">GeoColor Black Marble</option>
-                                <option value="TrueColor">True Color</option>
-                                <option value="NaturalColor">Natural Color</option>
-                                <option value="DayCloudPhase">Day Cloud Phase</option>
-                                <option value="DayLandCloudFire">Day Land Cloud/Fire</option>
-                                <option value="DaySnowFog">Day Snow/Fog</option>
-                                <option value="NighttimeMicrophysics">Nighttime Microphysics</option>
-                                <option value="Dust">Dust</option>
-                                <option value="Ash">Ash</option>
-                                <option value="SulfurDioxide">Sulfur Dioxide</option>
-                                <option value="RocketPlume">Rocket Plume</option>
-                            </select>
-                            <span id="weather-satellite-status" class="wx-small"></span>
-
-                            <div id="weather-satellite-lookback-wrap"
-                                style="display:none; margin-top:12px; padding-top:8px; border-top:1px solid #334155;">
-                                <div
-                                    style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                    <label class="wx-small" style="color:#94a3b8;">Lookback Hours</label>
-                                    <span id="weather-satellite-lookback-value" class="wx-small"
-                                        style="color:#cbd5e1; font-weight:bold; min-width:30px; text-align:right;">1h</span>
-                                </div>
-                                <input id="weather-satellite-lookback-slider" type="range" min="1" max="12" value="1"
-                                    step="1" style="width:100%; cursor:pointer;">
-                                <div
-                                    style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-top:3px;">
-                                    <span>1h</span>
-                                    <span>12h</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <div id="wx-section-water" class="wx-block" data-type="water" style="display:none;">
                         <label id="weather-water-network-filters-title" class="label-small">Networks</label>
                         <div id="weather-water-network-filters">
@@ -835,8 +650,6 @@
                             <button id="scrubber-speed-up" type="button" title="Faster playback"
                                 aria-label="Faster playback">+</button>
                         </div>
-                        <button id="weather-satellite-auto-refresh" type="button"
-                            title="Auto refresh satellite animation frames" aria-pressed="false">Auto</button>
                         <input type="range" id="scrubber-slider" min="0" max="0" value="0" step="1">
                         <span id="scrubber-frame-count"></span>
                         <span id="scrubber-timestamp">--</span>
@@ -875,18 +688,13 @@
         <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
         <script src="js/shared.js?v=20260526a"></script>
-        <script src="js/radar-site-locations.js?v=20260504c"></script>
         <script src="js/product-page-shell.js?v=20260627a"></script>
         <script src="js/product-app-context.js?v=20260616a"></script>
         <script src="js/alerts-engine.js?v=20260621a"></script>
         <script src="js/alerts-page.js?v=20260704a"></script>
-        <script src="js/satellite-engine.js?v=20260704a"></script>
-        <script src="js/satellite-page.js?v=20260716b"></script>
-        <script src="js/radar-engine.js?v=20260704a"></script>
-        <script src="js/radar-page.js?v=20260716a"></script>
         <script src="js/tropical-engine.js?v=20260704a"></script>
         <script src="js/tropical-page.js?v=20260618e"></script>
-        <script src="js/weather.js?v=20260718c"></script>
+        <script src="js/weather.js?v=20260718e"></script>
         <script>initNav('weather');</script>
     </body>
 

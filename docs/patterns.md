@@ -99,7 +99,7 @@ Weather cache-first endpoints (`/api/data/*`, `/api/overlay/*`) are lightweight 
 
 Archive and export endpoints retain progress tracking where render time is non-trivial.
 
-## Radar Live Fallback Pattern (Weather Tab)
+## Radar Live Fallback Pattern (Standalone Page)
 
 For `/api/radar/live/latest` and `/api/radar/live/frames`:
 
@@ -230,7 +230,8 @@ Animation encoding applies to Radar and Satellite export endpoints only. Weather
 
 Radar/Satellite: H.264 via FFmpeg, `/api/radar/export-animation`, `/api/satellite/export-animation`.
 
-Weather radar tab playback is frame scrub/poll playback from cached overlays, not encoded export animation.
+Standalone Radar playback is frame scrub/poll playback from cached overlays,
+not encoded export animation.
 
 ## Date Validation Pattern
 
@@ -350,9 +351,9 @@ standalone product page is verified:
 4. Update docs and smoke tests to treat the product page as canonical.
 5. Keep API endpoint compatibility unless a separate API cleanup is planned.
 
-## Radar UX State Pattern (Weather Tab)
+## Radar UX State Pattern (Standalone Page)
 
-Radar controls in `js/weather.js` follow these state rules:
+Radar controls in `frontend/pages/radar/` follow these state rules:
 
 1. Site dropdown selection collapses multi-site mode into a single-site context.
 2. If site/product selection changes during time-mode scrub, context is invalidated and user is prompted to press Animate again.

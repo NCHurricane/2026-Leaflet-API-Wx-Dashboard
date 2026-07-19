@@ -175,7 +175,10 @@ export function createMapCore(element, options = {}) {
             button.setAttribute('aria-label', 'Reset to selected region');
             button.textContent = '⌂';
             leaflet.DomEvent.disableClickPropagation(root);
-            leaflet.DomEvent.on(button, 'click', () => fitRegion(activeRegion));
+            leaflet.DomEvent.on(button, 'click', () => {
+                options.onResetView?.();
+                fitRegion(activeRegion);
+            });
             return root;
         },
     });

@@ -1,0 +1,119 @@
+.radar-app {
+    display: grid;
+    grid-template-columns: 310px minmax(0, 1fr);
+    height: calc(100vh - 58px);
+}
+
+.radar-controls { min-width: 0; }
+.radar-map-wrap, #radar-map { width: 100%; height: 100%; }
+.radar-status-card { padding: 10px 12px; }
+.radar-status-title, .radar-field-label {
+    margin-bottom: 7px;
+    color: var(--core-muted);
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.radar-status-card .core-status-grid { gap: 4px 10px; font-size: 0.75rem; }
+.radar-status-card .core-status-grid dt { white-space: nowrap; }
+.radar-panel-stack { display: grid; gap: 14px; }
+.radar-panel-stack[hidden] { display: none; }
+.radar-panel-stack h2 { margin: 0 0 7px; font-size: 0.72rem; }
+
+.radar-check-list { display: grid; gap: 6px; }
+.radar-check {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+.radar-check input { flex: 0 0 auto; }
+.radar-auto-update-row { padding-top: 8px; border-top: 1px solid var(--core-line); }
+
+.radar-lookback { padding-top: 4px; }
+.radar-lookback-header, .radar-lookback-labels {
+    display: flex;
+    justify-content: space-between;
+    color: var(--core-muted);
+    font-size: 0.66rem;
+    font-weight: 800;
+}
+.radar-lookback input { width: 100%; margin: 5px 0 2px; }
+
+.radar-elevation-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.radar-elevation-pill {
+    width: auto;
+    padding: 5px 8px;
+    color: var(--core-muted);
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+.radar-elevation-pill[aria-checked="true"] { color: #22e8ff; border-color: #22e8ff; }
+.radar-native-control { display: none; }
+
+.radar-footer-actions { display: grid; grid-template-columns: 1fr auto; gap: 7px; }
+.radar-footer-actions button { padding: 9px 12px; }
+.radar-refresh { background: #174a67; border-color: #2f8fb8; font-weight: 800; }
+
+#radar-scrubber-bar {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 620;
+    min-width: 0;
+    padding: 6px 10px;
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid #334155;
+    border-radius: 8px;
+}
+#radar-scrubber-bar[hidden] { display: none; }
+
+.radar-legend .core-legend-body { padding: 10px 18px 12px; }
+.radar-legend .core-legend-tick:first-child { transform: none; }
+.radar-legend .core-legend-tick:last-child { transform: translateX(-100%); }
+.radar-site-legend { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+
+.radar-inspector-readout {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 1200;
+    max-width: 260px;
+    pointer-events: none;
+    color: #eef6ff;
+    background: rgba(2, 6, 23, 0.92);
+    border: 1px solid #475569;
+    border-radius: 5px;
+    padding: 4px 6px;
+    white-space: nowrap;
+}
+.radar-inspector-readout strong, .radar-inspector-readout span { display: block; }
+.radar-inspector-readout strong { color: #fff; font-size: 0.78rem; }
+.radar-inspector-readout span { color: #94a3b8; font-size: 0.66rem; }
+
+.radar-map-wrap .leaflet-popup-content-wrapper,
+.radar-map-wrap .leaflet-popup-tip { color: #eef6ff; background: #0f172a; }
+.radar-storm-popup-title { margin-bottom: 6px; font-weight: 800; text-align: center; }
+.radar-storm-popup-grid {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 3px 12px;
+    margin: 0;
+    font-size: 0.72rem;
+}
+.radar-storm-popup-grid dt { color: #94a3b8; text-align: right; }
+.radar-storm-popup-grid dd { margin: 0; font-weight: 700; }
+
+@media (max-width: 900px) {
+    .radar-app { grid-template-columns: 1fr; grid-template-rows: auto minmax(320px, 1fr); height: auto; }
+    .radar-controls { max-height: 48vh; }
+    .radar-map-wrap { height: 62vh; }
+    .radar-site-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

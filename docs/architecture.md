@@ -17,14 +17,17 @@ hosts a live Leaflet map with mixed layer types:
 Active root pages and their JS in this checkout:
 
 - `index.html` — main landing page for the dashboard
-- `weather.html` / `js/weather.js` — Leaflet map, alerts + SPC GeoJSON layers, RTMA pre-rendered overlays, RTMA scrubber, radar live multi-site + time-mode playback
+- `weather.html` / `js/weather.js` — transitional combined workspace, now
+  primarily Alerts, Tropical, and Water plus shared workspace/archive wiring.
 - `/drought` — first true Stage 2 standalone page, served from
   `frontend/pages/drought/drought.html`; it loads ES modules from
   `frontend/core/` and its own directory and does not load `js/weather.js`.
   Shared `map-core.js` owns the Leaflet map, basemaps, logo, region fitting,
   Lat/Lon/state/country/county overlays, and cached US/World city-label layers
   with bounded density filtering. It also supplies the shared reset-view and
-  numeric-zoom controls. The Drought page owns its controls and supplies the
+  numeric-zoom controls. Pages may provide an `onResetView` hook to clear
+  product state before the shared Home control refits the active region. The
+  Drought page owns its controls and supplies the
   product-specific content for a bottom-left expandable legend;
   `frontend/core/nav.js` owns the icon-bearing
   product navigation. Large static map payloads use `fetchCachedJson()` and
@@ -62,9 +65,10 @@ Planned product-page migration:
   as static content.
 - Legacy `.html` product URLs may be kept as redirects or compatibility routes
   during the transition, but clean extensionless URLs should become canonical.
-- `main.py` already exposes `/radar.html`, but `radar.html` is not present in
-  the repository root in this checkout. Preserve that route during backend
-  refactors because it is a planned product-page route.
+- `/radar` serves `frontend/pages/radar/radar.html`, which owns live site/product
+  selection, current and cached-frame playback, NST overlays, legends, and the
+  value inspector without loading `js/weather.js`. `/radar.html` remains a
+  compatibility route and is separate from the canonical extensionless page.
 - `satellite.html` is also not present in the repository root. `js/satellite.js`
   is dead code — it is not loaded by `weather.html` or any route (confirmed
   during the 2026-07-11 render pipeline review) and is slated for deletion in
@@ -349,8 +353,8 @@ The intended product-page split includes independent `radar.html` and
 
 Those root HTML files are not present in this checkout yet. Treat this section
 as a planned migration target until the pages and endpoints are revalidated.
-Weather-tab radar (`weather.html`) is currently on a cache-first live overlay
-contract via `/api/radar/live/*`.
+The standalone Radar page is on the cache-first live overlay contract via
+`/api/radar/live/*`.
 
 Planned direction:
 

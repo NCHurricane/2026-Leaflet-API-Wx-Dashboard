@@ -76,15 +76,15 @@ start there before touching pipeline code.
 ## Radar
 
 ### 1. Frontend — click to request
-- `js/radar-page.js` — site/product/elevation selection UI, builds requests
-- `js/radar-engine.js` — product engine: request construction, response
-  interpretation, tile layer wiring
-- `js/radar-site-locations.js` — static site coordinate lookup (data only,
-  not perf-relevant)
-- `js/weather.js` — shared map lifecycle, scrubber infrastructure, legend
-  fetch/render for radar
-- `weather.html` — script tag load order / cache-busting versions for the
-  above
+- `frontend/pages/radar/radar-page.js` — standalone site/product/elevation,
+  map-control, auto-update, and shared scrubber wiring
+- `frontend/pages/radar/radar-engine.js` — request construction, response
+  interpretation, pooled image overlays, site/NST layers, legends, and value
+  inspector
+- `frontend/pages/radar/radar.html` / `radar.css` — standalone Option 1A shell
+  and Radar-specific layout/styles
+- `frontend/core/{map-core,legend,scrubber}.js` — shared map, legend-host, and
+  playback primitives used by Radar
 
 ### 2. API entry
 - `routes/radar.py` — tile, legend, site/product listing endpoints

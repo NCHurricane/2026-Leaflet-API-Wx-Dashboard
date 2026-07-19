@@ -49,12 +49,12 @@ def read_drought_page():
 
 @router.get("/satellite")
 def read_satellite_page():
-    return serve_product_shell_page("satellite")
+    return serve_page("frontend/pages/satellite/satellite.html")
 
 
 @router.get("/radar")
 def read_radar_standalone_page():
-    return serve_product_shell_page("radar")
+    return serve_page("frontend/pages/radar/radar.html")
 
 
 @router.get("/mrms")

@@ -1,9 +1,7 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-17 (Frontend Split Stage 2 Phase 20 Surface migration
-completed: /surface is a true standalone page, all surface code was deleted
-from js/weather.js and weather.html, and surface archive support was retired
-with the old archive scrubber rather than rebuilt)
+Last updated: 2026-07-18 (Phases 20-24 user smoke tests PASSED, including the
+Radar one-row legend and complete Home/Region/Clear reset follow-up.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -29,8 +27,8 @@ the plan for some future items; re-evaluate later tracks against the
 post-split structure, not the monolith.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
-   this file (section below). Phases 18-21 are complete; Phase 22 (MRMS +
-   RTMA + the scrubber-as-component rewrite) is next.
+   this file (section below). Phases 18-24 and Radar's post-smoke UI reset
+   follow-up are complete and user-confirmed.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
@@ -46,10 +44,10 @@ post-split structure, not the monolith.
 - The backend route/service refactor is complete enough that product routes and
   services should remain modular. Do not add route logic back to `main.py`.
 - The fixed map-first dashboard shell is accepted.
-- `/drought` and `/surface` serve true standalone pages from
-  `frontend/pages/`. The remaining canonical product routes serve the shared
-  dashboard shell in product-only mode: `/alerts`, `/radar`, `/satellite`,
-  `/spc`, `/rtma`, `/mrms`, `/tropical`, `/wpc`, and `/water`.
+- `/drought`, `/surface`, `/spc`, `/wpc`, `/mrms`, `/rtma`, `/satellite`, and
+  `/radar` serve true standalone pages from `frontend/pages/`. The remaining
+  canonical product routes serve the shared dashboard shell in product-only
+  mode: `/alerts`, `/tropical`, and `/water`.
 - `weather.html` remains the combined workspace and should keep working until
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
@@ -427,9 +425,8 @@ found it.
   group-pills-are-navigation-only decision). **WPC half COMPLETE
   2026-07-18 — monolith deletion landed WITHOUT the user parity smoke, on
   explicit user authorization ("Delete without smoke tests. Do this for any
-  other completed phases until I return"). The standalone /wpc page has
-  therefore NOT been parity-smoked yet: any gaps found later are fixed
-  forward in `frontend/pages/wpc/`, not by restoring monolith code.**
+  other completed phases until I return"). User parity smoke PASSED
+  2026-07-18.**
   Deleted: ~230 lines of WPC implementation from `js/weather.js` (engine/
   page factory refs, `wpcLayer`/`_wpcRequestSeq` state, `_openSpcTextDetail`
   (its only remaining caller was WPC; the alerts detail path uses the
@@ -447,8 +444,125 @@ found it.
   renderer, and the dead WPC rules in `css/dashboard.css` (same treatment
   as SPC's). `weather.js?v=20260718b`. This completes Phase 21.
 - Phase 22: mrms + rtma, including the scrubber-as-component rewrite.
-- Phase 23: satellite.
-- Phase 24: radar.
+  **COMPLETE 2026-07-18 — built and monolith-deleted in one session under
+  the user's standing "delete without smoke tests" authorization. User
+  parity smoke PASSED 2026-07-18 for both /mrms and /rtma.**
+  Scrubber-as-component: `frontend/pages/wpc/wpc-scrubber.js` was promoted
+  to `frontend/core/scrubber.js` (per-page instances, no global modes; WPC
+  imports the core module; `.nch-scrubber` CSS moved to `core.css`), and
+  gained `setFrames(frames, {index, silent, keepPlaying})` + `getIndex()`/
+  `isPlaying()` so auto-update can append frames without restarting
+  playback. MRMS standalone (`frontend/pages/mrms/`): Option 1A sidebar,
+  the five product sub-tabs with mutually-exclusive product checks and
+  per-product sub-option radios (`composeProductKey` ported unchanged incl.
+  QPE/Rotation/MESH/AzShear/EchoTop/VIL/Refl/Lightning/Model keys),
+  lookback slider (1-12 h), 90 s auto-update append capped at 400 frames,
+  frames from `/api/overlay/frames` with `/api/overlay/latest` →
+  `/api/data/mrms` fallback when no frames are cached, worker product set
+  via `/api/mrms/set-product`, scale/categorical/fallback legends on the
+  core tray, next-2 frame prefetch. RTMA standalone
+  (`frontend/pages/rtma/`): stream/product exclusivity rules ported (wind
+  speed+direction pair, 24 h temp change hourly-only, Rapid Update
+  CONUS-only), pre-rendered gradient overlay with on-demand and points-only
+  fallbacks, zoom-responsive value markers (colored text + wind barbs) with
+  density thinning and viewport-driven refresh, wind-pair secondary
+  markers, continuous-anchor legend, per-frame scrub rendering (prerender
+  overlay + points in parallel, error auto-skip), 90 s auto-update append
+  capped at 150 frames. Both routes serve standalone HTML. Monolith
+  deletion (~2,000 lines from `js/weather.js`, the MRMS/RTMA blocks from
+  `weather.html`, and js/{mrms,rtma}-{engine,page}.js) kept the shared
+  archive-scrubber chrome — `_setRtmaScrubberStatus`,
+  `_updateRtmaScrubberUi`, `_setArchiveScrubber`, RTMA_SCRUB_* playback
+  constants (all still used by radar/satellite), `_exitMrmsScrubMode`/
+  `_exitRtmaScrubMode` slimmed to chrome-only resets for the radar/
+  satellite engine contexts, and `hasMrms/RtmaScrubFrames` context
+  accessors stubbed to `false` (alerts/satellite engines hard-require
+  them). Archive mode in the retained shell is now Alerts-only. Deliberate
+  deltas for the eventual smoke: (a) MRMS date-range archive was not
+  rebuilt (same Option B treatment as SPC/Surface — the lookback scrubber
+  is the animation story), (b) the 3 s in-play warm poll and the animate-
+  button "filling" indicator were dropped (the 90 s auto-update append
+  covers frame growth), (c) RTMA marker density initializes from the
+  slider default 0.25 instead of the monolith's untouched-slider value 1.
+- Phase 23: satellite. **COMPLETE 2026-07-18 — built + monolith-deleted under
+  the user-approved build+delete-before-smoke authorization; user parity smoke
+  PASSED 2026-07-18. Fix gaps forward in `frontend/pages/satellite/`, never
+  restore monolith code.** Standalone page at `frontend/pages/satellite/`
+  on the Option 1A shells: `satellite.html`, `satellite-page.js` (controller:
+  strict Satellite → Sector → View → Product chain ported verbatim incl.
+  PLATFORM_SECTORS/PLATFORM_CHANNELS/GOES_ONLY_CHANNELS filtering, auto view
+  presets, dynamic himawari-target-current fit via
+  `/api/satellite-v2/frame-bounds`, per-sector frame budgets), `satellite-
+  engine.js` (catalog fetch via `/api/satellite-v2/catalog`, legend fetch +
+  interpretive-legend tables, continuous/interpretive legend HTML on the core
+  tray incl. the AOD "No Data" leading swatch), `satellite-anim.js` (tile-
+  layer animator ported from the shell: pooled per-frame layers with hot-frame
+  window ±3, ready-gated swaps w/ renderSeq + swapToken, 5 ms crossfade with
+  old-layer-underneath, progressive-redraw retries, tileerror backoff,
+  viewport prefetch queue w/ renderLive=0), and `satellite.css`. Frames drive
+  `frontend/core/scrubber.js`; zoom pauses/resumes playback and re-renders;
+  moveend reschedules prefetch. Deliberate deltas for the smoke: (a) the
+  separate Current/Animate modes were collapsed — the page always loads the
+  scrubber loop with the newest frame shown (the shell's html no longer had
+  mode buttons anyway), (b) auto-refresh is a sidebar Auto-Update checkbox
+  (5-min cadence, keepPlaying append, jump-to-newest on new frames) instead
+  of the scrubber-bar Auto pill, (c) scrubber speeds are the core component's
+  0.5–4x steps (shell had 0.25–4x in 7 steps), (d) an Imagery Opacity slider
+  was added in Style (shell was fixed 1.0), (e) empty-chain partial
+  selections never auto-pick Channel13 (strict placeholder retained).
+  Monolith deletion (~1,723 lines from `js/weather.js` → 9,250 lines): all
+  `_satellite*` state/constants/functions incl. the whole animation block,
+  `_crossfadeSatelliteLayers`, `_SAT_DISPLAY_NAMES`/`_SAT_SOURCES`/
+  `_satelliteReliabilityMeta`, the `satellite-overlays` pane, engine-context
+  registration + configureSatellitePage wiring, scrubber-bar satellite
+  branches (play/step/slider/auto-refresh), tab-change/visibilitychange/
+  moveend/zoomstart/zoomend branches, and the archive-button satellite guard;
+  `wx-section-satellite` (127 lines) + the scrubber-bar Auto button + script
+  tags removed from `weather.html`; `js/satellite-engine.js` +
+  `js/satellite-page.js` deleted. Kept per retained-shell rules: nav link,
+  hidden `weather-type-satellite` input, `'satellite'` entries in type
+  arrays/label maps/reliability dicts, dead satellite CSS in
+  `css/dashboard.css`, and the unrelated tropical Satellite Floater.
+  `weather.js?v=20260718d`. Archive mode remains Alerts-only. Smoke follow-up:
+  the continuous legend's longer temperature endpoint labels exposed the
+  core tray's horizontal overflow because the labels were centered at 0% and
+  100%. Satellite now aligns the first label inward from 0% and the last label
+  inward from 100% (`satellite.css?v=20260718c`) so the unwanted bottom
+  scrollbar is removed without clipping either endpoint. The shared
+  `.core-map-legend` bottom position is now 50px (user-accepted globally) so
+  legend trays clear the bottom scrubber instead of overlapping it.
+- Phase 24: radar. **COMPLETE + USER PARITY SMOKE PASSED 2026-07-18. Built and
+  monolith-deleted under the standing build+delete-before-smoke authorization.
+  Fix gaps forward in `frontend/pages/radar/`, never restore the monolith
+  implementation.** Standalone page at `frontend/pages/radar/`:
+  `radar.html`, `radar-page.js`, `radar-engine.js`, and `radar.css` on the
+  Option 1A shell, shared map/legend/sidebar cores, and
+  `frontend/core/scrubber.js`. Preserved behavior includes the complete
+  API-driven 164-site NEXRAD selector with operational-status marker colors;
+  CONUS-aware Level 2/Level 3 product filtering; response-driven L2 elevation
+  pills; parallel current-frame + 0.5-12 h cached-frame loading; pooled image
+  overlays; 90 s on-demand auto-update; continuous `.pal` legends; radar-site
+  legend; map opacity; NST cells/tracks; selected-cell motion parameters for
+  L2 SRV; and the throttled `/api/radar/live/value` inspector. The route now
+  serves the standalone HTML. Monolith deletion removed ~2,006 lines from
+  `js/weather.js` (now 7,244 lines), `wx-section-radar` and Radar script tags
+  from `weather.html`, and obsolete `js/radar-engine.js`, `js/radar-page.js`,
+  and `js/radar-site-locations.js`. The Alerts-owned Arrival Tool / Radar Speed
+  Estimator remains in `weather.html`/`js/weather.js` for Phase 25.
+  `weather.js?v=20260718e`. Deliberate
+  smoke points: (a) a site is now explicitly required instead of showing the
+  non-loading `National Composite` sentinel, (b) the dead/unwired multi-site
+  state was not rebuilt, (c) the core scrubber owns playback at 0.5-4x, and
+  (d) history-fill follow-up is a bounded refresh plus the 90 s auto-update
+  path rather than the monolith's separate scrubber chrome/warm indicator.
+  Post-smoke UI follow-up: the six site-status categories now occupy one row on
+  desktop (two columns at the existing mobile breakpoint). Home, Region change,
+  and Clear share one reset path that pauses and empties the scrubber, clears
+  the selected site/elevation/overlay/highlight and stale requests, restores
+  the default L2 reflectivity selection, and returns the legend to Radar Sites
+  when site markers are enabled. User browser confirmation PASSED 2026-07-18:
+  several radar sites passed the parity smoke, and the one-row legend plus all
+  three reset triggers worked correctly while playback was active.
 - Phase 25: alerts (immersive panel plus Arrival Tool / Speed Estimator
   move to engine-side modules).
 - Phase 26: tropical (already closest to the target pattern), then Water as a

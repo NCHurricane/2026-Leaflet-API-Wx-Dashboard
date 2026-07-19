@@ -1,0 +1,202 @@
+/* Satellite standalone page styles (Option 1A shell). */
+
+.satellite-app {
+    height: calc(100vh - 58px);
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-areas: "controls map";
+    min-height: 0;
+}
+
+.satellite-controls { grid-area: controls; }
+.satellite-map-wrap { grid-area: map; position: relative; min-height: 0; }
+#satellite-map { width: 100%; height: 100%; background: #0b1220; }
+
+.satellite-controls h2 {
+    margin: 0 0 8px;
+    color: var(--core-muted);
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.satellite-status-card { padding: 10px 12px; }
+.satellite-status-title {
+    margin-bottom: 7px;
+    color: var(--core-muted);
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.satellite-status-card .core-status-grid { gap: 4px 10px; font-size: 0.75rem; }
+.satellite-status-card .core-status-grid dt { white-space: nowrap; }
+
+.satellite-panel-stack { display: grid; gap: 12px; align-content: start; }
+
+.satellite-field-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--core-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Platform / sector pills */
+.satellite-subtabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+}
+
+.satellite-subtab-button {
+    min-width: 0;
+    padding: 5px 6px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #cbd5e1;
+    font-size: 0.66rem;
+    font-weight: 800;
+    line-height: 1.05;
+    text-align: center;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.satellite-subtab-button[aria-selected="true"] {
+    border-color: rgba(34, 211, 238, 0.68);
+    background: rgba(14, 116, 144, 0.36);
+    color: #f8fafc;
+}
+
+.satellite-native-control { display: none; }
+
+.satellite-check-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--core-text);
+}
+
+.satellite-auto-update-row {
+    padding-top: 8px;
+    border-top: 1px solid var(--core-line);
+}
+
+.satellite-check-list { display: flex; flex-direction: column; gap: 6px; }
+
+.satellite-check {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--core-text);
+}
+
+.satellite-lookback { display: flex; flex-direction: column; gap: 4px; }
+
+.satellite-lookback-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.74rem;
+    color: var(--core-muted);
+}
+
+#satellite-lookback-value { color: var(--core-text); font-weight: 700; }
+
+.satellite-lookback-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.66rem;
+    color: var(--core-muted);
+}
+
+.satellite-refresh {
+    width: 100%;
+    padding: 10px;
+    background: #174a67;
+    border-color: #2f8fb8;
+    font-size: 0.81rem;
+    font-weight: 800;
+}
+.core-sidebar-footer .core-message { margin-bottom: 6px; }
+
+/* ── Bottom scrubber bar ────────────────────────────────────────────────── */
+#satellite-scrubber-bar {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 620;
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 6px 10px;
+    min-width: 0;
+}
+#satellite-scrubber-bar[hidden] { display: none; }
+
+/* Legend extras (interpretive item lists + AOD leading swatch) */
+.satellite-legend .core-legend-body { padding: 10px 14px 12px; }
+.satellite-legend .core-legend-tick:first-child { transform: none; }
+.satellite-legend .core-legend-tick:last-child { transform: translateX(-100%); }
+
+.satellite-legend-items { display: flex; flex-direction: column; gap: 4px; }
+
+.satellite-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.72rem;
+    color: var(--core-text);
+}
+
+.satellite-legend-swatch {
+    width: 14px;
+    height: 10px;
+    flex: 0 0 auto;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    border-radius: 2px;
+}
+
+.satellite-legend-axis {
+    margin-top: 2px;
+    font-size: 0.66rem;
+    color: var(--core-muted);
+}
+
+.satellite-legend-colorbar-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.satellite-legend-leading-swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+
+.satellite-legend-leading-label {
+    font-size: 0.62rem;
+    color: var(--core-muted);
+    white-space: nowrap;
+}
+
+.satellite-legend-colorbar-main { flex: 1 1 auto; min-width: 0; }
+
+@media (max-width: 900px) {
+    .satellite-app {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(320px, 1fr);
+        height: auto;
+    }
+}

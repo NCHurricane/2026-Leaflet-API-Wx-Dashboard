@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Satellite — NCHurricane Dashboard</title>
+    <link rel="icon" href="/img/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260718a">
+    <link rel="stylesheet" href="/frontend/pages/satellite/satellite.css?v=20260718c">
+</head>
+<body>
+    <header class="core-header">
+        <div class="core-brand">NCHURRICANE</div>
+        <nav id="product-nav" class="core-nav" aria-label="Weather products"></nav>
+    </header>
+
+    <main class="satellite-app">
+        <aside id="satellite-sidebar-tabs" class="core-sidebar satellite-controls">
+            <h1 class="core-visually-hidden">Satellite Imagery</h1>
+
+            <div class="core-sidebar-header">
+                <div class="core-card satellite-status-card">
+                    <div class="satellite-status-title">Data status</div>
+                    <dl class="core-status-grid">
+                        <dt>Valid</dt><dd id="satellite-updated">—</dd>
+                        <dt>Data Age</dt><dd id="satellite-age">—</dd>
+                        <dt>Provider</dt><dd id="satellite-provider">—</dd>
+                        <dt>Source</dt><dd id="satellite-source">—</dd>
+                    </dl>
+                </div>
+
+                <div class="core-field">
+                    <label for="satellite-region">Region</label>
+                    <select id="satellite-region"></select>
+                </div>
+            </div>
+
+            <div class="core-sidebar-tabs" role="tablist" aria-label="Satellite controls">
+                <button id="satellite-tab-data" class="core-sidebar-tab is-active" type="button"
+                    role="tab" aria-selected="true" aria-controls="satellite-panel-data"
+                    data-sidebar-tab="data">
+                    <i class="fas fa-database" aria-hidden="true"></i><span class="core-sidebar-tab-label">Data</span>
+                </button>
+                <button id="satellite-tab-overlays" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="satellite-panel-overlays" tabindex="-1"
+                    data-sidebar-tab="overlays">
+                    <i class="fas fa-layer-group" aria-hidden="true"></i><span class="core-sidebar-tab-label">Overlays</span>
+                </button>
+                <button id="satellite-tab-style" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="satellite-panel-style" tabindex="-1"
+                    data-sidebar-tab="style">
+                    <i class="fas fa-sliders" aria-hidden="true"></i><span class="core-sidebar-tab-label">Style</span>
+                </button>
+            </div>
+
+            <div class="core-sidebar-content">
+                <section id="satellite-panel-data" class="core-sidebar-panel satellite-panel-stack"
+                    role="tabpanel" aria-labelledby="satellite-tab-data" data-sidebar-panel="data">
+
+                    <div class="satellite-field-label">Satellite</div>
+                    <div class="satellite-subtabs" role="tablist" aria-label="Satellite platform">
+                        <button id="satellite-subtab-goes18" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sat="goes18">GOES-18</button>
+                        <button id="satellite-subtab-goes19" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sat="goes19">GOES-19</button>
+                        <button id="satellite-subtab-himawari9" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sat="himawari9">Himawari-9</button>
+                        <button id="satellite-subtab-meteosat12" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sat="meteosat12">Meteosat-12</button>
+                        <button id="satellite-subtab-meteosat9" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sat="meteosat9">Meteosat-9</button>
+                        <button id="satellite-subtab-meteosat11" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sat="meteosat11">Meteosat-11 RSS</button>
+                    </div>
+                    <select id="satellite-sat-id" class="satellite-native-control" aria-hidden="true" tabindex="-1">
+                        <option value="" selected>— Select Satellite —</option>
+                        <option value="goes19">GOES-19 (East)</option>
+                        <option value="goes18">GOES-18 (West)</option>
+                        <option value="himawari9">Himawari-9 (West Pacific)</option>
+                        <option value="meteosat12">Meteosat-12 (Europe/Africa)</option>
+                        <option value="meteosat9">Meteosat-9 (Indian Ocean)</option>
+                        <option value="meteosat11">Meteosat-11 (Rapid Scan)</option>
+                    </select>
+
+                    <div class="satellite-field-label">Sector</div>
+                    <div class="satellite-subtabs" role="tablist" aria-label="Satellite sector">
+                        <button id="satellite-sector-fulldisk" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sector="FullDisk">Full Disk</button>
+                        <button id="satellite-sector-conus" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sector="CONUS">CONUS</button>
+                        <button id="satellite-sector-meso1" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sector="Meso1">Meso 1</button>
+                        <button id="satellite-sector-meso2" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sector="Meso2">Meso 2</button>
+                        <button id="satellite-sector-rss" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sector="RSS"
+                            style="display:none;">Rapid Scan</button>
+                        <button id="satellite-sector-japan" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sector="Japan"
+                            style="display:none;">Japan</button>
+                        <button id="satellite-sector-target" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sector="Target"
+                            style="display:none;">Target Area</button>
+                    </div>
+                    <select id="satellite-sector" class="satellite-native-control" aria-hidden="true" tabindex="-1">
+                        <option value="" selected>— Select Sector —</option>
+                        <option value="CONUS">CONUS</option>
+                        <option value="FullDisk">Full Disk</option>
+                        <option value="Meso1">Mesoscale 1</option>
+                        <option value="Meso2">Mesoscale 2</option>
+                        <option value="RSS">Rapid Scan</option>
+                        <option value="Japan">Japan</option>
+                        <option value="Target">Target Area</option>
+                    </select>
+
+                    <div class="core-field">
+                        <label for="satellite-view-preset">View</label>
+                        <select id="satellite-view-preset" disabled>
+                            <option value="" selected>— Select View —</option>
+                            <option value="conus">CONUS</option>
+                            <option value="goes-west-full-disk">GOES-West Full Disk</option>
+                            <option value="goes-east-full-disk">GOES-East Full Disk</option>
+                            <option value="west-pacific">West Pacific</option>
+                            <option value="europe-africa">Europe/Africa</option>
+                            <option value="indian-ocean">Indian Ocean</option>
+                            <option value="europe-rss">Europe (Rapid Scan)</option>
+                            <option value="himawari-japan">Japan</option>
+                            <option value="himawari-target-current">Current Target Area</option>
+                        </select>
+                    </div>
+
+                    <div class="core-field">
+                        <label for="satellite-channel">Product</label>
+                        <select id="satellite-channel" disabled>
+                            <option value="" selected>— Choose Product —</option>
+                            <option value="Channel01">Channel 01 - Blue Visible</option>
+                            <option value="Channel02">Channel 02 - Red Visible</option>
+                            <option value="Channel03">Channel 03 - Veggie Near-IR</option>
+                            <option value="Channel05">Channel 05 - Snow/Ice</option>
+                            <option value="Channel06">Channel 06 - Cloud Particle Size</option>
+                            <option value="Channel07">Channel 07 - Shortwave IR</option>
+                            <option value="Channel07Fire">Channel 07 - Fire Detection</option>
+                            <option value="Channel08RAMSDIS">Channel 08 - RAMSDIS WV</option>
+                            <option value="Channel09RAMSDIS">Channel 09 - RAMSDIS WV</option>
+                            <option value="Channel13">Channel 13 - Clean IR</option>
+                            <option value="Channel14">Channel 14 - Longwave IR</option>
+                            <option value="AerosolDetection">Aerosol — Smoke &amp; Dust (ADP)</option>
+                            <option value="AerosolOpticalDepth">Aerosol Optical Depth (AOD)</option>
+                            <option value="FireRadiativePower">Fire Radiative Power (FRP)</option>
+                            <option value="FireTemperature">Fire Temperature</option>
+                            <option value="AirMass">Air Mass</option>
+                            <option value="GeoColor">GeoColor</option>
+                            <option value="GeoColorBlkMar">GeoColor Black Marble</option>
+                            <option value="TrueColor">True Color</option>
+                            <option value="NaturalColor">Natural Color</option>
+                            <option value="DayCloudPhase">Day Cloud Phase</option>
+                            <option value="DayLandCloudFire">Day Land Cloud/Fire</option>
+                            <option value="DaySnowFog">Day Snow/Fog</option>
+                            <option value="NighttimeMicrophysics">Nighttime Microphysics</option>
+                            <option value="Dust">Dust</option>
+                            <option value="Ash">Ash</option>
+                            <option value="SulfurDioxide">Sulfur Dioxide</option>
+                            <option value="RocketPlume">Rocket Plume</option>
+                        </select>
+                    </div>
+
+                    <div class="satellite-check-row satellite-auto-update-row">
+                        <span>Auto-Update</span>
+                        <input id="satellite-auto-update" type="checkbox">
+                    </div>
+
+                    <div id="satellite-lookback-block" class="satellite-lookback">
+                        <div class="satellite-lookback-header">
+                            <span>Lookback Hours</span>
+                            <span id="satellite-lookback-value">1h</span>
+                        </div>
+                        <input id="satellite-lookback" type="range" min="1" max="12" step="1" value="1">
+                        <div class="satellite-lookback-labels"><span>1h</span><span>12h</span></div>
+                    </div>
+                </section>
+
+                <section id="satellite-panel-overlays" class="core-sidebar-panel satellite-panel-stack"
+                    role="tabpanel" aria-labelledby="satellite-tab-overlays" data-sidebar-panel="overlays" hidden>
+                    <div>
+                    <h2>Cities</h2>
+                    <div class="core-segmented" role="radiogroup" aria-label="Cities">
+                        <label><input name="satellite-cities-source" type="radio" value="off" checked><span>Off</span></label>
+                        <label><input name="satellite-cities-source" type="radio" value="us"><span>US</span></label>
+                        <label><input name="satellite-cities-source" type="radio" value="world"><span>World</span></label>
+                    </div>
+                    <div class="core-adjustment" data-city-adjustment>
+                        <label id="satellite-city-density-label" for="satellite-city-density">City Density</label>
+                        <input id="satellite-city-density" type="range" min="0.01" max="1" step="0.005" value="0.25">
+                    </div>
+                    <div class="core-adjustment" data-city-adjustment>
+                        <label id="satellite-city-font-size-label" for="satellite-city-font-size">City Font Size (0.6)</label>
+                        <input id="satellite-city-font-size" type="range" min="0.4" max="1.2" step="0.05" value="0.6">
+                    </div>
+                    </div>
+
+                    <div>
+                    <h2>Map overlays</h2>
+                    <div class="satellite-check-list">
+                        <label class="satellite-check"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
+                        <label class="satellite-check"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
+                        <label class="satellite-check"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
+                        <label class="satellite-check"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                    </div>
+                    </div>
+                </section>
+
+                <section id="satellite-panel-style" class="core-sidebar-panel satellite-panel-stack"
+                    role="tabpanel" aria-labelledby="satellite-tab-style" data-sidebar-panel="style" hidden>
+                    <div class="core-adjustment">
+                        <label for="satellite-opacity">Imagery Opacity (1)</label>
+                        <input id="satellite-opacity" type="range" min="0.1" max="1" step="0.05" value="1">
+                    </div>
+
+                    <div class="core-field">
+                        <label for="satellite-basemap">Basemap</label>
+                        <select id="satellite-basemap">
+                            <option>Dark (No Labels)</option><option>Light (No Labels)</option>
+                            <option>Voyager</option><option>USGS</option><option>Satellite</option>
+                        </select>
+                    </div>
+                </section>
+            </div>
+
+            <div class="core-sidebar-footer">
+                <div id="satellite-message" class="core-message" aria-live="polite"></div>
+                <button id="satellite-refresh" class="satellite-refresh" type="button">Refresh</button>
+            </div>
+        </aside>
+
+        <section id="satellite-map-wrap" class="core-map-panel satellite-map-wrap" aria-label="Satellite imagery map">
+            <div id="satellite-map"></div>
+            <div id="global-timestamp" class="core-global-timestamp">Last Updated: —</div>
+            <div id="satellite-legend" class="satellite-legend" data-legend-align="left" hidden></div>
+            <div id="satellite-scrubber-bar" hidden>
+                <div id="satellite-bottom-scrubber"></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="/frontend/pages/satellite/satellite-page.js?v=20260718a"></script>
+</body>
+</html>

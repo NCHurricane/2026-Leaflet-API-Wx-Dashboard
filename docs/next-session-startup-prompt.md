@@ -20,16 +20,15 @@ Read first:
 
 Current status:
 - The fixed map-first dashboard shell is accepted.
-- /drought and /surface serve true standalone pages from frontend/pages/. The
-  remaining canonical product routes serve product-only dashboard mode:
-  /alerts, /radar, /satellite, /spc, /rtma, /mrms, /tropical, /wpc, and /water.
+- /drought, /surface, /spc, /wpc, /mrms, /rtma, /satellite, and /radar serve
+  true standalone pages from frontend/pages/. The remaining product-only shell
+  routes are /alerts, /tropical, and /water.
 - /weather.html remains the combined workspace and must keep working until it is
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
   interpretation, and most rendering.
-- js/weather.js still owns shared map lifecycle, generic archive orchestration,
-  shared scrubber infrastructure, and injected callbacks where cross-product
-  state remains coupled.
+- js/weather.js still owns the combined workspace, Alerts archive orchestration,
+  and injected callbacks where Alerts/Tropical/Water state remains coupled.
 - Backend route logic should stay in routes/*.py, route-facing cache/response
   behavior should stay in services/*_service.py, and upstream/cache refresh
   behavior should stay in workers/*_worker.py.
@@ -57,14 +56,49 @@ Active track order (2026-07-17):
     page at frontend/pages/wpc/, monolith WPC code deleted 2026-07-18
     (~230 lines from js/weather.js, the wx-section-wpc/wx-side-group-wpc/
     wpc-scrubber-bar blocks from weather.html, plus js/wpc-engine.js,
-    js/wpc-page.js, and js/scrubber.js; weather.js?v=20260718b). WARNING:
-    the WPC deletion was explicitly user-authorized WITHOUT a parity smoke
-    ("Delete without smoke tests") — /wpc still needs its first user
-    smoke; fix any gaps forward in frontend/pages/wpc/, do not restore
-    monolith code. Phase 22 (MRMS + RTMA + the scrubber-as-component
-    rewrite) is next. Minor UI spacing polish across
-    the new standalone pages is deferred to the end of the superplan by
-    user decision.
+    js/wpc-page.js, and js/scrubber.js; weather.js?v=20260718b; user
+    smoke PASSED 2026-07-18). Phase 22 (MRMS + RTMA + scrubber-as-component) is
+    COMPLETE 2026-07-18 under the same authorization: the WPC page's
+    scrubber was promoted to frontend/core/scrubber.js (index-preserving
+    setFrames options added), standalone pages were built at
+    frontend/pages/mrms/ and frontend/pages/rtma/ (routes switched), and
+    the monolith MRMS/RTMA code was deleted (~2,000 lines from
+    js/weather.js, weather.html sections, js/{mrms,rtma}-{engine,page}.js;
+    weather.js?v=20260718c). User parity smokes PASSED 2026-07-18 for
+    /wpc, /mrms, and /rtma. The shared archive-scrubber chrome
+    (_setRtmaScrubberStatus/_updateRtmaScrubberUi/_setArchiveScrubber,
+    RTMA_SCRUB_* constants, slimmed _exitMrms/RtmaScrubMode, stubbed
+    hasMrms/RtmaScrubFrames) was later removed with the Radar cutover; archive
+    mode in weather.html is Alerts-only. Phase 23 (satellite) COMPLETE
+    2026-07-18 — built + monolith-deleted
+    under the same build+delete-before-smoke authorization: standalone page
+    at frontend/pages/satellite/ (satellite.html, satellite-page.js,
+    satellite-engine.js, satellite-anim.js, satellite.css) on the core
+    shells + frontend/core/scrubber.js; ~1,723 lines of satellite code
+    deleted from js/weather.js (now 9,250 lines), wx-section-satellite +
+    scrubber Auto button removed from weather.html, js/satellite-{engine,
+    page}.js deleted (weather.js?v=20260718d). User parity smoke PASSED
+    2026-07-18. The reported continuous-legend bottom scrollbar was traced to
+    long endpoint labels centered outside the 0%/100% bounds; the endpoints
+    are now aligned inward (`satellite.css?v=20260718c`). The shared
+    `.core-map-legend` bottom position is user-accepted globally at 50px so it
+    clears bottom scrubbers. Phase 24 (radar) is COMPLETE + USER PARITY SMOKE
+    PASSED 2026-07-18 under the same authorization: standalone page at
+    frontend/pages/radar/ on the core map/sidebar/legend/scrubber primitives;
+    complete API-driven site/product catalog, operational site markers,
+    CONUS-aware L2/L3 filtering, elevation pills, current + 0.5-12 h frames,
+    pooled overlays, 90 s auto-update, `.pal` legends, NST tracks + selected-
+    cell SRV motion, and the value inspector. About 2,006 Radar lines were
+    deleted from js/weather.js (now 7,244); the Radar controls/scripts were
+    removed from weather.html; js/radar-{engine,page}.js and
+    js/radar-site-locations.js were deleted. Alerts' Arrival Tool / Radar Speed
+    Estimator remains for Phase 25 (`weather.js?v=20260718e`). See the
+    superfile for the deliberate smoke deltas. Post-smoke UI follow-up makes
+    the desktop site-status legend one row and gives Home, Region change, and
+    Clear one complete Radar reset path; this focused reset follow-up awaits a
+    browser spot-check. Phase 25 (alerts) is next. Minor UI
+    spacing polish across the new standalone pages is deferred to the end
+    of the superplan by user decision.
 2. Satellite render-pipeline latency optimization. This backend-only track may
    interleave with Track 1 while their files remain disjoint.
 3. GK2A + GMGSI after the satellite-page migration boundary is safe.
