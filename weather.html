@@ -65,9 +65,6 @@
                 <span>Water</span>
             </a>
         </nav>
-            <div class="weather-header-right">
-                <button id="weather-test-new-alert" class="weather-top-test-btn" type="button">Test New Alert</button>
-            </div>
             <!-- Hidden product type inputs for event handling. Needed by weather.js sidebar logic. -->
             <div style="display: none;">
                 <input id="weather-type-current" type="checkbox">
@@ -91,8 +88,6 @@
                     <div id="weather-map-empty-overlay" class="weather-map-empty-overlay" hidden>
                         <span id="weather-map-empty-message"></span>
                     </div>
-                    <div id="wx-new-alert-border-flash" aria-hidden="true"></div>
-                    <div id="wx-new-alert-stack"></div>
                     <div id="wx-radar-toast-stack" aria-live="polite" aria-atomic="true"></div>
                 </div>
 
@@ -120,7 +115,6 @@
                     <div id="wx-region-block" class="wx-block">
                         <label for="weather-region">Region</label>
                         <select id="weather-region">
-                            <option value="__ALERT_LOCATION__" disabled hidden>Choose Location</option>
                             <option value="CONUS">CONUS</option>
                             <option value="WORLD">World</option>
                             <option value="NC" selected>North Carolina</option>
@@ -178,112 +172,6 @@
                     </div>
 
 
-                    <div id="wx-section-alerts" class="wx-block" data-type="alerts" style="display:none;">
-                        <div id="weather-alerts-opts">
-                            <div class="wx-check-row"><span>All Alerts</span><input class="weather-alerts-category"
-                                    id="weather-alerts-all" type="checkbox" value="All Alerts"></div>
-                            <div id="weather-alerts-filter-options">
-                                <div class="wx-check-row"><span>Severe Weather Warnings</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Severe Weather Warnings" checked
-                                        >
-                                </div>
-                                <div id="wx-warn-filter-row" class="wx-warn-filter-row">
-                                    <div class="wx-check-row"><label style="padding-top: 0; margin-top: 0;"><input
-                                                type="checkbox" class="wx-warn-filter-ck" data-warn-filter="tor" checked
-                                                >
-                                            <span>TOR<span class="wx-warn-filter-count"
-                                                    data-warn-filter-count="tor">0</span></span></label></div>
-                                    <div class="wx-check-row"><label style="padding-top: 0; margin-top: 0;"><input
-                                                type="checkbox" class="wx-warn-filter-ck" data-warn-filter="svr" checked
-                                                >
-                                            <span>SVR<span class="wx-warn-filter-count"
-                                                    data-warn-filter-count="svr">0</span></span></label></div>
-                                    <div class="wx-check-row"><label style="padding-top: 0; margin-top: 0;"><input
-                                                type="checkbox" class="wx-warn-filter-ck" data-warn-filter="ffw" checked
-                                                >
-                                            <span>FFW<span class="wx-warn-filter-count"
-                                                    data-warn-filter-count="ffw">0</span></span></label></div>
-                                </div>
-                                <!-- <label for="alert-categories">Filters</label> -->
-                                <div class="wx-check-row"><span>Severe Weather Alerts</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Severe Weather Alerts"
-                                        >
-                                </div>
-                                <div class="wx-check-row"><span>Severe Weather Watches</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Severe Weather Watches"
-                                        >
-                                </div>
-                                <div class="wx-check-row"><span>Hydrology Alerts</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Hydrology Alerts"
-                                        >
-                                </div>
-                                <div class="wx-check-row"><span>Flash Flood Alerts</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Flash Flood Alerts"
-                                        >
-                                </div>
-                                <div class="wx-check-row"><span>Winter Alerts</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Winter Alerts">
-                                </div>
-                                <div class="wx-check-row"><span>Cold Alerts</span><input class="weather-alerts-category"
-                                        type="checkbox" value="Cold Alerts"></div>
-                                <div class="wx-check-row"><span>Fire Alerts</span><input class="weather-alerts-category"
-                                        type="checkbox" value="Fire Alerts"></div>
-                                <div class="wx-check-row"><span>Heat Alerts</span><input class="weather-alerts-category"
-                                        type="checkbox" value="Heat Alerts"></div>
-                                <div class="wx-check-row"><span>Coastal Alerts</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Coastal Alerts">
-                                </div>
-                                <div class="wx-check-row"><span>Marine Alerts</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Marine Alerts">
-                                </div>
-                                <div class="wx-check-row"><span>Tropical Cyclone Alerts</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Tropical Cyclone Alerts"
-                                        >
-                                </div>
-                                <div class="wx-check-row"><span>Non-Precipitation Alerts</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Non-Precipitation Alerts"
-                                        >
-                                </div>
-                                <div class="wx-check-row"><span>Geophysical Alerts</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Geophysical Alerts"
-                                        >
-                                </div>
-                                <div class="wx-check-row"><span>Public Safety Alerts</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Public Safety Alerts"
-                                        >
-                                </div>
-                                <div class="wx-check-row"><span>Informational Alerts</span><input
-                                        class="weather-alerts-category" type="checkbox" value="Informational Alerts"
-                                        >
-                                </div>
-                            </div>
-                            <div class="wx-block wx-small">Alert Count:
-                                <span id="weather-alerts-count"></span>
-                            </div>
-                            <hr class="wx-divider">
-                            <div class="wx-block wx-small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Local Storm Reports <span id="weather-alerts-lsr-count" style="font-weight:400;color:#94a3b8;">(0)</span></div>
-                            <div class="wx-check-row"><span>All Reports</span><input id="weather-lsr-all" type="checkbox"></div>
-                            <div class="wx-check-row"><span>Tornado / Waterspout / Funnel</span><input class="weather-lsr-category" type="checkbox" value="tornado"></div>
-                            <div class="wx-check-row"><span>Hail</span><input class="weather-lsr-category" type="checkbox" value="hail"></div>
-                            <div class="wx-check-row"><span>Wind</span><input class="weather-lsr-category" type="checkbox" value="wind"></div>
-                            <div class="wx-check-row"><span>Flash Flood / Flood</span><input class="weather-lsr-category" type="checkbox" value="flood"></div>
-                            <div class="wx-check-row"><span>Heavy Rain</span><input class="weather-lsr-category" type="checkbox" value="rain"></div>
-                            <div class="wx-check-row"><span>Winter Weather</span><input class="weather-lsr-category" type="checkbox" value="winter"></div>
-                            <div class="wx-check-row"><span>Fire / Smoke</span><input class="weather-lsr-category" type="checkbox" value="fire"></div>
-                            <div class="wx-check-row"><span>Heat</span><input class="weather-lsr-category" type="checkbox" value="heat"></div>
-                            <div class="wx-check-row"><span>Other</span><input class="weather-lsr-category" type="checkbox" value="other"></div>
-                            <div class="wx-block wx-small" style="font-weight:600;color:#94a3b8;margin-top:6px;">Time Window</div>
-                            <div class="wx-archive-presets" id="weather-lsr-hours-row">
-                                <button class="wx-preset-btn" type="button" data-lsr-hours="6">6 hr</button>
-                                <button class="wx-preset-btn" type="button" data-lsr-hours="12">12 hr</button>
-                                <button class="wx-preset-btn active" type="button" data-lsr-hours="24">24 hr</button>
-                            </div>
-                            <div class="wx-block" style="display:flex;gap:8px;">
-                                <button id="weather-refresh-alerts" type="button">Refresh</button>
-                                <button id="wx-alerts-auto-update" type="button" style="flex:1;">Auto-update</button>
-                            </div>
-                        </div>
-                    </div>
 
                     <div id="wx-section-water" class="wx-block" data-type="water" style="display:none;">
                         <label id="weather-water-network-filters-title" class="label-small">Networks</label>
@@ -397,59 +285,20 @@
                                 title="Refresh Tropical">Refresh</button>
                         </div>
                     </div>
-
-                    <div id="wx-mode-controls" class="wx-block">
-                        <div class="wx-mode-tabs">
-                            <button id="weather-mode-archive" class="wx-mode-tab" type="button">Archive</button>
-                        </div>
-                        <span id="wx-scrubber-status" class="wx-small" style="display:none; margin-top:4px;"></span>
-                        <div id="wx-archive-actions" style="display:none; margin-top:8px;">
-                            <label style="margin-bottom:4px;">Lookback Options</label>
-                            <div class="wx-archive-presets">
-                                <button class="wx-preset-btn active" type="button" data-hours="1">1 hr</button>
-                                <button class="wx-preset-btn" type="button" data-hours="2">2 hr</button>
-                                <button class="wx-preset-btn" type="button" data-hours="3">3 hr</button>
-                                <button class="wx-preset-btn" type="button" data-hours="6">6 hr</button>
-                                <button class="wx-preset-btn" type="button" data-hours="12">12 hr</button>
-                                <button class="wx-preset-btn" type="button" data-hours="24">24 hr</button>
-                            </div>
-                            <div class="wx-archive-presets">
-                                <button class="wx-preset-btn" type="button" data-hours="snapshot">Single
-                                    Frame</button>
-                                <button class="wx-preset-btn" type="button" data-hours="custom">Custom</button>
-                            </div>
-                            <div class="wx-archive-field">
-                                <span class="wx-archive-field-label">From</span>
-                                <input type="datetime-local" id="archive-from" class="wx-sidebar-input">
-                            </div>
-                            <div class="wx-archive-field">
-                                <span class="wx-archive-field-label">To</span>
-                                <input type="datetime-local" id="archive-to" class="wx-sidebar-input">
-                            </div>
-                            <button id="archive-load-btn" class="primary" type="button"
-                                style="width:100%; margin-top:6px;">Load</button>
-                        </div>
-                    </div>
                 </aside>
                 <aside class="weather-side weather-side-right" id="weather-side-right">
                     <div class="wx-right-tabs" role="tablist" aria-label="Right panel tabs">
-                        <button type="button" id="wx-right-tab-btn-layers" class="wx-right-tab" data-right-tab="layers"
-                            role="tab" aria-selected="false" aria-controls="wx-right-pane-layers">Layers</button>
+                        <button type="button" id="wx-right-tab-btn-layers" class="wx-right-tab is-active" data-right-tab="layers"
+                            role="tab" aria-selected="true" aria-controls="wx-right-pane-layers">Layers</button>
                         <button type="button" id="wx-right-tab-btn-system" class="wx-right-tab" data-right-tab="system"
                             role="tab" aria-selected="false" aria-controls="wx-right-pane-system" hidden>System</button>
-                        <button type="button" id="wx-right-tab-btn-warnings" class="wx-right-tab is-active"
-                            data-right-tab="warnings" role="tab" aria-selected="true"
-                            aria-controls="wx-right-pane-warnings">
-                            <span>WWA</span>
-                            <span id="wx-warnings-count" class="wx-warnings-count" hidden>0</span>
-                        </button>
                         <button type="button" id="wx-right-tab-btn-styling" class="wx-right-tab"
                             data-right-tab="styling" role="tab" aria-selected="false"
                             aria-controls="wx-right-pane-styling" hidden>Styling</button>
                     </div>
 
-                    <div id="wx-right-pane-layers" class="wx-right-pane" role="tabpanel"
-                        aria-labelledby="wx-right-tab-btn-layers" hidden>
+                    <div id="wx-right-pane-layers" class="wx-right-pane is-active" role="tabpanel"
+                        aria-labelledby="wx-right-tab-btn-layers">
                         <div id="wx-side-group-map-layers" class="wx-block">
                             <div class="wx-city-mode" role="radiogroup" aria-label="Cities">
                                 <span class="wx-city-mode-label">Cities</span>
@@ -483,15 +332,6 @@
                         <div id="wx-side-groups-empty" class="wx-block wx-small" style="display:none;">
                             Enable a product group to see style controls.
                         </div>
-                        <div id="wx-side-group-alerts" class="wx-block wx-side-group" data-type="alerts"
-                            style="display:none;">
-                            <h3>Styling</h3>
-                            <h4>Alerts Styling</h4>
-                            <div class="wx-block">
-                                <label for="weather-opacity-alerts">Polygon Opacity</label>
-                                <input id="weather-opacity-alerts" type="range" min="0.1" max="1" step="0.05"
-                                    value="0.75"></div>
-                            <div class="wx-block">
                                 <h3>PROJECTED ARRIVAL TOOL</h3>
                                 <div class="wx-stormtrack-tools" id="wx-stormtrack-tools">
                                     <button id="wx-stormtrack-start" type="button">Start Line</button>
@@ -524,25 +364,6 @@
                         </div>
                     </div>
 
-                    <div id="wx-right-pane-warnings" class="wx-right-pane is-active" role="tabpanel"
-                        aria-labelledby="wx-right-tab-btn-warnings">
-                        <div class="wx-warnings-filter" role="group" aria-label="Warning filter">
-                            <button type="button" class="is-active" data-warn-panel-filter="all" aria-pressed="true"
-                                title="All Active Alerts">ALL<span class="wx-warn-filter-count"
-                                    data-warn-panel-filter-count="all">0</span></button>
-                            <button type="button" class="is-active" data-warn-filter="tor" aria-pressed="true"
-                                title="Tornado Warnings">TOR<span class="wx-warn-filter-count"
-                                    data-warn-filter-count="tor">0</span></button>
-                            <button type="button" class="is-active" data-warn-filter="svr" aria-pressed="true"
-                                title="Severe Thunderstorm Warnings">SVR<span class="wx-warn-filter-count"
-                                    data-warn-filter-count="svr">0</span></button>
-                            <button type="button" class="is-active" data-warn-filter="ffw" aria-pressed="true"
-                                title="Flash Flood Warnings">FFW<span class="wx-warn-filter-count"
-                                    data-warn-filter-count="ffw">0</span></button>
-                        </div>
-                        <div id="wx-warnings-list"></div>
-                        <div id="wx-warnings-empty">No active warnings.</div>
-                    </div>
 
                     <div id="wx-right-pane-styling" class="wx-right-pane" role="tabpanel"
                         aria-labelledby="wx-right-tab-btn-styling" hidden>
@@ -632,30 +453,6 @@
                 </aside>
                 <div id="weather-colorbar" class="weather-colorbar" style="display:none;"></div>
 
-                <div id="weather-archive-bar" hidden>
-                    <div id="archive-progress-row" style="display:none;">
-                        <div id="archive-progress-track">
-                            <div id="archive-progress-fill"></div>
-                        </div>
-                        <span id="archive-progress-text"></span>
-                    </div>
-                    <div id="archive-scrubber-row" style="display:none;">
-                        <button id="scrubber-step-back" type="button" title="Previous frame">&#9664;</button>
-                        <button id="scrubber-play" type="button" title="Play/Pause">&#9654;</button>
-                        <button id="scrubber-step-fwd" type="button" title="Next frame">&#9654;&#9654;</button>
-                        <div class="scrubber-speed-controls" aria-label="Playback speed controls">
-                            <button id="scrubber-speed-down" type="button" title="Slower playback"
-                                aria-label="Slower playback">&minus;</button>
-                            <span id="scrubber-speed-label" title="Playback speed">1x</span>
-                            <button id="scrubber-speed-up" type="button" title="Faster playback"
-                                aria-label="Faster playback">+</button>
-                        </div>
-                        <input type="range" id="scrubber-slider" min="0" max="0" value="0" step="1">
-                        <span id="scrubber-frame-count"></span>
-                        <span id="scrubber-timestamp">--</span>
-                    </div>
-                </div>
-
                 <div id="wx-tropical-adv-scrubber" hidden>
                     <div id="adv-scrub-mode" class="adv-scrub-mode" role="group"
                         aria-label="Scrub mode" hidden>
@@ -690,8 +487,6 @@
         <script src="js/shared.js?v=20260526a"></script>
         <script src="js/product-page-shell.js?v=20260627a"></script>
         <script src="js/product-app-context.js?v=20260616a"></script>
-        <script src="js/alerts-engine.js?v=20260621a"></script>
-        <script src="js/alerts-page.js?v=20260704a"></script>
         <script src="js/tropical-engine.js?v=20260704a"></script>
         <script src="js/tropical-page.js?v=20260618e"></script>
         <script src="js/weather.js?v=20260718e"></script>

@@ -18,7 +18,8 @@ Active root pages and their JS in this checkout:
 
 - `index.html` — main landing page for the dashboard
 - `weather.html` / `js/weather.js` — transitional combined workspace, now
-  primarily Alerts, Tropical, and Water plus shared workspace/archive wiring.
+  primarily Tropical and Water plus the Phase 27-reserved Projected Arrival
+  and Radar Speed Estimator implementation. Legacy Alerts paths are removed.
 - `/drought` — first true Stage 2 standalone page, served from
   `frontend/pages/drought/drought.html`; it loads ES modules from
   `frontend/core/` and its own directory and does not load `js/weather.js`.

@@ -1,7 +1,7 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-19 (Phases 20-24 and the Phase 25 standalone Alerts
-parity/follow-up smoke tests PASSED. Legacy Alerts cleanup is next.)
+Last updated: 2026-07-19 (Phases 20-25 complete. Phase 25 legacy Alerts cleanup
+is statically validated; Phase 26 Tropical is next.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -28,8 +28,9 @@ post-split structure, not the monolith.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
    this file (section below). Phases 18-24 are complete and user-confirmed.
-   Phase 25 standalone Alerts is user-confirmed; remove its legacy monolith
-   implementation next, preserving the workspace-owned arrival/speed tools.
+   Phase 25 is complete, including legacy monolith cleanup. Continue with
+   Phase 26 Tropical, then Water, preserving the workspace-owned arrival/speed
+   tools for Phase 27.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
@@ -53,8 +54,8 @@ post-split structure, not the monolith.
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
   interpretation, and most rendering. `js/weather.js` still owns the combined
-  workspace, generic archive/scrubber infrastructure, legacy Alerts code
-  pending cleanup, and coupled Tropical/Water behavior.
+  workspace, the preserved arrival/speed tools, and coupled Tropical/Water
+  behavior.
 - City labels are controlled from the Layers pane with an `Off | US | World`
   segmented control. `US` loads `data/us-cities-all.json`; `World` loads
   `data/world-cities.json`. Both sources share the same density slider, mapped
@@ -566,11 +567,21 @@ found it.
   when site markers are enabled. User browser confirmation PASSED 2026-07-18:
   several radar sites passed the parity smoke, and the one-row legend plus all
   three reset triggers worked correctly while playback was active.
-- Phase 25: alerts. **STANDALONE BUILD + USER PARITY/FOLLOW-UP SMOKE PASSED
-  2026-07-19. Remove the legacy Alerts implementation from `weather.html`,
-  `js/weather.js`, and obsolete Alerts modules next; preserve the Projected
-  Arrival Tool and Radar Speed Estimator as workspace-owned Phase 27
-  capabilities. Fix future gaps forward in `frontend/pages/alerts/`.** The
+- Phase 25: alerts. **COMPLETE 2026-07-19. STANDALONE BUILD + USER
+  PARITY/FOLLOW-UP SMOKE PASSED; LEGACY MONOLITH CLEANUP STATICALLY
+  VALIDATED. Preserve the Projected Arrival Tool and Radar Speed Estimator as
+  workspace-owned Phase 27 capabilities. Fix future gaps forward in
+  `frontend/pages/alerts/`.** Legacy cleanup removed the Alerts controls,
+  warning rail, banners/detail/pager, live/LSR loaders, archive path, product
+  context, and obsolete `js/alerts-{engine,page}.js` from the combined
+  workspace (about 4,000 deleted lines). The storm-motion extraction,
+  projection/place-arrival, drawing, and speed-estimator implementation remains
+  in `weather.html`/`js/weather.js` for Phase 27. Validation: `node --check` on
+  the monolith and all standalone Alerts modules, focused standalone-boundary
+  tests (11 passed with the Drought regression set), an unresolved
+  internal-helper scan, legacy-reference searches, and `git diff --check`. Per the user's
+  multi-phase authorization, no additional browser smoke was run at this
+  boundary; it is deferred to the consolidated Phase 27 checklist. The
   standalone page uses the Option 1A core map/sidebar/legend/status/scrubber
   shell plus a dedicated active-warning rail. Preserved behavior includes the
   complete alert-category selector with TOR/SVR/FFW subtype filters; viewport-

@@ -80,8 +80,9 @@ Current preserved implementation: `js/weather.js`
 (`_activateStormTrackDragProjection`, `_installStormTrackDragHandle`,
 `_pivotedBearingDeg`). These controls are intentionally excluded from the
 standalone Alerts page because its former IEM radar overlay was removed. Treat
-them as deferred workspace-owned capabilities for the severe-weather workspace;
-preserve them when deleting the now-user-approved legacy Alerts paths.
+them as deferred workspace-owned capabilities for the severe-weather workspace.
+The Phase 25 legacy Alerts deletion preserved their motion, projection,
+place-arrival, drawing, and speed-estimator implementation for Phase 27.
 
 ## Alert Detail Open/Close Pattern
 

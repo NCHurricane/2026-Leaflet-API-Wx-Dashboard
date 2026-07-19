@@ -27,9 +27,9 @@ Current status:
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
   interpretation, and most rendering.
-- js/weather.js still owns the combined workspace, legacy Alerts code pending
-  removal, generic archive/scrubber orchestration, and coupled Tropical/Water
-  behavior.
+- js/weather.js still owns the combined workspace, the preserved Projected
+  Arrival/Speed Estimator tools, and coupled Tropical/Water behavior. Legacy
+  Alerts UI/controller/engine/archive paths were removed in Phase 25.
 - Backend route logic should stay in routes/*.py, route-facing cache/response
   behavior should stay in services/*_service.py, and upstream/cache refresh
   behavior should stay in workers/*_worker.py.
@@ -124,10 +124,11 @@ Active track order (2026-07-19):
     legend; restore default-on TOR/SVR/FFW/SMW fill/border pulsing with a Style
     toggle; retain the official FFW color while using a lighter text-only dark-
     UI presentation color; and enable Auto-Update by default at 60 seconds.
-    User parity and complete focused follow-up smoke PASSED 2026-07-19. Next:
-    delete only the legacy Alerts UI/controller/engine paths from the combined
-    workspace, while preserving the Projected Arrival Tool and Radar Speed
-    Estimator for Phase 27. Then continue to Phase 26. Minor UI spacing polish
+    User parity and complete focused follow-up smoke PASSED 2026-07-19. Legacy
+    Alerts cleanup is COMPLETE and statically validated: combined-workspace
+    controls, rendering/load/archive paths, and obsolete js/alerts-* modules
+    were removed while the Projected Arrival Tool and Radar Speed Estimator
+    remain reserved for Phase 27. Next: Phase 26 Tropical, then Water. Minor UI spacing polish
     across the new standalone pages remains deferred to the end of the
     superplan by user decision.
 2. Satellite render-pipeline latency optimization. This backend-only track may
