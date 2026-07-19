@@ -76,7 +76,6 @@
                 <input id="weather-type-mrms" type="checkbox">
                 <input id="weather-type-drought" type="checkbox">
                 <input id="weather-type-wpc" type="checkbox">
-                <input id="weather-type-water" type="checkbox">
             </div>
         </header>
 
@@ -172,36 +171,6 @@
 
 
 
-                    <div id="wx-section-water" class="wx-block" data-type="water" style="display:none;">
-                        <label id="weather-water-network-filters-title" class="label-small">Networks</label>
-                        <div id="weather-water-network-filters">
-                            <label class="weather-water-network-filter">
-                                <input type="checkbox" value="river"> River
-                            </label>
-                            <label class="weather-water-network-filter">
-                                <input type="checkbox" value="coastal"> Coastal
-                            </label>
-                            <label class="weather-water-network-filter">
-                                <input type="checkbox" value="buoy"> NDBC
-                            </label>
-                        </div>
-                        <div id="weather-water-flood-filter-row">
-                            <label class="label-small" style="margin-top:6px">River Flood Filter</label>
-                            <div id="weather-water-flood-filters" class="wx-water-flood-pills">
-                                <button class="wx-water-flood-pill" aria-selected="true"  data-flood="all">All</button>
-                                <button class="wx-water-flood-pill" aria-selected="false" data-flood="action">Action+</button>
-                                <button class="wx-water-flood-pill" aria-selected="false" data-flood="minor">Minor+</button>
-                                <button class="wx-water-flood-pill" aria-selected="false" data-flood="moderate">Moderate+</button>
-                                <button class="wx-water-flood-pill" aria-selected="false" data-flood="major">Major</button>
-                            </div>
-                        </div>
-                        <div class="wx-radar-action-row">
-                            <button id="weather-refresh-water" type="button">Refresh</button>
-                            <button id="weather-clear-water" type="button">Clear</button>
-                        </div>
-                        <span id="weather-water-status" class="wx-small"></span>
-                        <div id="weather-water-detail" class="wx-water-detail" hidden></div>
-                    </div>
 
                 </aside>
                 <aside class="weather-side weather-side-right" id="weather-side-right">

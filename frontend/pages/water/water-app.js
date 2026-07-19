@@ -1,0 +1,493 @@
+import { apiUrl } from '../../core/api.js';
+import { createLegendHost } from '../../core/legend.js';
+import { createMapCore } from '../../core/map-core.js';
+import { renderProductNav } from '../../core/nav.js';
+import { createSidebarTabs } from '../../core/sidebar-tabs.js';
+import { createStatusReporter } from '../../core/status.js';
+
+const byId = (id) => document.getElementById(id);
+const L = window.L;
+const mapCore = createMapCore(byId('weather-map'), { region: 'CONUS', basemap: 'Dark (No Labels)' });
+const map = mapCore.map;
+const waterMarkersPane = map.createPane('water-markers');
+waterMarkersPane.style.zIndex = '470';
+const legend = createLegendHost(byId('weather-colorbar'), { align: 'left' });
+const status = createStatusReporter({
+    globalTimestamp: byId('global-timestamp'), message: byId('weather-water-status'),
+    updated: byId('water-updated'), age: byId('water-age'),
+    provider: byId('water-provider'), source: byId('water-source'),
+});
+
+let waterLayer = null;
+let _waterStations = [];
+let _waterRequestSeq = 0;
+let _waterDetailRequestSeq = 0;
+let _waterSelectedSiteId = '';
+let _waterReloadTimer = null;
+let _waterStationsInFlight = false;
+let _waterPendingReload = false;
+let _waterFloodFilter = 'all';
+const WATER_FLOOD_RANKS = { action: 1, minor: 2, moderate: 3, major: 4 };
+
+const _escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[char]));
+function _asDate(value) { const date = value instanceof Date ? value : new Date(value); return Number.isNaN(date.getTime()) ? null : date; }
+function _formatValidTimeLabel(value) { const date = _asDate(value); return date ? date.toLocaleString() : '—'; }
+function _isTypeEnabled(type) { return type === 'water'; }
+function setLegend(html) { if (html) legend.setHtml(html); else legend.clear(); }
+function _setViewerTimestamp(value) { if (value) status.setDataInfo({ timestamp: value, provider: 'NOAA', source: 'Water observations' }); }
+function _setReliability(_type, _label, source, timestamp) { status.setDataInfo({ timestamp, provider: 'NOAA', source }); }
+function _setTimestampSource(_type, source, timestamp) { status.setDataInfo({ timestamp, provider: 'NOAA', source }); }
+
+function _ensureWaterLayer() {
+    if (!waterLayer) waterLayer = L.layerGroup();
+    return waterLayer;
+}
+
+function _setWaterStatus(message) {
+    const el = byId('weather-water-status');
+    if (el) el.textContent = message || '';
+}
+
+function _clearWaterLayer() {
+    _waterRequestSeq += 1;
+    if (_waterReloadTimer) {
+        clearTimeout(_waterReloadTimer);
+        _waterReloadTimer = null;
+    }
+    if (waterLayer) {
+        waterLayer.clearLayers();
+        if (map.hasLayer(waterLayer)) map.removeLayer(waterLayer);
+    }
+    _waterStations = [];
+    _waterSelectedSiteId = '';
+    const detail = byId('weather-water-detail');
+    if (detail) {
+        detail.hidden = true;
+        detail.innerHTML = '';
+    }
+}
+
+function _waterMarkerStyle(status) {
+    if (status === 'coastal') return { fill: '#14b8a6', stroke: '#e0f2fe', weight: 2.6 };
+    if (status === 'buoy') return { fill: '#2563eb', stroke: '#bfdbfe', weight: 2.6 };
+    if (status === 'major') return { fill: '#a855f7', stroke: '#581c87' };
+    if (status === 'moderate') return { fill: '#ef4444', stroke: '#991b1b' };
+    if (status === 'minor') return { fill: '#f97316', stroke: '#9a3412' };
+    if (status === 'action') return { fill: '#facc15', stroke: '#a16207' };
+    switch (status) {
+        case 'stale':
+            return { fill: '#64748b', stroke: '#334155' };
+        case 'missing':
+            return { fill: '#f59e0b', stroke: '#92400e' };
+        default:
+            return { fill: '#38bdf8', stroke: '#0369a1' };
+    }
+}
+
+function _waterLegendHtml() {
+    const rows = [
+        ['Major', 'major'],
+        ['Moderate ', 'moderate'],
+        ['Minor', 'minor'],
+        ['Action Stage', 'action'],
+        ['No Flood / Unknown', 'normal'],
+        ['Coastal Gauge', 'coastal'],
+        ['NDBC Buoy', 'buoy'],
+    ].map(([label, status]) => {
+        const style = _waterMarkerStyle(status);
+        const shadow = status === 'coastal'
+            ? 'box-shadow:0 0 0 1px #0f766e;'
+            : status === 'buoy'
+            ? 'box-shadow:0 0 0 1px #1d4ed8;'
+            : '';
+        return `<div class="legend-item"><span class="legend-swatch" style="background:${style.fill};border-color:${style.stroke};border-radius:50%;${shadow}"></span><span class="legend-text">${label}</span></div>`;
+    }).join('');
+    return `<h4 class="legend-title">River/Coastal/NDBC</h4><div class="legend-flow">${rows}</div>`;
+}
+
+function _selectedWaterNetworks() {
+    return [...document.querySelectorAll('.weather-water-network-filter input[type="checkbox"]:checked')]
+        .map((el) => String(el.value || '').trim().toLowerCase())
+        .filter(Boolean);
+}
+
+function _isCoastalWaterStation(station) {
+    return String(station?.network || '').toLowerCase() === 'coastal';
+}
+
+function _isBuoyWaterStation(station) {
+    return String(station?.network || '').toLowerCase() === 'buoy';
+}
+
+function _waterNetworkLabel(station) {
+    const network = String(station?.network || '').toLowerCase();
+    if (network === 'coastal') return 'Coastal';
+    if (network === 'buoy') return 'NDBC';
+    return 'River';
+}
+
+function _waterCapabilityText(station) {
+    const capabilities = Array.isArray(station?.capabilities) ? station.capabilities : [];
+    if (capabilities.length) return capabilities.join(', ');
+    const type = String(station?.station_type || '').replace(/_/g, ' ').trim();
+    return type ? _waterCategoryText(type) : '';
+}
+
+function _waterRequestBbox() {
+    const bounds = map.getBounds();
+    const south = Math.max(-90, bounds.getSouth());
+    const north = Math.min(90, bounds.getNorth());
+    const rawWest = bounds.getWest();
+    const rawEast = bounds.getEast();
+    const span = rawEast - rawWest;
+    const west = span >= 360 ? -180 : Math.max(-180, rawWest);
+    const east = span >= 360 ? 180 : Math.min(180, rawEast);
+    return [west, south, east, north].map((value) => value.toFixed(4)).join(',');
+}
+
+function _waterReadingText(station, key) {
+    const reading = station?.readings?.[key];
+    if (!reading || reading.value == null) return '—';
+    const value = Number(reading.value);
+    const formatted = Number.isFinite(value)
+        ? value.toLocaleString(undefined, { maximumFractionDigits: key === 'flow' ? 0 : 2 })
+        : String(reading.value);
+    return `${formatted} ${reading.units || ''}`.trim();
+}
+
+function _waterReadingRow(station, key, label) {
+    const text = _waterReadingText(station, key);
+    return text && text !== '—' ? [label, text] : null;
+}
+
+function _waterLatestTimestamp(station) {
+    const times = Object.values(station?.readings || {})
+        .map((reading) => _asDate(reading?.timestamp))
+        .filter(Boolean)
+        .sort((a, b) => b.getTime() - a.getTime());
+    return times[0] || null;
+}
+
+function _waterCategoryText(value) {
+    const text = String(value || '').replace(/_/g, ' ').trim();
+    if (!text) return '';
+    return text.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function _waterFloodRank(category) {
+    const cat = String(category || '').toLowerCase();
+    if (cat.includes('major')) return 4;
+    if (cat.includes('moderate')) return 3;
+    if (cat.includes('minor')) return 2;
+    if (cat.includes('action')) return 1;
+    return 0;
+}
+
+function _applyWaterFloodFilter(stations) {
+    if (_waterFloodFilter === 'all') return stations;
+    const minRank = WATER_FLOOD_RANKS[_waterFloodFilter] || 0;
+    return stations.filter((s) =>
+        _isCoastalWaterStation(s) ||
+        _isBuoyWaterStation(s) ||
+        _waterFloodRank(s.observed_category) >= minRank,
+    );
+}
+
+function _waterStageGaugeHtml(station) {
+    const reading = station?.readings?.stage;
+    const categories = station?.flood?.categories || {};
+    const current = reading?.value != null ? Number(reading.value) : null;
+    if (!Number.isFinite(current)) return '';
+    const THRESH = [
+        { key: 'action',   color: '#facc15', label: 'Act' },
+        { key: 'minor',    color: '#f97316', label: 'Min' },
+        { key: 'moderate', color: '#ef4444', label: 'Mod' },
+        { key: 'major',    color: '#a855f7', label: 'Maj' },
+    ];
+    const parsed = THRESH
+        .map((t) => ({ ...t, stage: Number(categories[t.key]?.stage) }))
+        .filter((t) => Number.isFinite(t.stage));
+    if (!parsed.length) return '';
+    const maxThreshold = parsed[parsed.length - 1].stage;
+    const scaleMax = Math.max(current * 1.1, maxThreshold * 1.15, 1);
+    const pct = (val) => `${Math.min(100, Math.max(0, (val / scaleMax) * 100)).toFixed(1)}%`;
+    let zones = `<div class="wx-stage-zone" style="left:0;width:${pct(parsed[0].stage)};background:#38bdf830;"></div>`;
+    for (let i = 0; i < parsed.length; i++) {
+        const start = parsed[i].stage;
+        const end = i + 1 < parsed.length ? parsed[i + 1].stage : scaleMax;
+        zones += `<div class="wx-stage-zone" style="left:${pct(start)};width:${pct(end - start)};background:${parsed[i].color}50;"></div>`;
+    }
+    const marker = `<div class="wx-stage-marker" style="left:${pct(current)};"></div>`;
+    const units = reading?.units || 'ft';
+    const threshText = parsed.map((t) => `${t.label}:${t.stage.toFixed(1)}`).join('  ');
+    return `<div class="wx-stage-gauge">`
+        + `<div class="wx-stage-bar">${zones}${marker}</div>`
+        + `<div class="wx-stage-summary">`
+        + `<span class="wx-stage-cur">&#9650; ${current.toFixed(2)} ${units}</span>`
+        + `<span class="wx-stage-thresh">${threshText}</span>`
+        + `</div></div>`;
+}
+
+function _waterBuoyCardHtml(station) {
+    const readings = station?.readings || {};
+    const rt = (key) => {
+        const rd = readings[key];
+        if (!rd || rd.value == null) return null;
+        const value = Number(rd.value);
+        const formatted = Number.isFinite(value)
+            ? value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+            : String(rd.value);
+        return `${formatted}${rd.units ? ' ' + rd.units : ''}`;
+    };
+    const windDir = readings.wind_direction?.value != null
+        ? `${Number(readings.wind_direction.value).toFixed(0)}°T` : null;
+    const waveDir = readings.mean_wave_direction?.value != null
+        ? `${Number(readings.mean_wave_direction.value).toFixed(0)}°T` : null;
+    const groups = [
+        { label: 'Wind',  items: [['Speed', rt('wind_speed')], ['Gust', rt('wind_gust')], ['Dir', windDir]] },
+        { label: 'Waves', items: [['Height', rt('wave_height')], ['Period', rt('dominant_wave_period')], ['Dir', waveDir]] },
+        { label: 'Atmos', items: [['Pressure', rt('pressure')], ['Tendency', rt('pressure_tendency')]] },
+        { label: 'Temp',  items: [['Air', rt('air_temperature')], ['Water', rt('water_temperature')], ['Dew Pt', rt('dewpoint')]] },
+        { label: 'Other', items: [['Visibility', rt('visibility')], ['Tide', rt('tide')]] },
+    ]
+        .map((g) => ({ ...g, items: g.items.filter(([, v]) => v != null) }))
+        .filter((g) => g.items.length);
+    if (!groups.length) return '';
+    return `<div class="wx-buoy-card">`
+        + groups.map((g) =>
+            `<div class="wx-buoy-group">`
+            + `<span class="wx-buoy-group-label">${_escapeHtml(g.label)}</span>`
+            + `<dl class="wx-storm-popup-grid">`
+            + g.items.map(([l, v]) => `<dt>${_escapeHtml(l)}</dt><dd>${_escapeHtml(v)}</dd>`).join('')
+            + `</dl></div>`,
+        ).join('')
+        + `</div>`;
+}
+
+function _waterPopupHydrograph(station) {
+    const pageUrl = station?.source_url || '';
+    const hydrographUrl = station?.floodcat_hydrograph_url || station?.hydrograph_url || '';
+    if (hydrographUrl && pageUrl) {
+        return `<a class="wx-water-hydrograph-link" href="${_escapeHtml(pageUrl)}" target="_blank" rel="noopener" title="Open NOAA gauge page">`
+            + `<img class="wx-water-hydrograph" src="${_escapeHtml(hydrographUrl)}" alt="Hydrograph for ${_escapeHtml(station?.name || station?.site_id || 'gauge')}" loading="lazy">`
+            + `</a>`;
+    }
+    if (!pageUrl) return '';
+    const sourceLabel = station?.source === 'NOAA NDBC'
+        ? 'NOAA NDBC station page'
+        : station?.source === 'NOAA CO-OPS'
+        ? 'NOAA Tides & Currents station page'
+        : station?.source === 'NOAA NWPS'
+        ? 'NOAA NWPS gauge page'
+        : 'NOAA river gauge page';
+    return `<a class="wx-water-detail-link" href="${_escapeHtml(pageUrl)}" target="_blank" rel="noopener">${_escapeHtml(sourceLabel)}</a>`;
+}
+
+function _waterStationPopupHtml(station) {
+    if (!station) return '';
+    const isCoastal = _isCoastalWaterStation(station);
+    const isBuoy = _isBuoyWaterStation(station);
+    const latest = _waterLatestTimestamp(station);
+    const updatedDate = latest || _asDate(station.updated);
+    const updated = updatedDate ? _formatValidTimeLabel(updatedDate.getTime()) : 'No current value';
+    const rows = [
+        ['Site', station.nwps_lid || station.coops_id || station.ndbc_id || station.site_id || ''],
+        ['Network', _waterNetworkLabel(station)],
+        ['Type', _waterCapabilityText(station)],
+        ['Waterbody', station.waterbody],
+        ['Stage', (isCoastal || isBuoy) ? '' : _waterReadingText(station, 'stage')],
+        ['Observed', (isCoastal || isBuoy) ? '' : _waterCategoryText(station.observed_category)],
+        isCoastal ? _waterReadingRow(station, 'water_level', 'Water Level') : null,
+        isCoastal ? _waterReadingRow(station, 'current_speed', 'Speed') : null,
+        isCoastal ? _waterReadingRow(station, 'current_direction', 'Direction') : null,
+        ['Updated', updated],
+        ['WFO / RFC', [station.wfo, station.rfc].filter(Boolean).join(' / ')],
+        ['Affiliation', station.affiliation],
+        ['County', [station.county, station.state].filter(Boolean).join(', ')],
+        ['State', isCoastal ? station.state : ''],
+    ]
+        .filter(Boolean)
+        .filter((row) => row[1])
+        .map(([label, value]) => `<dt>${_escapeHtml(label)}</dt><dd>${String(value).includes('<br>') ? value : _escapeHtml(value)}</dd>`)
+        .join('');
+    return `<div class="wx-storm-popup wx-water-popup">`
+        + `<div class="wx-storm-popup-title">${_escapeHtml(station.name || station.site_id)}</div>`
+        + `<dl class="wx-storm-popup-grid">${rows}</dl>`
+        + (!isBuoy && !isCoastal ? _waterStageGaugeHtml(station) : '')
+        + (isBuoy ? _waterBuoyCardHtml(station) : '')
+        + _waterPopupHydrograph(station)
+        + `</div>`;
+}
+
+async function _loadWaterStationDetail(siteId, marker) {
+    if (!marker) return;
+    const requestSeq = ++_waterDetailRequestSeq;
+    marker.bindPopup('<div class="wx-storm-popup wx-water-popup"><div class="wx-storm-popup-title">Loading gauge...</div></div>');
+    marker.openPopup();
+    try {
+        const resp = await fetch(apiUrl(`/api/water/stations/${encodeURIComponent(siteId)}`), { cache: 'no-store' });
+        if (requestSeq !== _waterDetailRequestSeq || !_isTypeEnabled('water')) return;
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (data?.station) {
+            _waterSelectedSiteId = siteId;
+            marker.setPopupContent(_waterStationPopupHtml(data.station));
+            marker.openPopup();
+        }
+    } catch (err) {
+        if (requestSeq !== _waterDetailRequestSeq) return;
+        _setWaterStatus(`Water station unavailable: ${err.message}`);
+        marker.setPopupContent(`<div class="wx-storm-popup wx-water-popup"><div class="wx-storm-popup-title">Gauge unavailable</div><dl class="wx-storm-popup-grid"><dt>Error</dt><dd>${_escapeHtml(err.message)}</dd></dl></div>`);
+        marker.openPopup();
+    }
+}
+
+function _waterMarkerStatus(station) {
+    if (_isCoastalWaterStation(station)) return 'coastal';
+    if (_isBuoyWaterStation(station)) return 'buoy';
+    const category = String(station?.observed_category || '').toLowerCase();
+    if (category.includes('major')) return 'major';
+    if (category.includes('moderate')) return 'moderate';
+    if (category.includes('minor')) return 'minor';
+    if (category.includes('action')) return 'action';
+    return 'normal';
+}
+
+function _renderWaterStations(stations) {
+    const layer = _ensureWaterLayer();
+    layer.clearLayers();
+    _waterStations = Array.isArray(stations) ? stations : [];
+    _applyWaterFloodFilter(_waterStations).forEach((station) => {
+        const lat = Number(station.lat);
+        const lon = Number(station.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        const style = _waterMarkerStyle(_waterMarkerStatus(station));
+        const marker = L.circleMarker([lat, lon], {
+            pane: 'water-markers',
+            radius: 5,
+            color: style.stroke,
+            weight: style.weight || 1.6,
+            fillColor: style.fill,
+            fillOpacity: 0.9,
+        });
+        const isCoastal = _isCoastalWaterStation(station);
+        const isBuoy = _isBuoyWaterStation(station);
+        marker.bindTooltip(
+            isCoastal
+                ? `<strong>${_escapeHtml(station.name || station.site_id)}</strong><br>${_escapeHtml(_waterCapabilityText(station) || 'Coastal Gauge')}`
+                : isBuoy
+                ? `<strong>${_escapeHtml(station.name || station.site_id)}</strong><br>${_escapeHtml(_waterReadingText(station, 'wave_height'))} waves`
+                : `<strong>${_escapeHtml(station.name || station.site_id)}</strong><br>Stage ${_escapeHtml(_waterReadingText(station, 'stage'))}`,
+            { direction: 'top', className: 'city-name-label' },
+        );
+        marker.bindPopup(_waterStationPopupHtml(station));
+        marker.on('click', () => _loadWaterStationDetail(station.site_id, marker));
+        marker.addTo(layer);
+    });
+    if (_isTypeEnabled('water') && !map.hasLayer(layer)) layer.addTo(map);
+}
+
+async function _loadWaterStations({ force = false } = {}) {
+    if (!_isTypeEnabled('water')) return;
+    if (_waterStationsInFlight) {
+        _waterPendingReload = true;
+        return;
+    }
+    const bbox = _waterRequestBbox();
+    const requestSeq = ++_waterRequestSeq;
+    _waterStationsInFlight = true;
+    _waterPendingReload = false;
+    _setWaterStatus('Loading NOAA water stations...');
+    try {
+        const params = new URLSearchParams({
+            bbox,
+            max_sites: '15000',
+            networks: _selectedWaterNetworks().join(','),
+        });
+        if (force) params.set('_', String(Date.now()));
+        const resp = await fetch(apiUrl(`/api/water/stations?${params.toString()}`), { cache: 'no-store' });
+        if (requestSeq !== _waterRequestSeq || !_isTypeEnabled('water')) return;
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const stations = Array.isArray(data?.stations) ? data.stations : [];
+        _renderWaterStations(stations);
+        const totalAvailable = Number(data?.total_available || stations.length);
+        const cachePrefix = data?.cache === 'empty' ? 'Cache warming: ' : '';
+        const staleSuffix = data?.stale ? ' Cache may be stale.' : '';
+        const selectedNetworks = _selectedWaterNetworks();
+        const networkLabel = selectedNetworks.length
+            ? selectedNetworks.map((value) => (
+                value === 'river' ? 'river' : value === 'coastal' ? 'coastal' : 'NDBC'
+            )).join(' + ')
+            : 'selected';
+        const countText = totalAvailable > stations.length
+            ? `${stations.length} of ${totalAvailable} cached NOAA ${networkLabel} gauges shown.`
+            : `${stations.length} cached NOAA ${networkLabel} gauge${stations.length === 1 ? '' : 's'} loaded.`;
+        _setWaterStatus(`${cachePrefix}${data?.message || countText}${staleSuffix}`);
+        const latest = stations.map(_waterLatestTimestamp).filter(Boolean).sort((a, b) => b.getTime() - a.getTime())[0];
+        if (latest) {
+            _setViewerTimestamp(latest.getTime());
+            _setReliability('water', 'NOAA water gauges', 'Observed river, coastal, and marine stations', latest.getTime());
+            _setTimestampSource('water', 'noaa_water_gauges', latest.getTime());
+        }
+    } catch (err) {
+        if (requestSeq !== _waterRequestSeq) return;
+        _setWaterStatus(`NOAA river gauge data unavailable: ${err.message}`);
+    } finally {
+        _waterStationsInFlight = false;
+        if (requestSeq === _waterRequestSeq && _waterPendingReload && _isTypeEnabled('water')) {
+            _waterPendingReload = false;
+            _scheduleWaterReload(900);
+        }
+    }
+}
+
+function _scheduleWaterReload(delayMs = 900) {
+    if (!_isTypeEnabled('water')) return;
+    if (_waterReloadTimer) clearTimeout(_waterReloadTimer);
+    _waterReloadTimer = setTimeout(() => {
+        _waterReloadTimer = null;
+        _loadWaterStations();
+    }, delayMs);
+}
+
+function _updateWaterFloodPillsVisibility() {
+    const riverChecked = !!document.querySelector('.weather-water-network-filter input[value="river"]:checked');
+    const row = byId('weather-water-flood-filter-row');
+    if (row) row.hidden = !riverChecked;
+    if (!riverChecked && _waterFloodFilter !== 'all') {
+        _waterFloodFilter = 'all';
+        document.querySelectorAll('.wx-water-flood-pill').forEach((pill) => {
+            pill.setAttribute('aria-selected', String(pill.dataset.flood === 'all'));
+        });
+    }
+}
+
+async function initialize() {
+    renderProductNav(byId('product-nav'), 'Water');
+    createSidebarTabs(byId('water-sidebar-tabs'), { defaultTab: 'data' });
+    byId('weather-refresh-water').addEventListener('click', () => void _loadWaterStations({ force: true }));
+    byId('weather-clear-water').addEventListener('click', () => { _clearWaterLayer(); _setWaterStatus('Water markers cleared.'); });
+    document.querySelectorAll('.weather-water-network-filter input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener('change', () => { _updateWaterFloodPillsVisibility(); void _loadWaterStations({ force: true }); }));
+    byId('weather-water-flood-filters').addEventListener('click', (event) => {
+        const pill = event.target.closest('.wx-water-flood-pill');
+        if (!pill) return;
+        _waterFloodFilter = pill.dataset.flood || 'all';
+        document.querySelectorAll('.wx-water-flood-pill').forEach((item) => item.setAttribute('aria-selected', String(item === pill)));
+        _renderWaterStations(_waterStations);
+        if (_waterFloodFilter !== 'all') _setWaterStatus(`Flood filter: ${_applyWaterFloodFilter(_waterStations).length} of ${_waterStations.length} river gauges shown.`);
+    });
+    byId('water-basemap').addEventListener('change', (event) => mapCore.setBasemap(event.target.value));
+    document.querySelectorAll('[data-map-overlay]').forEach((input) => {
+        input.addEventListener('change', () => void mapCore.setOverlayVisible(input.dataset.mapOverlay, input.checked));
+        if (input.checked) void mapCore.setOverlayVisible(input.dataset.mapOverlay, true);
+    });
+    map.on('moveend', () => _scheduleWaterReload());
+    _updateWaterFloodPillsVisibility();
+    setLegend(_waterLegendHtml());
+    await _loadWaterStations();
+}
+
+initialize().catch((error) => { console.error('[water] startup failed', error); status.setMessage(`Startup failed: ${error.message}`, 'error'); });

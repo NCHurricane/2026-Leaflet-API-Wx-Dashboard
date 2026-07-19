@@ -351,6 +351,11 @@ Tropical now demonstrates the boundary: reuse `frontend/core/` for API helpers,
 map setup, navigation, sidebar tabs, status, and legend lifecycle, while keeping
 storm/archive domain behavior in `frontend/pages/tropical/`.
 
+Water follows the same boundary with a single page entry module: viewport-aware
+station requests, flood filtering, markers, and popups remain page-local while
+map overlays, navigation, status, sidebar tabs, and legend hosting come from
+`frontend/core/`.
+
 For Tropical backend changes, follow the post-refactor ownership boundaries:
 
 - API route declarations belong in `routes/tropical.py`.

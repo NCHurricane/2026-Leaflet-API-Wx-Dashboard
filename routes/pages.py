@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app_core.static_assets import serve_page, serve_product_shell_page
+from app_core.static_assets import serve_page
 
 router = APIRouter()
 
@@ -74,4 +74,4 @@ def read_wpc_page():
 
 @router.get("/water")
 def read_water_page():
-    return serve_product_shell_page("water")
+    return serve_page("frontend/pages/water/water.html")

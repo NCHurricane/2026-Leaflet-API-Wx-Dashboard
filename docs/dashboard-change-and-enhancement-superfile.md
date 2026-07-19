@@ -1,7 +1,7 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-19 (Phases 20-25 and Phase 26 Tropical complete. Tropical
-is statically validated; Phase 26 Water is next.)
+Last updated: 2026-07-19 (Phases 20-26 complete and statically validated.
+Phase 27 workspace assembly and monolith retirement are next.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -28,9 +28,9 @@ post-split structure, not the monolith.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
    this file (section below). Phases 18-24 are complete and user-confirmed.
-   Phase 25 and the Tropical half of Phase 26 are complete, including legacy
-   monolith cleanup. Continue with Phase 26 Water, preserving the workspace-owned
-   arrival/speed tools for Phase 27.
+   Phases 25-26 are complete, including legacy Alerts, Tropical, and Water
+   monolith cleanup. Continue with Phase 27 workspace assembly, preserving the
+   arrival/speed tools in the new workspace.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
@@ -47,14 +47,15 @@ post-split structure, not the monolith.
   services should remain modular. Do not add route logic back to `main.py`.
 - The fixed map-first dashboard shell is accepted.
 - `/drought`, `/surface`, `/spc`, `/wpc`, `/mrms`, `/rtma`, `/satellite`,
-  `/radar`, `/alerts`, and `/tropical` serve true standalone pages from
-  `frontend/pages/`. The only remaining canonical product route serving the
-  shared dashboard shell in product-only mode is `/water`.
+  `/radar`, `/alerts`, `/tropical`, and `/water` serve true standalone pages
+  from `frontend/pages/`. No canonical product route depends on the shared
+  dashboard shell in product-only mode.
 - `weather.html` remains the combined workspace and should keep working until
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
-  interpretation, and rendering. `js/weather.js` now owns only the transitional
-  Water workspace plus the preserved arrival/speed tools.
+  interpretation, and rendering. `js/weather.js` now contains only transitional
+  shared-workspace infrastructure and the preserved arrival/speed tools; it is
+  scheduled for deletion in Phase 27.
 - City labels are controlled from the Layers pane with an `Off | US | World`
   segmented control. `US` loads `data/us-cities-all.json`; `World` loads
   `data/world-cities.json`. Both sources share the same density slider, mapped
@@ -675,10 +676,11 @@ found it.
   dense wrapping for many categories. The existing narrow-screen rule keeps
   two fluid columns, so shared core legends and mobile responsiveness are not
   changed.
-- Phase 26: Tropical is complete and statically validated at
-  `frontend/pages/tropical/`; Water remains the separate independently shippable
-  migration. Water stays excluded from the initial workspace, but must leave
-  `js/weather.js` before Phase 27.
+- Phase 26: complete. Tropical and Water now serve independently from
+  `frontend/pages/{tropical,water}/`, and their UI/state/load/render paths are
+  removed from `weather.html` and `js/weather.js`. Focused static/automated
+  validation passed; browser parity smoke is deferred to the consolidated
+  end-of-Phases-25-27 checklist.
 - Phase 27: workspace assembly; retire `weather.html`; delete the monolith.
 
 Definition of done (mechanically checkable): each product route loads only
@@ -1023,7 +1025,8 @@ Planned/enhancement direction:
 
 V1 is active implementation.
 
-- `/water` is registered in the shared product shell and navigation.
+- `/water` serves `frontend/pages/water/water.html` on the Stage 2 core map,
+  navigation, sidebar, status, and legend utilities without `js/weather.js`.
 - `workers/water_worker.py` builds a local marker cache from:
   - NWS ArcGIS river gauges.
   - NOS CO-OPS active water-level stations.

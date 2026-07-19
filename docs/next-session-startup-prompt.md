@@ -20,16 +20,16 @@ Read first:
 
 Current status:
 - The fixed map-first dashboard shell is accepted.
-- /drought, /surface, /spc, /wpc, /mrms, /rtma, /satellite, /radar, /alerts,
-  and /tropical serve true standalone pages from frontend/pages/. The only
-  remaining product-only shell route is /water.
+- All canonical product routes, including /tropical and /water, now serve true
+  standalone pages from frontend/pages/.
 - /weather.html remains the combined workspace and must keep working until it is
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
   interpretation, and most rendering.
-- js/weather.js now owns the transitional Water workspace and the preserved
-  Projected Arrival/Speed Estimator tools. Legacy Alerts paths were removed in
-  Phase 25 and legacy Tropical paths were removed in Phase 26.
+- js/weather.js now contains only transitional shared-workspace infrastructure
+  and the preserved Projected Arrival/Speed Estimator tools. Legacy Alerts,
+  Tropical, and Water paths have been removed; Phase 27 must move the tools into
+  the severe-weather workspace and delete the monolith.
 - Backend route logic should stay in routes/*.py, route-facing cache/response
   behavior should stay in services/*_service.py, and upstream/cache refresh
   behavior should stay in workers/*_worker.py.
@@ -132,7 +132,9 @@ Active track order (2026-07-19):
     statically validated: `/tropical` now serves frontend/pages/tropical/ on
     the core shell, and the Tropical UI/state/bridge plus js/tropical-* modules
     were removed from the monolith. Browser parity smoke is deferred to the
-    consolidated final checklist. Next: Phase 26 Water. Minor UI spacing polish
+    consolidated final checklist. Phase 26 Water is also COMPLETE and statically
+    validated at frontend/pages/water/; its legacy monolith/UI paths are removed.
+    Next: Phase 27 workspace assembly and monolith retirement. Minor UI spacing polish
     across the new standalone pages remains deferred to the end of the
     superplan by user decision.
 2. Satellite render-pipeline latency optimization. This backend-only track may
