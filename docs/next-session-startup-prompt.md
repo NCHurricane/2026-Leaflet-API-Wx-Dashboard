@@ -23,11 +23,71 @@ Current status:
 - All canonical product routes, including /tropical and /water, now serve true
   standalone pages from frontend/pages/.
 - /workspace is the new severe-weather workspace. /weather.html redirects to it.
+- The initial Workspace smoke found and fixed mismatched core shell classes plus
+  a legacy map grid-area collision. The Radar/Alerts Workspace slice was accepted
+  by the user on 2026-07-19 after iterative KGSP smoke testing; all tests reported
+  by the user passed.
+- Workspace UX follow-up removes the redundant Live Radar checkbox, pins only
+  CONUS/AK/HI/PR, centers CONUS with page-owned bounds, defaults alerts to TOR+SVR
+  with independently combinable TOR/SVR/FFW/SMW filters that turn `All` off,
+  plus report type/time pills with a 1-hour default, adds
+  independent header switches with adjacent counts, and
+  separate compact collapsible legends. Styling remains Workspace-local. Storm
+  Reports default off; Storm Tracks and
+  Value Inspector are site-dependent and reset on region/Home defaults. The
+  redundant radar helper text is removed and the footer refresh action is now
+  full width. A split right rail now mirrors the standalone Alerts warning/report
+  cards, counts, sorting, and card filters; each half is visible only when its
+  corresponding Workspace layer switch is enabled. Rail `ALL` includes every
+  selected active alert, warning-card zoom is capped at level 9, and report
+  popups clear on layer-off or Workspace view/product changes instead of
+  reopening from cached selection. A visible default-on 60-second auto-update
+  refreshes enabled alert/report data and selected radar frames. New TOR/SVR/FFW
+  warnings and watches produce 15-second dismissible map notices and one
+  `sounds/weather_alert.mp3` playback per notification burst; SMW and other alert
+  types do not notify. First load, filter changes, and viewport/region changes
+  do not produce false notices. Alert cards sort newest-issued first, and radar
+  site hover labels have a Workspace-only translucent high-contrast background.
+  Alert polygons/cards and LSR markers/cards now open the shared draggable detail
+  panel; LSR detail includes location/time/magnitude/WFO/source/remarks and no
+  longer uses a Leaflet popup on pages that provide the panel. Workspace polygon
+  and alert-card navigation are both capped at zoom 9. LSR markers show compact
+  260 px responsive sticky hover tooltips with type/magnitude/location. Leaflet overlay focus
+  rings are hidden for pointer clicks and retained only for keyboard focus-visible
+  navigation.
+  A KGSP radar-site smoke found four follow-ups now corrected: the shared value
+  inspector request queue is restored to remove mousemove abort churn; NST tracks
+  use the established icons/tooltips plus a separate Workspace legend; Projected
+  Arrival drawing no longer opens/zooms an alert detail; and radar history frames
+  now populate a visible shared scrubber. This correction set is included in the
+  accepted 2026-07-19 Radar/Alerts closure.
+  Layers groups are independently collapsible. Radar starts open; Active Alerts,
+  Storm Reports, and the SPC/Satellite/RTMA/MRMS/WPC/Water composition placeholders
+  start collapsed.
+  Workspace does not expose radar elevation selection; it requests the explicit
+  0.5-degree Level II default. The advanced selector remains Radar-page-only,
+  where 0.5 degrees is also the initial default.
+  Radar has a default-on header switch and Level 2/Level 3 pills below Site; the
+  pills and Product field appear only after site selection, and Product shows
+  only catalog entries for that level. Level 3 is unavailable for non-CONUS sites.
+  Projected Arrival has its own Workspace group immediately below Active Alerts;
+  the group is hidden until an alert polygon, rail card, or new-alert notice is
+  selected, then appears expanded with the selected alert named. There is no
+  separate Tools sidebar tab. Its inline help text is retained in the superfile
+  as future FAQ/Wiki copy. The former Radar Speed Estimator and all of its wiring
+  were removed because the fixed loop timing it assumed no longer exists.
+  The map Home control now performs a full Workspace context reset before fitting
+  CONUS: it clears the selected radar/site frames and scrubber, restores Level 2
+  Base Reflectivity, clears the selected alert/projection, and hides Projected
+  Arrival while preserving the user's layer visibility preferences.
+  The Radar/Alerts Workspace update cycle is closed for now.
+- Next session: diagnose and correct the known standalone Water page UI issues.
+  Keep the completed Workspace Radar/Alerts behavior stable while doing so.
 - Product engines/pages own product-specific controls, requests, response
   interpretation, and most rendering.
 - weather.html, js/weather.js, the obsolete root js modules, and
-  css/dashboard.css are deleted. The Projected Arrival/Speed Estimator tools now
-  live in frontend/pages/workspace/workspace-tools.js.
+  css/dashboard.css are deleted. The Projected Arrival Tool now lives in
+  frontend/pages/workspace/workspace-tools.js.
 - Backend route logic should stay in routes/*.py, route-facing cache/response
   behavior should stay in services/*_service.py, and upstream/cache refresh
   behavior should stay in workers/*_worker.py.
@@ -90,9 +150,9 @@ Active track order (2026-07-19):
     cell SRV motion, and the value inspector. About 2,006 Radar lines were
     deleted from js/weather.js (now 7,244); the Radar controls/scripts were
     removed from weather.html; js/radar-{engine,page}.js and
-    js/radar-site-locations.js were deleted. The Projected Arrival Tool / Radar
-    Speed Estimator remains preserved in the legacy workspace for Phase 27, but
-    is no longer part of Alerts (`weather.js?v=20260718e`). See the
+    js/radar-site-locations.js were deleted. The Projected Arrival Tool remained
+    preserved in the legacy workspace for Phase 27, but is no longer part of
+    Alerts (`weather.js?v=20260718e`). See the
     superfile for the deliberate smoke deltas. Post-smoke UI follow-up makes
     the desktop site-status legend one row and gives Home, Region change, and
     Clear one complete Radar reset path; the user confirmed this follow-up.
@@ -100,8 +160,8 @@ Active track order (2026-07-19):
     now serves it. It includes live categories/subtype filtering, LSRs, the
     active-warning rail, immersive detail, map/style controls, and auto-update.
     Alerts archive UI is hidden pending the unified archive design. It
-    intentionally excludes the two radar-dependent
-    tools above. Initial user parity smoke PASSED. A focused follow-up now uses
+    intentionally excludes the radar-dependent Projected Arrival Tool above.
+    Initial user parity smoke PASSED. A focused follow-up now uses
     a full-width compact Alerts/LSR legend, collapsible Alert Categories,
     TOR/SVR/FFW/SMW filters, Severe/All/Off new-alert notice selection, and a
     bounded draggable detail panel with restored threat chips and official NWS
@@ -125,20 +185,22 @@ Active track order (2026-07-19):
     User parity and complete focused follow-up smoke PASSED 2026-07-19. Legacy
     Alerts cleanup is COMPLETE and statically validated: combined-workspace
     controls, rendering/load/archive paths, and obsolete js/alerts-* modules
-    were removed while the Projected Arrival Tool and Radar Speed Estimator
-    remain reserved for Phase 27. Phase 26 Tropical is also COMPLETE and
+    were removed while the Projected Arrival Tool remained reserved for Phase
+    27. Phase 26 Tropical is also COMPLETE and
     statically validated: `/tropical` now serves frontend/pages/tropical/ on
     the core shell, and the Tropical UI/state/bridge plus js/tropical-* modules
     were removed from the monolith. Browser parity smoke is deferred to the
     consolidated final checklist. Phase 26 Water is also COMPLETE and statically
     validated at frontend/pages/water/; its legacy monolith/UI paths are removed.
     Phase 27 is COMPLETE and statically validated: /workspace composes Alerts
-    and Radar engine APIs, preserves both radar-dependent tools, redirects the
+    and Radar engine APIs, preserves the Projected Arrival Tool, redirects the
     legacy /weather.html URL, vendors browser libraries under frontend/lib, and
-    retires the monolith/root shell assets. Run
-    docs/phases-25-27-manual-smoke-checklist.md next. Additional product-engine
-    composition (SPC/MRMS/RTMA/Satellite/Drought/WPC) remains the next workspace
-    expansion. Minor UI spacing polish
+    retires the monolith/root shell assets. The user closed the Radar/Alerts
+    Workspace slice on 2026-07-19 with all tests reported passing. Begin the next
+    session with the known standalone Water UI issues; keep the consolidated
+    checklist as regression reference. Additional product-engine composition
+    (SPC/MRMS/RTMA/Satellite/Drought/WPC) remains a later workspace expansion.
+    Minor UI spacing polish
     across the new standalone pages remains deferred to the end of the
     superplan by user decision.
 2. Satellite render-pipeline latency optimization. This backend-only track may

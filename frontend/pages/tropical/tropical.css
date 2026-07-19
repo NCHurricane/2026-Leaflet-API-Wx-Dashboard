@@ -1137,13 +1137,6 @@ body.wx-standalone-product .weather-header-right {
     color: #e2e8f0;
 }
 
-#wx-radarcal-result {
-    font-size: 0.68rem;
-    color: #22e8ff;
-    margin-top: 4px;
-    min-height: 1.2em;
-}
-
 #weather-alerts-filter-options[hidden] {
     display: none;
 }

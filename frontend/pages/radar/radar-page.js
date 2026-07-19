@@ -6,7 +6,7 @@ import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js';
-import { createRadarEngine } from './radar-engine.js';
+import { createRadarEngine } from './radar-engine.js?v=20260719a';
 
 const byId = (id) => document.getElementById(id);
 const AUTO_UPDATE_INTERVAL_MS = 90_000;
@@ -16,7 +16,7 @@ function activeSelection() {
     return {
         site: String(byId('radar-site')?.value || '').trim().toUpperCase(),
         product: String(byId('radar-product')?.value || '').trim().toUpperCase(),
-        elevation: String(byId('radar-elevation')?.value || '').trim(),
+        elevation: String(byId('radar-elevation')?.value || '0.5').trim(),
         hours: Math.max(0.5, Math.min(12, Number.isFinite(hours) ? hours : 1)),
     };
 }

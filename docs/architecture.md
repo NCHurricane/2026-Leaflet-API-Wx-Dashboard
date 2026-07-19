@@ -19,7 +19,7 @@ Active root pages and their JS in this checkout:
 - `index.html` — main landing page for the dashboard
 - `/workspace` — Stage 2 composition page. It imports the Alerts and Radar
   engines (never their page controllers), combines active warnings/LSRs with
-  live radar, and owns the Projected Arrival and Radar Speed Estimator tools in
+  live radar, and owns the Projected Arrival Tool in
   `frontend/pages/workspace/workspace-tools.js`.
 - `/drought` — first true Stage 2 standalone page, served from
   `frontend/pages/drought/drought.html`; it loads ES modules from
@@ -73,8 +73,8 @@ Planned product-page migration:
   severe-warning pulse styling, and default-on 60-second refresh without
   loading `js/weather.js`. Alerts archive plumbing is dormant and its UI is
   hidden pending a unified one-target-datetime plus lookback design. The radar-
-  dependent Projected Arrival and Speed Estimator tools remain reserved for the
-  future severe-weather workspace.
+  dependent Projected Arrival Tool remains reserved for the severe-weather
+  workspace.
 - `/radar` serves `frontend/pages/radar/radar.html`, which owns live site/product
   selection, current and cached-frame playback, NST overlays, legends, and the
   value inspector without loading `js/weather.js`. `/radar.html` remains a
@@ -249,9 +249,10 @@ Standalone Alerts interaction model:
   toggles existing paths without a data reload.
 - Official NWS colors remain the polygon/border/legend source of truth. FFW uses
   a separate lighter presentation-only text color on dark UI surfaces.
-- Projected Arrival and Radar Speed Estimator controls are no longer part of
-  Alerts. Their implementation is reserved for the future severe-weather
-  workspace, where a radar timeline can provide the required visual context.
+- Projected Arrival controls are no longer part of Alerts. Their implementation
+  belongs to the severe-weather workspace, where radar and alert context coexist.
+- The former Radar Speed Estimator was removed project-wide because its assumed
+  fixed four-frame, five-minute radar loop no longer exists.
 
 ## Pipeline Separation
 

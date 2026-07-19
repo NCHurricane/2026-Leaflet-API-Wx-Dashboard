@@ -67,7 +67,7 @@ function legendHeader(title) {
 }
 
 export function createAlertsEngine(options) {
-    const { api, mapCore, legend, status, onAlertCount, onLsrCount, onWarnings, onDetail, onNewAlert } = options;
+    const { api, mapCore, legend, lsrLegend = null, status, onAlertCount, onLsrCount, onWarnings, onDetail, onNewAlert, onLsrDetail, onLsrDetailClose, shouldHandleAlertClick } = options;
     const { leaflet, map } = mapCore;
     const alertsPane = map.createPane('alerts-polygons');
     alertsPane.style.zIndex = '360';
@@ -103,8 +103,14 @@ export function createAlertsEngine(options) {
     }
 
     function openSelectedLsrPopup() {
-        if (!selectedLsrId) return;
+        if (!selectedLsrId || onLsrDetail) return;
         lsrLayer?.eachLayer((layer) => { if (lsrFeatureId(layer.feature) === selectedLsrId) layer.openPopup?.(); });
+    }
+
+    function clearLsrSelection() {
+        selectedLsrId = '';
+        map.closePopup();
+        onLsrDetailClose?.();
     }
 
     function replaceLayer(current, next) {
@@ -147,6 +153,7 @@ export function createAlertsEngine(options) {
                 layer.on('add', () => syncAlertPulseLayer(layer, feature));
                 layer.bindTooltip(tooltipHtml(feature), { sticky: true, opacity: 0.95, className: 'alerts-hover-tip' });
                 layer.on('click', (event) => {
+                    if (shouldHandleAlertClick && !shouldHandleAlertClick(feature, event)) return;
                     if (event.originalEvent) leaflet.DomEvent.stopPropagation(event.originalEvent);
                     onDetail?.(feature);
                 });
@@ -186,10 +193,18 @@ export function createAlertsEngine(options) {
             const count = lsrCounts.get(category);
             return `<div class="core-legend-category alerts-legend-lsr-category"><span class="alerts-legend-icon" style="color:${color}"><i class="${iconClass}" aria-hidden="true"></i></span><div class="core-legend-category-copy"><span class="core-legend-category-code">${escapeHtml(label)} (${count})</span></div></div>`;
         }).join('');
-        const sections = [
-            alertRows ? `<div class="alerts-legend-section"><div class="alerts-legend-label">Alerts in view</div><div class="core-legend-categories">${alertRows}</div></div>` : '',
-            lsrRows ? `<div class="alerts-legend-section"><div class="alerts-legend-label">Local storm reports</div><div class="core-legend-categories">${lsrRows}</div></div>` : '',
-        ].join('');
+        const alertSection = alertRows
+            ? `<div class="alerts-legend-section"><div class="alerts-legend-label">Alerts in view</div><div class="core-legend-categories">${alertRows}</div></div>` : '';
+        const lsrSection = lsrRows
+            ? `<div class="alerts-legend-section"><div class="alerts-legend-label">Local storm reports</div><div class="core-legend-categories">${lsrRows}</div></div>` : '';
+        if (lsrLegend) {
+            if (alertSection) legend.setHtml(`${legendHeader('Active Alerts')}<div class="core-legend-body">${alertSection}</div>`);
+            else legend.clear();
+            if (lsrSection) lsrLegend.setHtml(`${legendHeader('Local Storm Reports')}<div class="core-legend-body">${lsrSection}</div>`);
+            else lsrLegend.clear();
+            return;
+        }
+        const sections = `${alertSection}${lsrSection}`;
         if (!sections) { legend.clear(); return; }
         legend.setHtml(`${legendHeader('Active Alerts')}<div class="core-legend-body">${sections}</div>`);
     }
@@ -220,8 +235,8 @@ export function createAlertsEngine(options) {
             displayBaseFeatures = activeFeatures(display?.features || full?.features);
             alertCacheReady = true;
             renderAlerts();
-            const nextIds = new Set(renderedAlerts.map(featureId));
-            if (knownAlertIds) renderedAlerts.forEach((feature) => {
+            const nextIds = new Set(fullBaseFeatures.map(featureId));
+            if (knownAlertIds && loadOptions.notifyNewAlerts !== false) renderedAlerts.forEach((feature) => {
                 if (!knownAlertIds.has(featureId(feature))) onNewAlert?.(feature);
             });
             knownAlertIds = nextIds;
@@ -250,7 +265,21 @@ export function createAlertsEngine(options) {
             onEachFeature(feature, layer) {
                 const props = feature?.properties || {};
                 const meta = [props.location, props.state].filter(Boolean).join(', ');
-                layer.bindPopup(`<strong>${escapeHtml(props.event || 'Local Storm Report')}${props.magnitude_label ? ` (${escapeHtml(props.magnitude_label)})` : ''}</strong>${meta ? `<br>${escapeHtml(meta)}` : ''}${props.time ? `<br>${escapeHtml(new Date(props.time).toLocaleString())}` : ''}${props.remarks ? `<br><small>${escapeHtml(props.remarks)}</small>` : ''}`);
+                const category = classifyLsrEvent(props.event);
+                const [, color] = LSR_CATEGORIES[category] || LSR_CATEGORIES.other;
+                const title = `${props.event || 'Local Storm Report'}${props.magnitude_label ? ` (${props.magnitude_label})` : ''}`;
+                layer.bindTooltip(`<strong style="color:${color}">${escapeHtml(title)}</strong>${meta ? `<br>${escapeHtml(meta)}` : ''}`, {
+                    sticky: true, opacity: 0.95, className: 'alerts-hover-tip alerts-lsr-hover-tip',
+                });
+                if (onLsrDetail) {
+                    layer.on('click', (event) => {
+                        if (event.originalEvent) leaflet.DomEvent.stopPropagation(event.originalEvent);
+                        selectedLsrId = lsrFeatureId(feature);
+                        onLsrDetail(feature);
+                    });
+                } else {
+                    layer.bindPopup(`<strong>${escapeHtml(props.event || 'Local Storm Report')}${props.magnitude_label ? ` (${escapeHtml(props.magnitude_label)})` : ''}</strong>${meta ? `<br>${escapeHtml(meta)}` : ''}${props.time ? `<br>${escapeHtml(new Date(props.time).toLocaleString())}` : ''}${props.remarks ? `<br><small>${escapeHtml(props.remarks)}</small>` : ''}`);
+                }
             },
         });
     }
@@ -258,6 +287,7 @@ export function createAlertsEngine(options) {
     async function loadLsr(categories, hours, loadOptions = {}) {
         const seq = ++lsrSequence;
         if (!categories?.length) {
+            clearLsrSelection();
             renderedLsr = []; lsrLayer = replaceLayer(lsrLayer, null); onLsrCount?.(0); options.onLsrReports?.([]); renderLegend(); return;
         }
         const bounds = map.getBounds();
@@ -322,13 +352,13 @@ export function createAlertsEngine(options) {
         fullBaseFeatures = []; displayBaseFeatures = []; renderedAlerts = []; renderedLsr = [];
         alertCacheReady = false; lsrBaseFeatures = []; lsrCacheKey = ''; lsrCacheReady = false;
         knownAlertIds = null;
-        selectedLsrId = '';
+        clearLsrSelection();
         alertLayer = replaceLayer(alertLayer, null); lsrLayer = replaceLayer(lsrLayer, null);
-        onAlertCount?.(0); onLsrCount?.(0); onWarnings?.([]); options.onLsrReports?.([]); legend.clear();
+        onAlertCount?.(0); onLsrCount?.(0); onWarnings?.([]); options.onLsrReports?.([]); legend.clear(); lsrLegend?.clear();
     }
 
     return Object.freeze({
-        clear,
+        clear, clearLsrSelection,
         destroy() { clear(); },
         getAlerts() { return [...renderedAlerts]; },
         loadArchive, loadLive, loadLsr, renderArchiveFrame, renderLegend, setSelection,
@@ -337,10 +367,18 @@ export function createAlertsEngine(options) {
         showLsr(feature) {
             const coordinates = feature?.geometry?.coordinates;
             if (!Array.isArray(coordinates) || coordinates.length < 2) return;
-            selectedLsrId = lsrFeatureId(feature);
             map.setView([Number(coordinates[1]), Number(coordinates[0])], Math.max(map.getZoom(), 9), { animate: false });
-            openSelectedLsrPopup();
+            selectedLsrId = lsrFeatureId(feature);
+            if (onLsrDetail) onLsrDetail(feature);
+            else openSelectedLsrPopup();
         },
-        zoomTo(feature) { try { map.fitBounds(leaflet.geoJSON(feature).getBounds(), { animate: false, padding: [28, 28] }); } catch (_) { /* invalid geometry */ } },
+        zoomTo(feature, zoomOptions = {}) {
+            try {
+                map.fitBounds(leaflet.geoJSON(feature).getBounds(), {
+                    animate: false, padding: [28, 28],
+                    ...(Number.isFinite(zoomOptions.maxZoom) ? { maxZoom: zoomOptions.maxZoom } : {}),
+                });
+            } catch (_) { /* invalid geometry */ }
+        },
     });
 }

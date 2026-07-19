@@ -76,13 +76,13 @@ handle projects movement intervals from alert-derived motion vectors.
 - Pivot is clamped by `_STORM_TRACK_PIVOT_MAX_DEG` (currently 45 degrees).
 - Place-arrival overlay rows are sorted by arrival time and capped.
 
-Current preserved implementation: `js/weather.js`
+Current implementation: `frontend/pages/workspace/workspace-tools.js`
 (`_activateStormTrackDragProjection`, `_installStormTrackDragHandle`,
 `_pivotedBearingDeg`). These controls are intentionally excluded from the
 standalone Alerts page because its former IEM radar overlay was removed. Treat
-them as deferred workspace-owned capabilities for the severe-weather workspace.
-The Phase 25 legacy Alerts deletion preserved their motion, projection,
-place-arrival, drawing, and speed-estimator implementation for Phase 27.
+them as workspace-owned capabilities for the severe-weather workspace. The
+former fixed-loop Radar Speed Estimator was removed after its timing dependency
+ceased to match the current radar frame model.
 
 ## Alert Detail Open/Close Pattern
 

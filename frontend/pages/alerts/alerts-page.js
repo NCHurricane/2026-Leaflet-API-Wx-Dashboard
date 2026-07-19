@@ -7,8 +7,8 @@ import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from './alerts-config.js?v=20260719a';
-import { createAlertDetail } from './alerts-detail.js?v=20260719a';
-import { classifyLsrEvent, createAlertsEngine } from './alerts-engine.js?v=20260719a';
+import { createAlertDetail } from './alerts-detail.js?v=20260719b';
+import { classifyLsrEvent, createAlertsEngine } from './alerts-engine.js?v=20260719f';
 
 const byId = (id) => document.getElementById(id);
 const AUTO_UPDATE_MS = 60_000;
@@ -53,7 +53,12 @@ async function initialize() {
         updated: byId('alerts-updated'), age: byId('alerts-age'),
         provider: byId('alerts-provider'), source: byId('alerts-source'),
     });
-    const detail = createAlertDetail(byId('alerts-detail'));
+    const detail = createAlertDetail(byId('alerts-detail'), {
+        lsrColor(feature) {
+            const category = classifyLsrEvent(feature?.properties?.event);
+            return (LSR_CATEGORIES[category] || LSR_CATEGORIES.other)[1];
+        },
+    });
     mapCore.leaflet.DomEvent.disableClickPropagation(byId('alerts-detail'));
     mapCore.leaflet.DomEvent.disableScrollPropagation(byId('alerts-detail'));
     mapCore.leaflet.DomEvent.disableClickPropagation(byId('alerts-notifications'));
@@ -209,6 +214,8 @@ async function initialize() {
         onLsrReports: renderLsrReports,
         onWarnings: renderWarnings,
         onDetail: (feature) => detail.open(feature),
+        onLsrDetail: (feature) => detail.openLsr(feature),
+        onLsrDetailClose: detail.closeLsr,
         onNewAlert: showNewAlert,
     });
     const scrubberBar = byId('alerts-scrubber-bar');
@@ -283,12 +290,13 @@ async function initialize() {
     byId('alerts-warning-subtypes').addEventListener('change', applyAlertSelection);
     byId('alerts-lsr-all').addEventListener('change', (event) => {
         document.querySelectorAll('#alerts-lsr-list input').forEach((input) => { input.checked = event.target.checked; });
-        syncLsrMaster(); syncRightRailVisibility(); void engine.loadLsr(selectedLsrCategories(), selectedLsrHours());
+        syncLsrMaster(); syncRightRailVisibility(); engine.clearLsrSelection(); void engine.loadLsr(selectedLsrCategories(), selectedLsrHours());
     });
-    byId('alerts-lsr-list').addEventListener('change', () => { syncLsrMaster(); syncRightRailVisibility(); void engine.loadLsr(selectedLsrCategories(), selectedLsrHours()); });
+    byId('alerts-lsr-list').addEventListener('change', () => { syncLsrMaster(); syncRightRailVisibility(); engine.clearLsrSelection(); void engine.loadLsr(selectedLsrCategories(), selectedLsrHours()); });
     byId('alerts-lsr-hours').addEventListener('click', (event) => {
         const button = event.target.closest('[data-hours]'); if (!button) return;
         byId('alerts-lsr-hours').querySelectorAll('button').forEach((item) => item.classList.toggle('is-active', item === button));
+        engine.clearLsrSelection();
         void engine.loadLsr(selectedLsrCategories(), selectedLsrHours());
     });
     byId('alerts-warning-filters').addEventListener('click', (event) => {

@@ -5,71 +5,136 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Severe Weather Workspace | NCHurricane</title>
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260719a">
-    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260719a">
+    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260719s">
 </head>
 <body>
     <header class="core-header">
-        <nav id="product-nav" class="core-product-nav" aria-label="Weather products"></nav>
-        <div class="core-reliability" aria-label="Workspace data status">
-            <span>Updated <strong id="workspace-updated">—</strong></span>
-            <span>Age <strong id="workspace-age">—</strong></span>
-            <span>Provider <strong id="workspace-provider">—</strong></span>
-            <span>Source <strong id="workspace-source">—</strong></span>
-        </div>
+        <div class="core-brand">NCHURRICANE</div>
+        <nav id="product-nav" class="core-nav" aria-label="Weather products"></nav>
     </header>
     <main class="core-map-shell workspace-shell">
         <aside id="workspace-sidebar-tabs" class="core-sidebar workspace-sidebar">
-            <div class="core-sidebar-pinned-head"><h1>Severe Weather Workspace</h1><p>Live radar + active warnings</p></div>
-            <div class="core-sidebar-tablist" role="tablist" aria-label="Workspace controls">
-                <button type="button" data-sidebar-tab="layers" role="tab">Layers</button>
-                <button type="button" data-sidebar-tab="tools" role="tab">Tools</button>
-                <button type="button" data-sidebar-tab="map" role="tab">Map</button>
+            <div class="core-sidebar-header">
+                <div class="core-sidebar-pinned-head"><h1>Severe Weather Workspace</h1><p>Live radar + active warnings</p></div>
+                <div class="core-card workspace-status-card" aria-label="Workspace data status">
+                    <div class="workspace-eyebrow">Data status</div>
+                    <dl class="core-status-grid">
+                        <dt>Valid</dt><dd id="workspace-updated">—</dd>
+                        <dt>Data Age</dt><dd id="workspace-age">—</dd>
+                        <dt>Provider</dt><dd id="workspace-provider">—</dd>
+                        <dt>Source</dt><dd id="workspace-source">—</dd>
+                    </dl>
+                </div>
+                <div class="core-field workspace-region-field">
+                    <label for="workspace-region">Region</label>
+                    <select id="workspace-region">
+                        <option value="CONUS">CONUS</option>
+                        <option value="AK">Alaska</option>
+                        <option value="HI">Hawaii</option>
+                        <option value="PR">Puerto Rico</option>
+                    </select>
+                </div>
             </div>
-            <div class="core-sidebar-scroll">
-                <section data-sidebar-panel="layers">
-                    <div class="workspace-group">
-                        <h2>Radar</h2>
-                        <label class="wx-check-row"><span>Live Radar</span><input id="workspace-radar-enabled" type="checkbox"></label>
-                        <label for="workspace-radar-site">Site</label><select id="workspace-radar-site"><option value="">Select site</option></select>
-                        <label for="workspace-radar-product">Product</label><select id="workspace-radar-product"><option value="L2_REF">Base Reflectivity</option></select>
-                        <label for="workspace-radar-elevation">Elevation</label><select id="workspace-radar-elevation"><option value="auto">Auto</option></select>
-                        <label class="wx-check-row"><span>Radar Sites</span><input id="workspace-radar-sites" type="checkbox" checked></label>
-                        <label class="wx-check-row"><span>Storm Tracks</span><input id="workspace-radar-tracks" type="checkbox"></label>
-                        <label class="wx-check-row"><span>Value Inspector</span><input id="workspace-radar-inspector" type="checkbox"></label>
-                    </div>
-                    <div class="workspace-group">
-                        <h2>Alerts</h2>
-                        <label class="wx-check-row"><span>Active Warnings</span><input id="workspace-alerts-enabled" type="checkbox" checked></label>
-                        <label class="wx-check-row"><span>Storm Reports (24h)</span><input id="workspace-lsr-enabled" type="checkbox" checked></label>
-                        <div class="workspace-counts"><span id="workspace-alert-count">0 warnings</span><span id="workspace-lsr-count">0 reports</span></div>
-                    </div>
-                    <div class="workspace-group workspace-future-layers">
-                        <h2>Additional products</h2>
-                        <p>SPC, MRMS, RTMA, Satellite, Drought, and WPC remain available from their standalone pages; engine composition is reserved for the next workspace expansion.</p>
-                    </div>
-                </section>
-                <section data-sidebar-panel="tools" hidden>
-                    <div class="workspace-group">
-                        <h2>Projected Arrival Tool</h2>
-                        <p class="workspace-help">Select an alert polygon, draw its motion line, then finish the projection. Hold Shift while dragging the handle to pivot.</p>
-                        <div class="wx-stormtrack-tools" id="wx-stormtrack-tools">
-                            <button id="wx-stormtrack-start" type="button">Start Line</button>
-                            <button id="wx-stormtrack-finish" type="button">Finish Line</button>
-                            <button id="wx-stormtrack-clear" type="button">Clear Projection</button>
+            <div class="core-sidebar-tabs" role="tablist" aria-label="Workspace controls">
+                <button class="core-sidebar-tab" type="button" data-sidebar-tab="layers" role="tab">Layers</button>
+                <button class="core-sidebar-tab" type="button" data-sidebar-tab="map" role="tab">Map</button>
+            </div>
+            <div class="core-sidebar-content">
+                <section class="core-sidebar-panel" data-sidebar-panel="layers">
+                    <details class="workspace-group workspace-layer-group" open>
+                        <summary class="workspace-group-summary">
+                            <h2>Radar</h2>
+                            <label class="workspace-layer-toggle" title="Show radar">
+                                <span class="core-visually-hidden">Show radar</span>
+                                <input id="workspace-radar-enabled" type="checkbox" checked>
+                                <span aria-hidden="true"></span>
+                            </label>
+                        </summary>
+                        <div id="workspace-radar-controls" class="workspace-group-body">
+                            <label for="workspace-radar-site">Site</label><select id="workspace-radar-site"><option value="">Select site</option></select>
+                            <div id="workspace-radar-product-options" class="workspace-radar-product-options" hidden>
+                                <div id="workspace-radar-levels" class="workspace-pills workspace-radar-levels" role="group" aria-label="Radar product level">
+                                    <button class="is-active" type="button" data-radar-level="Level 2" aria-pressed="true">Level 2</button>
+                                    <button type="button" data-radar-level="Level 3" aria-pressed="false">Level 3</button>
+                                </div>
+                                <label for="workspace-radar-product">Product</label><select id="workspace-radar-product"><option value="L2_REF">Base Reflectivity</option></select>
+                            </div>
+                            <label class="wx-check-row"><span>Show Radar Sites</span><input id="workspace-radar-sites" type="checkbox" checked></label>
+                            <label class="wx-check-row workspace-radar-site-option" hidden><span>Storm Tracks</span><input id="workspace-radar-tracks" type="checkbox"></label>
+                            <label class="wx-check-row workspace-radar-site-option" hidden><span>Value Inspector</span><input id="workspace-radar-inspector" type="checkbox"></label>
                         </div>
-                        <label for="wx-speed-override">Speed Override (kt)</label>
-                        <div class="wx-speed-override-row"><input id="wx-speed-override" type="number" min="1" max="200" step="1" placeholder="—"><button id="wx-speed-override-clear" type="button" title="Clear override">×</button></div>
-                    </div>
-                    <div class="workspace-group">
-                        <h2>Radar Speed Estimator</h2>
-                        <p class="workspace-help">Draw cell displacement across a four-frame, five-minute-step radar loop.</p>
-                        <div class="wx-stormtrack-tools" id="wx-radarcal-tools"><button id="wx-radarcal-start" type="button">Draw Speed Line</button><button id="wx-radarcal-clear" type="button">Clear</button></div>
-                        <div id="wx-radarcal-result"></div>
-                    </div>
+                    </details>
+                    <details class="workspace-group workspace-layer-group">
+                        <summary class="workspace-group-summary">
+                            <div class="workspace-title-count"><h2>Active Alerts</h2><span id="workspace-alert-count">0</span></div>
+                            <label class="workspace-layer-toggle" title="Show active alerts">
+                                <span class="core-visually-hidden">Show active alerts</span>
+                                <input id="workspace-alerts-enabled" type="checkbox" checked>
+                                <span aria-hidden="true"></span>
+                            </label>
+                        </summary>
+                        <div class="workspace-group-body">
+                            <div id="workspace-warning-filters" class="workspace-pills" role="group" aria-label="Active alert type">
+                                <button type="button" data-warning="all" aria-pressed="false">All</button>
+                                <button class="is-active" type="button" data-warning="tor" aria-pressed="true">TOR</button>
+                                <button class="is-active" type="button" data-warning="svr" aria-pressed="true">SVR</button>
+                                <button type="button" data-warning="ffw" aria-pressed="false">FFW</button>
+                                <button type="button" data-warning="smw" aria-pressed="false">SMW</button>
+                            </div>
+                        </div>
+                    </details>
+                    <details id="workspace-projected-arrival-group" class="workspace-group workspace-layer-group workspace-projected-arrival-group" hidden>
+                        <summary class="workspace-group-summary"><h2>Projected Arrival</h2></summary>
+                        <div class="workspace-group-body">
+                            <div id="workspace-projected-arrival-alert" class="workspace-projected-arrival-alert"></div>
+                            <div class="wx-stormtrack-tools" id="wx-stormtrack-tools">
+                                <button id="wx-stormtrack-start" type="button">Start</button>
+                                <button id="wx-stormtrack-finish" type="button">Finish</button>
+                                <button id="wx-stormtrack-clear" type="button">Clear</button>
+                            </div>
+                            <label for="wx-speed-override">Speed Override (kt)</label>
+                            <div class="wx-speed-override-row"><input id="wx-speed-override" type="number" min="1" max="200" step="1" placeholder="—"><button id="wx-speed-override-clear" type="button" title="Clear override">×</button></div>
+                        </div>
+                    </details>
+                    <details class="workspace-group workspace-layer-group">
+                        <summary class="workspace-group-summary">
+                            <div class="workspace-title-count"><h2>Storm Reports</h2><span id="workspace-lsr-count">0</span></div>
+                            <label class="workspace-layer-toggle" title="Show storm reports">
+                                <span class="core-visually-hidden">Show storm reports</span>
+                                <input id="workspace-lsr-enabled" type="checkbox">
+                                <span aria-hidden="true"></span>
+                            </label>
+                        </summary>
+                        <div class="workspace-group-body">
+                            <div class="workspace-eyebrow">Type</div>
+                            <div id="workspace-lsr-filters" class="workspace-pills workspace-pills-wrap" role="group" aria-label="Storm report type">
+                                <button class="is-active" type="button" data-lsr="all">All</button>
+                                <button type="button" data-lsr="tornado">TOR</button>
+                                <button type="button" data-lsr="hail">Hail</button>
+                                <button type="button" data-lsr="wind">Wind</button>
+                                <button type="button" data-lsr="flood">Flood</button>
+                                <button type="button" data-lsr="rain">Rain</button>
+                                <button type="button" data-lsr="other">Other</button>
+                            </div>
+                            <div class="workspace-eyebrow">Time window</div>
+                            <div id="workspace-lsr-hours" class="workspace-pills" role="group" aria-label="Storm report time window">
+                                <button class="is-active" type="button" data-hours="1">1 hr</button>
+                                <button type="button" data-hours="6">6 hr</button>
+                                <button type="button" data-hours="12">12 hr</button>
+                                <button type="button" data-hours="24">24 hr</button>
+                            </div>
+                        </div>
+                    </details>
+                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>SPC</h2><span>Planned</span></summary><div class="workspace-group-body"><p>SPC engine composition placeholder.</p></div></details>
+                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>Satellite</h2><span>Planned</span></summary><div class="workspace-group-body"><p>Satellite engine composition placeholder.</p></div></details>
+                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>RTMA</h2><span>Planned</span></summary><div class="workspace-group-body"><p>RTMA engine composition placeholder.</p></div></details>
+                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>MRMS</h2><span>Planned</span></summary><div class="workspace-group-body"><p>MRMS engine composition placeholder.</p></div></details>
+                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>WPC</h2><span>Planned</span></summary><div class="workspace-group-body"><p>WPC engine composition placeholder.</p></div></details>
+                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>Water</h2><span>Planned</span></summary><div class="workspace-group-body"><p>Water engine composition placeholder.</p></div></details>
                 </section>
-                <section data-sidebar-panel="map" hidden>
-                    <label for="workspace-region">Region</label><select id="workspace-region"><option value="CONUS">CONUS</option><option value="NC">North Carolina</option><option value="WORLD">World</option></select>
+                <section class="core-sidebar-panel" data-sidebar-panel="map" hidden>
                     <label for="workspace-basemap">Basemap</label><select id="workspace-basemap"><option>Dark (No Labels)</option><option>Dark</option><option>Light</option><option>Street</option></select>
                     <label class="wx-check-row"><span>Lat/Lon Grid</span><input type="checkbox" data-map-overlay="graticule"></label>
                     <label class="wx-check-row"><span>State Borders</span><input type="checkbox" data-map-overlay="states" checked></label>
@@ -77,16 +142,50 @@
                     <label class="wx-check-row"><span>County Borders</span><input type="checkbox" data-map-overlay="counties"></label>
                 </section>
             </div>
-            <footer class="core-sidebar-footer"><div id="workspace-message" role="status" aria-live="polite">Loading workspace…</div><button id="workspace-refresh" type="button">Refresh Active Layers</button></footer>
+            <footer class="core-sidebar-footer workspace-footer"><div id="workspace-message" class="core-message workspace-message" role="status" aria-live="polite">Loading workspace…</div><label class="workspace-auto-update"><span>Auto-Update (60 sec)</span><span class="workspace-layer-toggle"><input id="workspace-auto-update" type="checkbox" checked><span aria-hidden="true"></span></span></label><button id="workspace-refresh" type="button">Refresh Active Layers</button></footer>
         </aside>
         <section class="core-map-panel weather-map-wrap">
             <div id="workspace-map" class="core-map"></div>
-            <time id="global-timestamp" class="core-map-timestamp"></time>
-            <div id="workspace-legends" class="workspace-legends"><div id="workspace-radar-legend"></div><div id="workspace-alerts-legend"></div></div>
+            <time id="global-timestamp" class="core-global-timestamp">Last Updated: —</time>
+            <div id="workspace-legends" class="workspace-legends">
+                <div id="workspace-radar-legend"></div>
+                <div id="workspace-storm-track-legend"></div>
+                <div id="workspace-alerts-legend"></div>
+                <div id="workspace-lsr-legend"></div>
+            </div>
+            <div id="workspace-radar-scrubber-bar" hidden><div id="workspace-radar-bottom-scrubber"></div></div>
+            <div id="workspace-detail" class="alerts-detail" hidden></div>
+            <div id="workspace-notifications" class="alerts-notifications workspace-notifications" aria-live="assertive"></div>
         </section>
+        <aside id="workspace-right-rail" class="alerts-warning-rail workspace-right-rail" aria-label="Active warnings and latest storm reports">
+            <section id="workspace-warning-section" class="alerts-rail-section">
+                <div class="alerts-warning-head"><div><span class="alerts-eyebrow">NWS alerts</span><h2>Active Alerts</h2></div><span id="workspace-warning-count" class="alerts-warning-count">0</span></div>
+                <div id="workspace-rail-warning-filters" class="alerts-warning-filters" role="group" aria-label="Warning card filter">
+                    <button class="is-active" type="button" data-filter="all">ALL <span data-count="all">0</span></button>
+                    <button type="button" data-filter="tor">TOR <span data-count="tor">0</span></button>
+                    <button type="button" data-filter="svr">SVR <span data-count="svr">0</span></button>
+                    <button type="button" data-filter="ffw">FFW <span data-count="ffw">0</span></button>
+                    <button type="button" data-filter="smw">SMW <span data-count="smw">0</span></button>
+                </div>
+                <div id="workspace-warning-list" class="alerts-warning-list"></div>
+                <div id="workspace-warning-empty" class="alerts-warning-empty">No active alerts.</div>
+            </section>
+            <section id="workspace-lsr-section" class="alerts-rail-section alerts-lsr-rail-section" hidden>
+                <div class="alerts-warning-head"><div><span class="alerts-eyebrow">Local Storm Reports</span><h2>Latest Reports</h2></div><span id="workspace-lsr-rail-count" class="alerts-warning-count alerts-lsr-rail-count">0</span></div>
+                <div id="workspace-rail-lsr-filters" class="alerts-warning-filters alerts-lsr-filters" role="group" aria-label="Local Storm Report card filter">
+                    <button class="is-active" type="button" data-filter="all">ALL <span data-count="all">0</span></button>
+                    <button type="button" data-filter="tornado">TOR <span data-count="tornado">0</span></button>
+                    <button type="button" data-filter="hail">HAIL <span data-count="hail">0</span></button>
+                    <button type="button" data-filter="wind">WIND <span data-count="wind">0</span></button>
+                    <button type="button" data-filter="other">OTHER <span data-count="other">0</span></button>
+                </div>
+                <div id="workspace-lsr-rail-list" class="alerts-warning-list alerts-lsr-rail-list"></div>
+                <div id="workspace-lsr-rail-empty" class="alerts-warning-empty">No Local Storm Reports in view.</div>
+            </section>
+        </aside>
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
     <script src="/frontend/lib/tz-lookup/tz.js?v=6.1.25"></script>
-    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260719a"></script>
+    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260719w"></script>
 </body>
 </html>

@@ -113,7 +113,20 @@ function installDrag(root, handle) {
 }
 
 export function createAlertDetail(root, options = {}) {
-    function close() { root.replaceChildren(); root.hidden = true; }
+    let mode = '';
+    function close() { mode = ''; root.replaceChildren(); root.hidden = true; }
+    function position(color, textColor = color) {
+        root.style.setProperty('--alert-color', color);
+        root.style.setProperty('--alert-text-color', textColor);
+        root.style.left = 'auto'; root.style.right = '12px'; root.style.top = '12px';
+    }
+    function finishOpen(feature, nextMode) {
+        mode = nextMode;
+        root.hidden = false;
+        root.querySelector('.alerts-detail-close')?.addEventListener('click', close);
+        installDrag(root, root.querySelector('.alerts-detail-head'));
+        options.onOpen?.(feature, nextMode);
+    }
     function open(feature) {
         const props = feature?.properties || {};
         const event = props.event || 'Weather Alert';
@@ -122,9 +135,7 @@ export function createAlertDetail(root, options = {}) {
         const { body, locations } = splitDescription(props.description);
         const link = textProductUrl(feature);
         const badges = [props.severity, props.urgency, props.certainty].filter(Boolean);
-        root.style.setProperty('--alert-color', color);
-        root.style.setProperty('--alert-text-color', ALERT_TEXT_COLORS[event] || color);
-        root.style.left = 'auto'; root.style.right = '12px'; root.style.top = '12px';
+        position(color, ALERT_TEXT_COLORS[event] || color);
         root.innerHTML = `<div class="alerts-detail-head"><div><div class="alerts-eyebrow">NWS Alert</div><h2>${escapeHtml(event)}</h2></div><button class="alerts-detail-close" type="button" aria-label="Close alert detail">×</button></div>
             <div class="alerts-detail-body">
                 ${badges.length ? `<div class="alerts-detail-badges">${badges.map((badge) => `<span class="alerts-detail-badge">${escapeHtml(badge)}</span>`).join('')}</div>` : ''}
@@ -136,11 +147,28 @@ export function createAlertDetail(root, options = {}) {
                 ${props.instruction ? `<div class="alerts-detail-section"><h3>Precautionary / Preparedness Actions</h3>${formatText(props.instruction)}</div>` : ''}
                 ${link ? `<a class="alerts-detail-link" href="${escapeHtml(link)}" target="_blank" rel="noopener">View Full NWS Alert Text</a>` : ''}
             </div>`;
-        root.hidden = false;
-        root.querySelector('.alerts-detail-close')?.addEventListener('click', close);
-        installDrag(root, root.querySelector('.alerts-detail-head'));
-        options.onOpen?.(feature);
+        finishOpen(feature, 'alert');
+    }
+    function openLsr(feature) {
+        const props = feature?.properties || {};
+        const event = props.event || 'Local Storm Report';
+        const color = options.lsrColor?.(feature) || '#38bdf8';
+        const location = [props.location, props.state].filter(Boolean).join(', ') || '—';
+        const office = [props.wfo_id, props.wfo].filter(Boolean).join(' · ') || '—';
+        position(color);
+        root.innerHTML = `<div class="alerts-detail-head"><div><div class="alerts-eyebrow">Local Storm Report</div><h2>${escapeHtml(event)}</h2></div><button class="alerts-detail-close" type="button" aria-label="Close storm report detail">×</button></div>
+            <div class="alerts-detail-body">
+                ${props.magnitude_label ? `<div class="alerts-detail-badges"><span class="alerts-detail-badge">${escapeHtml(props.magnitude_label)}</span></div>` : ''}
+                <dl class="alerts-detail-grid"><dt>Location</dt><dd>${escapeHtml(location)}</dd><dt>Reported</dt><dd>${escapeHtml(formatTime(props.time))}</dd><dt>Magnitude</dt><dd>${escapeHtml(props.magnitude_label || '—')}</dd><dt>WFO</dt><dd>${escapeHtml(office)}</dd><dt>Source</dt><dd>${escapeHtml(props.source || 'NOAA/NWS Local Storm Reports')}</dd></dl>
+                ${props.remarks ? `<div class="alerts-detail-section"><h3>Remarks</h3><p>${escapeHtml(props.remarks)}</p></div>` : '<div class="alerts-detail-section"><h3>Remarks</h3><p>No remarks provided.</p></div>'}
+            </div>`;
+        finishOpen(feature, 'lsr');
     }
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
-    return Object.freeze({ close, open });
+    return Object.freeze({
+        close,
+        closeAlert() { if (mode === 'alert') close(); },
+        closeLsr() { if (mode === 'lsr') close(); },
+        open, openLsr,
+    });
 }

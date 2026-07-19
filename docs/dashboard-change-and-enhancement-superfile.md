@@ -1,7 +1,8 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-19 (Phases 20-27 complete and statically validated.
-Consolidated browser smoke is deferred to the manual checklist.)
+Last updated: 2026-07-19 (Phases 20-27 complete. Consolidated browser smoke is
+in progress; the initial Workspace shell layout issue is fixed and awaiting
+user retest.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -34,6 +35,8 @@ post-split structure, not the monolith.
    Alerts and Radar engine APIs, owns the preserved arrival/speed tools, and
    replaces the deleted legacy shell/monolith. Run the consolidated browser
    checklist before expanding the workspace with additional product engines.
+   After the Workspace page is finished, return to the known standalone Water
+   page UI issues before starting optional Water enhancements.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
@@ -578,14 +581,14 @@ found it.
   three reset triggers worked correctly while playback was active.
 - Phase 25: alerts. **COMPLETE 2026-07-19. STANDALONE BUILD + USER
   PARITY/FOLLOW-UP SMOKE PASSED; LEGACY MONOLITH CLEANUP STATICALLY
-  VALIDATED. Preserve the Projected Arrival Tool and Radar Speed Estimator as
-  workspace-owned Phase 27 capabilities. Fix future gaps forward in
+  VALIDATED. Preserve the Projected Arrival Tool as a workspace-owned Phase 27
+  capability. Fix future gaps forward in
   `frontend/pages/alerts/`.** Legacy cleanup removed the Alerts controls,
   warning rail, banners/detail/pager, live/LSR loaders, archive path, product
   context, and obsolete `js/alerts-{engine,page}.js` from the combined
   workspace (about 4,000 deleted lines). The storm-motion extraction,
-  projection/place-arrival, drawing, and speed-estimator implementation remains
-  in `weather.html`/`js/weather.js` for Phase 27. Validation: `node --check` on
+  projection/place-arrival and drawing implementation remains in
+  `weather.html`/`js/weather.js` for Phase 27. Validation: `node --check` on
   the monolith and all standalone Alerts modules, focused standalone-boundary
   tests (11 passed with the Drought regression set), an unresolved
   internal-helper scan, legacy-reference searches, and `git diff --check`. Per the user's
@@ -604,10 +607,10 @@ found it.
   plumbing on the shared scrubber (UI hidden pending the unified archive
   design). `/alerts` now serves
   `frontend/pages/alerts/alerts.html` and loads only core + Alerts modules.
-  Clarified scope decision: the Projected Arrival Tool and Radar Speed Estimator
-  depended on the removed IEM radar overlay, so neither is part of standalone
-  Alerts. Preserve their existing implementation as workspace-owned capability
-  for Phase 27, when the severe-weather workspace (eventually the
+  Clarified scope decision: the Projected Arrival Tool depended on the removed
+  IEM radar overlay, so it is not part of standalone Alerts. Preserve its
+  existing implementation as a workspace-owned capability for Phase 27, when
+  the severe-weather workspace (eventually the
   primary `/weather` page) can supply radar imagery and playback context.
   Initial-smoke follow-up (`alerts.css`/`alerts-page.js?v=20260718b`): the
   page-specific legend now spans the map width, uses compact responsive
@@ -685,12 +688,101 @@ found it.
 - Phase 27: complete. `/workspace` composes Alerts and Radar engine modules,
   active warnings/LSRs, live radar site/product/elevation controls, NST tracks,
   and the value inspector on one core map. The validated Projected Arrival Tool
-  and Radar Speed Estimator moved intact to `workspace-tools.js` and are wired
-  to selected workspace alerts. `/weather.html` redirects to `/workspace`;
+  moved to `workspace-tools.js` and is wired to selected workspace alerts.
+  `/weather.html` redirects to `/workspace`;
   `weather.html`, `js/weather.js`, obsolete root JS modules, and
   `css/dashboard.css` are deleted. Leaflet 1.9.4, topojson-client 3, and
   tz-lookup 6.1.25 are vendored under `frontend/lib/`, and all standalone HTML
-  pages use local Leaflet assets. Additional SPC/MRMS/RTMA/Satellite/Drought/WPC
+  pages use local Leaflet assets. Initial smoke follow-up now uses
+  radar site selection as the live-radar activation, a centered CONUS preset
+  plus AK/HI/PR, a TOR+SVR default with independently combinable
+  TOR/SVR/FFW/SMW filters that are mutually exclusive with `All`,
+  report type/time pills with a 1-hour default, independent layer switches with adjacent counts, and
+  separate compact collapsible
+  Radar/Warnings/Storm Reports legends. These presentation rules
+  remain scoped to `frontend/pages/workspace/workspace.css`. Storm Reports now
+  default off; Storm Tracks and Value Inspector remain hidden until a radar site
+  is selected and reset on region/Home defaults. Sidebar field labels/footer
+  typography and the full-width refresh action received Workspace-only polish.
+  Workspace also reuses the standalone Alerts split right-rail pattern: Active
+  Warning and Latest Report cards have independent rail filters and counts,
+  share the engine-provided feature collections, and appear only while their
+  corresponding map layer switch is enabled. With both layers enabled, the two
+  card sections split the rail; with one enabled, that section uses the rail.
+  The Workspace rail's `ALL` warning filter shows every alert in the active map
+  selection while TOR/SVR/FFW/SMW remain severe-only filters, and alert-card
+  navigation is capped at map zoom 9. Report-card popup selection is cleared
+  when the report layer is disabled or the Workspace region/radar context
+  changes, so a cached popup cannot reopen when reports are enabled again.
+  Workspace auto-update is visible and enabled by default at 60 seconds. Each
+  cycle refreshes enabled Alerts/LSR data and selected-site radar frames without
+  polling inactive layers, static overlays, or the radar catalog. Newly issued
+  Tornado, Severe Thunderstorm, and Flash Flood warnings/watches produce up to
+  three dismissible 15-second map notices and play
+  `/sounds/weather_alert.mp3` once per notification burst. SMW and all other
+  alert types do not notify. Opening a notice selects the alert for Workspace
+  tools and uses the same level-9 zoom cap. Initial loads and view/filter/layer
+  context changes establish a notification baseline without mislabeling existing
+  alerts as new. Workspace alert rail cards sort newest-issued first (`sent`,
+  then `effective`/`onset` fallback). Radar-site hover labels use a Workspace-only
+  translucent dark tooltip with light text/border for contrast over any basemap.
+  The shared draggable Alerts detail panel now opens from Workspace alert
+  polygons, alert rail cards, LSR markers, and LSR rail cards. Its LSR mode shows
+  event, location, report time, magnitude, WFO, source, and remarks, replacing
+  the small Leaflet report popup. Disabling/changing report context closes only
+  an open LSR detail, while alert details remain independently managed. Both
+  polygon and alert-card navigation are capped at map zoom 9.
+  LSR markers retain a compact sticky hover tooltip with report type, optional
+  magnitude, and location; its Workspace layout uses a responsive 260 px card
+  width so abbreviations and locations wrap as phrases rather than single words.
+  Clicking continues to open the full report detail.
+  Workspace overlay focus indicators are input-aware: pointer-click focus rings
+  are suppressed on Leaflet vectors/markers, while keyboard `:focus-visible`
+  navigation retains a deliberate cyan outline.
+  The KGSP radar-site smoke then exposed four Workspace composition gaps. Radar
+  history frames now drive a visible shared scrubber; Projected Arrival drawing
+  suppresses alert-detail activation so clicks reach the drawing tool; NST storm
+  tracks use the established TVS/mesocyclone/hail/cell symbols, styled tooltips,
+  and a separate collapsible legend; and the shared Radar value inspector again
+  queues one pending sample behind the in-flight request instead of aborting and
+  restarting on every mousemove. Static validation passed, followed by the user's
+  iterative KGSP smoke/testing cycle.
+  The Layers sidebar now presents Radar, Active Alerts, and Storm Reports as
+  independently collapsible groups. Radar starts open; Active Alerts, Storm
+  Reports, and the SPC/Satellite/RTMA/MRMS/WPC/Water placeholders start collapsed.
+  Elevation selection remains a standalone Radar-page advanced control; Workspace
+  uses the explicit 0.5-degree Level II default internally. This matches the
+  scheduled worker cache key and the lowest practical tilt expected by most users.
+  The Workspace Radar group has a default-on header switch plus Level 2/Level 3
+  pills directly below Site. Product options are filtered from the API catalog
+  to the active level; the pills and Product field remain hidden until a site is
+  selected, and Level 3 remains disabled for non-CONUS sites.
+  The Projected Arrival Tool now has its own collapsible Workspace group directly
+  below Active Alerts; the redundant standalone Tools sidebar tab is removed.
+  The entire group stays hidden until an alert polygon, rail card, or new-alert
+  notice is selected, then appears expanded and identifies the selected alert.
+  Disabling Alerts or changing Workspace region clears and hides it again.
+  Workspace now supplies the shared map Home control with a page reset callback.
+  Home clears the selected radar/site frames and scrubber, restores Level 2 Base
+  Reflectivity, clears the selected alert/projection, hides Projected Arrival,
+  resets the Region selector, and fits the default CONUS view while retaining
+  layer visibility preferences.
+  Inline explanatory copy was removed to keep the panel compact. Preserve this
+  wording for a future FAQ/Wiki:
+  - Projected Arrival Tool: "Select an alert polygon, draw its motion line, then
+    finish the projection. Hold Shift while dragging the handle to pivot."
+  The Radar Speed Estimator was subsequently removed project-wide, including its
+  UI, map-click draw mode, fixed-loop calculation/autofill wiring, stale styles,
+  and tests. It assumed a fixed four-frame, five-minute radar loop that no longer
+  exists. Projected Arrival and its manual Speed Override are unaffected.
+  **Radar/Alerts Workspace closure (2026-07-19):** the user accepted this slice
+  for now and reported all tests passed. Treat the current Radar, Alerts, Storm
+  Reports, scrubber, value-inspector, storm-track, Projected Arrival, and Home-reset
+  behavior as the stable baseline. The next session should address the previously
+  deferred standalone Water UI issues without reopening this slice unless a
+  regression is found.
+  Additional
+  SPC/MRMS/RTMA/Satellite/Drought/WPC
   engine composition remains an explicit workspace expansion; those standalone
   pages remain canonical and are linked in navigation. Static boundary tests
   passed (23 focused tests). The final repository-wide suite reached 58 passed
@@ -1039,6 +1131,11 @@ Planned/enhancement direction:
 ### Water page
 
 V1 is active implementation.
+
+Known follow-up (2026-07-19): the standalone Water UI has issues found during
+manual review. Keep the current Workspace page smoke/fix cycle as the active
+priority; inspect and correct the Water UI immediately after Workspace is
+finished. Specific Water defects will be recorded as they are reproduced.
 
 - `/water` serves `frontend/pages/water/water.html` on the Stage 2 core map,
   navigation, sidebar, status, and legend utilities without `js/weather.js`.

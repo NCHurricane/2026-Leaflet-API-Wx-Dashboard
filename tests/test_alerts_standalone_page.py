@@ -24,7 +24,7 @@ def test_alerts_page_uses_only_new_frontend_boundary():
     assert "js/alerts-page.js" not in page
 
 
-def test_legacy_alerts_paths_are_removed_but_workspace_tools_are_preserved():
+def test_legacy_alerts_paths_are_removed_but_projected_arrival_is_preserved():
     workspace = (
         Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.html"
     ).read_text(encoding="utf-8")
@@ -33,7 +33,25 @@ def test_legacy_alerts_paths_are_removed_but_workspace_tools_are_preserved():
     ).read_text(encoding="utf-8")
 
     assert 'id="wx-stormtrack-start"' in workspace
-    assert 'id="wx-radarcal-start"' in workspace
+    assert 'id="wx-radarcal-start"' not in workspace
     assert "function _activateStormTrackDragProjection" in tools
-    assert "function _computeRadarCalSpeed" in tools
+    assert "_radarCal" not in tools
     assert "setAlerts(features)" in tools
+
+
+def test_shared_alert_detail_supports_local_storm_reports():
+    page_app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-page.js"
+    ).read_text(encoding="utf-8")
+    detail = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-detail.js"
+    ).read_text(encoding="utf-8")
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+
+    assert "function openLsr(feature)" in detail
+    assert "Close storm report detail" in detail
+    assert "onLsrDetail: (feature) => detail.openLsr(feature)" in page_app
+    assert "onLsrDetail(feature)" in engine
+    assert "alerts-hover-tip alerts-lsr-hover-tip" in engine

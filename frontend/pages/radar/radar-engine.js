@@ -85,19 +85,32 @@ function productLegendHtml(productId, product, table) {
         </div>`;
 }
 
+function stormCellSvg(priority, size = 34) {
+    const half = size / 2;
+    const label = (text, y, fontSize = 12) => `<text x="${half}" y="${y}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="900" fill="#fff" stroke="#020617" stroke-width="2.6" paint-order="stroke fill">${text}</text>`;
+    if (priority === 'tvs') return `<polygon points="2,4 ${size - 2},4 ${half},${size - 2}" fill="#ef4444" stroke="#020617" stroke-width="4" stroke-linejoin="round"/><polygon points="2,4 ${size - 2},4 ${half},${size - 2}" fill="#ef4444" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>${label('T', Math.round(size * 0.56))}`;
+    if (priority === 'meso') return `<circle cx="${half}" cy="${half}" r="${half - 2}" fill="#f97316" stroke="#020617" stroke-width="4"/><circle cx="${half}" cy="${half}" r="${half - 4}" fill="#f97316" stroke="#fff" stroke-width="1.6"/><path d="M8 15 A9 9 0 0 1 25 11" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/><path d="M25 11 L25 6 L30 6" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M26 19 A9 9 0 0 1 9 23" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/><path d="M9 23 L9 28 L4 28" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>${label('M', 21, 9)}`;
+    if (priority === 'pos_hail') return `<polygon points="${half},2 ${size - 2},${size - 4} 2,${size - 4}" fill="#22c55e" stroke="#020617" stroke-width="4" stroke-linejoin="round"/><polygon points="${half},2 ${size - 2},${size - 4} 2,${size - 4}" fill="#22c55e" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>${label('H', 25)}`;
+    if (priority === 'prob_hail') return `<polygon points="${half},2 ${size - 2},${size - 4} 2,${size - 4}" fill="#020617" stroke="#22c55e" stroke-width="4" stroke-linejoin="round"/><polygon points="${half},2 ${size - 2},${size - 4} 2,${size - 4}" fill="#020617" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/>`;
+    const inset = 4;
+    return `<rect x="${inset}" y="${inset}" width="${size - inset * 2}" height="${size - inset * 2}" rx="2" fill="#cfcfcf" stroke="#020617" stroke-width="2"/><rect x="${inset + 2}" y="${inset + 2}" width="${size - inset * 2 - 4}" height="${size - inset * 2 - 4}" rx="1" fill="#111827" stroke="#facc15" stroke-width="2"/>`;
+}
+
 function stormCellIcon(leaflet, priority) {
-    const styles = {
-        tvs: ['#ef4444', 'T'], meso: ['#f97316', 'M'],
-        pos_hail: ['#22c55e', 'H'], prob_hail: ['#020617', 'H?'], cell: ['#cfcfcf', ''],
-    };
-    const [color, label] = styles[priority] || styles.cell;
+    const size = priority === 'cell' ? 26 : 34;
     return leaflet.divIcon({
-        className: '', iconSize: [30, 30], iconAnchor: [15, 15],
-        html: `<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
-            <circle cx="15" cy="15" r="11" fill="${color}" stroke="#fff" stroke-width="2"/>
-            <text x="15" y="19" text-anchor="middle" font-size="11" font-weight="900" fill="#fff" stroke="#020617" paint-order="stroke">${label}</text>
-        </svg>`,
+        className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2],
+        html: `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">${stormCellSvg(priority, size)}</svg>`,
     });
+}
+
+function stormTrackLegendHtml() {
+    const items = [
+        ['tvs', 'Tornadic Vortex Signature'], ['meso', 'Mesocyclone'],
+        ['pos_hail', 'Confirmed Hail (POSH ≥50%)'], ['prob_hail', 'Probable Hail (POH ≥50%)'],
+        ['cell', 'Storm Cell'],
+    ].map(([priority, label]) => `<div class="core-legend-category"><span class="radar-storm-legend-icon"><svg width="20" height="20" viewBox="0 0 34 34" aria-hidden="true">${stormCellSvg(priority, 34)}</svg></span><div class="core-legend-category-copy"><span class="core-legend-category-code">${escapeHtml(label)}</span></div></div>`).join('');
+    return `${legendHeader('Storm Tracks (NST)')}<div class="core-legend-body"><div class="core-legend-categories radar-storm-track-legend">${items}</div></div>`;
 }
 
 function stormPopupHtml(properties) {
@@ -116,7 +129,7 @@ function stormPopupHtml(properties) {
 
 export function createRadarEngine(options) {
     const { api, mapCore, legend, status, getSelection, onCatalog, onElevationData,
-        onFrames, onFrameIndex, onSitePicked, onMessage } = options;
+        onFrames, onFrameIndex, onSitePicked, onMessage, onStormTrackLegend } = options;
     const { leaflet, map } = mapCore;
     const radarPane = map.createPane('radar-overlays');
     radarPane.style.zIndex = '210';
@@ -151,6 +164,11 @@ export function createRadarEngine(options) {
     let inspectorController = null;
     let inspectorElement = null;
     let lastInspectorRequest = 0;
+    let inspectorSequence = 0;
+    let inspectorInFlight = false;
+    let inspectorPending = false;
+    let inspectorLatestLatLng = null;
+    let inspectorSuppressed = false;
 
     const message = (text, tone = '') => onMessage?.(text, tone);
     const selectionMatches = (snapshot) => {
@@ -250,6 +268,7 @@ export function createRadarEngine(options) {
         stormLayer.clearLayers();
         if (map.hasLayer(stormLayer)) map.removeLayer(stormLayer);
         hideInspector();
+        onStormTrackLegend?.(null);
         legend.clear();
     }
 
@@ -432,8 +451,18 @@ export function createRadarEngine(options) {
                 const marker = leaflet.marker([Number(geometry.coordinates[1]), Number(geometry.coordinates[0])], {
                     pane: 'radar-sites', icon: stormCellIcon(leaflet, properties.icon_priority || 'cell'),
                 });
-                marker.bindTooltip(`NST ${escapeHtml(properties.cell_id || '')}`, { direction: 'top' });
+                const priority = properties.icon_priority || 'cell';
+                const tooltipLabel = priority === 'tvs' ? `TVS Cell ${properties.cell_id || ''}`
+                    : priority === 'meso' ? `Meso Cell ${properties.cell_id || ''}`
+                    : priority === 'pos_hail' ? `Hail+ Cell ${properties.cell_id || ''}`
+                    : priority === 'prob_hail' ? `Hail? Cell ${properties.cell_id || ''}`
+                    : `NST ${properties.cell_id || ''}`;
+                marker.bindTooltip(escapeHtml(tooltipLabel), { direction: 'top', className: 'core-city-name-tag' });
                 marker.bindPopup(stormPopupHtml(properties));
+                marker.on('mouseover', () => { inspectorSuppressed = true; hideInspector(); });
+                marker.on('mouseout', () => { inspectorSuppressed = false; });
+                marker.on('popupopen', () => { inspectorSuppressed = true; hideInspector(); });
+                marker.on('popupclose', () => { inspectorSuppressed = false; });
                 marker.on('click', () => {
                     selectedCell = {
                         site: selection.site, cell_id: properties.cell_id || '', speed_kt: properties.speed_kt,
@@ -449,17 +478,38 @@ export function createRadarEngine(options) {
         }
     }
 
-    function hideInspector() {
+    function cancelInspectorRequest() {
+        inspectorSequence += 1;
+        clearTimeout(inspectorTimer);
+        inspectorTimer = null;
         inspectorController?.abort();
         inspectorController = null;
+        inspectorInFlight = false;
+        inspectorPending = false;
+    }
+
+    function hideInspector() {
+        cancelInspectorRequest();
         if (inspectorElement) inspectorElement.remove();
         inspectorElement = null;
     }
 
-    async function requestInspector(latlng) {
+    function positionInspector(latlng) {
+        if (!inspectorElement || !latlng) return;
+        const point = map.latLngToContainerPoint(latlng);
+        inspectorElement.style.transform = `translate(${Math.round(point.x + 14)}px, ${Math.round(point.y - 14)}px)`;
+    }
+
+    async function requestInspector() {
+        inspectorTimer = null;
         const selection = getSelection();
-        if (!inspectorVisible || !currentOverlay || !selection.site) return;
-        inspectorController?.abort();
+        if (!inspectorVisible || inspectorSuppressed || !currentOverlay || !selection.site || !inspectorLatestLatLng) return;
+        if (inspectorInFlight) { inspectorPending = true; return; }
+        const latlng = inspectorLatestLatLng;
+        const seq = ++inspectorSequence;
+        inspectorInFlight = true;
+        inspectorPending = false;
+        lastInspectorRequest = Date.now();
         inspectorController = new AbortController();
         const params = new URLSearchParams({
             site: selection.site, product: selection.product, elevation: selection.elevation || 'auto',
@@ -471,7 +521,7 @@ export function createRadarEngine(options) {
             const data = await api.fetchJson(`/api/radar/live/value?${params}`, {
                 cache: 'no-store', signal: inspectorController.signal,
             });
-            if (!inspectorVisible || data?.status !== 'success') return;
+            if (seq !== inspectorSequence || !inspectorVisible || inspectorSuppressed || data?.status !== 'success') return;
             if (!inspectorElement) {
                 inspectorElement = document.createElement('div');
                 inspectorElement.className = 'radar-inspector-readout';
@@ -480,23 +530,33 @@ export function createRadarEngine(options) {
             const value = Number(data.value);
             inspectorElement.innerHTML = `<strong>${Number.isFinite(value) ? value.toFixed(Math.abs(value) < 10 ? 1 : 0) : '—'} ${escapeHtml(data.units || '')}</strong>
                 <span>${escapeHtml(data.label || data.product || 'Radar')}</span>`;
-            const point = map.latLngToContainerPoint(latlng);
-            inspectorElement.style.transform = `translate(${Math.round(point.x + 14)}px, ${Math.round(point.y - 14)}px)`;
+            positionInspector(inspectorLatestLatLng || latlng);
         } catch (error) {
             if (error?.name !== 'AbortError') hideInspector();
+        } finally {
+            if (seq === inspectorSequence) {
+                inspectorInFlight = false;
+                inspectorController = null;
+                if (inspectorPending && inspectorVisible && !inspectorSuppressed) scheduleInspector(0);
+            }
         }
     }
 
-    function onMouseMove(event) {
-        if (!inspectorVisible) return;
+    function scheduleInspector(delayOverride = null) {
+        if (inspectorTimer) return;
+        if (inspectorInFlight) { inspectorPending = true; return; }
         const elapsed = Date.now() - lastInspectorRequest;
-        clearTimeout(inspectorTimer);
-        inspectorTimer = setTimeout(() => {
-            lastInspectorRequest = Date.now();
-            void requestInspector(event.latlng);
-        }, Math.max(0, 90 - elapsed));
+        inspectorTimer = setTimeout(() => void requestInspector(), delayOverride ?? Math.max(0, 90 - elapsed));
+    }
+
+    function onMouseMove(event) {
+        if (!inspectorVisible || inspectorSuppressed) return;
+        inspectorLatestLatLng = event.latlng;
+        positionInspector(event.latlng);
+        scheduleInspector();
     }
     map.on('mousemove', onMouseMove);
+    map.on('mouseout movestart zoomstart', hideInspector);
 
     return Object.freeze({
         clear: clearOverlays,
@@ -507,6 +567,7 @@ export function createRadarEngine(options) {
             clearTimeout(historyTimer); clearTimeout(retryTimer); clearTimeout(inspectorTimer);
             hideInspector(); clearOverlays();
             map.off('mousemove', onMouseMove);
+            map.off('mouseout movestart zoomstart', hideInspector);
             [siteLayer, highlightLayer, stormLayer].forEach((layer) => { if (map.hasLayer(layer)) map.removeLayer(layer); });
         },
         frameAt(index) { return frames[index] || null; },
@@ -527,6 +588,7 @@ export function createRadarEngine(options) {
         setSitesVisible(value) { sitesVisible = !!value; syncSiteVisibility(); if (!sitesVisible) legend.clear(); },
         setStormTracksVisible(value) {
             tracksVisible = !!value;
+            onStormTrackLegend?.(tracksVisible ? stormTrackLegendHtml() : null);
             if (tracksVisible) void loadStormTracks(currentFrame?.timestamp);
             else { stormLayer.clearLayers(); if (map.hasLayer(stormLayer)) map.removeLayer(stormLayer); }
         },

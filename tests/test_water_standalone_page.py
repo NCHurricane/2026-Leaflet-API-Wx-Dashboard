@@ -40,11 +40,11 @@ def test_water_page_contains_required_controls():
         assert f'id="{target_id}"' in page
 
 
-def test_workspace_excludes_water_but_preserves_radar_tools():
+def test_workspace_excludes_water_but_preserves_projected_arrival():
     workspace = (
         Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.html"
     ).read_text(encoding="utf-8")
 
     assert 'id="wx-section-water"' not in workspace
     assert 'id="wx-stormtrack-start"' in workspace
-    assert 'id="wx-radarcal-start"' in workspace
+    assert 'id="wx-radarcal-start"' not in workspace

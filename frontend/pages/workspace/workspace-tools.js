@@ -8,16 +8,6 @@ export function createWorkspaceTools(options) {
     }[char]));
     let _allAlertFeatures = [];
 
-    function _haversineKm(lat1, lon1, lat2, lon2) {
-        const earthRadiusKm = 6371;
-        const toRadians = (value) => value * Math.PI / 180;
-        const deltaLat = toRadians(lat2 - lat1);
-        const deltaLon = toRadians(lon2 - lon1);
-        const a = Math.sin(deltaLat / 2) ** 2
-            + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(deltaLon / 2) ** 2;
-        return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    }
-
     let _stormTrackLayer = L.layerGroup().addTo(map);
     let _stormTrackProjectionLayer = L.layerGroup().addTo(_stormTrackLayer);
     let _stormTrackHandleLayer = L.layerGroup().addTo(_stormTrackLayer);
@@ -42,19 +32,10 @@ export function createWorkspaceTools(options) {
     const _stormTrackPlaceTypeFilter = new Set(_STORM_TRACK_PLACE_TYPES.map((t) => t.key));
     let _stormTrackLastCorridorLatLngs = [];
     let _stormTrackOutlineLayer = null;
-    // ── Radar Speed Calibrator state ─────────────────────────────────────────
-    let _radarCalDrawMode = false;
-    let _radarCalLatLngs = [];
-    let _radarCalLayer = null;
     const _STORM_TRACK_INTERVAL_MIN = 15;
     const _STORM_TRACK_WIDTH_GROWTH_PER_INTERVAL = 0.10;
     const _STORM_TRACK_PIVOT_MAX_DEG = 45;
     const _STORM_TRACK_MAX_PLACE_ROWS = 50;
-    const _RADAR_OVERLAY_FRAMES = 4;
-    const _RADAR_OVERLAY_STEP_MIN = 5;
-    // The Alerts speed estimator treats the legacy radar loop as four 5-minute
-    // steps when converting a user-drawn displacement into forward speed.
-
     // ── Preserved workspace storm-motion tools ───────────────────────────────
     function _ringContainsPoint(ring, lng, lat) {
         let inside = false;
@@ -749,72 +730,9 @@ export function createWorkspaceTools(options) {
         setStatus(`Drag the marker forward to project ${evt} at ${_STORM_TRACK_INTERVAL_MIN}-minute intervals (${motion.source}).${speedNote} Hold Shift to pivot up to \u00b1${_STORM_TRACK_PIVOT_MAX_DEG}\u00b0.`);
     }
 
-    // ── Radar Speed Calibrator helpers ────────────────────────────────────────
-
     function _clearSpeedOverride() {
         const input = byId('wx-speed-override');
         if (input) input.value = '';
-        const resultEl = byId('wx-radarcal-result');
-        if (resultEl) resultEl.textContent = '';
-    }
-
-    function _setRadarCalDrawMode(active) {
-        _radarCalDrawMode = active;
-        const startBtn = byId('wx-radarcal-start');
-        if (startBtn) startBtn.classList.toggle('is-active', active);
-        map.getContainer().style.cursor = active ? 'crosshair' : '';
-    }
-
-    function _clearRadarCalLine() {
-        if (_radarCalLayer) {
-            try { map.removeLayer(_radarCalLayer); } catch (_) { /* ignore */ }
-            _radarCalLayer = null;
-        }
-        _radarCalLatLngs = [];
-        const resultEl = byId('wx-radarcal-result');
-        if (resultEl) resultEl.textContent = '';
-    }
-
-    function _renderRadarCalLine() {
-        if (_radarCalLayer) {
-            try { map.removeLayer(_radarCalLayer); } catch (_) { /* ignore */ }
-            _radarCalLayer = null;
-        }
-        if (!_radarCalLatLngs.length) return;
-        const layers = [];
-        layers.push(L.circleMarker(_radarCalLatLngs[0], {
-            radius: 5, color: '#facc15', fillColor: '#facc15', fillOpacity: 1, weight: 1, interactive: false,
-        }));
-        if (_radarCalLatLngs.length >= 2) {
-            layers.push(L.polyline(_radarCalLatLngs, {
-                color: '#facc15', weight: 2.5, opacity: 0.9, dashArray: '6 4', interactive: false,
-            }));
-            layers.push(L.circleMarker(_radarCalLatLngs[_radarCalLatLngs.length - 1], {
-                radius: 5, color: '#facc15', fillColor: '#facc15', fillOpacity: 1, weight: 1, interactive: false,
-            }));
-            _computeRadarCalSpeed();
-        }
-        _radarCalLayer = L.layerGroup(layers).addTo(map);
-    }
-
-    function _computeRadarCalSpeed() {
-        if (_radarCalLatLngs.length < 2) return;
-        const p1 = _radarCalLatLngs[0];
-        const p2 = _radarCalLatLngs[_radarCalLatLngs.length - 1];
-        const distKm = _haversineKm(p1.lat, p1.lng, p2.lat, p2.lng);
-        const loopMinutes = _RADAR_OVERLAY_FRAMES * _RADAR_OVERLAY_STEP_MIN;
-        if (loopMinutes <= 0 || distKm <= 0) return;
-        const speedKmh = distKm / (loopMinutes / 60);
-        const speedKt = speedKmh / 1.852;
-        const rounded = Math.round(speedKt);
-
-        const input = byId('wx-speed-override');
-        if (input) input.value = String(rounded);
-
-        const resultEl = byId('wx-radarcal-result');
-        if (resultEl) resultEl.textContent = `Est. ${rounded} kt (${Math.round(speedKmh)} km/h) over ${loopMinutes} min`;
-
-        setStatus(`Radar speed estimate: ${rounded} kt — auto-filled speed override. Use Finish Line to project.`);
     }
 
     byId('wx-stormtrack-start')?.addEventListener('click', () => {
@@ -835,19 +753,6 @@ export function createWorkspaceTools(options) {
         setStatus('Storm track projection cleared.');
     });
 
-    byId('wx-radarcal-start')?.addEventListener('click', () => {
-        _clearRadarCalLine();
-        _setRadarCalDrawMode(true);
-        setStatus('Click on the map to mark where the cell was at the start of the radar loop, then click again at its current position.');
-    });
-
-    byId('wx-radarcal-clear')?.addEventListener('click', () => {
-        _setRadarCalDrawMode(false);
-        _clearRadarCalLine();
-        _clearSpeedOverride();
-        setStatus('Radar speed calibration cleared.');
-    });
-
     byId('wx-speed-override-clear')?.addEventListener('click', () => {
         _clearSpeedOverride();
     });
@@ -860,17 +765,6 @@ export function createWorkspaceTools(options) {
     });
 
     map.on('click', (evt) => {
-        // Radar speed calibrator draw mode — independent of storm-track projection.
-        if (_radarCalDrawMode) {
-            const latlng = evt?.latlng;
-            if (!latlng) return;
-            _radarCalLatLngs.push(L.latLng(latlng.lat, latlng.lng));
-            _renderRadarCalLine();
-            // Auto-finish after two points (start + end of cell movement).
-            if (_radarCalLatLngs.length >= 2) _setRadarCalDrawMode(false);
-            return;
-        }
-
         if (!_stormTrackDrawMode) {
             const hasProjection = !!_stormTrackMotion
                 || !!_stormTrackDragHandle
@@ -908,6 +802,7 @@ export function createWorkspaceTools(options) {
     return Object.freeze({
         setAlerts(features) { _allAlertFeatures = Array.isArray(features) ? features : []; },
         setSelectedAlert(feature) { _stormTrackSelectedAlert = feature || null; },
-        clear() { _clearStormTrackLayer(); _clearRadarCalLine(); },
+        isDrawing() { return _stormTrackDrawMode; },
+        clear() { _clearStormTrackLayer(); },
     });
 }
