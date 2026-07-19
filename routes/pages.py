@@ -24,7 +24,7 @@ def read_weather_page():
 
 @router.get("/tropical")
 def read_tropical_page():
-    return serve_page("weather.html")
+    return serve_page("frontend/pages/tropical/tropical.html")
 
 
 @router.get("/alerts")

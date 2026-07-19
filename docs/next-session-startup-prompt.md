@@ -20,16 +20,16 @@ Read first:
 
 Current status:
 - The fixed map-first dashboard shell is accepted.
-- /drought, /surface, /spc, /wpc, /mrms, /rtma, /satellite, /radar, and /alerts serve
-  true standalone pages from frontend/pages/. The remaining product-only shell
-  routes are /tropical and /water.
+- /drought, /surface, /spc, /wpc, /mrms, /rtma, /satellite, /radar, /alerts,
+  and /tropical serve true standalone pages from frontend/pages/. The only
+  remaining product-only shell route is /water.
 - /weather.html remains the combined workspace and must keep working until it is
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
   interpretation, and most rendering.
-- js/weather.js still owns the combined workspace, the preserved Projected
-  Arrival/Speed Estimator tools, and coupled Tropical/Water behavior. Legacy
-  Alerts UI/controller/engine/archive paths were removed in Phase 25.
+- js/weather.js now owns the transitional Water workspace and the preserved
+  Projected Arrival/Speed Estimator tools. Legacy Alerts paths were removed in
+  Phase 25 and legacy Tropical paths were removed in Phase 26.
 - Backend route logic should stay in routes/*.py, route-facing cache/response
   behavior should stay in services/*_service.py, and upstream/cache refresh
   behavior should stay in workers/*_worker.py.
@@ -128,7 +128,11 @@ Active track order (2026-07-19):
     Alerts cleanup is COMPLETE and statically validated: combined-workspace
     controls, rendering/load/archive paths, and obsolete js/alerts-* modules
     were removed while the Projected Arrival Tool and Radar Speed Estimator
-    remain reserved for Phase 27. Next: Phase 26 Tropical, then Water. Minor UI spacing polish
+    remain reserved for Phase 27. Phase 26 Tropical is also COMPLETE and
+    statically validated: `/tropical` now serves frontend/pages/tropical/ on
+    the core shell, and the Tropical UI/state/bridge plus js/tropical-* modules
+    were removed from the monolith. Browser parity smoke is deferred to the
+    consolidated final checklist. Next: Phase 26 Water. Minor UI spacing polish
     across the new standalone pages remains deferred to the end of the
     superplan by user decision.
 2. Satellite render-pipeline latency optimization. This backend-only track may

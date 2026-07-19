@@ -17,9 +17,9 @@ hosts a live Leaflet map with mixed layer types:
 Active root pages and their JS in this checkout:
 
 - `index.html` — main landing page for the dashboard
-- `weather.html` / `js/weather.js` — transitional combined workspace, now
-  primarily Tropical and Water plus the Phase 27-reserved Projected Arrival
-  and Radar Speed Estimator implementation. Legacy Alerts paths are removed.
+- `weather.html` / `js/weather.js` — transitional workspace, now limited to
+  Water plus the Phase 27-reserved Projected Arrival and Radar Speed Estimator
+  implementation. Legacy Alerts and Tropical paths are removed.
 - `/drought` — first true Stage 2 standalone page, served from
   `frontend/pages/drought/drought.html`; it loads ES modules from
   `frontend/core/` and its own directory and does not load `js/weather.js`.
@@ -78,6 +78,9 @@ Planned product-page migration:
   selection, current and cached-frame playback, NST overlays, legends, and the
   value inspector without loading `js/weather.js`. `/radar.html` remains a
   compatibility route and is separate from the canonical extensionless page.
+- `/tropical` serves `frontend/pages/tropical/tropical.html`, which composes its
+  page-local engine/controller/application modules with `frontend/core/` and
+  does not load `js/weather.js` or the removed root `js/tropical-*` modules.
 - `satellite.html` is also not present in the repository root. `js/satellite.js`
   is dead code — it is not loaded by `weather.html` or any route (confirmed
   during the 2026-07-11 render pipeline review) and is slated for deletion in

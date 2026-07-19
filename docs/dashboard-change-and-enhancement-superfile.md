@@ -1,7 +1,7 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-19 (Phases 20-25 complete. Phase 25 legacy Alerts cleanup
-is statically validated; Phase 26 Tropical is next.)
+Last updated: 2026-07-19 (Phases 20-25 and Phase 26 Tropical complete. Tropical
+is statically validated; Phase 26 Water is next.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -28,9 +28,9 @@ post-split structure, not the monolith.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
    this file (section below). Phases 18-24 are complete and user-confirmed.
-   Phase 25 is complete, including legacy monolith cleanup. Continue with
-   Phase 26 Tropical, then Water, preserving the workspace-owned arrival/speed
-   tools for Phase 27.
+   Phase 25 and the Tropical half of Phase 26 are complete, including legacy
+   monolith cleanup. Continue with Phase 26 Water, preserving the workspace-owned
+   arrival/speed tools for Phase 27.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
@@ -47,15 +47,14 @@ post-split structure, not the monolith.
   services should remain modular. Do not add route logic back to `main.py`.
 - The fixed map-first dashboard shell is accepted.
 - `/drought`, `/surface`, `/spc`, `/wpc`, `/mrms`, `/rtma`, `/satellite`,
-  `/radar`, and `/alerts` serve true standalone pages from `frontend/pages/`.
-  The remaining canonical product routes serving the shared dashboard shell in
-  product-only mode are `/tropical` and `/water`.
+  `/radar`, `/alerts`, and `/tropical` serve true standalone pages from
+  `frontend/pages/`. The only remaining canonical product route serving the
+  shared dashboard shell in product-only mode is `/water`.
 - `weather.html` remains the combined workspace and should keep working until
   explicitly retired.
 - Product engines/pages own product-specific controls, requests, response
-  interpretation, and most rendering. `js/weather.js` still owns the combined
-  workspace, the preserved arrival/speed tools, and coupled Tropical/Water
-  behavior.
+  interpretation, and rendering. `js/weather.js` now owns only the transitional
+  Water workspace plus the preserved arrival/speed tools.
 - City labels are controlled from the Layers pane with an `Off | US | World`
   segmented control. `US` loads `data/us-cities-all.json`; `World` loads
   `data/world-cities.json`. Both sources share the same density slider, mapped
@@ -154,16 +153,24 @@ Important retained rules:
 
 ### Tropical migration
 
-- Tropical is the accepted reference UI for rich product pages.
-- `js/tropical-engine.js` owns active-storm list, live detail/advisory requests,
+- Tropical is the accepted reference UI for rich product pages and now serves
+  from `frontend/pages/tropical/tropical.html` without `js/weather.js`.
+- `frontend/pages/tropical/tropical-engine.js` owns active-storm list, live detail/advisory requests,
   archive catalog requests, per-storm archive base data, advisory requests, and
   response sequencing.
-- `js/tropical-page.js` owns active-system cards, archive selectors/cards,
+- `frontend/pages/tropical/tropical-controller.js` owns active-system cards, archive selectors/cards,
   advisory/fix scrubber state and controls, inspector rendering, forecast table
   rendering, official product/graphics panels, floater state, NESDIS URL
   generation, availability probing, and modal/pill handlers.
-- `js/weather.js` still supplies shared map/layer callbacks and GIS overlay
-  rendering where those are tied to the common map lifecycle.
+- `frontend/pages/tropical/tropical-app.js` composes those modules with the core
+  map, navigation, sidebar, status, and legend utilities. The old Tropical UI,
+  bridge, state, event wiring, and `js/tropical-*` modules are removed from the
+  combined workspace. Static/automated validation passed on 2026-07-19; browser
+  parity smoke is deferred to the consolidated end-of-Phases-25-27 checklist.
+  The focused boundary suite passed 14 tests. The repository-wide suite reached
+  49 passed with five unrelated Radar expectation failures in
+  `test_radar_product_catalog.py` and `test_radar_storm_attributes_service.py`;
+  Phase 26 did not change those Radar backend/config paths.
 
 ### RTMA Feels Like
 
@@ -668,9 +675,10 @@ found it.
   dense wrapping for many categories. The existing narrow-screen rule keeps
   two fluid columns, so shared core legends and mobile responsiveness are not
   changed.
-- Phase 26: tropical (already closest to the target pattern), then Water as a
-  separate independently shippable migration. Water stays excluded from the
-  initial workspace, but must leave `js/weather.js` before Phase 27.
+- Phase 26: Tropical is complete and statically validated at
+  `frontend/pages/tropical/`; Water remains the separate independently shippable
+  migration. Water stays excluded from the initial workspace, but must leave
+  `js/weather.js` before Phase 27.
 - Phase 27: workspace assembly; retire `weather.html`; delete the monolith.
 
 Definition of done (mechanically checkable): each product route loads only

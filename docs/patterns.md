@@ -294,9 +294,9 @@ Alerts intentionally remains on vector GeoJSON workflow.
 
 ## Product Page Shell Pattern
 
-Planned product pages should share the same map-first dashboard shell. The
-Tropical tab is the reference product implementation because it already has the
-clearest product-specific hub/map/inspector workflow.
+Product pages share the same map-first dashboard shell. The standalone Tropical
+page is the reference rich product implementation because it has the clearest
+product-specific hub/map/inspector workflow.
 
 1. Top navigation/status bar.
 2. Fixed left product hub or controls dock.
@@ -347,10 +347,9 @@ Do not create product pages by copy-pasting the current combined `weather.js`
 state model into separate files. Split shared utilities first, then give each
 product page a narrow entry module.
 
-Use Tropical to decide the first shared utilities. Start by extracting only the
-pieces that are clearly reusable, such as API helpers, map setup, layer cleanup,
-status/error rendering, legend rendering, inspector wiring, and timer cleanup.
-Keep Tropical-specific domain behavior in the Tropical entry/module.
+Tropical now demonstrates the boundary: reuse `frontend/core/` for API helpers,
+map setup, navigation, sidebar tabs, status, and legend lifecycle, while keeping
+storm/archive domain behavior in `frontend/pages/tropical/`.
 
 For Tropical backend changes, follow the post-refactor ownership boundaries:
 

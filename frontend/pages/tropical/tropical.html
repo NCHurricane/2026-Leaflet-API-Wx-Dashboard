@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tropical — NCHurricane Dashboard</title>
+    <link rel="icon" href="/img/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260718b">
+    <link rel="stylesheet" href="/frontend/pages/tropical/tropical.css?v=20260719a">
+</head>
+<body>
+    <header class="core-header"><div class="core-brand">NCHURRICANE</div><nav id="product-nav" class="core-nav" aria-label="Weather products"></nav></header>
+    <main class="tropical-app">
+        <aside id="tropical-sidebar-tabs" class="core-sidebar tropical-controls">
+            <h1 class="core-visually-hidden">Tropical Weather</h1>
+            <div class="core-sidebar-header">
+                <div class="core-card"><dl class="core-status-grid">
+                    <dt>Valid</dt><dd id="tropical-updated">—</dd><dt>Data Age</dt><dd id="tropical-age">—</dd>
+                    <dt>Provider</dt><dd id="tropical-provider">—</dd><dt>Source</dt><dd id="tropical-source">—</dd>
+                </dl></div>
+            </div>
+            <div class="core-sidebar-tabs" role="tablist" aria-label="Tropical controls">
+                <button class="core-sidebar-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="tropical-panel-data" data-sidebar-tab="data"><i class="fas fa-hurricane"></i><span class="core-sidebar-tab-label">Data</span></button>
+                <button class="core-sidebar-tab" type="button" role="tab" aria-selected="false" aria-controls="tropical-panel-overlays" tabindex="-1" data-sidebar-tab="overlays"><i class="fas fa-layer-group"></i><span class="core-sidebar-tab-label">Overlays</span></button>
+                <button class="core-sidebar-tab" type="button" role="tab" aria-selected="false" aria-controls="tropical-panel-style" tabindex="-1" data-sidebar-tab="style"><i class="fas fa-sliders"></i><span class="core-sidebar-tab-label">Style</span></button>
+                <button id="tropical-system-tab" class="core-sidebar-tab" type="button" role="tab" aria-selected="false" aria-controls="tropical-panel-system" tabindex="-1" data-sidebar-tab="system" hidden><i class="fas fa-circle-info"></i><span class="core-sidebar-tab-label">System</span></button>
+            </div>
+            <div class="core-sidebar-content">
+                <section id="tropical-panel-data" class="core-sidebar-panel" role="tabpanel" data-sidebar-panel="data">
+                    <div id="wx-section-tropical" data-tropical-mode="overview">
+                        <div id="weather-tropical-opts">
+                            <div class="core-field"><label for="weather-tropical-basin">Region / Basin</label><select id="weather-tropical-basin"><option value="WORLD">World</option><option value="AL" selected>Atlantic</option><option value="EP">Eastern Pacific</option><option value="CP">Central Pacific</option></select></div>
+                            <div class="wx-tropical-tabs" role="tablist" aria-label="Tropical data views">
+                                <button id="wx-tropical-tab-active" class="wx-tropical-tab" type="button" role="tab" aria-selected="false" aria-controls="wx-tropical-panel-active" data-tropical-tab="active">Active</button>
+                                <button id="wx-tropical-tab-outlooks" class="wx-tropical-tab" type="button" role="tab" aria-selected="true" aria-controls="wx-tropical-panel-outlooks" data-tropical-tab="outlooks">Outlooks</button>
+                                <button id="wx-tropical-tab-archive" class="wx-tropical-tab" type="button" role="tab" aria-selected="false" aria-controls="wx-tropical-panel-archive" data-tropical-tab="archive">Archive</button>
+                            </div>
+                            <div id="weather-tropical-hub">
+                                <section id="wx-tropical-panel-active" class="wx-tropical-panel wx-tropical-tab-panel" role="tabpanel" aria-labelledby="wx-tropical-tab-active" hidden><div class="wx-tropical-panel-head"><h3 class="wx-tropical-section-title">Active Systems</h3><span id="weather-tropical-system-count" class="wx-tropical-count">0</span></div><div id="weather-tropical-system-cards" class="wx-tropical-card-list"></div></section>
+                                <section id="wx-tropical-panel-outlooks" class="wx-tropical-panel wx-tropical-tab-panel" role="tabpanel" aria-labelledby="wx-tropical-tab-outlooks"><div class="wx-tropical-panel-head"><h3 class="wx-tropical-section-title">Tropical Outlook</h3><span id="weather-tropical-outlook-count" class="wx-tropical-count">0</span></div><div id="weather-tropical-outlook-cards" class="wx-tropical-card-list"></div></section>
+                                <section id="wx-tropical-panel-archive" class="wx-tropical-panel wx-tropical-tab-panel" role="tabpanel" aria-labelledby="wx-tropical-tab-archive" hidden>
+                                    <div class="wx-archive-controls"><div class="wx-archive-field"><label for="wx-archive-basin">Basin</label><select id="wx-archive-basin"><option value="AL">Atlantic</option></select></div><div class="wx-archive-field"><label for="wx-archive-season">Season</label><select id="wx-archive-season"></select></div></div>
+                                    <div id="wx-archive-card-list" class="wx-tropical-card-list"></div><div id="wx-archive-status" class="wx-archive-status">Select a basin and season to browse past storms.</div>
+                                </section>
+                            </div>
+                            <label for="weather-tropical-system" class="tropical-native-control">System</label><select id="weather-tropical-system" class="tropical-native-control" aria-hidden="true" tabindex="-1"><option value="">Select a system</option></select>
+                        </div>
+                    </div>
+                </section>
+                <section id="tropical-panel-overlays" class="core-sidebar-panel" role="tabpanel" data-sidebar-panel="overlays" hidden>
+                    <div id="wx-tropical-inspector-layers"><h2>Storm Layers</h2><div class="wx-tropical-layer-toggles">
+                        <label class="wx-tc-pill"><input type="checkbox" data-tc-layer="cone"><span>Cone</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="forecast_track"><span>Track</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="forecast_points"><span>Points</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="wind_radii"><span>Wind radii</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="initial_wind_extent"><span>Initial wind extent</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="watches_warnings"><span>Watch/warn</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="storm_surge"><span>Surge WW</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="peak_surge"><span>Peak surge</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="best_track"><span>Best track</span></label>
+                    </div></div>
+                    <h2>Map overlays</h2><div class="tropical-checks"><label><span>Lat/Lon Grid</span><input id="weather-tropical-graticule" type="checkbox"></label><label><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label><label><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label><label><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label></div>
+                </section>
+                <section id="tropical-panel-style" class="core-sidebar-panel" role="tabpanel" data-sidebar-panel="style" hidden><div class="core-field"><label for="tropical-basemap">Basemap</label><select id="tropical-basemap"><option>Dark (No Labels)</option><option>Light (No Labels)</option><option>Voyager</option><option>USGS</option><option>Satellite</option></select></div></section>
+                <section id="tropical-panel-system" class="core-sidebar-panel" role="tabpanel" data-sidebar-panel="system" hidden>
+                    <div id="weather-tropical-inspector">
+                        <section id="wx-tropical-inspector-summary" class="wx-tropical-inspector-section wx-accordion" data-open="true"><button type="button" class="wx-accordion-header"><span>Summary</span><span>▾</span></button><div class="wx-accordion-body"><div id="wx-tropical-summary-head" class="wx-tropical-summary-head"></div><div id="weather-tropical-summary" class="wx-tropical-summary"></div></div></section>
+                        <section id="wx-tropical-inspector-forecast" class="wx-tropical-inspector-section wx-accordion" data-open="false"><button type="button" class="wx-accordion-header"><span>Forecast</span><span>▾</span></button><div class="wx-accordion-body"><div id="weather-tropical-track"></div></div></section>
+                        <section id="wx-tropical-inspector-products" class="wx-tropical-inspector-section wx-accordion" data-open="false"><button type="button" class="wx-accordion-header"><span>Products</span><span>▾</span></button><div class="wx-accordion-body"><div id="weather-tropical-products" class="wx-tropical-product-list"></div></div></section>
+                        <section id="wx-tropical-inspector-graphics" class="wx-tropical-inspector-section wx-accordion" data-open="false"><button type="button" class="wx-accordion-header"><span>Graphics</span><span>▾</span></button><div class="wx-accordion-body"><div id="weather-tropical-graphics" class="wx-tropical-graphics-list"></div></div></section>
+                        <section id="wx-tropical-inspector-floater" class="wx-tropical-inspector-section wx-accordion" data-open="false" hidden><button type="button" class="wx-accordion-header"><span>Satellite Floater</span><span>▾</span></button><div class="wx-accordion-body"><div id="wx-floater-pills" class="wx-floater-pills"><button type="button" class="wx-floater-pill" data-floater-product="GEOCOLOR">GeoColor</button><button type="button" class="wx-floater-pill" data-floater-product="13">Clean IR</button><button type="button" class="wx-floater-pill" data-floater-product="02">Red Visible</button></div></div></section>
+                    </div>
+                </section>
+            </div>
+            <div class="core-sidebar-footer"><div id="weather-tropical-status" class="core-message" aria-live="polite"></div><button id="weather-refresh-tropical" type="button">Refresh</button></div>
+        </aside>
+        <section id="weather-map-wrap" class="core-map-panel weather-map-wrap"><div id="weather-map"></div><div id="global-timestamp" class="core-global-timestamp">Last Updated: —</div><div id="weather-colorbar" data-legend-align="left" hidden></div>
+            <div id="wx-tropical-adv-scrubber" hidden><div id="adv-scrub-mode" class="adv-scrub-mode" hidden><button type="button" data-scrub-mode="advisory">Advisory</button><button type="button" data-scrub-mode="besttrack">Best Track</button></div><button id="adv-scrub-first" type="button">⏮</button><button id="adv-scrub-prev" type="button">◀</button><button id="adv-scrub-play" type="button" aria-pressed="false">▶</button><button id="adv-scrub-next" type="button">▶</button><button id="adv-scrub-last" type="button">⏭</button><div class="adv-scrub-speed"><button id="adv-scrub-speed-down" type="button">−</button><span id="adv-scrub-speed-label">1x</span><button id="adv-scrub-speed-up" type="button">+</button></div><input id="adv-scrub-slider" type="range" min="0" max="0" value="0"><span id="adv-scrub-label">--</span></div>
+        </section>
+    </main>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/frontend/pages/tropical/tropical-engine.js?v=20260719a"></script>
+    <script src="/frontend/pages/tropical/tropical-controller.js?v=20260719a"></script>
+    <script type="module" src="/frontend/pages/tropical/tropical-app.js?v=20260719a"></script>
+</body>
+</html>
