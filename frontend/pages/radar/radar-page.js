@@ -2,11 +2,11 @@ import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
 import { createMapCore, REGION_LABELS } from '../../core/map-core.js?v=20260718b';
 import { renderProductNav } from '../../core/nav.js';
-import { createScrubber } from '../../core/scrubber.js';
+import { createScrubber } from '../../core/scrubber.js?v=20260719a';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js';
-import { createRadarEngine } from './radar-engine.js?v=20260719a';
+import { createRadarEngine } from './radar-engine.js?v=20260719b';
 
 const byId = (id) => document.getElementById(id);
 const AUTO_UPDATE_INTERVAL_MS = 90_000;
@@ -69,6 +69,7 @@ async function initialize() {
     let autoUpdateTimer = null;
     const scrubberBar = byId('radar-scrubber-bar');
     const scrubber = createScrubber(byId('radar-bottom-scrubber'), {
+        holdAtEnd: true,
         onFrame(_frame, index) { void engine.renderFrameAt(index); },
     });
 

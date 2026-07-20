@@ -114,11 +114,12 @@ function installDrag(root, handle) {
 
 export function createAlertDetail(root, options = {}) {
     let mode = '';
+    const initialTop = Math.max(0, Number(options.initialTop) || 12);
     function close() { mode = ''; root.replaceChildren(); root.hidden = true; }
     function position(color, textColor = color) {
         root.style.setProperty('--alert-color', color);
         root.style.setProperty('--alert-text-color', textColor);
-        root.style.left = 'auto'; root.style.right = '12px'; root.style.top = '12px';
+        root.style.left = 'auto'; root.style.right = '12px'; root.style.top = `${initialTop}px`;
     }
     function finishOpen(feature, nextMode) {
         mode = nextMode;

@@ -2480,7 +2480,7 @@ body.wx-standalone-product .weather-header-right {
 #weather-map.leaflet-container .wx-water-popup .wx-water-hydrograph {
     display: block;
     height: auto;
-    max-height: 150px;
+    max-height: 200px;
     max-width: min(320px, 72vw);
     object-fit: contain;
     width: 100%;
@@ -4934,16 +4934,111 @@ button.wx-tropical-outlook-card:focus-visible {
 /* Stage 2 standalone Water layout. Product styles below are retained from the
    accepted dashboard implementation until final cross-page CSS consolidation. */
 html, body { height: 100%; margin: 0; overflow: hidden; }
-.core-map-shell { height: calc(100vh - var(--core-header-height)); }
+.water-app { display: grid; grid-template-columns: 330px minmax(0, 1fr); height: calc(100vh - 58px); min-height: 0; }
+.water-controls { min-width: 0; }
+.water-map-wrap { position: relative; min-width: 0; min-height: 0; }
 .core-map-panel, .core-map { min-width: 0; min-height: 0; width: 100%; height: 100%; }
-.core-sidebar-scroll { padding: 12px; }
 .core-sidebar-pinned-head h1 { margin: 0; font-size: 1rem; }
 .core-sidebar-pinned-head p { margin: 3px 0 0; color: #91a4b8; font-size: .72rem; }
+.water-status-card { padding: 10px 12px; }
+.water-status-card .core-status-grid { gap: 4px 10px; font-size: .75rem; }
+.water-status-title { margin-bottom: 6px; color: var(--core-muted); font-size: .66rem; font-weight: 800; letter-spacing: .07em; }
+.water-panel-stack { display: grid; align-content: start; gap: 12px; }
+.water-panel-stack[hidden] { display: none; }
+.water-data-controls { display: grid; gap: 16px; }
+.water-control-section { display: grid; gap: 7px; }
+.water-panel-stack h2,
+.water-control-section h2 {
+    margin: 0;
+    color: var(--core-muted);
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+.water-check-list,
+#weather-water-network-filters.water-check-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin: 0;
+}
+#wx-section-water label.water-check,
+#water-panel-overlays label.water-check {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    color: #d7e6f5;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+}
+#wx-section-water label.water-check input[type="checkbox"],
+#water-panel-overlays label.water-check input[type="checkbox"] {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--core-accent);
+}
 .core-sidebar-footer { display: grid; gap: 8px; }
 .core-sidebar-footer .wx-radar-action-row { margin: 0; }
-#weather-water-network-filters { display: grid; gap: 8px; margin: 8px 0 14px; }
-.weather-water-network-filter { display: flex; align-items: center; gap: 8px; }
-#weather-water-flood-filter-row { margin-top: 8px; }
-.wx-water-flood-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+#weather-water-flood-filter-row { margin-top: 0; }
+.wx-water-flood-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
 .wx-water-flood-pill[aria-selected="true"] { border-color: #38bdf8; color: #e0f2fe; background: #075985; }
 .leaflet-pane.leaflet-water-markers-pane { z-index: 470; }
+.water-legend .core-legend-body { padding: 10px 14px 12px; }
+.water-legend .legend-flow { gap: 5px 12px; }
+.water-legend .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.water-legend .legend-text { font-size: .72rem; font-weight: 700; line-height: 1.15; }
+.water-detail {
+    position: absolute;
+    z-index: 1200;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    width: min(470px, calc(100% - 24px));
+    max-height: min(72%, 620px);
+    overflow: hidden;
+    color: #e5eefc;
+    background: rgba(4, 14, 30, .97);
+    border: 1px solid #35538b;
+    border-top: 5px solid var(--water-detail-color, #38bdf8);
+    border-radius: 8px;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, .5);
+}
+.water-detail[hidden] { display: none; }
+.water-detail-head {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px 9px;
+    border-bottom: 1px solid #29384f;
+    cursor: move;
+    user-select: none;
+    touch-action: none;
+}
+.water-detail-eyebrow { color: #7f93ad; font-size: .62rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.water-detail-head h2 { margin: 2px 0 0; color: var(--water-detail-color, #38bdf8); font-size: 1rem; }
+.water-detail-close { width: auto; align-self: start; padding: 2px 7px; font-size: 1rem; }
+.water-detail-body { min-height: 0; overflow: auto; padding: 11px 14px 15px; font-size: .76rem; line-height: 1.45; }
+.water-detail-message { margin: 0; color: #cbd5e1; }
+.water-detail .wx-storm-popup-grid { grid-template-columns: auto minmax(0, 1fr); }
+.water-detail .wx-storm-popup-grid dd { white-space: normal; overflow-wrap: anywhere; }
+.water-detail a.wx-water-hydrograph-link { display: block; margin-top: 10px; }
+.water-detail a.wx-water-detail-link { display: block; margin-top: 10px; color: #38bdf8; font-size: .78rem; font-weight: 700; }
+.water-detail .wx-water-hydrograph { display: block; width: 100%; height: auto; max-height: 260px; object-fit: contain; }
+
+@media (max-width: 900px) {
+    body { overflow: auto; }
+    .water-app { grid-template-columns: 1fr; grid-template-rows: auto minmax(320px, 62vh); height: auto; }
+    .water-controls { max-height: 48vh; }
+}

@@ -4934,8 +4934,10 @@ button.wx-tropical-outlook-card:focus-visible {
 /* Stage 2 standalone Tropical shell overrides. Legacy Tropical selectors below
    are retained until the accepted controller markup is normalized. */
 html, body { margin: 0; height: 100%; overflow: hidden; }
-body { display: grid; grid-template-rows: var(--core-header-height, 50px) minmax(0, 1fr); background: #020617; }
-.tropical-app { min-height: 0; display: grid; grid-template-columns: minmax(290px, 340px) minmax(0, 1fr); }
+body { display: grid; grid-template-rows: 58px minmax(0, 1fr); background: #020617; }
+.tropical-app { position: relative; min-height: 0; display: grid; grid-template-columns: minmax(290px, 340px) minmax(0, 1fr); overflow: hidden; }
+.tropical-app.has-system-inspector { grid-template-columns: minmax(290px, 340px) minmax(0, 1fr) minmax(340px, 380px); }
+.tropical-app > .weather-map-wrap { grid-area: auto; }
 .tropical-controls { min-height: 0; }
 .tropical-controls .core-sidebar-content { min-height: 0; }
 .tropical-controls .core-sidebar-panel { padding: 12px; }
@@ -4943,12 +4945,173 @@ body { display: grid; grid-template-rows: var(--core-header-height, 50px) minmax
 .weather-map-wrap { position: relative; min-width: 0; min-height: 0; }
 #weather-map { position: absolute; inset: 0; }
 #weather-colorbar { z-index: 700; }
+.tropical-system-rail[hidden], .tropical-system-open[hidden] { display: none; }
+.tropical-system-rail {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    color: var(--core-text);
+    background: var(--core-panel);
+    border-left: 1px solid var(--core-line);
+}
+.tropical-system-rail-header {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--core-line);
+}
+.tropical-system-rail-header h2 {
+    margin: 0;
+    color: var(--core-text);
+    font-size: .82rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+.tropical-system-rail-header button {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    color: var(--core-muted);
+    background: transparent;
+    border: 1px solid var(--core-line);
+    border-radius: 5px;
+}
+.tropical-system-rail-header button:hover { color: var(--core-text); border-color: var(--core-accent); }
+.tropical-system-rail-body { min-height: 0; overflow-y: auto; padding: 12px; }
+.tropical-system-open {
+    position: absolute;
+    z-index: 710;
+    top: 54px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    color: var(--core-text);
+    background: rgba(15, 30, 51, .94);
+    border: 1px solid var(--core-accent);
+    border-radius: 6px;
+    font-size: .7rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+}
 #wx-section-tropical { display: block !important; }
 .tropical-native-control { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; }
 .tropical-checks { display: grid; gap: 6px; }
-.tropical-checks label { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#tropical-panel-settings > h2 {
+    margin: 12px 0 0;
+    color: var(--core-muted);
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+#tropical-panel-settings .core-segmented + .core-adjustment { margin-top: 10px; }
+#tropical-panel-settings .core-adjustment + .core-adjustment { margin-top: 8px; }
+.tropical-checks label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: #d7e6f5;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .02em;
+}
 .core-sidebar-footer button { width: 100%; }
 .wx-accordion[data-open="false"] .wx-accordion-body { display: none; }
 .wx-accordion-header { width: 100%; display: flex; justify-content: space-between; }
-#wx-tropical-adv-scrubber { z-index: 720; }
-@media (max-width: 800px) { .tropical-app { grid-template-columns: minmax(250px, 42vw) minmax(0, 1fr); } }
+.weather-map-wrap > #wx-tropical-adv-scrubber {
+    position: absolute;
+    z-index: 720;
+    right: 10px;
+    bottom: 8px;
+    left: 10px;
+    box-sizing: border-box;
+    border-radius: 7px;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .42);
+}
+.wx-live-basin-filter { display: grid; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid rgba(148, 163, 184, .18); }
+.wx-live-basin-label { color: #94a3b8; font-size: .66rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.wx-live-basin-pills { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.wx-live-basin-pills button {
+    min-width: 0;
+    padding: 6px 3px;
+    color: #94a3b8;
+    background: rgba(15, 23, 42, .7);
+    border: 1px solid rgba(148, 163, 184, .32);
+    border-radius: 5px;
+    font-size: .62rem;
+    font-weight: 800;
+    letter-spacing: .02em;
+    white-space: nowrap;
+    text-transform: uppercase;
+}
+.wx-live-basin-pills button[aria-pressed="true"] {
+    color: #f8fafc;
+    background: rgba(14, 116, 144, .58);
+    border-color: #22e8ff;
+    box-shadow: inset 0 0 0 1px #22e8ff;
+}
+.wx-live-accordion { gap: 0; }
+.wx-live-accordion-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 0;
+    color: #94a3b8;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, .22);
+    font-family: inherit;
+    font-size: .66rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-align: left;
+    text-transform: uppercase;
+}
+.wx-live-accordion-meta { display: flex; align-items: center; gap: 7px; }
+.wx-live-accordion-meta i { transition: transform .15s ease; }
+.wx-live-accordion[data-open="false"] .wx-live-accordion-meta i { transform: rotate(-90deg); }
+.wx-live-accordion[data-open="false"] .wx-live-accordion-body { display: none; }
+.wx-live-accordion-body { padding-top: 7px; }
+#tropical-panel-archive { display: flex; flex-direction: column; gap: 10px; }
+#tropical-panel-archive[hidden] { display: none; }
+.wx-tropical-card-basin { margin-left: auto; color: #94a3b8; font-size: .6rem; font-weight: 800; letter-spacing: .05em; }
+.tropical-legend .core-legend-body { padding: 10px 14px 12px; }
+.tropical-legend .legend-flow { gap: 5px 12px; }
+.tropical-legend .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.tropical-legend .legend-text { font-size: .72rem; font-weight: 700; line-height: 1.15; }
+.tropical-legend-section-label {
+    margin: 8px 0 4px;
+    color: var(--core-muted);
+    font-size: .64rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+.tropical-legend-section-label:first-child { margin-top: 0; }
+@media (max-width: 1399px) {
+    .tropical-app.has-system-inspector { grid-template-columns: minmax(290px, 340px) minmax(0, 1fr); }
+    .tropical-system-rail {
+        position: absolute;
+        z-index: 900;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(380px, calc(100vw - 24px));
+        box-shadow: -10px 0 24px rgba(0, 0, 0, .45);
+    }
+}
+@media (max-width: 800px) {
+    .tropical-app, .tropical-app.has-system-inspector { grid-template-columns: minmax(250px, 42vw) minmax(0, 1fr); }
+}

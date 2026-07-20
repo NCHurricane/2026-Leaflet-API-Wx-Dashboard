@@ -397,31 +397,25 @@
                 const data = await resp.json();
                 if (!context.canApplyResponse(requestSeq)) return;
 
-                const storms = Array.isArray(data.storms) ? data.storms : [];
+                const allStorms = Array.isArray(data.storms) ? data.storms : [];
+                const storms = context.filterStorms ? context.filterStorms(allStorms) : allStorms;
+                const selectedStormId = String(context.getSelectedStormId?.() || '').toUpperCase();
                 context.setStorms(storms);
                 context.renderStormList(storms);
+                context.renderActiveStorms?.(storms);
                 context.loadBasinFeeds();
 
+                const hasSelectedStorm = storms.some((storm) => (
+                    String(storm?.id || '').toUpperCase() === selectedStormId
+                ));
+                if (selectedStormId && !hasSelectedStorm) context.clearFilteredStorm?.();
+
                 if (!storms.length) {
-                    context.clearActiveStorm();
-                    context.setHubMode('overview');
-                    context.clearTropicalLayer();
-                    context.renderSummary(null);
-                    context.setStatus('No active NHC systems for the selected basin.');
+                    context.setStatus('No active NHC systems for the selected regions.');
                     return;
                 }
 
                 context.setStatus(`${storms.length} active system${storms.length === 1 ? '' : 's'} found.`);
-                const selectedStormId = String(context.getSelectedStormId?.() || '').toUpperCase();
-                const hasSelectedStorm = storms.some((storm) => (
-                    String(storm?.id || '').toUpperCase() === selectedStormId
-                ));
-                const featuredStormId = selectedStormId && hasSelectedStorm
-                    ? selectedStormId
-                    : String(storms[0]?.id || '').toUpperCase();
-                if (featuredStormId) {
-                    context.selectStorm(featuredStormId, { fitBounds: false, zoomToLatest: true });
-                }
             } catch (err) {
                 if (!context.isCurrentRequest(requestSeq)) return;
                 console.error('[tropical] Storm list error:', err);

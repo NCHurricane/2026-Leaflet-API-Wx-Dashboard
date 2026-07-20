@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260719a">
-    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260719s">
+    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260719x">
 </head>
 <body>
     <header class="core-header">
@@ -39,7 +39,7 @@
             </div>
             <div class="core-sidebar-tabs" role="tablist" aria-label="Workspace controls">
                 <button class="core-sidebar-tab" type="button" data-sidebar-tab="layers" role="tab">Layers</button>
-                <button class="core-sidebar-tab" type="button" data-sidebar-tab="map" role="tab">Map</button>
+                <button class="core-sidebar-tab" type="button" data-sidebar-tab="map" role="tab">Settings</button>
             </div>
             <div class="core-sidebar-content">
                 <section class="core-sidebar-panel" data-sidebar-panel="layers">
@@ -64,6 +64,10 @@
                             <label class="wx-check-row"><span>Show Radar Sites</span><input id="workspace-radar-sites" type="checkbox" checked></label>
                             <label class="wx-check-row workspace-radar-site-option" hidden><span>Storm Tracks</span><input id="workspace-radar-tracks" type="checkbox"></label>
                             <label class="wx-check-row workspace-radar-site-option" hidden><span>Value Inspector</span><input id="workspace-radar-inspector" type="checkbox"></label>
+                            <div class="core-adjustment workspace-opacity-control workspace-radar-site-option" hidden>
+                                <label id="workspace-radar-opacity-label" for="workspace-radar-opacity">Radar Opacity (0.9)</label>
+                                <input id="workspace-radar-opacity" type="range" min="0.1" max="1" step="0.05" value="0.9">
+                            </div>
                         </div>
                     </details>
                     <details class="workspace-group workspace-layer-group">
@@ -82,6 +86,11 @@
                                 <button class="is-active" type="button" data-warning="svr" aria-pressed="true">SVR</button>
                                 <button type="button" data-warning="ffw" aria-pressed="false">FFW</button>
                                 <button type="button" data-warning="smw" aria-pressed="false">SMW</button>
+                                <button type="button" data-warning="sps" aria-pressed="false" title="Special Weather Statement">SPS</button>
+                            </div>
+                            <div class="core-adjustment workspace-opacity-control">
+                                <label id="workspace-alerts-opacity-label" for="workspace-alerts-opacity">Alerts Opacity (0.75)</label>
+                                <input id="workspace-alerts-opacity" type="range" min="0.1" max="1" step="0.05" value="0.75">
                             </div>
                         </div>
                     </details>
@@ -125,6 +134,10 @@
                                 <button type="button" data-hours="12">12 hr</button>
                                 <button type="button" data-hours="24">24 hr</button>
                             </div>
+                            <div class="core-adjustment workspace-opacity-control">
+                                <label id="workspace-lsr-opacity-label" for="workspace-lsr-opacity">Storm Reports Opacity (1)</label>
+                                <input id="workspace-lsr-opacity" type="range" min="0.1" max="1" step="0.05" value="1">
+                            </div>
                         </div>
                     </details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>SPC</h2><span>Planned</span></summary><div class="workspace-group-body"><p>SPC engine composition placeholder.</p></div></details>
@@ -134,15 +147,39 @@
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>WPC</h2><span>Planned</span></summary><div class="workspace-group-body"><p>WPC engine composition placeholder.</p></div></details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>Water</h2><span>Planned</span></summary><div class="workspace-group-body"><p>Water engine composition placeholder.</p></div></details>
                 </section>
-                <section class="core-sidebar-panel" data-sidebar-panel="map" hidden>
-                    <label for="workspace-basemap">Basemap</label><select id="workspace-basemap"><option>Dark (No Labels)</option><option>Dark</option><option>Light</option><option>Street</option></select>
-                    <label class="wx-check-row"><span>Lat/Lon Grid</span><input type="checkbox" data-map-overlay="graticule"></label>
-                    <label class="wx-check-row"><span>State Borders</span><input type="checkbox" data-map-overlay="states" checked></label>
-                    <label class="wx-check-row"><span>Country Borders</span><input type="checkbox" data-map-overlay="countries" checked></label>
-                    <label class="wx-check-row"><span>County Borders</span><input type="checkbox" data-map-overlay="counties"></label>
+                <section class="core-sidebar-panel workspace-settings-panel" data-sidebar-panel="map" hidden>
+                    <div class="core-field workspace-settings-section">
+                        <label for="workspace-basemap">Basemap</label>
+                        <select id="workspace-basemap"><option>Dark (No Labels)</option><option>Dark</option><option>Light</option><option>Street</option></select>
+                    </div>
+                    <div class="workspace-settings-section">
+                        <h2>Cities</h2>
+                        <div class="core-segmented" role="radiogroup" aria-label="Cities">
+                            <label><input name="workspace-cities-source" type="radio" value="off" checked><span>Off</span></label>
+                            <label><input name="workspace-cities-source" type="radio" value="us"><span>US</span></label>
+                            <label><input name="workspace-cities-source" type="radio" value="world"><span>World</span></label>
+                        </div>
+                        <div class="core-adjustment" data-city-adjustment>
+                            <label id="workspace-city-density-label" for="workspace-city-density">City Density</label>
+                            <input id="workspace-city-density" type="range" min="0.01" max="1" step="0.005" value="0.25">
+                        </div>
+                        <div class="core-adjustment" data-city-adjustment>
+                            <label id="workspace-city-font-size-label" for="workspace-city-font-size">City Font Size (0.6)</label>
+                            <input id="workspace-city-font-size" type="range" min="0.4" max="1.2" step="0.05" value="0.6">
+                        </div>
+                    </div>
+                    <div class="workspace-settings-section">
+                        <h2>Map Overlays</h2>
+                        <div class="workspace-map-overlay-list">
+                            <label class="wx-check-row"><span>Lat/Lon Grid</span><input type="checkbox" data-map-overlay="graticule"></label>
+                            <label class="wx-check-row"><span>State Borders</span><input type="checkbox" data-map-overlay="states" checked></label>
+                            <label class="wx-check-row"><span>Country Borders</span><input type="checkbox" data-map-overlay="countries"></label>
+                            <label class="wx-check-row"><span>County Borders</span><input type="checkbox" data-map-overlay="counties" checked></label>
+                        </div>
+                    </div>
                 </section>
             </div>
-            <footer class="core-sidebar-footer workspace-footer"><div id="workspace-message" class="core-message workspace-message" role="status" aria-live="polite">Loading workspace…</div><label class="workspace-auto-update"><span>Auto-Update (60 sec)</span><span class="workspace-layer-toggle"><input id="workspace-auto-update" type="checkbox" checked><span aria-hidden="true"></span></span></label><button id="workspace-refresh" type="button">Refresh Active Layers</button></footer>
+            <footer class="core-sidebar-footer workspace-footer"><div id="workspace-message" class="core-message workspace-message" role="status" aria-live="polite">Loading workspace…</div><label class="workspace-auto-update"><span>Auto-Update (30 sec)</span><span class="workspace-layer-toggle"><input id="workspace-auto-update" type="checkbox" checked><span aria-hidden="true"></span></span></label><button id="workspace-refresh" type="button">Refresh Active Layers</button></footer>
         </aside>
         <section class="core-map-panel weather-map-wrap">
             <div id="workspace-map" class="core-map"></div>
@@ -186,6 +223,6 @@
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
     <script src="/frontend/lib/tz-lookup/tz.js?v=6.1.25"></script>
-    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260719w"></script>
+    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260719ae"></script>
 </body>
 </html>

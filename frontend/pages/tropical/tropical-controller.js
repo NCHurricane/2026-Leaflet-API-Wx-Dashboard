@@ -841,6 +841,7 @@
         const stormId = String(storm?.id || '').toUpperCase();
         const name = storm?.name || stormId || 'Unnamed';
         const type = storm?.classification || storm?.systemType || '';
+        const basin = String(storm?.basin || '').toUpperCase();
         const windMph = context.ktToMph(storm?.intensity);
         const pressure = Number(storm?.pressure);
         const color = context.pointColor(storm?.intensity);
@@ -857,6 +858,7 @@
                     <span class="wx-tropical-card-head">
                         <span class="wx-tropical-card-name">${context.escapeHtml(name)}</span>
                         ${type ? `<span class="wx-tropical-card-badge">${context.escapeHtml(type)}</span>` : ''}
+                        ${basin ? `<span class="wx-tropical-card-basin">${context.escapeHtml(basin)}</span>` : ''}
                     </span>
                     <span class="wx-tropical-card-class">${context.escapeHtml(context.windClass(storm?.intensity))}</span>
                     <span class="wx-tropical-card-metrics">${metrics.map(([label, value]) => (
@@ -891,7 +893,7 @@
                 <div class="wx-tropical-empty-card">
                     <div class="wx-tropical-empty-title">No active systems</div>
                     <div class="wx-tropical-empty-note">
-                        The selected basin has no active tropical cyclones.
+                        The selected regions have no active tropical cyclones.
                     </div>
                 </div>`;
             return;

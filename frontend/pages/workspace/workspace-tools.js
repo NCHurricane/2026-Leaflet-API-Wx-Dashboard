@@ -367,6 +367,10 @@ export function createWorkspaceTools(options) {
             if (_stormTrackPlacesOverlayEl === panel) {
                 _stormTrackPlacesOverlayEl = null;
             }
+            _setStormTrackDrawMode(false);
+            _stormTrackBaseLatLngs = [];
+            _clearStormTrackLayer();
+            setStatus('Storm track projection closed. Select Start to draw a new line.');
         });
 
         _stormTrackPlacesOverlayEl = panel;
@@ -485,6 +489,7 @@ export function createWorkspaceTools(options) {
     }
 
     function _clearStormTrackLayer() {
+        _stormTrackPlacesComputeSeq += 1;
         _stormTrackProjectionLayer.clearLayers();
         _stormTrackHandleLayer.clearLayers();
         _stormTrackDragHandle = null;
@@ -803,6 +808,10 @@ export function createWorkspaceTools(options) {
         setAlerts(features) { _allAlertFeatures = Array.isArray(features) ? features : []; },
         setSelectedAlert(feature) { _stormTrackSelectedAlert = feature || null; },
         isDrawing() { return _stormTrackDrawMode; },
-        clear() { _clearStormTrackLayer(); },
+        clear() {
+            _setStormTrackDrawMode(false);
+            _stormTrackBaseLatLngs = [];
+            _clearStormTrackLayer();
+        },
     });
 }

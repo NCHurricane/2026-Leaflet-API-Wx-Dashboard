@@ -39,6 +39,9 @@ function matchesSelection(feature, selection) {
     const categoryMatch = !CATEGORY_EVENTS.has(event)
         || categories.some((category) => (ALERT_CATEGORIES[category] || []).includes(event));
     if (!categoryMatch) return false;
+    if (Array.isArray(selection.eventTypes) && selection.eventTypes.length) {
+        return selection.eventTypes.includes(event);
+    }
     const subtype = Object.entries(SEVERE_EVENTS).find(([, name]) => name === event)?.[0];
     const subtypeFilteringActive = categories.includes('Severe Weather Warnings');
     return !subtype || !subtypeFilteringActive || selection.warningTypes?.includes(subtype);
@@ -85,6 +88,7 @@ export function createAlertsEngine(options) {
     let renderedLsr = [];
     let selection = { categories: [], warningTypes: [] };
     let opacity = 0.75;
+    let lsrOpacity = 1;
     let pulseEnabled = true;
     let liveSequence = 0;
     let lsrSequence = 0;
@@ -260,7 +264,7 @@ export function createAlertsEngine(options) {
                 const category = classifyLsrEvent(feature?.properties?.event);
                 const [, color, iconClass] = LSR_CATEGORIES[category];
                 const size = Math.round(16 * Math.pow(1.1, Math.max(0, map.getZoom() - 7)));
-                return leaflet.marker(latlng, { pane: 'alerts-lsr', icon: leaflet.divIcon({ className: '', html: `<i class="${iconClass}" style="color:${color};font-size:${size}px;-webkit-text-stroke:.5px #08111d;text-shadow:0 0 3px #000"></i>`, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }) });
+                return leaflet.marker(latlng, { pane: 'alerts-lsr', opacity: lsrOpacity, icon: leaflet.divIcon({ className: '', html: `<i class="${iconClass}" style="color:${color};font-size:${size}px;-webkit-text-stroke:.5px #08111d;text-shadow:0 0 3px #000"></i>`, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }) });
             },
             onEachFeature(feature, layer) {
                 const props = feature?.properties || {};
@@ -363,6 +367,11 @@ export function createAlertsEngine(options) {
         getAlerts() { return [...renderedAlerts]; },
         loadArchive, loadLive, loadLsr, renderArchiveFrame, renderLegend, setSelection,
         setOpacity(value) { opacity = Math.max(0.1, Math.min(1, Number(value) || 0.75)); alertLayer?.setStyle(alertStyle); syncAlertPulseLayers(); return opacity; },
+        setLsrOpacity(value) {
+            lsrOpacity = Math.max(0.1, Math.min(1, Number(value) || 1));
+            lsrLayer?.eachLayer((layer) => layer.setOpacity?.(lsrOpacity));
+            return lsrOpacity;
+        },
         setPulseEnabled(value) { pulseEnabled = Boolean(value); syncAlertPulseLayers(); return pulseEnabled; },
         showLsr(feature) {
             const coordinates = feature?.geometry?.coordinates;

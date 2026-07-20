@@ -20,7 +20,6 @@ _TROPICAL_PRODUCTS = {
 _TROPICAL_CACHE_DIR = Path(BASE_DIR) / "cache" / "tropical"
 _TROPICAL_STORMS_CACHE = _TROPICAL_CACHE_DIR / "current_storms.json"
 _TROPICAL_SUMMARY_CACHE = _TROPICAL_CACHE_DIR / "summary.json"
-_TROPICAL_CACHE_TTL_SECONDS = 2 * 60 * 60
 
 _TROPICAL_ARCHIVE_DIR = _TROPICAL_CACHE_DIR / "archive"
 _TROPICAL_ARCHIVE_CATALOG = _TROPICAL_ARCHIVE_DIR / "catalog" / "seasons.json"
@@ -51,7 +50,7 @@ def _read_tropical_archive_cache(path: Path) -> dict[str, Any] | None:
         return None
 
 
-def _read_tropical_cache(path: Path, max_age_seconds: int) -> dict[str, Any] | None:
+def _read_tropical_cache(path: Path, max_age_seconds: float) -> dict[str, Any] | None:
     try:
         if not path.is_file():
             return None
@@ -63,6 +62,11 @@ def _read_tropical_cache(path: Path, max_age_seconds: int) -> dict[str, Any] | N
         return payload if isinstance(payload, dict) else None
     except Exception:
         return None
+
+
+def _read_tropical_cache_any_age(path: Path) -> dict[str, Any] | None:
+    """Read the latest worker artifact without making a page request refresh it."""
+    return _read_tropical_cache(path, float("inf"))
 
 
 def _write_tropical_cache(path: Path, payload: dict[str, Any]) -> None:
@@ -298,15 +302,13 @@ def get_tropical_storms_data(basin: str = "WORLD", force: bool = False) -> dict:
     if basin_key not in {"WORLD", "AL", "EP", "CP"}:
         raise HTTPException(status_code=400, detail="Invalid tropical basin.")
 
-    summary = None if force else _read_tropical_cache(
-        _TROPICAL_SUMMARY_CACHE, _TROPICAL_CACHE_TTL_SECONDS
-    )
+    summary = None if force else _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
     source = "worker-cache"
     if summary is None:
         try:
             _run_tropical_worker_once(force=force)
         except Exception as exc:
-            fallback = _read_tropical_cache(_TROPICAL_SUMMARY_CACHE, 7 * 24 * 60 * 60)
+            fallback = _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
             if fallback is None:
                 raise HTTPException(
                     status_code=502,
@@ -315,9 +317,7 @@ def get_tropical_storms_data(basin: str = "WORLD", force: bool = False) -> dict:
             summary = fallback
             source = "stale-worker-cache"
         else:
-            summary = _read_tropical_cache(
-                _TROPICAL_SUMMARY_CACHE, 7 * 24 * 60 * 60
-            )
+            summary = _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
             source = "worker-cache-refresh"
 
     if summary is None:
@@ -340,21 +340,19 @@ def get_tropical_storms_data(basin: str = "WORLD", force: bool = False) -> dict:
 
 def get_tropical_summary_data(force: bool = False) -> dict:
     """Return the cached tropical worker summary."""
-    summary = None if force else _read_tropical_cache(
-        _TROPICAL_SUMMARY_CACHE, _TROPICAL_CACHE_TTL_SECONDS
-    )
+    summary = None if force else _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
     if summary is None:
         try:
             _run_tropical_worker_once(force=force)
         except Exception as exc:
-            fallback = _read_tropical_cache(_TROPICAL_SUMMARY_CACHE, 7 * 24 * 60 * 60)
+            fallback = _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
             if fallback is None:
                 raise HTTPException(
                     status_code=502,
                     detail=f"Tropical cache refresh failed: {exc}",
                 )
             return fallback
-        summary = _read_tropical_cache(_TROPICAL_SUMMARY_CACHE, 7 * 24 * 60 * 60)
+        summary = _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
     if summary is None:
         raise HTTPException(status_code=503, detail="Tropical cache is not available.")
     return summary
@@ -373,18 +371,10 @@ def get_tropical_basin_feeds_data(basin_id: str) -> dict:
         raise HTTPException(status_code=400, detail="Invalid tropical basin.")
 
     basin_dir = _TROPICAL_CACHE_DIR / "basins" / basin_key
-    index_payload = _read_tropical_cache(
-        basin_dir / "index.json", _TROPICAL_CACHE_TTL_SECONDS
-    )
-    gis_payload = _read_tropical_cache(
-        basin_dir / "gis.json", _TROPICAL_CACHE_TTL_SECONDS
-    )
-    assets_payload = _read_tropical_cache(
-        basin_dir / "assets.json", _TROPICAL_CACHE_TTL_SECONDS
-    )
-    gtwo_payload = _read_tropical_cache(
-        basin_dir / "gtwo.json", _TROPICAL_CACHE_TTL_SECONDS
-    )
+    index_payload = _read_tropical_cache_any_age(basin_dir / "index.json")
+    gis_payload = _read_tropical_cache_any_age(basin_dir / "gis.json")
+    assets_payload = _read_tropical_cache_any_age(basin_dir / "assets.json")
+    gtwo_payload = _read_tropical_cache_any_age(basin_dir / "gtwo.json")
     if index_payload is None or gis_payload is None or assets_payload is None:
         try:
             _run_tropical_worker_once(force=False)
@@ -393,14 +383,10 @@ def get_tropical_basin_feeds_data(basin_id: str) -> dict:
                 status_code=502,
                 detail=f"Tropical basin feed refresh failed: {exc}",
             )
-        index_payload = _read_tropical_cache(
-            basin_dir / "index.json", 7 * 24 * 60 * 60
-        )
-        gis_payload = _read_tropical_cache(basin_dir / "gis.json", 7 * 24 * 60 * 60)
-        assets_payload = _read_tropical_cache(
-            basin_dir / "assets.json", 7 * 24 * 60 * 60
-        )
-        gtwo_payload = _read_tropical_cache(basin_dir / "gtwo.json", 7 * 24 * 60 * 60)
+        index_payload = _read_tropical_cache_any_age(basin_dir / "index.json")
+        gis_payload = _read_tropical_cache_any_age(basin_dir / "gis.json")
+        assets_payload = _read_tropical_cache_any_age(basin_dir / "assets.json")
+        gtwo_payload = _read_tropical_cache_any_age(basin_dir / "gtwo.json")
 
     if index_payload is None or gis_payload is None or assets_payload is None:
         raise HTTPException(
@@ -425,12 +411,12 @@ def get_tropical_storm_data(storm_id: str) -> dict:
         raise HTTPException(status_code=400, detail="Invalid tropical storm id.")
 
     storm_cache = _TROPICAL_CACHE_DIR / "storms" / sid / "storm.json"
-    payload = _read_tropical_cache(storm_cache, _TROPICAL_CACHE_TTL_SECONDS)
+    payload = _read_tropical_cache_any_age(storm_cache)
     if payload is None:
         try:
             _run_tropical_worker_once(force=False)
         except Exception as exc:
-            fallback = _read_tropical_cache(storm_cache, 7 * 24 * 60 * 60)
+            fallback = _read_tropical_cache_any_age(storm_cache)
             if fallback is None:
                 raise HTTPException(
                     status_code=502,
@@ -438,7 +424,7 @@ def get_tropical_storm_data(storm_id: str) -> dict:
                 )
             payload = fallback
         else:
-            payload = _read_tropical_cache(storm_cache, 7 * 24 * 60 * 60)
+            payload = _read_tropical_cache_any_age(storm_cache)
 
     if payload is None:
         raise HTTPException(status_code=404, detail=f"No cached tropical storm: {sid}")

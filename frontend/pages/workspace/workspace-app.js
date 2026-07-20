@@ -1,23 +1,28 @@
 import * as api from '../../core/api.js';
 import { createMapCore } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
-import { createScrubber } from '../../core/scrubber.js';
+import { createScrubber } from '../../core/scrubber.js?v=20260719a';
+import { loadDefaultSettings } from '../../core/settings.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { createStatusReporter } from '../../core/status.js';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
-import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260719b';
-import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260719g';
-import { createRadarEngine } from '../radar/radar-engine.js?v=20260719a';
-import { createWorkspaceTools } from './workspace-tools.js?v=20260719b';
+import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260719c';
+import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260719i';
+import { createRadarEngine } from '../radar/radar-engine.js?v=20260719b';
+import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 
 const byId = (id) => document.getElementById(id);
-const AUTO_UPDATE_MS = 60_000;
+const AUTO_UPDATE_MS = 30_000;
 const NEW_ALERT_NOTICE_MS = 15_000;
 const NEW_ALERT_EVENTS = new Set([
     'Tornado Warning', 'Tornado Watch',
     'Severe Thunderstorm Warning', 'Severe Thunderstorm Watch',
     'Flash Flood Warning', 'Flash Flood Watch',
 ]);
+const WORKSPACE_ALERT_EVENTS = Object.freeze({
+    ...SEVERE_EVENTS,
+    sps: 'Special Weather Statement',
+});
 
 const WORKSPACE_REGION_BOUNDS = Object.freeze({
     CONUS: [[24.0, -125.0], [50.0, -66.5]],
@@ -38,12 +43,42 @@ function createStackLegend(root, label, defaultOpen = false) {
         clear() { root.replaceChildren(); root.hidden = true; },
         setHtml(html) {
             if (!html) { this.clear(); return; }
-            const details = document.createElement('details');
-            details.className = 'workspace-legend-panel';
-            details.open = isOpen;
-            details.innerHTML = `<summary>${label}</summary><div class="workspace-legend-content">${html}</div>`;
-            details.addEventListener('toggle', () => { isOpen = details.open; });
-            root.replaceChildren(details);
+            const panel = document.createElement('div');
+            panel.className = 'workspace-legend-panel';
+            panel.classList.toggle('is-collapsed', !isOpen);
+            const content = document.createElement('div');
+            content.className = 'workspace-legend-content';
+            content.innerHTML = html;
+            let header = content.querySelector(':scope > .core-legend-header');
+            if (!header) {
+                header = document.createElement('div');
+                header.className = 'core-legend-header';
+                const heading = document.createElement('div');
+                heading.className = 'core-legend-heading';
+                const title = document.createElement('div');
+                title.className = 'core-legend-title';
+                title.textContent = label;
+                heading.appendChild(title);
+                header.appendChild(heading);
+            }
+            const collapse = document.createElement('button');
+            collapse.type = 'button';
+            collapse.className = 'core-legend-collapse';
+            collapse.innerHTML = '<i class="fas fa-chevron-down" aria-hidden="true"></i>';
+            const syncCollapse = () => {
+                collapse.setAttribute('aria-expanded', String(isOpen));
+                collapse.setAttribute('aria-label', isOpen ? 'Collapse legend' : 'Expand legend');
+                collapse.title = isOpen ? 'Collapse legend' : 'Expand legend';
+            };
+            collapse.addEventListener('click', () => {
+                isOpen = !isOpen;
+                panel.classList.toggle('is-collapsed', !isOpen);
+                syncCollapse();
+            });
+            syncCollapse();
+            header.appendChild(collapse);
+            panel.append(header, content);
+            root.replaceChildren(panel);
             root.hidden = false;
         },
     });
@@ -107,6 +142,8 @@ function radarFrameLabel(frame) {
 async function initialize() {
     renderProductNav(byId('product-nav'), 'Home');
     createSidebarTabs(byId('workspace-sidebar-tabs'), { defaultTab: 'layers' });
+    const defaults = await loadDefaultSettings().catch(() => ({}));
+    const cityDefaults = defaults?.global?.cityLabels || {};
     document.querySelectorAll('.workspace-group-summary .workspace-layer-toggle').forEach((toggle) => {
         toggle.addEventListener('click', (event) => event.stopPropagation());
     });
@@ -134,6 +171,7 @@ async function initialize() {
     const radarLegend = createStackLegend(byId('workspace-radar-legend'), 'Radar');
     const stormTrackLegend = createStackLegend(byId('workspace-storm-track-legend'), 'Storm Tracks');
     const detail = createAlertDetail(byId('workspace-detail'), {
+        initialTop: 70,
         lsrColor(feature) {
             const category = classifyLsrEvent(feature?.properties?.event);
             return (LSR_CATEGORIES[category] || LSR_CATEGORIES.other)[1];
@@ -168,10 +206,14 @@ async function initialize() {
         const selected = [...byId('workspace-warning-filters').querySelectorAll('.is-active')]
             .map((button) => button.dataset.warning);
         const allActive = selected.includes('all');
-        const warningTypes = selected.filter((value) => value !== 'all');
+        const filterTypes = selected.filter((value) => value !== 'all');
+        const warningTypes = filterTypes.filter((value) => Object.hasOwn(SEVERE_EVENTS, value));
+        const categories = [];
+        if (warningTypes.length) categories.push('Severe Weather Warnings');
+        if (filterTypes.includes('sps')) categories.push('Informational Alerts');
         return allActive
             ? { categories: Object.keys(ALERT_CATEGORIES), warningTypes: Object.keys(SEVERE_EVENTS) }
-            : { categories: warningTypes.length ? ['Severe Weather Warnings'] : [], warningTypes };
+            : { categories, warningTypes, eventTypes: filterTypes.map((value) => WORKSPACE_ALERT_EVENTS[value]).filter(Boolean) };
     };
     const selectedLsrCategories = () => LSR_FILTER_CATEGORIES[activePillValue('workspace-lsr-filters', 'lsr', 'all')] || LSR_FILTER_CATEGORIES.all;
     const selectedLsrHours = () => Number(activePillValue('workspace-lsr-hours', 'hours', '1'));
@@ -363,6 +405,7 @@ async function initialize() {
     };
     const radarScrubberBar = byId('workspace-radar-scrubber-bar');
     const radarScrubber = createScrubber(byId('workspace-radar-bottom-scrubber'), {
+        holdAtEnd: true,
         onFrame(_frame, index) { void radarEngine.renderFrameAt(index); },
     });
     function showRadarScrubber(visible) {
@@ -541,12 +584,43 @@ async function initialize() {
         alertsEngine.clearLsrSelection();
         setActiveRadarLevel(button.dataset.radarLevel);
         populateRadarProducts();
-        if (byId('workspace-radar-enabled').checked && radarSelection().site) void radarEngine.refreshAll();
+        if (byId('workspace-radar-enabled').checked && radarSelection().site) {
+            radarEngine.clear();
+            void radarEngine.refreshAll();
+        }
     });
-    byId('workspace-radar-product').addEventListener('change', () => { alertsEngine.clearLsrSelection(); if (byId('workspace-radar-enabled').checked && radarSelection().site) void radarEngine.refreshAll(); });
+    byId('workspace-radar-product').addEventListener('change', () => {
+        alertsEngine.clearLsrSelection();
+        if (byId('workspace-radar-enabled').checked && radarSelection().site) {
+            radarEngine.clear();
+            void radarEngine.refreshAll();
+        }
+    });
     byId('workspace-radar-sites').addEventListener('change', (event) => { if (byId('workspace-radar-enabled').checked) { radarEngine.setSitesVisible(event.target.checked); if (event.target.checked) radarEngine.showSiteLegend(); } });
     byId('workspace-radar-tracks').addEventListener('change', (event) => radarEngine.setStormTracksVisible(event.target.checked));
     byId('workspace-radar-inspector').addEventListener('change', (event) => radarEngine.setInspectorVisible(event.target.checked));
+    const opacityLabel = (prefix, value) => `${prefix} (${value.toFixed(2).replace(/\.?0+$/, '')})`;
+    const radarOpacityInput = byId('workspace-radar-opacity');
+    const alertsOpacityInput = byId('workspace-alerts-opacity');
+    const lsrOpacityInput = byId('workspace-lsr-opacity');
+    const updateRadarOpacity = () => {
+        const value = radarEngine.setOpacity(radarOpacityInput.value);
+        byId('workspace-radar-opacity-label').textContent = opacityLabel('Radar Opacity', value);
+    };
+    const updateAlertsOpacity = () => {
+        const value = alertsEngine.setOpacity(alertsOpacityInput.value);
+        byId('workspace-alerts-opacity-label').textContent = opacityLabel('Alerts Opacity', value);
+    };
+    const updateLsrOpacity = () => {
+        const value = alertsEngine.setLsrOpacity(lsrOpacityInput.value);
+        byId('workspace-lsr-opacity-label').textContent = opacityLabel('Storm Reports Opacity', value);
+    };
+    radarOpacityInput.addEventListener('input', updateRadarOpacity);
+    alertsOpacityInput.addEventListener('input', updateAlertsOpacity);
+    lsrOpacityInput.addEventListener('input', updateLsrOpacity);
+    updateRadarOpacity();
+    updateAlertsOpacity();
+    updateLsrOpacity();
     regionSelect.addEventListener('change', () => {
         alertsEngine.clearLsrSelection();
         hideProjectedArrival();
@@ -558,6 +632,52 @@ async function initialize() {
         void refreshAlerts({ refresh: true, notifyNewAlerts: false });
     });
     byId('workspace-basemap').addEventListener('change', (event) => mapCore.setBasemap(event.target.value));
+
+    const citySource = ['us', 'world'].includes(cityDefaults.source) ? cityDefaults.source : 'off';
+    const cityDensity = Number(cityDefaults.density);
+    const cityFontSize = Number(cityDefaults.fontSize);
+    const cityDensityInput = byId('workspace-city-density');
+    const cityFontSizeInput = byId('workspace-city-font-size');
+    cityDensityInput.value = String(cityDensity >= 0.01 && cityDensity <= 1 ? cityDensity : 0.25);
+    cityFontSizeInput.value = String(cityFontSize >= 0.4 && cityFontSize <= 1.2 ? cityFontSize : 0.6);
+    const initialCitySourceInput = document.querySelector(`input[name="workspace-cities-source"][value="${citySource}"]`);
+    if (initialCitySourceInput) initialCitySourceInput.checked = true;
+
+    const selectedCitySource = () => document.querySelector('input[name="workspace-cities-source"]:checked')?.value || 'off';
+    function updateCityControlLabels() {
+        const source = selectedCitySource();
+        const disabled = source === 'off';
+        document.querySelectorAll('[data-city-adjustment]').forEach((row) => {
+            row.classList.toggle('is-disabled', disabled);
+            row.querySelector('input').disabled = disabled;
+        });
+        const distanceKm = Math.round(mapCore.getCityMinDistanceKm(source, cityDensityInput.value));
+        byId('workspace-city-density-label').textContent = `City Density (${distanceKm} km)`;
+        const fontSizeLabel = Number(cityFontSizeInput.value).toFixed(2).replace(/\.?0+$/, '');
+        byId('workspace-city-font-size-label').textContent = `City Font Size (${fontSizeLabel})`;
+    }
+    document.querySelectorAll('input[name="workspace-cities-source"]').forEach((input) => {
+        input.addEventListener('change', () => {
+            updateCityControlLabels();
+            void mapCore.setCitySource(selectedCitySource())
+                .catch((error) => status.setMessage(`City overlay unavailable: ${error.message}`, 'error'));
+        });
+    });
+    cityDensityInput.addEventListener('input', () => {
+        mapCore.setCityDensity(cityDensityInput.value);
+        updateCityControlLabels();
+    });
+    cityFontSizeInput.addEventListener('input', () => {
+        mapCore.setCityFontSize(cityFontSizeInput.value);
+        updateCityControlLabels();
+    });
+    mapCore.map.on('zoomend', updateCityControlLabels);
+    mapCore.setCityDensity(cityDensityInput.value);
+    mapCore.setCityFontSize(cityFontSizeInput.value);
+    updateCityControlLabels();
+    void mapCore.setCitySource(citySource)
+        .catch((error) => status.setMessage(`City overlay unavailable: ${error.message}`, 'error'));
+
     document.querySelectorAll('[data-map-overlay]').forEach((input) => {
         input.addEventListener('change', () => void mapCore.setOverlayVisible(input.dataset.mapOverlay, input.checked));
         if (input.checked) void mapCore.setOverlayVisible(input.dataset.mapOverlay, true);
@@ -576,7 +696,11 @@ async function initialize() {
     await radarEngine.loadCatalog();
     await refreshAlerts();
     status.setMessage('Workspace ready. Select a radar site to add live radar.');
-    window.addEventListener('beforeunload', () => { clearInterval(autoUpdateTimer); radarScrubber.destroy(); }, { once: true });
+    window.addEventListener('beforeunload', () => {
+        clearInterval(autoUpdateTimer);
+        mapCore.map.off('zoomend', updateCityControlLabels);
+        radarScrubber.destroy();
+    }, { once: true });
 }
 
 initialize().catch((error) => {

@@ -1,6 +1,6 @@
 import { apiUrl } from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
-import { createMapCore } from '../../core/map-core.js';
+import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { createStatusReporter } from '../../core/status.js';
@@ -40,6 +40,61 @@ function _setViewerTimestamp(value) { if (value) status.setDataInfo({ timestamp:
 function _setReliability(_type, _label, source, timestamp) { status.setDataInfo({ timestamp, provider: 'NOAA', source }); }
 function _setTimestampSource(_type, source, timestamp) { status.setDataInfo({ timestamp, provider: 'NOAA', source }); }
 
+function _installWaterDetailDrag(root, handle) {
+    if (!root || !handle) return;
+    let drag = null;
+    handle.addEventListener('pointerdown', (event) => {
+        if (event.target.closest('button, a')) return;
+        const parentRect = root.parentElement.getBoundingClientRect();
+        const rect = root.getBoundingClientRect();
+        root.style.left = `${rect.left - parentRect.left}px`;
+        root.style.top = `${rect.top - parentRect.top}px`;
+        root.style.right = 'auto';
+        drag = { x: event.clientX, y: event.clientY, left: rect.left - parentRect.left, top: rect.top - parentRect.top };
+        handle.setPointerCapture(event.pointerId);
+        event.preventDefault();
+    });
+    handle.addEventListener('pointermove', (event) => {
+        if (!drag) return;
+        const parent = root.parentElement.getBoundingClientRect();
+        const maxLeft = Math.max(0, parent.width - root.offsetWidth);
+        const maxTop = Math.max(0, parent.height - root.offsetHeight);
+        root.style.left = `${Math.max(0, Math.min(maxLeft, drag.left + event.clientX - drag.x))}px`;
+        root.style.top = `${Math.max(0, Math.min(maxTop, drag.top + event.clientY - drag.y))}px`;
+    });
+    const end = () => { drag = null; };
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+}
+
+function _closeWaterDetail() {
+    _waterDetailRequestSeq += 1;
+    _waterSelectedSiteId = '';
+    const root = byId('weather-water-detail');
+    if (!root) return;
+    root.replaceChildren();
+    root.hidden = true;
+}
+
+function _openWaterDetail(html, siteId, color = '#38bdf8') {
+    const root = byId('weather-water-detail');
+    if (!root) return;
+    _waterSelectedSiteId = siteId || '';
+    root.style.setProperty('--water-detail-color', color);
+    root.style.left = 'auto';
+    root.style.right = '12px';
+    root.style.top = '12px';
+    root.innerHTML = html;
+    root.hidden = false;
+    root.querySelector('.water-detail-close')?.addEventListener('click', _closeWaterDetail);
+    _installWaterDetailDrag(root, root.querySelector('.water-detail-head'));
+}
+
+function _waterDetailMessageHtml(title, message) {
+    return `<div class="water-detail-head"><div><div class="water-detail-eyebrow">NOAA Water Observation</div><h2 id="water-detail-title">${_escapeHtml(title)}</h2></div><button class="water-detail-close" type="button" aria-label="Close water station detail">×</button></div>`
+        + `<div class="water-detail-body"><p class="water-detail-message">${_escapeHtml(message)}</p></div>`;
+}
+
 function _ensureWaterLayer() {
     if (!waterLayer) waterLayer = L.layerGroup();
     return waterLayer;
@@ -61,12 +116,7 @@ function _clearWaterLayer() {
         if (map.hasLayer(waterLayer)) map.removeLayer(waterLayer);
     }
     _waterStations = [];
-    _waterSelectedSiteId = '';
-    const detail = byId('weather-water-detail');
-    if (detail) {
-        detail.hidden = true;
-        detail.innerHTML = '';
-    }
+    _closeWaterDetail();
 }
 
 function _waterMarkerStyle(status) {
@@ -104,7 +154,11 @@ function _waterLegendHtml() {
             : '';
         return `<div class="legend-item"><span class="legend-swatch" style="background:${style.fill};border-color:${style.stroke};border-radius:50%;${shadow}"></span><span class="legend-text">${label}</span></div>`;
     }).join('');
-    return `<h4 class="legend-title">River/Coastal/NDBC</h4><div class="legend-flow">${rows}</div>`;
+    return `<div class="core-legend-header">
+            <span class="core-legend-provider">NOAA</span>
+            <div class="core-legend-heading"><div class="core-legend-title">Water Observations</div></div>
+            <span class="core-legend-meta">3 networks</span>
+        </div><div class="core-legend-body"><div class="legend-flow">${rows}</div></div>`;
 }
 
 function _selectedWaterNetworks() {
@@ -285,7 +339,7 @@ function _waterPopupHydrograph(station) {
     return `<a class="wx-water-detail-link" href="${_escapeHtml(pageUrl)}" target="_blank" rel="noopener">${_escapeHtml(sourceLabel)}</a>`;
 }
 
-function _waterStationPopupHtml(station) {
+function _waterStationDetailHtml(station) {
     if (!station) return '';
     const isCoastal = _isCoastalWaterStation(station);
     const isBuoy = _isBuoyWaterStation(station);
@@ -312,35 +366,36 @@ function _waterStationPopupHtml(station) {
         .filter((row) => row[1])
         .map(([label, value]) => `<dt>${_escapeHtml(label)}</dt><dd>${String(value).includes('<br>') ? value : _escapeHtml(value)}</dd>`)
         .join('');
-    return `<div class="wx-storm-popup wx-water-popup">`
-        + `<div class="wx-storm-popup-title">${_escapeHtml(station.name || station.site_id)}</div>`
-        + `<dl class="wx-storm-popup-grid">${rows}</dl>`
+    return `<div class="water-detail-head"><div><div class="water-detail-eyebrow">NOAA ${_escapeHtml(_waterNetworkLabel(station))} Observation</div><h2 id="water-detail-title">${_escapeHtml(station.name || station.site_id)}</h2></div><button class="water-detail-close" type="button" aria-label="Close water station detail">×</button></div>`
+        + `<div class="water-detail-body"><dl class="wx-storm-popup-grid">${rows}</dl>`
         + (!isBuoy && !isCoastal ? _waterStageGaugeHtml(station) : '')
         + (isBuoy ? _waterBuoyCardHtml(station) : '')
         + _waterPopupHydrograph(station)
         + `</div>`;
 }
 
-async function _loadWaterStationDetail(siteId, marker) {
-    if (!marker) return;
+async function _loadWaterStationDetail(siteId, station) {
+    if (!siteId) return;
     const requestSeq = ++_waterDetailRequestSeq;
-    marker.bindPopup('<div class="wx-storm-popup wx-water-popup"><div class="wx-storm-popup-title">Loading gauge...</div></div>');
-    marker.openPopup();
+    const markerStyle = _waterMarkerStyle(_waterMarkerStatus(station));
+    _openWaterDetail(
+        _waterDetailMessageHtml(station?.name || siteId, 'Loading latest station details…'),
+        siteId,
+        markerStyle.fill,
+    );
     try {
         const resp = await fetch(apiUrl(`/api/water/stations/${encodeURIComponent(siteId)}`), { cache: 'no-store' });
         if (requestSeq !== _waterDetailRequestSeq || !_isTypeEnabled('water')) return;
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         if (data?.station) {
-            _waterSelectedSiteId = siteId;
-            marker.setPopupContent(_waterStationPopupHtml(data.station));
-            marker.openPopup();
+            const detailStyle = _waterMarkerStyle(_waterMarkerStatus(data.station));
+            _openWaterDetail(_waterStationDetailHtml(data.station), siteId, detailStyle.fill);
         }
     } catch (err) {
         if (requestSeq !== _waterDetailRequestSeq) return;
         _setWaterStatus(`Water station unavailable: ${err.message}`);
-        marker.setPopupContent(`<div class="wx-storm-popup wx-water-popup"><div class="wx-storm-popup-title">Gauge unavailable</div><dl class="wx-storm-popup-grid"><dt>Error</dt><dd>${_escapeHtml(err.message)}</dd></dl></div>`);
-        marker.openPopup();
+        _openWaterDetail(_waterDetailMessageHtml(station?.name || siteId, `Station unavailable: ${err.message}`), siteId, markerStyle.fill);
     }
 }
 
@@ -382,8 +437,7 @@ function _renderWaterStations(stations) {
                 : `<strong>${_escapeHtml(station.name || station.site_id)}</strong><br>Stage ${_escapeHtml(_waterReadingText(station, 'stage'))}`,
             { direction: 'top', className: 'city-name-label' },
         );
-        marker.bindPopup(_waterStationPopupHtml(station));
-        marker.on('click', () => _loadWaterStationDetail(station.site_id, marker));
+        marker.on('click', () => _loadWaterStationDetail(station.site_id, station));
         marker.addTo(layer);
     });
     if (_isTypeEnabled('water') && !map.hasLayer(layer)) layer.addTo(map);
@@ -468,8 +522,18 @@ function _updateWaterFloodPillsVisibility() {
 async function initialize() {
     renderProductNav(byId('product-nav'), 'Water');
     createSidebarTabs(byId('water-sidebar-tabs'), { defaultTab: 'data' });
+    const regionSelect = byId('weather-water-region');
+    regionSelect.replaceChildren(...Object.entries(REGION_LABELS).map(([code, label]) => new Option(label, code)));
+    regionSelect.value = 'CONUS';
+    L.DomEvent.disableClickPropagation(byId('weather-water-detail'));
+    L.DomEvent.disableScrollPropagation(byId('weather-water-detail'));
     byId('weather-refresh-water').addEventListener('click', () => void _loadWaterStations({ force: true }));
     byId('weather-clear-water').addEventListener('click', () => { _clearWaterLayer(); _setWaterStatus('Water markers cleared.'); });
+    regionSelect.addEventListener('change', () => {
+        _clearWaterLayer();
+        mapCore.fitRegion(regionSelect.value);
+        _scheduleWaterReload(0);
+    });
     document.querySelectorAll('.weather-water-network-filter input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener('change', () => { _updateWaterFloodPillsVisibility(); void _loadWaterStations({ force: true }); }));
     byId('weather-water-flood-filters').addEventListener('click', (event) => {
         const pill = event.target.closest('.wx-water-flood-pill');
@@ -484,7 +548,9 @@ async function initialize() {
         input.addEventListener('change', () => void mapCore.setOverlayVisible(input.dataset.mapOverlay, input.checked));
         if (input.checked) void mapCore.setOverlayVisible(input.dataset.mapOverlay, true);
     });
+    map.on('movestart zoomstart', _closeWaterDetail);
     map.on('moveend', () => _scheduleWaterReload());
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') _closeWaterDetail(); });
     _updateWaterFloodPillsVisibility();
     setLegend(_waterLegendHtml());
     await _loadWaterStations();

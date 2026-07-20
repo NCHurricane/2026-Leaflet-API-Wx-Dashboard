@@ -41,7 +41,7 @@ Current status:
   corresponding Workspace layer switch is enabled. Rail `ALL` includes every
   selected active alert, warning-card zoom is capped at level 9, and report
   popups clear on layer-off or Workspace view/product changes instead of
-  reopening from cached selection. A visible default-on 60-second auto-update
+  reopening from cached selection. A visible default-on 30-second auto-update
   refreshes enabled alert/report data and selected radar frames. New TOR/SVR/FFW
   warnings and watches produce 15-second dismissible map notices and one
   `sounds/weather_alert.mp3` playback per notification burst; SMW and other alert
@@ -80,9 +80,25 @@ Current status:
   CONUS: it clears the selected radar/site frames and scrubber, restores Level 2
   Base Reflectivity, clears the selected alert/projection, and hides Projected
   Arrival while preserving the user's layer visibility preferences.
+  A focused 2026-07-19 follow-up smoke passed for the Workspace Settings tab,
+  Basemap/Cities/border controls, per-layer opacity sliders, alert/LSR and
+  Projected Arrival panel placement, repeat Projected Arrival drawing after
+  close, and immediate radar product switching. Radar frame identity includes
+  site/product/elevation/frame so same-scan product overlays cannot collide.
   The Radar/Alerts Workspace update cycle is closed for now.
-- Next session: diagnose and correct the known standalone Water page UI issues.
-  Keep the completed Workspace Radar/Alerts behavior stable while doing so.
+  A final quick filter adds default-off `SPS` (Special Weather Statement) to the
+  Workspace Active Alerts pills. It uses exact event matching and does not add
+  SPS to severe-warning notices, pulse behavior, or standalone Alerts defaults.
+  Radar scrubbers on both Workspace and standalone Radar now apply the loop hold
+  to the newest frame before wrapping to the oldest. Other shared-scrubber pages
+  retain their existing timing.
+  Workspace's stacked Radar/Storm Tracks/Alerts/Storm Reports legends retain
+  independent collapse state and compact placement but now use the same shared
+  header and boxed chevron collapse styling as standalone product pages.
+- The standalone Water shell/layout issue is resolved and user-smoked. Its
+  baseline layout, River/Coastal/NDBC data, detail content, and loading passed
+  with no errors. Later Water UI follow-ups are statically validated and listed
+  below for browser re-smoke. Keep the completed Workspace Radar/Alerts baseline stable.
 - Product engines/pages own product-specific controls, requests, response
   interpretation, and most rendering.
 - weather.html, js/weather.js, the obsolete root js modules, and
@@ -189,16 +205,38 @@ Active track order (2026-07-19):
     27. Phase 26 Tropical is also COMPLETE and
     statically validated: `/tropical` now serves frontend/pages/tropical/ on
     the core shell, and the Tropical UI/state/bridge plus js/tropical-* modules
-    were removed from the monolith. Browser parity smoke is deferred to the
-    consolidated final checklist. Phase 26 Water is also COMPLETE and statically
-    validated at frontend/pages/water/; its legacy monolith/UI paths are removed.
+    were removed from the monolith. Its normal page, basin, Refresh, overlay/vector,
+    and storm-detail reads now stay on the latest worker disk cache; only the
+    scheduled worker (or explicit API `force=true`) polls NHC. Tropical Cities
+    controls are restored under Settings with shared zoom-aware density behavior.
+    System details now use one contextual right inspector, preserving the active
+    Live/Archive list; it becomes an overlay below 1400 px and closes without
+    clearing the selected storm. The left tabs are now `LIVE | ARCHIVE | SETTINGS`;
+    Live defaults to World, supports combined ATL/E PAC/C PAC filters, shows
+    Active and Outlooks as open accordions, and no longer auto-selects a storm.
+    Basin changes reset the matching extent and show outlook areas plus cached
+    clickable active-system overview markers; full storm GIS remains selection-driven.
+    Browser parity smoke is deferred to the
+    consolidated final checklist. Phase 26 Water is COMPLETE at
+    frontend/pages/water/; its legacy monolith/UI paths are removed, and its
+    corrected core shell plus baseline data/detail/load behavior passed user
+    smoke on 2026-07-19. Tropical and Water legends now use the same collapsible core
+    header/body tray and provider-badge styling as the other refactored pages.
+    Water marker details now use a draggable map-level detail panel rather than
+    Leaflet popups, and the missing shared Region selector is restored in the
+    sidebar header. Water labels and checkbox rows now match the refactored
+    sidebar controls on other pages, including full-width Network/Map Overlay
+    rows with right-aligned checkboxes. The focused Water suite passes 8 tests;
+    these post-baseline Water follow-ups await browser smoke.
+    The Tropical Archive Advisory/Best Track scrubber is restored as a visible
+    bottom-map overlay after an archive storm is selected.
     Phase 27 is COMPLETE and statically validated: /workspace composes Alerts
     and Radar engine APIs, preserves the Projected Arrival Tool, redirects the
     legacy /weather.html URL, vendors browser libraries under frontend/lib, and
     retires the monolith/root shell assets. The user closed the Radar/Alerts
     Workspace slice on 2026-07-19 with all tests reported passing. Begin the next
-    session with the known standalone Water UI issues; keep the consolidated
-    checklist as regression reference. Additional product-engine composition
+    session by browser-smoke testing the pending Tropical refactor and Water
+    post-baseline follow-ups from the consolidated checklist. Additional product-engine composition
     (SPC/MRMS/RTMA/Satellite/Drought/WPC) remains a later workspace expansion.
     Minor UI spacing polish
     across the new standalone pages remains deferred to the end of the

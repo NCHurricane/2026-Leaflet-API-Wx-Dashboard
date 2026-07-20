@@ -15,7 +15,12 @@ function timestampMs(value) {
 }
 
 function frameIdentity(frame) {
-    return String(frame?.frame_key || frame?.timestamp || frame?.image_url || '');
+    const frameKey = String(frame?.frame_key || frame?.timestamp || frame?.image_url || '');
+    if (!frameKey) return '';
+    const site = String(frame?.site || '');
+    const product = String(frame?.product || '');
+    const elevation = String(frame?.selected_elevation ?? frame?.elevation ?? '');
+    return `${site}|${product}|${elevation}|${frameKey}`;
 }
 
 function normalizeFrames(rawFrames, site, product) {

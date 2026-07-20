@@ -35,8 +35,10 @@ post-split structure, not the monolith.
    Alerts and Radar engine APIs, owns the preserved arrival/speed tools, and
    replaces the deleted legacy shell/monolith. Run the consolidated browser
    checklist before expanding the workspace with additional product engines.
-   After the Workspace page is finished, return to the known standalone Water
-   page UI issues before starting optional Water enhancements.
+   The standalone Water shell/layout follow-up is complete and user-smoked.
+   Its later detail-panel, Region, legend, and sidebar-style follow-ups are
+   implemented and statically validated but still need browser re-smoke;
+   optional Water enhancements remain deferred.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
@@ -172,6 +174,30 @@ Important retained rules:
   bridge, state, event wiring, and `js/tropical-*` modules are removed from the
   combined workspace. Static/automated validation passed on 2026-07-19; browser
   parity smoke is deferred to the consolidated end-of-Phases-25-27 checklist.
+  Normal page loads, basin changes, Refresh actions, basin overlay/vector reads,
+  and storm-detail reads now consume the latest worker-written disk cache without
+  polling NHC; the scheduled Tropical worker remains the update owner, while an
+  absent cache or explicit API `force=true` request can still invoke it. The
+  Settings tab again exposes the shared Cities controls (Off/US/World, zoom-aware
+  density, and font size) after they were restored from the pre-refactor UI.
+  The left sidebar is now `LIVE | ARCHIVE | SETTINGS`. Live defaults to World,
+  supports mutually exclusive World or any combination of ATL/E PAC/C PAC,
+  filters one cached World storm summary locally, and loads only the selected
+  cached outlook feeds with stale-response protection. Active Systems and
+  Tropical Outlooks are independent collapsible panels, both open by default;
+  storms require explicit selection and carry basin badges. World and regional
+  extents render both outlook areas and clickable active-system overview markers
+  directly from the cached summary, and every basin-pill action resets the map
+  to the matching extent while retaining any still-valid System selection.
+  Archive keeps its
+  independent basin/season browser. The canonical System inspector opens
+  contextually on the right without replacing either left workflow. It is a
+  third rail on wide screens, an overlay drawer below 1400 px, and can be
+  closed/reopened without clearing selection.
+  The refactor's startup blockers were corrected by restoring the scrubber
+  playback-speed formatter and the standalone map container sizing; the page
+  now initializes and renders its Leaflet map. Full Tropical workflow smoke is
+  still pending.
   The focused boundary suite passed 14 tests. The repository-wide suite reached
   49 passed with five unrelated Radar expectation failures in
   `test_radar_product_catalog.py` and `test_radar_storm_attributes_service.py`;
@@ -683,8 +709,24 @@ found it.
 - Phase 26: complete. Tropical and Water now serve independently from
   `frontend/pages/{tropical,water}/`, and their UI/state/load/render paths are
   removed from `weather.html` and `js/weather.js`. Focused static/automated
-  validation passed; browser parity smoke is deferred to the consolidated
-  end-of-Phases-25-27 checklist.
+  validation passed. Water baseline browser parity PASSED 2026-07-19 after correcting its
+  obsolete core-shell class names and missing two-column grid; the user confirmed
+  layout, data, detail content, and loading with no errors. Tropical and Water legend
+  content now uses the refactored core header/body tray with provider badges,
+  shared collapse controls, compact page-scoped rows, and hidden-empty startup.
+  The Tropical Archive Advisory/Best Track scrubber is anchored to the bottom
+  of the map viewport after the right-inspector layout refactor.
+  Tropical browser parity remains
+  on the consolidated end-of-Phases-25-27 checklist.
+  Water station selection now opens River, Coastal, and NDBC details in a
+  draggable map-level panel matching the Alerts detail interaction; the former
+  Leaflet popup path is removed. The shared Region selector is restored in the
+  Water sidebar header and reloads observations for the selected map extent;
+  Data, Overlays, and Style labels/check rows now follow the shared refactored
+  sidebar typography, spacing, and control sizing. Page-scoped selectors
+  explicitly override the retained legacy `.wx-block label` rule so Network and
+  Map Overlay rows remain full-width with right-aligned checkboxes. The focused
+  Water suite passes 8 tests; these post-baseline UI changes await browser smoke.
 - Phase 27: complete. `/workspace` composes Alerts and Radar engine modules,
   active warnings/LSRs, live radar site/product/elevation controls, NST tracks,
   and the value inspector on one core map. The validated Projected Arrival Tool
@@ -714,7 +756,7 @@ found it.
   navigation is capped at map zoom 9. Report-card popup selection is cleared
   when the report layer is disabled or the Workspace region/radar context
   changes, so a cached popup cannot reopen when reports are enabled again.
-  Workspace auto-update is visible and enabled by default at 60 seconds. Each
+  Workspace auto-update is visible and enabled by default at 30 seconds. Each
   cycle refreshes enabled Alerts/LSR data and selected-site radar frames without
   polling inactive layers, static overlays, or the radar catalog. Newly issued
   Tornado, Severe Thunderstorm, and Flash Flood warnings/watches produce up to
@@ -775,19 +817,36 @@ found it.
   UI, map-click draw mode, fixed-loop calculation/autofill wiring, stale styles,
   and tests. It assumed a fixed four-frame, five-minute radar loop that no longer
   exists. Projected Arrival and its manual Speed Override are unaffected.
+  Final quick filter follow-up: Active Alerts now includes a default-off `SPS`
+  pill for exact `Special Weather Statement` matching. SPS remains informational:
+  it is not added to severe-warning notification, pulse, or standalone Alerts
+  defaults.
+  Radar loop timing follow-up: Workspace and standalone Radar opt into the shared
+  scrubber's `holdAtEnd` behavior, so the longer loop pause occurs on the newest
+  frame before wraparound instead of on the oldest frame after wraparound. Other
+  scrubber consumers retain their existing timing.
+  Workspace legend follow-up: the stacked Radar, Storm Tracks, Alerts, and Storm
+  Reports panels preserve their independent state and placement while reusing the
+  shared product-page legend header and boxed chevron collapse presentation in
+  place of the former native-details `+ / −` headers.
   **Radar/Alerts Workspace closure (2026-07-19):** the user accepted this slice
   for now and reported all tests passed. Treat the current Radar, Alerts, Storm
   Reports, scrubber, value-inspector, storm-track, Projected Arrival, and Home-reset
-  behavior as the stable baseline. The next session should address the previously
-  deferred standalone Water UI issues without reopening this slice unless a
-  regression is found.
+  behavior as the stable baseline. A focused post-closure user smoke also passed
+  for the Workspace Settings/Basemap/Cities and border defaults, per-layer opacity
+  controls, alert/LSR detail placement, left-side Projected Arrival Times panel,
+  repeat draw-after-close lifecycle, and immediate radar product switching. The
+  radar overlay pool now keys frames by site/product/elevation/frame to prevent
+  same-scan cross-product image reuse. The deferred standalone Water shell issue
+  was subsequently corrected and user-smoked without reopening this slice.
   Additional
   SPC/MRMS/RTMA/Satellite/Drought/WPC
   engine composition remains an explicit workspace expansion; those standalone
   pages remain canonical and are linked in navigation. Static boundary tests
   passed (23 focused tests). The final repository-wide suite reached 58 passed
   with the same five unrelated Radar expectation failures already recorded
-  above; Phase 27 did not modify those Radar backend/config behaviors. Browser proof is deferred to
+  above; Phase 27 did not modify those Radar backend/config behaviors. Browser
+  proof and the focused follow-up smoke are recorded in
   `docs/phases-25-27-manual-smoke-checklist.md`.
 
 Definition of done (mechanically checkable): each product route loads only
@@ -1132,10 +1191,13 @@ Planned/enhancement direction:
 
 V1 is active implementation.
 
-Known follow-up (2026-07-19): the standalone Water UI has issues found during
-manual review. Keep the current Workspace page smoke/fix cycle as the active
-priority; inspect and correct the Water UI immediately after Workspace is
-finished. Specific Water defects will be recorded as they are reproduced.
+Resolved follow-up (2026-07-19): the standalone Water page used obsolete core
+shell class names and lacked an explicit two-column grid, producing the same
+full-width-sidebar/map displacement first found during Workspace smoke testing.
+The active core header/sidebar/tab/content/status/timestamp contracts and a
+page-local 330 px sidebar + map grid now own the layout. Focused tests passed;
+the user confirmed the baseline layout, River/Coastal/NDBC data, detail content,
+and loading with no errors before the later UI follow-ups described below.
 
 - `/water` serves `frontend/pages/water/water.html` on the Stage 2 core map,
   navigation, sidebar, status, and legend utilities without `js/weather.js`.
@@ -1153,7 +1215,17 @@ finished. Specific Water defects will be recorded as they are reproduced.
   Action, or default no-flood/not-given.
 - Coastal and NDBC stations have distinct marker styles and render in the
   dedicated `water-markers` Leaflet pane.
-- The sidebar `Networks` selector follows the Surface page pattern.
+- The Water legend uses the shared collapsible core legend header/body shell and
+  retains all river-stage, coastal-gauge, and NDBC-buoy categories.
+- A shared Region selector lives in the pinned sidebar header, defaults to
+  CONUS, refits the map, closes selected-station detail, and reloads the new
+  viewport immediately.
+- Network and Map Overlay controls use shared-style section headings and compact
+  full-width label/checkbox rows; the checkbox stays right-aligned despite the
+  retained legacy Water stylesheet.
+- River, CO-OPS, and NDBC marker selection uses a draggable map-level detail
+  panel rather than a Leaflet popup. It closes through its button, Escape,
+  Clear, or map navigation and invalidates an outstanding detail response.
 - Leaflet world-wrap bbox edge cases are normalized/clamped instead of returning
   422s at world view.
 - Basemap tile layers may wrap horizontally (`noWrap: false`) to avoid empty
@@ -1167,12 +1239,12 @@ Completed enhancements (2026-06-28):
   the water sidebar. Client-side filter; coastal and NDBC markers always remain
   visible. Pills are hidden when the River network is unchecked and the filter
   resets to All automatically.
-- Stage gauge bar added to river gauge popups when flood threshold data is
+- Stage gauge bar added to river gauge details when flood threshold data is
   available. Shows color-coded zones (normal / action / minor / moderate / major)
   with a white current-stage marker and a threshold summary line.
 - CO-OPS click enrichment: on-click live fetch from the CO-OPS API populates
-  Water Level (or Current Speed / Direction) in the coastal station popup.
-- NDBC buoy popup replaced flat reading rows with a grouped card layout:
+  Water Level (or Current Speed / Direction) in the coastal station detail panel.
+- NDBC buoy detail replaced flat reading rows with a grouped card layout:
   Wind / Waves / Atmos / Temp / Other.
 - Removed `impacts`, `historic_crests`, and `recent_crests` parsing from the
   NWPS detail fetch path (`_parse_nwps_gauge`); the `_nwps_crests` helper was

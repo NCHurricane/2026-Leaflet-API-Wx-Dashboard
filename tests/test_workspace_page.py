@@ -101,7 +101,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     ]
     assert "WORKSPACE_REGION_BOUNDS" in app
     assert "categories: Object.keys(ALERT_CATEGORIES)" in app
-    assert "categories: warningTypes.length ? ['Severe Weather Warnings'] : []" in app
+    assert "if (warningTypes.length) categories.push('Severe Weather Warnings')" in app
     assert "function toggleWarningPill" in app
     assert "function syncRadarControls" in app
     assert "String(product?.level || '') === level" in app
@@ -115,7 +115,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "selectAlert(feature, { maxZoom: 9 })" in app
     assert "function selectAlert(feature, options = { maxZoom: 9 })" in app
     assert "alertsEngine.clearLsrSelection()" in app
-    assert "const AUTO_UPDATE_MS = 60_000" in app
+    assert "const AUTO_UPDATE_MS = 30_000" in app
     assert "const NEW_ALERT_NOTICE_MS = 15_000" in app
     assert "'Tornado Warning', 'Tornado Watch'" in app
     assert "'Severe Thunderstorm Warning', 'Severe Thunderstorm Watch'" in app
@@ -127,14 +127,22 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "shouldHandleAlertClick: () => !tools.isDrawing()" in app
     assert "detail.open(feature)" in app
     assert "createScrubber" in app
+    assert "holdAtEnd: true" in app
     assert "radarScrubber.setFrames" in app
     assert "onStormTrackLegend" in app
+    assert "collapse.className = 'core-legend-collapse'" in app
+    assert "fa-chevron-down" in app
+    assert "panel.classList.toggle('is-collapsed', !isOpen)" in app
     assert "elevation: '0.5'" in app
     assert "radarEngine.loadFrames({ refresh: true })" in app
     assert "notifyNewAlerts: false" in app
     assert 'data-warning="all" aria-pressed="false"' in page
     assert 'class="is-active" type="button" data-warning="tor" aria-pressed="true"' in page
     assert 'class="is-active" type="button" data-warning="svr" aria-pressed="true"' in page
+    assert 'data-warning="sps" aria-pressed="false" title="Special Weather Statement">SPS</button>' in page
+    assert "sps: 'Special Weather Statement'" in app
+    assert "if (filterTypes.includes('sps')) categories.push('Informational Alerts')" in app
+    assert "eventTypes: filterTypes.map" in app
     assert 'class="is-active" type="button" data-hours="1"' in page
     assert 'class="is-active" type="button" data-hours="24"' not in page
 
@@ -157,6 +165,17 @@ def test_standalone_radar_uses_explicit_lowest_tilt_default():
     ).read_text(encoding="utf-8")
 
     assert "byId('radar-elevation')?.value || '0.5'" in app
+    assert "holdAtEnd: true" in app
+
+
+def test_radar_scrubbers_hold_on_the_newest_frame():
+    scrubber = (
+        Path(BASE_DIR) / "frontend" / "core" / "scrubber.js"
+    ).read_text(encoding="utf-8")
+
+    assert "const holdAtEnd = options.holdAtEnd === true" in scrubber
+    assert "holdAtEnd && next === frames.length - 1" in scrubber
+    assert "holdAtEnd ? interval() : interval() * LOOP_HOLD_MULTIPLIER" in scrubber
 
 
 def test_workspace_hides_pointer_focus_rings_but_keeps_keyboard_focus_visible():

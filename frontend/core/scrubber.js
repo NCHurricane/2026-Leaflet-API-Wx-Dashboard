@@ -8,6 +8,7 @@ const LOOP_HOLD_MULTIPLIER = 2;
 
 export function createScrubber(containerEl, options = {}) {
     const onFrame = options.onFrame || (() => {});
+    const holdAtEnd = options.holdAtEnd === true;
 
     let frames = [];
     let currentIndex = 0;
@@ -78,10 +79,13 @@ export function createScrubber(containerEl, options = {}) {
         const next = currentIndex + 1;
         if (next >= frames.length) {
             goTo(0);
-            playTimer = setTimeout(tick, interval() * LOOP_HOLD_MULTIPLIER);
+            playTimer = setTimeout(tick, holdAtEnd ? interval() : interval() * LOOP_HOLD_MULTIPLIER);
         } else {
             goTo(next);
-            playTimer = setTimeout(tick, interval());
+            const delay = holdAtEnd && next === frames.length - 1
+                ? interval() * LOOP_HOLD_MULTIPLIER
+                : interval();
+            playTimer = setTimeout(tick, delay);
         }
     }
 

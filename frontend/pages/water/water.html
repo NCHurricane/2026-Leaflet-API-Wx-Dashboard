@@ -5,41 +5,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Water Monitoring | NCHurricane</title>
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260719a">
-    <link rel="stylesheet" href="/frontend/pages/water/water.css?v=20260719a">
+    <link rel="stylesheet" href="/frontend/pages/water/water.css?v=20260719f">
 </head>
 <body>
     <header class="core-header">
-        <nav id="product-nav" class="core-product-nav" aria-label="Weather products"></nav>
-        <div class="core-reliability" aria-label="Water data status">
-            <span>Updated <strong id="water-updated">—</strong></span>
-            <span>Age <strong id="water-age">—</strong></span>
-            <span>Provider <strong id="water-provider">—</strong></span>
-            <span>Source <strong id="water-source">—</strong></span>
-        </div>
+        <div class="core-brand">NCHURRICANE</div>
+        <nav id="product-nav" class="core-nav" aria-label="Weather products"></nav>
     </header>
-    <main class="core-map-shell">
-        <aside id="water-sidebar-tabs" class="core-sidebar">
-            <div class="core-sidebar-pinned-head">
-                <h1>Water Monitoring</h1>
-                <p>NOAA river, coastal, and marine observations</p>
+    <main class="water-app">
+        <aside id="water-sidebar-tabs" class="core-sidebar water-controls">
+            <div class="core-sidebar-header">
+                <div class="core-sidebar-pinned-head">
+                    <h1>Water Monitoring</h1>
+                    <p>NOAA river, coastal, and marine observations</p>
+                </div>
+                <div class="core-card water-status-card" aria-label="Water data status">
+                    <div class="water-status-title">Data status</div>
+                    <dl class="core-status-grid">
+                        <dt>Valid</dt><dd id="water-updated">—</dd>
+                        <dt>Data Age</dt><dd id="water-age">—</dd>
+                        <dt>Provider</dt><dd id="water-provider">—</dd>
+                        <dt>Source</dt><dd id="water-source">—</dd>
+                    </dl>
+                </div>
+                <div class="core-field"><label for="weather-water-region">Region</label><select id="weather-water-region"></select></div>
             </div>
-            <div class="core-sidebar-tablist" role="tablist" aria-label="Water controls">
-                <button type="button" data-sidebar-tab="data" role="tab">Data</button>
-                <button type="button" data-sidebar-tab="overlays" role="tab">Overlays</button>
-                <button type="button" data-sidebar-tab="style" role="tab">Style</button>
+            <div class="core-sidebar-tabs" role="tablist" aria-label="Water controls">
+                <button id="water-tab-data" class="core-sidebar-tab is-active" type="button" data-sidebar-tab="data" role="tab" aria-selected="true" aria-controls="water-panel-data">Data</button>
+                <button id="water-tab-overlays" class="core-sidebar-tab" type="button" data-sidebar-tab="overlays" role="tab" aria-selected="false" aria-controls="water-panel-overlays" tabindex="-1">Overlays</button>
+                <button id="water-tab-style" class="core-sidebar-tab" type="button" data-sidebar-tab="style" role="tab" aria-selected="false" aria-controls="water-panel-style" tabindex="-1">Style</button>
             </div>
-            <div class="core-sidebar-scroll">
-                <section data-sidebar-panel="data">
-                    <div id="wx-section-water" class="wx-block" data-type="water">
-                        <label id="weather-water-network-filters-title" class="label-small">Networks</label>
-                        <div id="weather-water-network-filters">
-                            <label class="weather-water-network-filter"><input type="checkbox" value="river" checked> River</label>
-                            <label class="weather-water-network-filter"><input type="checkbox" value="coastal" checked> Coastal</label>
-                            <label class="weather-water-network-filter"><input type="checkbox" value="buoy" checked> NDBC Buoys</label>
+            <div class="core-sidebar-content">
+                <section id="water-panel-data" class="core-sidebar-panel water-panel-stack" role="tabpanel" aria-labelledby="water-tab-data" data-sidebar-panel="data">
+                    <div id="wx-section-water" class="wx-block water-data-controls" data-type="water">
+                        <div class="water-control-section">
+                            <h2 id="weather-water-network-filters-title">Networks</h2>
+                            <div id="weather-water-network-filters" class="water-check-list">
+                                <label class="water-check weather-water-network-filter"><span>River</span><input type="checkbox" value="river" checked></label>
+                                <label class="water-check weather-water-network-filter"><span>Coastal</span><input type="checkbox" value="coastal" checked></label>
+                                <label class="water-check weather-water-network-filter"><span>NDBC Buoys</span><input type="checkbox" value="buoy" checked></label>
+                            </div>
                         </div>
-                        <div id="weather-water-flood-filter-row">
-                            <label class="label-small">Minimum flood stage</label>
+                        <div id="weather-water-flood-filter-row" class="water-control-section">
+                            <h2>Minimum Flood Stage</h2>
                             <div id="weather-water-flood-filters" class="wx-water-flood-pills">
                                 <button type="button" class="wx-water-flood-pill" aria-selected="true" data-flood="all">All</button>
                                 <button type="button" class="wx-water-flood-pill" aria-selected="false" data-flood="action">Action+</button>
@@ -48,37 +58,44 @@
                                 <button type="button" class="wx-water-flood-pill" aria-selected="false" data-flood="major">Major</button>
                             </div>
                         </div>
-                        <div id="weather-water-detail" class="wx-water-detail" hidden></div>
                     </div>
                 </section>
-                <section data-sidebar-panel="overlays" hidden>
-                    <label class="wx-check-row"><span>Lat/Lon Grid</span><input type="checkbox" data-map-overlay="graticule"></label>
-                    <label class="wx-check-row"><span>State Borders</span><input type="checkbox" data-map-overlay="states" checked></label>
-                    <label class="wx-check-row"><span>Country Borders</span><input type="checkbox" data-map-overlay="countries" checked></label>
-                    <label class="wx-check-row"><span>County Borders</span><input type="checkbox" data-map-overlay="counties"></label>
+                <section id="water-panel-overlays" class="core-sidebar-panel water-panel-stack" role="tabpanel" aria-labelledby="water-tab-overlays" data-sidebar-panel="overlays" hidden>
+                    <div class="water-control-section">
+                        <h2>Map Overlays</h2>
+                        <div class="water-check-list">
+                            <label class="water-check"><span>Lat/Lon Grid</span><input type="checkbox" data-map-overlay="graticule"></label>
+                            <label class="water-check"><span>State Borders</span><input type="checkbox" data-map-overlay="states" checked></label>
+                            <label class="water-check"><span>Country Borders</span><input type="checkbox" data-map-overlay="countries" checked></label>
+                            <label class="water-check"><span>County Borders</span><input type="checkbox" data-map-overlay="counties"></label>
+                        </div>
+                    </div>
                 </section>
-                <section data-sidebar-panel="style" hidden>
-                    <label for="water-basemap">Basemap</label>
-                    <select id="water-basemap" class="wx-sidebar-select">
-                        <option>Dark (No Labels)</option><option>Dark</option><option>Light</option><option>Street</option>
-                    </select>
+                <section id="water-panel-style" class="core-sidebar-panel water-panel-stack" role="tabpanel" aria-labelledby="water-tab-style" data-sidebar-panel="style" hidden>
+                    <div class="core-field">
+                        <label for="water-basemap">Basemap</label>
+                        <select id="water-basemap">
+                            <option>Dark (No Labels)</option><option>Dark</option><option>Light</option><option>Street</option>
+                        </select>
+                    </div>
                 </section>
             </div>
             <footer class="core-sidebar-footer">
-                <div id="weather-water-status" role="status" aria-live="polite">Ready.</div>
+                <div id="weather-water-status" class="core-message" role="status" aria-live="polite">Ready.</div>
                 <div class="wx-radar-action-row">
                     <button id="weather-refresh-water" type="button">Refresh</button>
                     <button id="weather-clear-water" type="button">Clear</button>
                 </div>
             </footer>
         </aside>
-        <section class="core-map-panel">
+        <section class="core-map-panel water-map-wrap">
             <div id="weather-map" class="core-map"></div>
-            <time id="global-timestamp" class="core-map-timestamp"></time>
-            <div id="weather-colorbar" class="core-map-legend"></div>
+            <time id="global-timestamp" class="core-global-timestamp"></time>
+            <div id="weather-colorbar" class="water-legend" data-legend-align="left" hidden></div>
+            <div id="weather-water-detail" class="water-detail" role="dialog" aria-modal="false" aria-labelledby="water-detail-title" hidden></div>
         </section>
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/water/water-app.js?v=20260719a"></script>
+    <script type="module" src="/frontend/pages/water/water-app.js?v=20260719d"></script>
 </body>
 </html>

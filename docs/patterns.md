@@ -351,10 +351,40 @@ Tropical now demonstrates the boundary: reuse `frontend/core/` for API helpers,
 map setup, navigation, sidebar tabs, status, and legend lifecycle, while keeping
 storm/archive domain behavior in `frontend/pages/tropical/`.
 
+Tropical also uses an adaptive master-map-detail layout: Live/Archive/Settings
+stay in the left sidebar, the map remains central, and one canonical System inspector
+opens on the right for live or archived selections. Preserve the left subtab,
+filters, list, and scroll state when opening details; collapse the inspector to
+an overlay drawer on narrower viewports and invalidate the Leaflet map after
+open/close layout changes.
+
+For Tropical Live filtering, fetch the worker-cached World summary once and
+filter storms locally for the selected basin set. World is exclusive with the
+regional multi-select pills, and the final regional deselection falls back to
+World. Basin outlook reads need their own response sequence so rapid pill
+changes cannot render an older selection. Never auto-select the first storm;
+preserve an explicitly selected storm only while its basin remains visible.
+Render lightweight active-system overview markers from the same summary so
+combined basin views do not require eager storm-detail requests; load the full
+cone/track/radii package only after explicit storm selection.
+
 Water follows the same boundary with a single page entry module: viewport-aware
-station requests, flood filtering, markers, and popups remain page-local while
-map overlays, navigation, status, sidebar tabs, and legend hosting come from
-`frontend/core/`.
+station requests, flood filtering, markers, and the station detail panel remain
+page-local while map overlays, navigation, status, sidebar tabs, and legend
+hosting come from `frontend/core/`.
+
+Map-level detail panels should be children of the page's `.core-map-panel`, not
+Leaflet popups or sidebar content. Match the Alerts interaction: disable map
+click/scroll propagation inside the panel, support close-button and Escape
+dismissal, constrain dragging to the map viewport, close on map navigation, and
+invalidate outstanding detail requests when the panel closes. Retained legacy
+product CSS may have higher-specificity label rules; use narrow page-scoped
+selectors instead of changing shared semantics globally.
+
+Pages using `createLegendHost()` must supply `.core-legend-header` and
+`.core-legend-body` content, including a provider badge and title. A flat
+`.legend-title` body bypasses the shared collapse control and is not an accepted
+standalone-page legend shape.
 
 For Tropical backend changes, follow the post-refactor ownership boundaries:
 
@@ -363,6 +393,9 @@ For Tropical backend changes, follow the post-refactor ownership boundaries:
   `services/tropical_service.py`.
 - NHC ingestion, GTWO parsing, GIS parsing, and cache generation belong in
   `workers/tropical_worker.py`.
+- Page, basin, overlay/vector, and storm-detail reads must serve the most recent
+  worker-written disk artifact regardless of age. Scheduled workers discover
+  new upstream updates; ordinary UI reads must not become NHC polling triggers.
 - Do not add Tropical route logic back to `main.py`.
 
 ## Clean-Cut Migration Pattern

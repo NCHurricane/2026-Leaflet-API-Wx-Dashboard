@@ -931,7 +931,8 @@ body.wx-standalone-product .weather-header-right {
 .wx-stormtrack-places {
     position: absolute;
     top: 90px;
-    right: 100px;
+    left: 12px;
+    right: auto;
     width: min(92vw, 400px);
     max-height: min(70vh, 625px);
     z-index: 1205;
@@ -5182,6 +5183,19 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
 .workspace-status-card .core-status-grid { gap: 4px 10px; font-size: .75rem; }
 .workspace-eyebrow { margin-bottom: 6px; color: var(--core-muted); font-size: .66rem; font-weight: 800; letter-spacing: .07em; }
 .workspace-region-field { padding-top: 2px; }
+.workspace-settings-panel { display: grid; align-content: start; gap: 16px; }
+.workspace-settings-panel[hidden] { display: none; }
+.workspace-settings-section { display: grid; gap: 8px; }
+.workspace-settings-section h2 {
+    margin: 0;
+    color: var(--core-muted);
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+.workspace-map-overlay-list { display: grid; gap: 6px; }
+.workspace-settings-panel .wx-check-row { font-size: .72rem; font-weight: 800; }
 .workspace-group { padding: 10px; margin-bottom: 1px; border: 1px solid #26384a; border-radius: 8px; background: #101b28; display: grid; gap: 7px; }
 .workspace-layer-group { display: block; }
 .workspace-projected-arrival-group[hidden] { display: none; }
@@ -5209,10 +5223,12 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
 .workspace-layer-toggle input:checked + span::after { background: #e6faff; transform: translateX(15px); }
 .workspace-layer-toggle input:focus-visible + span { outline: 2px solid #7dd3fc; outline-offset: 2px; }
 .workspace-pills { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+#workspace-warning-filters { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .workspace-pills-wrap { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .workspace-radar-levels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .workspace-radar-product-options { display: grid; gap: 7px; }
 .workspace-radar-product-options[hidden] { display: none; }
+.workspace-opacity-control { margin-top: 2px; padding-top: 8px; border-top: 1px solid rgba(75, 96, 117, .45); }
 .workspace-pills button { min-width: 0; padding: 6px 3px; color: #91a4b8; background: #111d2b; border-color: #33475b; font-size: .64rem; font-weight: 900; }
 .workspace-pills button.is-active { color: #06111f; background: #55d7ff; border-color: #8ce6ff; }
 .workspace-pills.is-disabled { opacity: .45; }
@@ -5248,12 +5264,9 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
 .radar-storm-legend-icon { display: inline-flex; width: 32px; height: 32px; align-items: center; justify-content: center; }
 .radar-storm-legend-icon svg { width: 28px; height: 28px; }
 .workspace-legend-panel { overflow: hidden; color: #e6f0f8; background: rgba(7, 15, 24, .94); border: 1px solid #31465a; border-radius: 8px; box-shadow: 0 8px 22px rgba(0, 0, 0, .35); }
-.workspace-legend-panel > summary { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; color: #d8e8f5; background: #0d1c2d; cursor: pointer; font-size: .7rem; font-weight: 900; letter-spacing: .06em; list-style: none; }
-.workspace-legend-panel > summary::-webkit-details-marker { display: none; }
-.workspace-legend-panel > summary::after { content: '+'; color: #55d7ff; font-size: .9rem; }
-.workspace-legend-panel[open] > summary::after { content: '−'; }
+.workspace-legend-panel.is-collapsed .workspace-legend-content { display: none; }
+.workspace-legend-panel.is-collapsed .core-legend-collapse i { transform: rotate(180deg); }
 .workspace-legend-content { max-height: 190px; overflow: auto; padding: 8px; }
-.workspace-legend-content > .core-legend-header { display: none; }
 .workspace-legend-content .core-legend-body { padding: 0; }
 .workspace-legend-content .alerts-legend-label { margin: 0 0 6px; color: #91a4b8; font-size: .62rem; font-weight: 800; letter-spacing: .06em; }
 .workspace-legend-content .core-legend-categories { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }

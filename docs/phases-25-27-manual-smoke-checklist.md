@@ -11,7 +11,26 @@ Smoke log:
 - 2026-07-19 closure: After the iterative KGSP Radar/Alerts smoke-and-fix cycle,
   the user accepted the Workspace Radar/Alerts slice for now and reported all
   tests passed. Remaining naturally occurring-event observations are non-blocking;
-  the next session moves to the deferred standalone Water UI issues.
+  the deferred standalone Water UI issue was subsequently completed below.
+- 2026-07-19 focused follow-up smoke PASSED: the renamed Settings tab, corrected
+  Basemap layout, shared zoom-aware Cities controls, State/County-on and
+  Country-off defaults, Radar/Alerts/Storm Reports opacity controls, conditional
+  Radar-opacity visibility, lowered alert/LSR detail panel, left-positioned
+  Projected Arrival Times panel, repeat Projected Arrival draw-after-close cycle,
+  and immediate radar product switching all passed user browser testing. Radar
+  overlay identity now includes site/product/elevation/frame so same-scan product
+  changes cannot reuse the preceding product image.
+- 2026-07-19 standalone Water smoke PASSED after correcting the same obsolete
+  core-shell class and missing-grid layout defect first found in Workspace. The
+  user confirmed the baseline page layout, River/Coastal/NDBC data, detail
+  content, and loading behavior all work with no errors.
+- 2026-07-19 Water post-baseline follow-up is implemented and statically
+  validated (8 focused tests) but awaits browser re-smoke: shared collapsible
+  legend, draggable map-level station detail panel replacing Leaflet popups,
+  pinned Region selector, and shared-style labels/full-width checkbox rows.
+- 2026-07-19 Tropical startup and map-render blockers were corrected (missing
+  scrubber speed formatter and stale map-grid sizing). The page initializes and
+  displays its map; the full workflow checklist below remains pending.
 
 - 2026-07-19: Initial `/workspace` shell check found unsupported core class names
   and a legacy named-grid-area collision. The header/nav, sidebar status card,
@@ -33,7 +52,7 @@ Smoke log:
   level-9 zoom cap, and a selected report popup closed on layer-off, remained
   closed after layer-on, and closed on a region change. User smoke remains
   pending.
-- 2026-07-19: Workspace auto-update is now visibly enabled at 60 seconds. Local
+- 2026-07-19: Workspace auto-update is now visibly enabled at 30 seconds. Local
   browser verification confirmed the checked control renders and toggles off/on.
   Static wiring confirms enabled alerts/reports and selected radar frames are
   refreshed while inactive/static layers are skipped. User observation of a
@@ -98,10 +117,19 @@ Smoke log:
   reset. It clears selected-site radar frames/scrubber and Projected Arrival,
   restores Level 2 Base Reflectivity, resets Region to CONUS, and retains layer
   visibility preferences before the map refits the default view.
+- 2026-07-19: Added a default-off SPS Active Alerts pill for exact Special
+  Weather Statement filtering. It does not alter standalone Alerts or severe
+  notification/pulse behavior.
+- 2026-07-19: Workspace and standalone Radar scrubbers now hold on the newest
+  frame at the end of each loop, then wrap to the oldest without an extra hold.
+  Other shared-scrubber pages are unchanged.
+- 2026-07-19: Workspace's stacked legends now use the same shared header and
+  boxed chevron collapse styling as standalone pages while retaining independent
+  open state and compact placement.
 
 ## Workspace and asset boundary
 
-- Open `/workspace`; confirm the fixed header, Layers/Map sidebar, map,
+- Open `/workspace`; confirm the fixed header, Layers/Settings sidebar, map,
   sidebar data-status card, map-overlay timestamp, and Refresh footer render
   without overlap.
 - Open `/weather.html`; confirm it redirects to `/workspace`.
@@ -139,7 +167,8 @@ Smoke log:
   they remain compact and do not obscure the center of the map.
 - Select a radar site by dropdown and by map marker; confirm selection loads
   live radar and the blank site clears it. Test Level II and Level III products,
-  elevation selection, Radar Sites, Storm Tracks, and Value Inspector. Storm
+  Radar Sites, Storm Tracks, and Value Inspector. Workspace uses the fixed
+  0.5-degree Level II default; elevation selection remains Radar-page-only. Storm
   Tracks and Value Inspector should remain hidden without a selected site and
   hide/reset after region changes or returning Home.
 - With radar loaded and Projected Arrival visible, press Home. Confirm radar and
@@ -150,7 +179,7 @@ Smoke log:
   change basemap and toggle graticule, states, countries, and counties.
 - Pan/zoom and press Refresh Active Layers; confirm alerts refetch for the new
   viewport and the selected radar context remains coherent.
-- Confirm Auto-Update (60 sec) is enabled initially and can be disabled/re-enabled.
+- Confirm Auto-Update (30 sec) is enabled initially and can be disabled/re-enabled.
   Leave it enabled across a refresh boundary and confirm enabled Alerts/Storm
   Reports update; with a radar site selected, confirm its frames update without
   resetting the chosen site/product/elevation. When a genuinely new selected
@@ -200,13 +229,24 @@ Smoke log:
 
 ## Phase 26 Tropical and Water pages
 
-- Open `/tropical`; test World/AL/EP/CP basin changes, active storms, outlooks,
-  archive season/storm selection, advisory and best-track scrubbers, inspector
-  accordions/layer pills, products/graphics, floater controls, refresh, and
-  map overlays/basemap.
-- Open `/water`; verify River/Coastal/NDBC loading, viewport reload, flood-stage
+- Open `/tropical`; verify `LIVE | ARCHIVE | SETTINGS`, World default/exclusivity,
+  combined ATL/E PAC/C PAC filtering, extent reset when returning to World,
+  outlook areas plus active-system markers in every selected extent, both Live
+  accordions, explicit storm
+  selection, and clearing only when the selected basin is removed. Test Archive
+  season/storm selection, preservation of the active Archive list while the
+  right System inspector opens, inspector close/reopen and responsive drawer,
+  advisory and best-track scrubbers, inspector accordions/layer pills,
+  products/graphics, floater controls, refresh, and map overlays/basemap.
+- **BASELINE SHELL/DATA PASSED 2026-07-19; FOLLOW-UP RE-SMOKE PENDING.** Open
+  `/water`; verify Region selection and that it remains pinned above the tabs.
+  Verify River/Coastal/NDBC loading, viewport reload, flood-stage
   pills, marker/legend colors, river stage gauge, CO-OPS details, NDBC grouped
-  readings, Refresh/Clear, overlays, and basemap.
+  readings, draggable marker detail panel (close button, Escape, and map-move
+  dismissal), Refresh/Clear, overlays, and basemap. Confirm Networks and Map
+  Overlays use compact full-width rows with labels left and checkboxes aligned
+  at the right edge. On both Tropical and Water,
+  verify the refactored legend header/provider styling and collapse/expand control.
 
 ## Regression sweep
 
