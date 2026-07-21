@@ -17,7 +17,7 @@ import {
 import { createSatelliteAnimator } from './satellite-anim.js';
 
 const byId = (id) => document.getElementById(id);
-const SELECT_CHAIN_MESSAGE = 'Pick a satellite, sector, view, and product to load imagery.';
+const SELECT_CHAIN_MESSAGE = 'Pick a satellite, sector, and product to load imagery.';
 const LOOKBACK_HOURS_MAX = 12;
 const FRAME_REQUEST_MAX = 360;
 const LOOKBACK_RELOAD_DEBOUNCE_MS = 250;
@@ -178,11 +178,11 @@ function syncViewPresetEnabled() {
 }
 
 function syncChannelEnabled() {
-    const view = byId('satellite-view-preset')?.value || '';
     const select = byId('satellite-channel');
     if (!select) return;
-    select.disabled = !view;
-    if (!view) select.value = '';
+    const sector = activeSector();
+    select.disabled = !sector;
+    if (!sector) select.value = '';
 }
 
 function syncChannelVisibility() {
@@ -211,6 +211,9 @@ function syncChannelVisibility() {
 function syncSubtabs() {
     const satId = activeSatId();
     const sector = activeSector();
+    byId('satellite-sector-controls').hidden = !satId;
+    byId('satellite-view-controls').hidden = !sector;
+    byId('satellite-product-controls').hidden = !sector;
     document.querySelectorAll('.satellite-subtab-button[data-satellite-sat]').forEach((button) => {
         const isSelected = button.dataset.satelliteSat === satId;
         button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
@@ -243,7 +246,7 @@ function setSelectValue(selectId, value) {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'Satellite');
-    const sidebarTabs = createSidebarTabs(byId('satellite-sidebar-tabs'), { defaultTab: 'data' });
+    const sidebarTabs = createSidebarTabs(byId('satellite-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('satellite', {
         mapView: 'WORLD', platform: '', sector: '', product: 'Channel13', hours: 1,
     });
@@ -258,9 +261,11 @@ async function initialize() {
     }));
     regionSelect.value = REGION_LABELS[settings.mapView] ? settings.mapView : 'WORLD';
 
+    let resetSatelliteState = () => {};
     const mapCore = createMapCore(byId('satellite-map'), {
         region: regionSelect.value,
         basemap: 'Dark (No Labels)',
+        onResetView: () => resetSatelliteState(),
     });
     const legend = createLegendHost(byId('satellite-legend'), { align: 'left' });
     const status = createStatusReporter({
@@ -353,6 +358,15 @@ async function initialize() {
         legend.clear();
         status.setMessage(SELECT_CHAIN_MESSAGE);
     }
+
+    resetSatelliteState = () => {
+        byId('satellite-sat-id').value = '';
+        byId('satellite-sector').value = '';
+        byId('satellite-view-preset').value = '';
+        byId('satellite-channel').value = '';
+        syncSubtabs();
+        clearFrames();
+    };
 
     async function reloadFrames({ refresh = false, preserveFrameKey = '' } = {}) {
         const { satId, sector, channel } = activeSelection();
@@ -642,7 +656,10 @@ async function initialize() {
     byId('satellite-basemap').addEventListener('change', (event) => mapCore.setBasemap(event.target.value));
 
     // ── Region / refresh ────────────────────────────────────────────────────
-    regionSelect.addEventListener('change', () => mapCore.fitRegion(regionSelect.value));
+    regionSelect.addEventListener('change', () => {
+        resetSatelliteState();
+        mapCore.fitRegion(regionSelect.value);
+    });
     byId('satellite-refresh').addEventListener('click', () => void reloadFrames({ refresh: true }));
 
     // ── Cities ──────────────────────────────────────────────────────────────

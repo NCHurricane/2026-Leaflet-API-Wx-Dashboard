@@ -22,6 +22,13 @@ Current status:
 - The fixed map-first dashboard shell is accepted.
 - All canonical product routes, including /tropical and /water, now serve true
   standalone pages from frontend/pages/.
+- The 2026-07-19 standalone control harmonization is complete. Surface, Alerts,
+  Radar, Satellite, SPC, RTMA, and MRMS use Live/Settings/Archive; Alerts Archive
+  is functional and the others are placeholders. Drought, WPC, and Water remain
+  Live/Settings, while Tropical retains Live/Archive/Settings. Shared Settings
+  styling and ordering now follow Workspace. Radar uses Site -> Level 2/3 ->
+  Product with U.S.-only Level 3. Satellite uses Satellite -> Sector -> Product;
+  View remains an independent named-view preset after Sector selection.
 - /workspace is the new severe-weather workspace. /weather.html redirects to it.
 - The initial Workspace smoke found and fixed mismatched core shell classes plus
   a legacy map grid-area collision. The Radar/Alerts Workspace slice was accepted
@@ -111,16 +118,17 @@ Current status:
 Active track order (2026-07-19):
 1. Frontend True Split Stage 2. Phases 18-20 are complete; `/drought` and
    `/surface` are true standalone pages under `frontend/`. The accepted shared
-    sidebar reference is Option 1A (pinned status/region, Data/Overlays/Style
-    tabs via `frontend/core/sidebar-tabs.js`, pinned message/Refresh footer)
+    sidebar reference is Option 1A (pinned status/region, semantic sidebar tabs
+    via `frontend/core/sidebar-tabs.js`, pinned message/Refresh footer)
     and the shared legend is the collapsible dark map-panel tray in
     `frontend/core/legend.js`. Surface (Phase 20, user-smoked 2026-07-17)
     proved the second consumer: page-local renderer module, worker-PNG
     gradients with client-canvas IDW fallback, network filters, density
     thinning, and a continuous-colorbar legend on the core primitives.
     Decisions to remember: the Gradient Blur control was dropped (fallback
-    uses fixed FALLBACK_BLUR_SCALE 1.0) and surface archive was retired
-    entirely rather than rebuilt — surface no longer participates in the
+    uses fixed FALLBACK_BLUR_SCALE 1.0) and the surface archive workflow was
+    retired rather than rebuilt — its new Archive tab is a placeholder and it
+    no longer participates in the
     shared archive scrubber, whose component rewrite remains Phase 22. All
     surface code was deleted from js/weather.js and weather.html
     (weather.js?v=20260717a); shared helpers used by RTMA/cities/satellite
@@ -238,9 +246,9 @@ Active track order (2026-07-19):
     session by browser-smoke testing the pending Tropical refactor and Water
     post-baseline follow-ups from the consolidated checklist. Additional product-engine composition
     (SPC/MRMS/RTMA/Satellite/Drought/WPC) remains a later workspace expansion.
-    Minor UI spacing polish
-    across the new standalone pages remains deferred to the end of the
-    superplan by user decision.
+    The cross-page control grouping and spacing pass is complete. The next UI
+    step is a user visual smoke across all standalone pages, with any remaining
+    product-specific polish handled as a bounded follow-up.
 2. Satellite render-pipeline latency optimization. This backend-only track may
    interleave with Track 1 while their files remain disjoint.
 3. GK2A + GMGSI after the satellite-page migration boundary is safe.
@@ -319,14 +327,13 @@ products (ADP/AOD/FRP) and GeoColor display corrections added 2026-07-16:
   FCI. Render versions bumped (products-v3 / products-ahi2 / products-fci2).
   New reflectance-calibrated platforms get this for free -- do not add a
   per-platform stretch.
-- Satellite sidebar now enforces a strict selection chain: Satellite -> Sector
-  -> View -> Product. Each control is disabled (native <select disabled>)
-  until its prerequisite is chosen, and each defaults to a "-- Choose X --"/
-  "-- Select X --" placeholder so nothing auto-loads on partial selection.
-  "Full Disk" is the default View option now (was missing). This is recent
-  (2026-07-10/11) and only lightly exercised -- if you touch satellite-page.js
-  selection wiring, re-verify the whole chain by hand (set each control via
-  the browser and confirm the next one enables, not just via DOM inspection).
+- Satellite sidebar now enforces Satellite -> Sector -> Product selection.
+  Sector remains hidden until Satellite is chosen, and Product remains hidden
+  until Sector is chosen. View appears after Sector as an independent named map
+  preset for current/future regional views; it is not a Product prerequisite.
+  Satellite changes, Region changes, and Home/reset clear the dependent chain.
+  If this wiring changes, re-verify the full interaction by hand rather than
+  relying only on DOM inspection.
 - Product dropdown is filtered per satellite via PLATFORM_CHANNELS in
   js/satellite-page.js: Himawari-9 shows the full GOES list (identical ABI,
   same render cost); Meteosat-9/11/12 show only the proven scalar + 3
@@ -388,8 +395,8 @@ Important guardrails:
   state before the first refreshActiveLayers() call.
 - Confirm product engine/page script tags when adding a new product module; a
   missing window.NCH*Engine or window.NCH*Page silently prevents engine creation.
-- When changing Satellite page control wiring, bump the relevant script query
-  strings in weather.html so browser cache does not mask the new behavior.
+- When changing a standalone page's control wiring, bump the relevant CSS and
+  script query strings in that page's HTML so browser cache does not mask it.
 - Make bounded, reviewable changes and update the superfile when roadmap or
   phase state materially changes.
 - Standalone Alerts footer status is page-owned as of `v=20260718f`; preserve
@@ -399,7 +406,7 @@ Important guardrails:
   and deterministic category ordering (Tornado first when present) as of
   `alerts-engine.js?v=20260718h`.
 - TOR/SVR/FFW/SMW polygon fill and borders pulse by default as of
-  `alerts-engine.js?v=20260718i`; the Styles-tab selector toggles the animation
+  `alerts-engine.js?v=20260718i`; the Settings-tab selector toggles the animation
   on the existing layer without refetching.
 - Standalone Alerts uses a presentation-only lighter FFW text color while
   retaining the official NWS core color, and Auto-Update defaults on at a
@@ -409,6 +416,10 @@ Important guardrails:
 - Preserve unrelated working-tree changes.
 
 Validation defaults:
+- The 2026-07-19 control pass has automated interaction smoke for Surface,
+  Alerts, Radar, Satellite, Water, and Tropical; 40 focused tests and all changed
+  JavaScript syntax checks pass. The full suite currently has five unrelated
+  Radar backend expectation failures in product-catalog/storm-attribute tests.
 - Run the narrowest meaningful static check first, such as node --check for
   touched JavaScript and py_compile for touched Python.
 - Browser smoke and all proofing/correlation checks (satellite recipe proofs,

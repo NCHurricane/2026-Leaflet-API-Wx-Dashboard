@@ -7,7 +7,7 @@
     <link rel="icon" href="/img/favicon.ico">
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260718b">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719d">
     <link rel="stylesheet" href="/frontend/pages/alerts/alerts.css?v=20260719b">
 </head>
 <body>
@@ -33,32 +33,29 @@
             </div>
 
             <div class="core-sidebar-tabs" role="tablist" aria-label="Alerts controls">
-                <button id="alerts-tab-data" class="core-sidebar-tab is-active" type="button" role="tab"
-                    aria-selected="true" aria-controls="alerts-panel-data" data-sidebar-tab="data">
-                    <i class="fas fa-database" aria-hidden="true"></i><span class="core-sidebar-tab-label">Data</span>
+                <button id="alerts-tab-live" class="core-sidebar-tab is-active" type="button" role="tab"
+                    aria-selected="true" aria-controls="alerts-panel-live" data-sidebar-tab="live">
+                    <i class="fas fa-tower-broadcast" aria-hidden="true"></i><span class="core-sidebar-tab-label">Live</span>
                 </button>
-                <button id="alerts-tab-overlays" class="core-sidebar-tab" type="button" role="tab"
-                    aria-selected="false" aria-controls="alerts-panel-overlays" tabindex="-1" data-sidebar-tab="overlays">
-                    <i class="fas fa-layer-group" aria-hidden="true"></i><span class="core-sidebar-tab-label">Overlays</span>
+                <button id="alerts-tab-settings" class="core-sidebar-tab" type="button" role="tab"
+                    aria-selected="false" aria-controls="alerts-panel-settings" tabindex="-1" data-sidebar-tab="settings">
+                    <i class="fas fa-sliders" aria-hidden="true"></i><span class="core-sidebar-tab-label">Settings</span>
                 </button>
-                <button id="alerts-tab-style" class="core-sidebar-tab" type="button" role="tab"
-                    aria-selected="false" aria-controls="alerts-panel-style" tabindex="-1" data-sidebar-tab="style">
-                    <i class="fas fa-sliders" aria-hidden="true"></i><span class="core-sidebar-tab-label">Style</span>
+                <button id="alerts-tab-archive" class="core-sidebar-tab" type="button" role="tab"
+                    aria-selected="false" aria-controls="alerts-panel-archive" tabindex="-1" data-sidebar-tab="archive">
+                    <i class="fas fa-clock-rotate-left" aria-hidden="true"></i><span class="core-sidebar-tab-label">Archive</span>
                 </button>
             </div>
 
             <div class="core-sidebar-content">
-                <section id="alerts-panel-data" class="core-sidebar-panel alerts-panel-stack" role="tabpanel"
-                    aria-labelledby="alerts-tab-data" data-sidebar-panel="data">
-                    <div id="alerts-mode-selector" class="core-segmented alerts-mode-selector" role="radiogroup" aria-label="Alerts time mode" hidden>
-                        <label><input name="alerts-mode" type="radio" value="live" checked><span>Live</span></label>
-                        <label><input name="alerts-mode" type="radio" value="archive"><span>Archive</span></label>
-                    </div>
+                <section id="alerts-panel-live" class="core-sidebar-panel alerts-panel-stack" role="tabpanel"
+                    aria-labelledby="alerts-tab-live" data-sidebar-panel="live">
                     <div id="alerts-live-controls" class="alerts-panel-stack">
                         <details class="alerts-categories" open>
                             <summary>Alert Categories <span><b id="alerts-count">0</b> active</span></summary>
-                            <label class="alerts-check alerts-master"><span>All Alerts</span><input id="alerts-all" type="checkbox"></label>
-                            <div id="alerts-category-list" class="alerts-check-list"></div>
+                            <div id="alerts-category-list" class="alerts-check-list">
+                                <label class="alerts-check alerts-master"><span>All Alerts</span><input id="alerts-all" type="checkbox"></label>
+                            </div>
                             <div id="alerts-warning-subtypes">
                                 <div class="alerts-eyebrow">Severe warning types</div>
                                 <div class="alerts-subtype-grid">
@@ -69,7 +66,7 @@
                                 </div>
                             </div>
                         </details>
-                        <details class="alerts-lsr" open>
+                        <details class="alerts-lsr">
                             <summary>Local Storm Reports <span id="alerts-lsr-count">0</span></summary>
                             <label class="alerts-check alerts-master"><span>All Reports</span><input id="alerts-lsr-all" type="checkbox"></label>
                             <div id="alerts-lsr-list" class="alerts-check-list"></div>
@@ -83,16 +80,13 @@
                         </details>
                         <label class="alerts-check alerts-auto"><span>Auto-Update (60 sec)</span><input id="alerts-auto-update" type="checkbox" checked></label>
                     </div>
-                    <div id="alerts-archive-controls" class="alerts-panel-stack" hidden>
-                        <div class="core-field"><label for="alerts-archive-from">From</label><input id="alerts-archive-from" type="datetime-local"></div>
-                        <div class="core-field"><label for="alerts-archive-to">To</label><input id="alerts-archive-to" type="datetime-local"></div>
-                        <button id="alerts-load-archive" class="alerts-primary" type="button">Load Archive</button>
-                    </div>
                 </section>
 
-                <section id="alerts-panel-overlays" class="core-sidebar-panel alerts-panel-stack" role="tabpanel"
-                    aria-labelledby="alerts-tab-overlays" data-sidebar-panel="overlays" hidden>
-                    <div><h2>Cities</h2>
+                <section id="alerts-panel-settings" class="core-sidebar-panel core-settings-panel alerts-panel-stack" role="tabpanel"
+                    aria-labelledby="alerts-tab-settings" data-sidebar-panel="settings" hidden>
+                    <div class="core-field"><label for="alerts-basemap">Basemap</label><select id="alerts-basemap"><option>Dark (No Labels)</option><option>Light (No Labels)</option><option>Voyager</option><option>USGS</option><option>Satellite</option></select></div>
+                    <div class="core-adjustment"><label id="alerts-opacity-label" for="alerts-opacity">Polygon Opacity (0.75)</label><input id="alerts-opacity" type="range" min="0.1" max="1" step="0.05" value="0.75"></div>
+                    <div class="core-settings-section"><h2>Cities</h2>
                         <div class="core-segmented" role="radiogroup" aria-label="Cities">
                             <label><input name="alerts-cities-source" type="radio" value="off" checked><span>Off</span></label>
                             <label><input name="alerts-cities-source" type="radio" value="us"><span>US</span></label>
@@ -101,33 +95,36 @@
                         <div class="core-adjustment" data-city-adjustment><label for="alerts-city-density">City Density</label><input id="alerts-city-density" type="range" min="0.01" max="1" step="0.005" value="0.25"></div>
                         <div class="core-adjustment" data-city-adjustment><label id="alerts-city-font-size-label" for="alerts-city-font-size">City Font Size (0.6)</label><input id="alerts-city-font-size" type="range" min="0.4" max="1.2" step="0.05" value="0.6"></div>
                     </div>
-                    <div><h2>Map overlays</h2><div class="alerts-check-list">
-                        <label class="alerts-check"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
-                        <label class="alerts-check"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
-                        <label class="alerts-check"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
-                        <label class="alerts-check"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                    <div class="core-settings-section"><h2>Map Overlays</h2><div class="alerts-check-list core-check-list">
+                        <label class="alerts-check core-check-row"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
+                        <label class="alerts-check core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
+                        <label class="alerts-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
+                        <label class="alerts-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
                     </div></div>
-                </section>
-
-                <section id="alerts-panel-style" class="core-sidebar-panel alerts-panel-stack" role="tabpanel"
-                    aria-labelledby="alerts-tab-style" data-sidebar-panel="style" hidden>
-                    <div>
-                        <div class="alerts-eyebrow">New Alert Notifications</div>
+                    <div class="core-settings-section">
+                        <h2>New Alert Notifications</h2>
                         <div class="core-segmented alerts-notification-mode" role="radiogroup" aria-label="New alert notifications">
                             <label><input name="alerts-notification-mode" type="radio" value="severe" checked><span>Severe</span></label>
                             <label><input name="alerts-notification-mode" type="radio" value="all"><span>All Selected</span></label>
                             <label><input name="alerts-notification-mode" type="radio" value="off"><span>Off</span></label>
                         </div>
                     </div>
-                    <div>
-                        <div class="alerts-eyebrow">Severe Polygon Pulse</div>
+                    <div class="core-settings-section">
+                        <h2>Severe Polygon Pulse</h2>
                         <div class="core-segmented" role="radiogroup" aria-label="Severe warning polygon pulse">
                             <label><input name="alerts-polygon-pulse" type="radio" value="on" checked><span>On</span></label>
                             <label><input name="alerts-polygon-pulse" type="radio" value="off"><span>Off</span></label>
                         </div>
                     </div>
-                    <div class="core-adjustment"><label id="alerts-opacity-label" for="alerts-opacity">Polygon Opacity (0.75)</label><input id="alerts-opacity" type="range" min="0.1" max="1" step="0.05" value="0.75"></div>
-                    <div class="core-field"><label for="alerts-basemap">Basemap</label><select id="alerts-basemap"><option>Dark (No Labels)</option><option>Light (No Labels)</option><option>Voyager</option><option>USGS</option><option>Satellite</option></select></div>
+                </section>
+
+                <section id="alerts-panel-archive" class="core-sidebar-panel alerts-panel-stack" role="tabpanel"
+                    aria-labelledby="alerts-tab-archive" data-sidebar-panel="archive" hidden>
+                    <div id="alerts-archive-controls" class="alerts-panel-stack">
+                        <div class="core-field"><label for="alerts-archive-from">From</label><input id="alerts-archive-from" type="datetime-local"></div>
+                        <div class="core-field"><label for="alerts-archive-to">To</label><input id="alerts-archive-to" type="datetime-local"></div>
+                        <button id="alerts-load-archive" class="alerts-primary" type="button">Load Archive</button>
+                    </div>
                 </section>
             </div>
             <div class="core-sidebar-footer">
@@ -173,6 +170,6 @@
         </aside>
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/alerts/alerts-page.js?v=20260719f"></script>
+    <script type="module" src="/frontend/pages/alerts/alerts-page.js?v=20260719g"></script>
 </body>
 </html>

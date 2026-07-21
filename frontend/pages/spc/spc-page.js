@@ -196,7 +196,7 @@ function shouldResetFireDaySelection() {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'SPC');
-    const sidebarTabs = createSidebarTabs(byId('spc-sidebar-tabs'), { defaultTab: 'data' });
+    const sidebarTabs = createSidebarTabs(byId('spc-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('spc', { mapView: 'CONUS', autoLoad: false });
     const defaults = await loadDefaultSettings().catch(() => ({}));
     const cityDefaults = defaults?.global?.cityLabels || {};

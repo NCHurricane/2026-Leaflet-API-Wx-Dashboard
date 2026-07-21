@@ -13,7 +13,11 @@ import { classifyLsrEvent, createAlertsEngine } from './alerts-engine.js?v=20260
 const byId = (id) => document.getElementById(id);
 const AUTO_UPDATE_MS = 60_000;
 
-function selectedMode() { return document.querySelector('input[name="alerts-mode"]:checked')?.value || 'live'; }
+function selectedMode() {
+    return document.querySelector('#alerts-sidebar-tabs .core-sidebar-tab.is-active')?.dataset.sidebarTab === 'archive'
+        ? 'archive'
+        : 'live';
+}
 function selectedCategories() { return [...document.querySelectorAll('#alerts-category-list .alerts-category-input:checked')].map((input) => input.value); }
 function selectedWarningTypes() { return [...document.querySelectorAll('#alerts-warning-subtypes input:checked')].map((input) => input.value); }
 function selectedLsrCategories() { return [...document.querySelectorAll('#alerts-lsr-list input:checked')].map((input) => input.value); }
@@ -33,7 +37,7 @@ function frameLabel(frame) {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'Alerts');
-    createSidebarTabs(byId('alerts-sidebar-tabs'), { defaultTab: 'data' });
+    createSidebarTabs(byId('alerts-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('alerts', { mapView: 'CONUS' });
     const defaults = await loadDefaultSettings().catch(() => ({}));
     const cityDefaults = defaults?.global?.cityLabels || {};
@@ -224,7 +228,8 @@ async function initialize() {
     });
 
     function populateFilters() {
-        byId('alerts-category-list').replaceChildren(...Object.keys(ALERT_CATEGORIES).map((category) => {
+        const master = byId('alerts-all').closest('label');
+        byId('alerts-category-list').replaceChildren(master, ...Object.keys(ALERT_CATEGORIES).map((category) => {
             const label = document.createElement('label');
             label.className = 'alerts-check';
             label.innerHTML = `<span>${category}</span><input class="alerts-category-input" type="checkbox" value="${category}">`;
@@ -312,14 +317,13 @@ async function initialize() {
         renderLsrReports();
     });
 
-    document.querySelectorAll('input[name="alerts-mode"]').forEach((input) => input.addEventListener('change', () => {
-        const archive = selectedMode() === 'archive';
-        byId('alerts-live-controls').hidden = archive;
-        byId('alerts-archive-controls').hidden = !archive;
+    byId('alerts-sidebar-tabs').addEventListener('core:sidebar-tab-change', (event) => {
+        if (!['live', 'archive'].includes(event.detail?.tab)) return;
+        const archive = event.detail.tab === 'archive';
         scrubber.pause(); scrubber.setFrames([]); scrubberBar.hidden = true;
         engine.clear(); detail.close(); status.clear();
         if (!archive) void loadLive(); else status.setMessage('Choose an archive time range, then load.');
-    }));
+    });
 
     const now = new Date();
     byId('alerts-archive-to').value = localDatetimeValue(now);

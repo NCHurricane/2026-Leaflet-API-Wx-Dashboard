@@ -106,7 +106,7 @@ function buildRadioList(ulEl, products, name, currentId) {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'WPC');
-    const sidebarTabs = createSidebarTabs(byId('wpc-sidebar-tabs'), { defaultTab: 'data' });
+    const sidebarTabs = createSidebarTabs(byId('wpc-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('wpc', { mapView: 'CONUS', autoLoad: false });
     const defaults = await loadDefaultSettings().catch(() => ({}));
     const cityDefaults = defaults?.global?.cityLabels || {};

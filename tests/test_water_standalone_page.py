@@ -100,7 +100,10 @@ def test_water_sidebar_controls_use_refactored_label_and_checkbox_styles():
     assert "label-small" not in page
     assert ".water-control-section h2" in styles
     assert "#wx-section-water label.water-check" in styles
-    assert '#water-panel-overlays label.water-check input[type="checkbox"]' in styles
+    assert '#water-panel-settings label.water-check input[type="checkbox"]' in styles
+    assert 'name="water-cities-source"' in page
+    assert 'id="water-city-density"' in page
+    assert 'id="water-city-font-size"' in page
 
 
 def test_workspace_excludes_water_but_preserves_projected_arrival():

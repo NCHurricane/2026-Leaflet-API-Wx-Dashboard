@@ -328,6 +328,36 @@ Canonical product URLs should be extensionless:
 Legacy `.html` URLs may redirect to canonical routes or remain as temporary
 compatibility routes during migration.
 
+### Standalone sidebar control pattern
+
+Use Workspace as the visual reference for titles, labels, pills, and checkbox
+rows while retaining each standalone page's own IDs and event ownership.
+
+1. Use `Live / Settings / Archive` when a page exposes all three concepts.
+   Archive may be an explicit placeholder until the workflow exists. Drought,
+   WPC, and Water intentionally use `Live / Settings`; Tropical intentionally
+   keeps `Live / Archive / Settings`.
+2. Order Settings sections as Basemap, product opacity control(s), Cities, Map
+   Overlays, then page-specific settings. Omit controls the product does not own;
+   Water, for example, has no opacity control.
+3. Use `.core-settings-panel`, `.core-settings-section`, `.core-check-list`, and
+   `.core-check-row` rather than page-specific copies of the same typography and
+   checkbox alignment.
+4. Keep controls mounted and move their existing DOM nodes between panels. This
+   preserves listeners and state while `sidebar-tabs.js` toggles panels.
+5. Styled wrappers that must be conditionally absent need an explicit page CSS
+   `[hidden] { display: none; }` rule when another display declaration would
+   otherwise override the native hidden attribute.
+6. Bump page CSS/JavaScript query versions when control structure, wiring, or
+   visibility rules change so cached assets cannot present a mixed UI.
+
+Radar is the intentional stateful exception within Live: Site selection reveals
+Level 2/3 pills and a level-filtered Product selector. Level 3 is U.S.-only, and
+elevation, storm tracks, and value inspection remain site-dependent. Satellite
+uses Satellite -> Sector -> Product enablement; View appears after Sector as an
+independent named map preset. Satellite changes, region changes, and Home/reset
+must clear the dependent chain.
+
 ## Shared Frontend Utility Pattern
 
 Each product page should own its entry file, but common behavior should live in
@@ -416,3 +446,7 @@ Radar controls in `frontend/pages/radar/` follow these state rules:
 2. If site/product selection changes during time-mode scrub, context is invalidated and user is prompted to press Animate again.
 3. `Clear` removes loaded radar overlays and exits animate-to-current state, while preserving current map extent.
 4. `Show Radar Sites` controls both marker visibility and the radar-sites legend visibility when no specific site is selected.
+5. Product controls stay hidden until a site is selected. Level 2/3 pills filter
+   the Product selector, and Level 3 is disabled outside U.S. radar sites.
+6. Elevation, Storm Tracks, and Value Inspector remain hidden until a site is
+   selected; Elevation is additionally hidden for Level 3 products.

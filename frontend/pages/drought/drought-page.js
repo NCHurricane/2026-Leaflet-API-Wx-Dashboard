@@ -47,7 +47,7 @@ function renderDateButtons(dates, activeDate, onSelect) {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'Drought');
-    const sidebarTabs = createSidebarTabs(byId('drought-sidebar-tabs'), { defaultTab: 'data' });
+    const sidebarTabs = createSidebarTabs(byId('drought-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('drought', { mapView: 'CONUS', autoLoad: false });
     const defaults = await loadDefaultSettings().catch(() => ({}));
     const cityDefaults = defaults?.global?.cityLabels || {};

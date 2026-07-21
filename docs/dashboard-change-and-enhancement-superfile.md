@@ -66,6 +66,30 @@ post-split structure, not the monolith.
   the root `js/` modules, and `css/dashboard.css` are deleted.
 - Standalone pages that expose city labels use the shared `map-core.js`
   Off/US/World source, bounded density, and font-size implementation.
+- Standalone sidebar controls were harmonized on 2026-07-19 using Workspace as
+  the styling reference. Surface, Alerts, Radar, Satellite, SPC, RTMA, and MRMS
+  use `Live / Settings / Archive`; Alerts owns a functional Archive panel while
+  the other Archive panels are explicit placeholders. Drought, WPC, and Water
+  intentionally remain `Live / Settings`, and Tropical intentionally retains
+  `Live / Archive / Settings`. Settings sections use the shared order Basemap,
+  opacity controls when the product has them, Cities, Map Overlays, then any
+  page-only settings.
+- Radar Live controls now follow the Workspace selection model: Site, Level 2/3
+  pills, then a level-filtered Product selector. Level 3 is available only for
+  U.S. sites; product options and site-dependent controls remain hidden until a
+  site is selected. Satellite uses a staged Satellite -> Sector -> Product flow;
+  View remains visible after sector selection as an independent future-facing
+  map preset, not a product prerequisite. Satellite, region, and Home/reset
+  changes clear dependent selections safely.
+- Surface Station Density now follows Products; RTMA and MRMS Lookback precedes
+  Auto Update. Alerts starts Local Storm Reports collapsed and keeps All Alerts
+  as the first item in the dynamically populated category list. Water now uses
+  the shared Cities controls but intentionally has no opacity control.
+- Validation for this pass: all 10 changed JavaScript modules passed
+  `node --check`; the 40 focused page/layout tests passed; and browser interaction
+  smoke covered Surface, Alerts, Radar, Satellite, Water, and Tropical control
+  state. The full repository suite still has five unrelated pre-existing Radar
+  backend expectation failures in product-catalog/storm-attribute tests.
 - `config/user_settings.default.json` is the tracked baseline for user-facing
   dashboard preferences. `GET /api/user-settings/defaults` serves this file,
   and standalone pages read it through `frontend/core/settings.js`. It separates
@@ -351,13 +375,15 @@ found it.
   4, preventing a response cached from an older unfiltered API process from
   crossing state and county toggle behavior. Dark (No Labels) is the standalone
   page and shared map-core default basemap, matching the pre-split shell.
-  Option 1A from the Drought sidebar design handoff is now the accepted shared
-  sidebar reference: a 300px shell with pinned Data Status/Region header,
-  accessible Data/Overlays/Style tabs, a scrollable mounted-panel area, and a
-  pinned message/Refresh footer. `frontend/core/sidebar-tabs.js` owns stable-DOM
-  switching plus click and keyboard navigation; pages may add an opt-in fourth
-  tab without changing the controller. Drought keeps Release Week/categories
-  under Data, cities/map layers under Overlays, and opacity/basemap under Style.
+  Option 1A from the Drought sidebar design handoff established the accepted
+  300px shell with pinned Data Status/Region header, accessible tabs, a
+  scrollable mounted-panel area, and a pinned message/Refresh footer.
+  `frontend/core/sidebar-tabs.js` owns stable-DOM switching plus click and
+  keyboard navigation. The completed 2026-07-19 control pass supersedes the
+  original Data/Overlays/Style grouping: standalone pages now use the semantic
+  Live/Settings/Archive pattern documented under Current State, with intentional
+  two-tab and Tropical-order exceptions. Controls remain mounted while hidden so
+  existing IDs, listeners, and state survive tab changes.
   Browser smoke passed tab switching, keyboard Home navigation, retained control
   state, default Dark basemap, automatic latest-release data, and pinned layout
   geometry. The accepted legend treatment is now a shared, map-panel-confined
@@ -690,7 +716,7 @@ found it.
   order rather than report arrival order, keeping Tornado first when present.
   Severe-polygon pulse restoration (`alerts.css?v=20260718f`/
   `alerts-engine.js?v=20260718i`): TOR, SVR, FFW, and SMW polygons again pulse
-  both fill and border. A Styles-tab On/Off selector is enabled by default and
+  both fill and border. A Settings-tab On/Off selector is enabled by default and
   updates the existing polygon layer immediately without a data reload.
   Contrast/refresh follow-up (`alerts-page.js?v=20260719a`): Flash Flood Warning
   text uses a lighter presentation-only red on dark UI surfaces while its

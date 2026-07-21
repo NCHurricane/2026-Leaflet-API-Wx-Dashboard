@@ -6,8 +6,8 @@
     <title>Water Monitoring | NCHurricane</title>
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719a">
-    <link rel="stylesheet" href="/frontend/pages/water/water.css?v=20260719f">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719d">
+    <link rel="stylesheet" href="/frontend/pages/water/water.css?v=20260719g">
 </head>
 <body>
     <header class="core-header">
@@ -33,12 +33,11 @@
                 <div class="core-field"><label for="weather-water-region">Region</label><select id="weather-water-region"></select></div>
             </div>
             <div class="core-sidebar-tabs" role="tablist" aria-label="Water controls">
-                <button id="water-tab-data" class="core-sidebar-tab is-active" type="button" data-sidebar-tab="data" role="tab" aria-selected="true" aria-controls="water-panel-data">Data</button>
-                <button id="water-tab-overlays" class="core-sidebar-tab" type="button" data-sidebar-tab="overlays" role="tab" aria-selected="false" aria-controls="water-panel-overlays" tabindex="-1">Overlays</button>
-                <button id="water-tab-style" class="core-sidebar-tab" type="button" data-sidebar-tab="style" role="tab" aria-selected="false" aria-controls="water-panel-style" tabindex="-1">Style</button>
+                <button id="water-tab-live" class="core-sidebar-tab is-active" type="button" data-sidebar-tab="live" role="tab" aria-selected="true" aria-controls="water-panel-live"><i class="fas fa-tower-broadcast" aria-hidden="true"></i><span class="core-sidebar-tab-label">Live</span></button>
+                <button id="water-tab-settings" class="core-sidebar-tab" type="button" data-sidebar-tab="settings" role="tab" aria-selected="false" aria-controls="water-panel-settings" tabindex="-1"><i class="fas fa-sliders" aria-hidden="true"></i><span class="core-sidebar-tab-label">Settings</span></button>
             </div>
             <div class="core-sidebar-content">
-                <section id="water-panel-data" class="core-sidebar-panel water-panel-stack" role="tabpanel" aria-labelledby="water-tab-data" data-sidebar-panel="data">
+                <section id="water-panel-live" class="core-sidebar-panel water-panel-stack" role="tabpanel" aria-labelledby="water-tab-live" data-sidebar-panel="live">
                     <div id="wx-section-water" class="wx-block water-data-controls" data-type="water">
                         <div class="water-control-section">
                             <h2 id="weather-water-network-filters-title">Networks</h2>
@@ -60,23 +59,37 @@
                         </div>
                     </div>
                 </section>
-                <section id="water-panel-overlays" class="core-sidebar-panel water-panel-stack" role="tabpanel" aria-labelledby="water-tab-overlays" data-sidebar-panel="overlays" hidden>
-                    <div class="water-control-section">
-                        <h2>Map Overlays</h2>
-                        <div class="water-check-list">
-                            <label class="water-check"><span>Lat/Lon Grid</span><input type="checkbox" data-map-overlay="graticule"></label>
-                            <label class="water-check"><span>State Borders</span><input type="checkbox" data-map-overlay="states" checked></label>
-                            <label class="water-check"><span>Country Borders</span><input type="checkbox" data-map-overlay="countries" checked></label>
-                            <label class="water-check"><span>County Borders</span><input type="checkbox" data-map-overlay="counties"></label>
-                        </div>
-                    </div>
-                </section>
-                <section id="water-panel-style" class="core-sidebar-panel water-panel-stack" role="tabpanel" aria-labelledby="water-tab-style" data-sidebar-panel="style" hidden>
+                <section id="water-panel-settings" class="core-sidebar-panel core-settings-panel water-panel-stack" role="tabpanel" aria-labelledby="water-tab-settings" data-sidebar-panel="settings" hidden>
                     <div class="core-field">
                         <label for="water-basemap">Basemap</label>
                         <select id="water-basemap">
                             <option>Dark (No Labels)</option><option>Dark</option><option>Light</option><option>Street</option>
                         </select>
+                    </div>
+                    <div class="core-settings-section">
+                        <h2>Cities</h2>
+                        <div class="core-segmented" role="radiogroup" aria-label="Cities">
+                            <label><input name="water-cities-source" type="radio" value="off" checked><span>Off</span></label>
+                            <label><input name="water-cities-source" type="radio" value="us"><span>US</span></label>
+                            <label><input name="water-cities-source" type="radio" value="world"><span>World</span></label>
+                        </div>
+                        <div class="core-adjustment" data-city-adjustment>
+                            <label id="water-city-density-label" for="water-city-density">City Density</label>
+                            <input id="water-city-density" type="range" min="0.01" max="1" step="0.005" value="0.25">
+                        </div>
+                        <div class="core-adjustment" data-city-adjustment>
+                            <label id="water-city-font-size-label" for="water-city-font-size">City Font Size (0.6)</label>
+                            <input id="water-city-font-size" type="range" min="0.4" max="1.2" step="0.05" value="0.6">
+                        </div>
+                    </div>
+                    <div class="water-control-section core-settings-section">
+                        <h2>Map Overlays</h2>
+                        <div class="water-check-list core-check-list">
+                            <label class="water-check core-check-row"><span>Lat/Lon Grid</span><input type="checkbox" data-map-overlay="graticule"></label>
+                            <label class="water-check core-check-row"><span>State Borders</span><input type="checkbox" data-map-overlay="states" checked></label>
+                            <label class="water-check core-check-row"><span>Country Borders</span><input type="checkbox" data-map-overlay="countries" checked></label>
+                            <label class="water-check core-check-row"><span>County Borders</span><input type="checkbox" data-map-overlay="counties"></label>
+                        </div>
                     </div>
                 </section>
             </div>
@@ -96,6 +109,6 @@
         </section>
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/water/water-app.js?v=20260719d"></script>
+    <script type="module" src="/frontend/pages/water/water-app.js?v=20260719e"></script>
 </body>
 </html>

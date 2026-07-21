@@ -7,7 +7,7 @@
     <link rel="icon" href="/img/favicon.ico">
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260718a">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719d">
     <link rel="stylesheet" href="/frontend/pages/rtma/rtma.css?v=20260718a">
 </head>
 <body>
@@ -38,26 +38,26 @@
             </div>
 
             <div class="core-sidebar-tabs" role="tablist" aria-label="RTMA controls">
-                <button id="rtma-tab-data" class="core-sidebar-tab is-active" type="button"
-                    role="tab" aria-selected="true" aria-controls="rtma-panel-data"
-                    data-sidebar-tab="data">
-                    <i class="fas fa-database" aria-hidden="true"></i><span class="core-sidebar-tab-label">Data</span>
+                <button id="rtma-tab-live" class="core-sidebar-tab is-active" type="button"
+                    role="tab" aria-selected="true" aria-controls="rtma-panel-live"
+                    data-sidebar-tab="live">
+                    <i class="fas fa-tower-broadcast" aria-hidden="true"></i><span class="core-sidebar-tab-label">Live</span>
                 </button>
-                <button id="rtma-tab-overlays" class="core-sidebar-tab" type="button"
-                    role="tab" aria-selected="false" aria-controls="rtma-panel-overlays" tabindex="-1"
-                    data-sidebar-tab="overlays">
-                    <i class="fas fa-layer-group" aria-hidden="true"></i><span class="core-sidebar-tab-label">Overlays</span>
+                <button id="rtma-tab-settings" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="rtma-panel-settings" tabindex="-1"
+                    data-sidebar-tab="settings">
+                    <i class="fas fa-sliders" aria-hidden="true"></i><span class="core-sidebar-tab-label">Settings</span>
                 </button>
-                <button id="rtma-tab-style" class="core-sidebar-tab" type="button"
-                    role="tab" aria-selected="false" aria-controls="rtma-panel-style" tabindex="-1"
-                    data-sidebar-tab="style">
-                    <i class="fas fa-sliders" aria-hidden="true"></i><span class="core-sidebar-tab-label">Style</span>
+                <button id="rtma-tab-archive" class="core-sidebar-tab" type="button"
+                    role="tab" aria-selected="false" aria-controls="rtma-panel-archive" tabindex="-1"
+                    data-sidebar-tab="archive">
+                    <i class="fas fa-clock-rotate-left" aria-hidden="true"></i><span class="core-sidebar-tab-label">Archive</span>
                 </button>
             </div>
 
             <div class="core-sidebar-content">
-                <section id="rtma-panel-data" class="core-sidebar-panel rtma-panel-stack"
-                    role="tabpanel" aria-labelledby="rtma-tab-data" data-sidebar-panel="data">
+                <section id="rtma-panel-live" class="core-sidebar-panel rtma-panel-stack"
+                    role="tabpanel" aria-labelledby="rtma-tab-live" data-sidebar-panel="live">
 
                     <div class="rtma-sub-group">
                         <span class="rtma-sub-group-label">Data Stream</span>
@@ -131,11 +131,6 @@
                         </div>
                     </div>
 
-                    <div class="rtma-check-row rtma-auto-update-row">
-                        <span>Auto-Update</span>
-                        <input id="rtma-auto-update" type="checkbox">
-                    </div>
-
                     <div id="rtma-lookback-block" class="rtma-lookback">
                         <div class="rtma-lookback-header">
                             <span>Lookback Hours</span>
@@ -144,11 +139,26 @@
                         <input id="rtma-lookback" type="range" min="1" max="12" step="0.5" value="1">
                         <div class="rtma-lookback-labels"><span>1H</span><span>12H</span></div>
                     </div>
+                    <div class="rtma-check-row rtma-auto-update-row">
+                        <span>Auto-Update</span>
+                        <input id="rtma-auto-update" type="checkbox">
+                    </div>
                 </section>
 
-                <section id="rtma-panel-overlays" class="core-sidebar-panel rtma-panel-stack"
-                    role="tabpanel" aria-labelledby="rtma-tab-overlays" data-sidebar-panel="overlays" hidden>
-                    <div>
+                <section id="rtma-panel-settings" class="core-sidebar-panel core-settings-panel rtma-panel-stack"
+                    role="tabpanel" aria-labelledby="rtma-tab-settings" data-sidebar-panel="settings" hidden>
+                    <div class="core-field">
+                        <label for="rtma-basemap">Basemap</label>
+                        <select id="rtma-basemap">
+                            <option>Dark (No Labels)</option><option>Light (No Labels)</option>
+                            <option>Voyager</option><option>USGS</option><option>Satellite</option>
+                        </select>
+                    </div>
+                    <div class="core-adjustment">
+                        <label for="rtma-gradient-opacity">Overlay Opacity (0.9)</label>
+                        <input id="rtma-gradient-opacity" type="range" min="0.1" max="1" step="0.05" value="0.9">
+                    </div>
+                    <div class="core-settings-section">
                     <h2>Cities</h2>
                     <div class="core-segmented" role="radiogroup" aria-label="Cities">
                         <label><input name="rtma-cities-source" type="radio" value="off" checked><span>Off</span></label>
@@ -165,31 +175,20 @@
                     </div>
                     </div>
 
-                    <div>
-                    <h2>Map overlays</h2>
-                    <div class="rtma-check-list">
-                        <label class="rtma-check"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
-                        <label class="rtma-check"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
-                        <label class="rtma-check"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
-                        <label class="rtma-check"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                    <div class="core-settings-section">
+                    <h2>Map Overlays</h2>
+                    <div class="rtma-check-list core-check-list">
+                        <label class="rtma-check core-check-row"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
+                        <label class="rtma-check core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
+                        <label class="rtma-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
+                        <label class="rtma-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
                     </div>
                     </div>
                 </section>
 
-                <section id="rtma-panel-style" class="core-sidebar-panel rtma-panel-stack"
-                    role="tabpanel" aria-labelledby="rtma-tab-style" data-sidebar-panel="style" hidden>
-                    <div class="core-adjustment">
-                        <label for="rtma-gradient-opacity">Overlay Opacity (0.9)</label>
-                        <input id="rtma-gradient-opacity" type="range" min="0.1" max="1" step="0.05" value="0.9">
-                    </div>
-
-                    <div class="core-field">
-                        <label for="rtma-basemap">Basemap</label>
-                        <select id="rtma-basemap">
-                            <option>Dark (No Labels)</option><option>Light (No Labels)</option>
-                            <option>Voyager</option><option>USGS</option><option>Satellite</option>
-                        </select>
-                    </div>
+                <section id="rtma-panel-archive" class="core-sidebar-panel core-placeholder-panel"
+                    role="tabpanel" aria-labelledby="rtma-tab-archive" data-sidebar-panel="archive" hidden>
+                    <p>Archive tools are planned for a future update.</p>
                 </section>
             </div>
 
@@ -210,6 +209,6 @@
     </main>
 
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/rtma/rtma-page.js?v=20260718a"></script>
+    <script type="module" src="/frontend/pages/rtma/rtma-page.js?v=20260719b"></script>
 </body>
 </html>

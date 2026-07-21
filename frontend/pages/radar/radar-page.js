@@ -35,7 +35,7 @@ function lookbackLabel(value) {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'Radar');
-    const sidebarTabs = createSidebarTabs(byId('radar-sidebar-tabs'), { defaultTab: 'data' });
+    const sidebarTabs = createSidebarTabs(byId('radar-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('radar', { mapView: 'CONUS', hours: 1 });
     const defaults = await loadDefaultSettings().catch(() => ({}));
     const cityDefaults = defaults?.global?.cityLabels || {};
@@ -75,9 +75,21 @@ async function initialize() {
 
     function showScrubber(visible) { scrubberBar.hidden = !visible; }
 
+    function activeRadarLevel() {
+        return byId('radar-levels').querySelector('.is-active')?.dataset.radarLevel || 'Level 2';
+    }
+
+    function setActiveRadarLevel(level) {
+        byId('radar-levels').querySelectorAll('[data-radar-level]').forEach((button) => {
+            const active = button.dataset.radarLevel === level;
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-pressed', String(active));
+        });
+    }
+
     function syncElevationControl() {
         const option = byId('radar-product')?.selectedOptions?.[0];
-        const enabled = option?.dataset.elevationSelection === 'true';
+        const enabled = Boolean(activeSelection().site) && option?.dataset.elevationSelection === 'true';
         byId('radar-elevation-wrap').hidden = !enabled;
         if (!enabled) byId('radar-elevation').value = '';
     }
@@ -126,27 +138,41 @@ async function initialize() {
         const keep = select.value;
         const site = activeSelection().site;
         const conus = site ? engine.isConusSite(site) : true;
-        const groups = new Map();
+        const level = activeRadarLevel();
         select.replaceChildren();
         Object.entries(catalog.products || {}).forEach(([productId, product]) => {
-            const level = String(product?.level || 'Other');
-            if (level === 'Level 3' && !conus) return;
-            if (!groups.has(level)) {
-                const group = document.createElement('optgroup');
-                group.label = level;
-                groups.set(level, group);
-                select.appendChild(group);
-            }
+            const productLevel = String(product?.level || 'Other');
+            if (productLevel !== level || (productLevel === 'Level 3' && !conus)) return;
             const option = document.createElement('option');
             option.value = String(productId).toUpperCase();
             option.textContent = String(product?.label || productId);
             option.dataset.units = String(product?.units || '');
             option.dataset.elevationSelection = String(!!product?.capabilities?.elevation_selection);
-            groups.get(level).appendChild(option);
+            select.appendChild(option);
         });
         const values = new Set(Array.from(select.options, (option) => option.value));
         select.value = values.has(keep) ? keep : values.has('L2_REF') ? 'L2_REF' : select.options[0]?.value || '';
         select.disabled = !site;
+        syncElevationControl();
+    }
+
+    function syncRadarControls() {
+        const site = activeSelection().site;
+        const hasSite = Boolean(site);
+        const conus = !site || engine.isConusSite(site);
+        if (!conus && activeRadarLevel() === 'Level 3') setActiveRadarLevel('Level 2');
+        byId('radar-product-options').hidden = !hasSite;
+        byId('radar-levels').querySelectorAll('[data-radar-level]').forEach((button) => {
+            button.disabled = !hasSite || (button.dataset.radarLevel === 'Level 3' && !conus);
+        });
+        populateProducts();
+        document.querySelectorAll('.radar-site-option').forEach((row) => { row.hidden = !hasSite; });
+        if (!hasSite) {
+            byId('radar-show-storm-tracks').checked = false;
+            byId('radar-inspector').checked = false;
+            engine.setStormTracksVisible(false);
+            engine.setInspectorVisible(false);
+        }
         syncElevationControl();
     }
 
@@ -175,7 +201,7 @@ async function initialize() {
         onCatalog(data) {
             catalog = data;
             populateSites();
-            populateProducts();
+            syncRadarControls();
             if (byId('radar-show-sites').checked) engine.showSiteLegend();
         },
         onElevationData: updateElevationOptions,
@@ -186,7 +212,7 @@ async function initialize() {
         },
         onSitePicked(site, coords) {
             byId('radar-site').value = site;
-            populateProducts();
+            syncRadarControls();
             engine.syncHighlights(site);
             mapCore.map.flyTo(coords, Math.max(mapCore.map.getZoom(), 9), { duration: 0.6 });
             void engine.refreshAll();
@@ -198,10 +224,10 @@ async function initialize() {
     resetRadarState = (message = 'Radar selection cleared.') => {
         scrubber.pause();
         siteSelect.value = '';
-        byId('radar-product').value = 'L2_REF';
+        setActiveRadarLevel('Level 2');
         byId('radar-elevation').replaceChildren(new Option('', ''));
         engine.clear();
-        populateProducts();
+        syncRadarControls();
         engine.syncHighlights('');
         showScrubber(false);
         status.clear();
@@ -211,7 +237,7 @@ async function initialize() {
 
     siteSelect.addEventListener('change', () => {
         engine.clear();
-        populateProducts();
+        syncRadarControls();
         engine.syncHighlights();
         const selection = activeSelection();
         const coords = engine.siteCoords(selection.site);
@@ -222,6 +248,16 @@ async function initialize() {
         }
         if (coords) mapCore.map.flyTo(coords, Math.max(mapCore.map.getZoom(), 9), { duration: 0.6 });
         void engine.refreshAll();
+    });
+
+    byId('radar-levels').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-radar-level]');
+        if (!button || button.disabled || button.classList.contains('is-active')) return;
+        setActiveRadarLevel(button.dataset.radarLevel);
+        byId('radar-elevation').replaceChildren(new Option('', ''));
+        populateProducts();
+        engine.clear();
+        if (activeSelection().site) void engine.refreshAll();
     });
 
     byId('radar-product').addEventListener('change', () => {

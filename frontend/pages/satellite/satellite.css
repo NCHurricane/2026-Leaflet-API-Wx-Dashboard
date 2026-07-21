@@ -34,6 +34,9 @@
 .satellite-status-card .core-status-grid dt { white-space: nowrap; }
 
 .satellite-panel-stack { display: grid; gap: 12px; align-content: start; }
+#satellite-sector-controls[hidden],
+#satellite-view-controls[hidden],
+#satellite-product-controls[hidden] { display: none; }
 
 .satellite-field-label {
     font-size: 0.7rem;

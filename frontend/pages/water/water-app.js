@@ -3,6 +3,7 @@ import { createLegendHost } from '../../core/legend.js';
 import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
+import { loadDefaultSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js';
 
 const byId = (id) => document.getElementById(id);
@@ -521,7 +522,9 @@ function _updateWaterFloodPillsVisibility() {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'Water');
-    createSidebarTabs(byId('water-sidebar-tabs'), { defaultTab: 'data' });
+    createSidebarTabs(byId('water-sidebar-tabs'), { defaultTab: 'live' });
+    const defaults = await loadDefaultSettings().catch(() => ({}));
+    const cityDefaults = defaults?.global?.cityLabels || {};
     const regionSelect = byId('weather-water-region');
     regionSelect.replaceChildren(...Object.entries(REGION_LABELS).map(([code, label]) => new Option(label, code)));
     regionSelect.value = 'CONUS';
@@ -544,6 +547,33 @@ async function initialize() {
         if (_waterFloodFilter !== 'all') _setWaterStatus(`Flood filter: ${_applyWaterFloodFilter(_waterStations).length} of ${_waterStations.length} river gauges shown.`);
     });
     byId('water-basemap').addEventListener('change', (event) => mapCore.setBasemap(event.target.value));
+    const citySource = ['us', 'world'].includes(cityDefaults.source) ? cityDefaults.source : 'off';
+    const cityDensityInput = byId('water-city-density');
+    const cityFontSizeInput = byId('water-city-font-size');
+    cityDensityInput.value = String(Number(cityDefaults.density) || 0.25);
+    cityFontSizeInput.value = String(Number(cityDefaults.fontSize) || 0.6);
+    document.querySelector(`input[name="water-cities-source"][value="${citySource}"]`).checked = true;
+    const selectedCitySource = () => document.querySelector('input[name="water-cities-source"]:checked')?.value || 'off';
+    const updateCityControls = () => {
+        const source = selectedCitySource();
+        const disabled = source === 'off';
+        document.querySelectorAll('[data-city-adjustment]').forEach((row) => {
+            row.classList.toggle('is-disabled', disabled);
+            row.querySelector('input').disabled = disabled;
+        });
+        byId('water-city-density-label').textContent = `City Density (${Math.round(mapCore.getCityMinDistanceKm(source, cityDensityInput.value))} km)`;
+        byId('water-city-font-size-label').textContent = `City Font Size (${Number(cityFontSizeInput.value).toFixed(2).replace(/\.?0+$/, '')})`;
+    };
+    document.querySelectorAll('input[name="water-cities-source"]').forEach((input) => input.addEventListener('change', () => {
+        updateCityControls();
+        void mapCore.setCitySource(selectedCitySource()).catch((error) => _setWaterStatus(`City overlay unavailable: ${error.message}`, 'error'));
+    }));
+    cityDensityInput.addEventListener('input', () => { mapCore.setCityDensity(cityDensityInput.value); updateCityControls(); });
+    cityFontSizeInput.addEventListener('input', () => { mapCore.setCityFontSize(cityFontSizeInput.value); updateCityControls(); });
+    mapCore.setCityDensity(cityDensityInput.value);
+    mapCore.setCityFontSize(cityFontSizeInput.value);
+    updateCityControls();
+    void mapCore.setCitySource(citySource).catch((error) => _setWaterStatus(`City overlay unavailable: ${error.message}`, 'error'));
     document.querySelectorAll('[data-map-overlay]').forEach((input) => {
         input.addEventListener('change', () => void mapCore.setOverlayVisible(input.dataset.mapOverlay, input.checked));
         if (input.checked) void mapCore.setOverlayVisible(input.dataset.mapOverlay, true);

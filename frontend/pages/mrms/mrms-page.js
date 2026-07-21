@@ -110,7 +110,7 @@ function updateSubControls() {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'MRMS');
-    const sidebarTabs = createSidebarTabs(byId('mrms-sidebar-tabs'), { defaultTab: 'data' });
+    const sidebarTabs = createSidebarTabs(byId('mrms-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('mrms', { mapView: 'CONUS' });
     const defaults = await loadDefaultSettings().catch(() => ({}));
     const cityDefaults = defaults?.global?.cityLabels || {};

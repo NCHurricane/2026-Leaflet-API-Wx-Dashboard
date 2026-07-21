@@ -4964,7 +4964,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
     margin: 0;
 }
 #wx-section-water label.water-check,
-#water-panel-overlays label.water-check {
+#water-panel-settings label.water-check {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -4980,7 +4980,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
     text-transform: uppercase;
 }
 #wx-section-water label.water-check input[type="checkbox"],
-#water-panel-overlays label.water-check input[type="checkbox"] {
+#water-panel-settings label.water-check input[type="checkbox"] {
     flex: 0 0 auto;
     width: 16px;
     height: 16px;

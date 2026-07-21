@@ -32,6 +32,20 @@
 }
 .radar-check input { flex: 0 0 auto; }
 .radar-auto-update-row { padding-top: 8px; border-top: 1px solid var(--core-line); }
+.radar-product-options { display: grid; gap: 8px; }
+.radar-product-options[hidden], .radar-site-option[hidden] { display: none; }
+.radar-level-pills { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.radar-level-pills button {
+    min-width: 0;
+    padding: 6px;
+    color: var(--core-muted);
+    background: #111d2b;
+    border-color: #33475b;
+    font-size: 0.68rem;
+    font-weight: 900;
+}
+.radar-level-pills button.is-active { color: #06111f; background: #55d7ff; border-color: #8ce6ff; }
+.radar-level-pills button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 .radar-lookback { padding-top: 4px; }
 .radar-lookback-header, .radar-lookback-labels {

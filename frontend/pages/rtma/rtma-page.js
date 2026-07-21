@@ -48,7 +48,7 @@ function lookbackHours(stream) {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'RTMA');
-    const sidebarTabs = createSidebarTabs(byId('rtma-sidebar-tabs'), { defaultTab: 'data' });
+    const sidebarTabs = createSidebarTabs(byId('rtma-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('rtma', { mapView: 'CONUS' });
     const defaults = await loadDefaultSettings().catch(() => ({}));
     const cityDefaults = defaults?.global?.cityLabels || {};

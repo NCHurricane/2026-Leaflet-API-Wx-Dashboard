@@ -5005,14 +5005,6 @@ body { display: grid; grid-template-rows: 58px minmax(0, 1fr); background: #0206
 #wx-section-tropical { display: block !important; }
 .tropical-native-control { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; }
 .tropical-checks { display: grid; gap: 6px; }
-#tropical-panel-settings > h2 {
-    margin: 12px 0 0;
-    color: var(--core-muted);
-    font-size: .72rem;
-    font-weight: 800;
-    letter-spacing: .05em;
-    text-transform: uppercase;
-}
 #tropical-panel-settings .core-segmented + .core-adjustment { margin-top: 10px; }
 #tropical-panel-settings .core-adjustment + .core-adjustment { margin-top: 8px; }
 .tropical-checks label {

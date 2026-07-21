@@ -36,7 +36,7 @@ function selectedNetworks() {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'Current');
-    const sidebarTabs = createSidebarTabs(byId('surface-sidebar-tabs'), { defaultTab: 'data' });
+    const sidebarTabs = createSidebarTabs(byId('surface-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('surface', { mapView: 'CONUS', autoLoad: false });
     const defaults = await loadDefaultSettings().catch(() => ({}));
     const cityDefaults = defaults?.global?.cityLabels || {};

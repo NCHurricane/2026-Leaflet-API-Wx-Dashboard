@@ -83,23 +83,22 @@ def test_drought_sidebar_uses_accessible_mounted_tab_panels():
         Path(BASE_DIR) / "frontend" / "core" / "sidebar-tabs.js"
     ).read_text(encoding="utf-8")
 
-    assert page.count('data-sidebar-tab="') == 3
-    assert page.count('data-sidebar-panel="') == 3
+    assert page.count('data-sidebar-tab="') == 2
+    assert page.count('data-sidebar-panel="') == 2
     assert 'role="tablist"' in page
-    assert page.count('role="tab"') == 3
-    assert page.count('role="tabpanel"') == 3
+    assert page.count('role="tab"') == 2
+    assert page.count('role="tabpanel"') == 2
     assert page.index('class="core-sidebar-header"') < page.index(
         'class="core-sidebar-tabs"'
     ) < page.index('class="core-sidebar-content"') < page.index(
         'class="core-sidebar-footer"'
     )
-    assert page.index('id="drought-panel-data"') < page.index('id="drought-dates"')
-    assert page.index('id="drought-panel-overlays"') < page.index(
+    assert page.index('id="drought-panel-live"') < page.index('id="drought-dates"')
+    assert page.index('id="drought-panel-settings"') < page.index(
+        'id="drought-basemap"'
+    ) < page.index('id="drought-opacity"') < page.index(
         'id="drought-city-density"'
     ) < page.index('data-map-overlay="graticule"')
-    assert page.index('id="drought-panel-style"') < page.index(
-        'id="drought-opacity"'
-    ) < page.index('id="drought-basemap"')
     assert page.index('id="drought-message"') < page.index('id="drought-refresh"')
     assert "createSidebarTabs" in page_script
     assert "candidate.hidden = candidate !== panel" in tabs
