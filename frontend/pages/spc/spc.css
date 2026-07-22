@@ -21,6 +21,10 @@
 .spc-panel-stack { display: grid; gap: 14px; align-content: start; }
 .spc-heading-gap { margin-top: 14px; }
 
+/* Subtab panels are plain blocks, so headings inside them do not inherit the
+   14px panel-stack rhythm the way sibling headings do on the other pages. */
+.spc-subtab-panel .core-field + h2 { margin-top: 14px; }
+
 .spc-check-list { display: grid; gap: 6px; }
 .spc-check {
     display: grid;
