@@ -1,11 +1,15 @@
 import importlib
 import json
+import os
+from collections import OrderedDict
 from pathlib import Path
 
 import pytest
 
 from satellite_v2 import bench
 from satellite_v2.cache import source_path, tile_path
+from satellite_v2 import renderer, service
+from satellite_v2.composites import COMPOSITES_REQUIRING_LONLAT
 
 
 def test_timing_collector_is_disabled_without_env(tmp_path, monkeypatch):
@@ -137,3 +141,121 @@ def test_baseline_index_aggregates_pinned_runs(tmp_path):
 
     bench._update_baseline_index(tmp_path)
     assert len(json.loads((tmp_path / "matrix-manifest.json").read_text())["benchmark_runs"]) == 2
+
+
+class _FakeDataset:
+    def __init__(self, name):
+        self.name = name
+        self.close_count = 0
+
+    def close(self):
+        self.close_count += 1
+
+
+def test_netcdf_cache_is_lru_and_closes_evicted_dataset(tmp_path, monkeypatch):
+    paths = [tmp_path / f"source-{index}.nc" for index in range(3)]
+    for path in paths:
+        path.write_bytes(b"netcdf")
+    opened = []
+
+    def fake_open(path, **_kwargs):
+        dataset = _FakeDataset(Path(path).name)
+        opened.append(dataset)
+        return dataset
+
+    monkeypatch.setattr(renderer, "_NETCDF_CACHE", OrderedDict())
+    monkeypatch.setattr(renderer, "_NETCDF_CACHE_MAX", 2)
+    monkeypatch.setattr(renderer.xr, "open_dataset", fake_open)
+
+    first = renderer._load_netcdf_dataset(paths[0])
+    second = renderer._load_netcdf_dataset(paths[1])
+    assert renderer._load_netcdf_dataset(paths[0]) is first
+    renderer._load_netcdf_dataset(paths[2])
+
+    assert list(renderer._NETCDF_CACHE) == [str(paths[0].resolve()), str(paths[2].resolve())]
+    assert first.close_count == 0
+    assert second.close_count == 1
+
+
+def test_netcdf_cache_closes_same_path_dataset_on_mtime_replace(tmp_path, monkeypatch):
+    path = tmp_path / "source.nc"
+    path.write_bytes(b"netcdf")
+    opened = []
+
+    def fake_open(source, **_kwargs):
+        dataset = _FakeDataset(Path(source).name)
+        opened.append(dataset)
+        return dataset
+
+    monkeypatch.setattr(renderer, "_NETCDF_CACHE", OrderedDict())
+    monkeypatch.setattr(renderer, "_NETCDF_CACHE_MAX", 2)
+    monkeypatch.setattr(renderer.xr, "open_dataset", fake_open)
+
+    original = renderer._load_netcdf_dataset(path)
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+    replacement = renderer._load_netcdf_dataset(path)
+
+    assert replacement is not original
+    assert original.close_count == 1
+    assert replacement.close_count == 0
+
+
+def test_resolve_tile_png_signature_skips_deep_validation(tmp_path, monkeypatch):
+    path = tile_path(tmp_path, "goes19", "CONUS", "Channel13", "frame-a", 7, 1, 2)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(service._PNG_SIGNATURE + b"cached-tile")
+
+    def fail_deep_validation(_path):
+        raise AssertionError("deep validation should not run for a PNG cache hit")
+
+    monkeypatch.setattr(service, "is_valid_tile_file", fail_deep_validation)
+    resolved, stats = service.resolve_tile(
+        tmp_path, "goes19", "CONUS", "Channel13", "frame-a", 7, 1, 2,
+        allow_render=False,
+    )
+
+    assert resolved == path
+    assert stats["cache_status"] == "hit"
+
+
+def test_resolve_tile_bad_signature_falls_back_to_deep_validation(tmp_path, monkeypatch):
+    path = tile_path(tmp_path, "goes19", "CONUS", "Channel13", "frame-a", 7, 1, 2)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"not-a-png")
+    validated = []
+
+    def accept_deep_validation(candidate):
+        validated.append(candidate)
+        return True
+
+    monkeypatch.setattr(service, "is_valid_tile_file", accept_deep_validation)
+    _, stats = service.resolve_tile(
+        tmp_path, "goes19", "CONUS", "Channel13", "frame-a", 7, 1, 2,
+        allow_render=False,
+    )
+
+    assert validated == [path]
+    assert stats["cache_status"] == "hit"
+
+
+def test_resolve_tile_invalid_file_remains_a_cache_miss(tmp_path, monkeypatch):
+    path = tile_path(tmp_path, "goes19", "CONUS", "Channel13", "frame-a", 7, 1, 2)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"invalid")
+    monkeypatch.setattr(service, "is_valid_tile_file", lambda _path: False)
+
+    _, stats = service.resolve_tile(
+        tmp_path, "goes19", "CONUS", "Channel13", "frame-a", 7, 1, 2,
+        allow_render=False,
+    )
+
+    assert stats["cache_status"] == "empty"
+    assert stats["miss_reason"] == "invalid"
+
+
+def test_only_geometry_consuming_composites_allocate_lonlat_mesh():
+    assert "GeoColor" in COMPOSITES_REQUIRING_LONLAT
+    assert "GeoColorBlkMar" in COMPOSITES_REQUIRING_LONLAT
+    assert "TrueColor" not in COMPOSITES_REQUIRING_LONLAT
+    assert "NighttimeMicrophysics" not in COMPOSITES_REQUIRING_LONLAT

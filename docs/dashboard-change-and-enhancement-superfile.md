@@ -1,9 +1,8 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-22 (The cross-page correction set is committed. Satellite
-render optimization Phase 0 is complete locally with a reproducible benchmark,
-full baseline matrix, and byte-identical golden gate; the Phase 0 commit is
-pending.)
+Last updated: 2026-07-22 (Satellite render optimization Phase 0 is committed;
+Phase 1 is complete locally with a 22.4–45.8x cache-hit validation improvement
+and an 81-tile byte-identical golden gate. Phase 1 commit pending.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -44,7 +43,7 @@ post-split structure, not the monolith.
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
    may interleave with track 1; the two touch disjoint files. Phase 0 is
-   complete locally; Phase 1 is next after the Phase 0 checkpoint commit.
+   committed; Phase 1 is complete locally and Phase 2 is next after checkpoint.
 3. GK2A + GMGSI new platforms. Adds `PLATFORM_*` entries to
    `js/satellite-page.js`; if started mid-split those entries must be
    ported to `pages/satellite/`, so prefer starting it before the split
@@ -53,10 +52,15 @@ post-split structure, not the monolith.
 ## Current State
 
 - Active repo: `F:\Python\dashboard_2026`.
-- Satellite optimization Phase 0 completed locally 2026-07-22: env-gated
+- Satellite optimization Phase 0 was committed at `a6f5f83`. Phase 1 completed
+  locally 2026-07-22: NetCDF LRU correctness, cheap PNG hit validation, and a
+  geometry-aware composite meshgrid gate. The full 81-tile golden comparison
+  passed, while hit validation improved from 1.349–2.603 ms to 0.051–0.067 ms
+  p50. Results live under `docs/perf/2026-07-22-phase1/`; commit pending.
+- Phase 0 delivered env-gated
   timing hooks, safe benchmark CLI, nine-row/three-scenario baseline, manifests,
   summaries, and 81 byte-identical golden-tile checks. Baseline artifacts live
-  under `docs/perf/2026-07-22-baseline/`; Phase 1 has not started.
+  under `docs/perf/2026-07-22-baseline/`.
 - The 2026-07-20 consolidated manual smoke is complete. Its correction set is
   implemented and awaits user browser re-smoke. Shared changes: State + County
   borders default on while Country + graticule default off; status cards omit
@@ -2258,8 +2262,8 @@ GeoColor opacity work).
 
 ### Satellite render pipeline latency optimization — registered 2026-07-16
 
-Active track 2 (see Active Tracks). Status: Phase 0 complete locally on
-2026-07-22; checkpoint commit pending and Phase 1 not started. The standalone
+Active track 2 (see Active Tracks). Status: Phase 0 committed at `a6f5f83`;
+Phase 1 complete locally on 2026-07-22 with checkpoint commit pending. The standalone
 execution plan is `docs/satellite-render-optimization-plan.md` (prepared
 2026-07-11), with the file-reference companion
 `docs/satellite-radar-render-pipeline-files.md`. Both stay standalone while
@@ -2278,15 +2282,17 @@ when the phases complete.
   Consolidated results and the environment/pinned-frame manifest are in
   `docs/perf/2026-07-22-baseline/`. The scratch goldens remain ignored. Focused
   Satellite tests pass 21/21; the full suite passes 93 tests plus 42 subtests.
+- Phase 1 result: NetCDF handles now follow a true closing LRU; normal PNG hits
+  avoid full decode while retaining deep fallback; non-geographic composites
+  skip lon/lat allocation. All 81 goldens remain byte-identical, hit validation
+  is 22.4–45.8x faster, and the full suite passes 99 tests plus 42 subtests.
 - Phases: 0 benchmark harness + committed baseline; 1 hit-path validation
   cheapening + `_NETCDF_CACHE` LRU bugfix; 2 supertile single-canvas +
   respond-first; 3 multi-channel single-pass parse + AHI threaded segment
   decompress; 4 shared source-raster cache; 5 warm-path process-pool reuse;
   6 (optional, measure-first) GDAL warp threads.
-- Pre-identified correctness bug rides along: `_NETCDF_CACHE` is a plain
-  dict but eviction calls `popitem(last=False)` — the 17th distinct GOES
-  NetCDF in one process raises TypeError. Fix is the first commit of
-  Phase 1.
+- The pre-identified `_NETCDF_CACHE` plain-dict eviction bug is fixed in the
+  locally complete Phase 1 slice.
 - Open decisions before implementation reaches them: the Phase 4
   byte-budget cache knob (new config knob yes/no) and whether Phase 6
   stays in scope.

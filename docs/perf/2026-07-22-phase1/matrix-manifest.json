@@ -1,0 +1,23 @@
+{
+  "baseline_commit": "a6f5f83",
+  "comparison_date": "2026-07-22",
+  "golden_dir": "cache/satellite/.bench/phase0-final-goldens",
+  "golden_tiles_compared": 81,
+  "phase1_commit": "pending",
+  "pinned_frames": {
+    "goes19/CONUS/Channel13/z7": "20260721T000117Z",
+    "goes19/CONUS/GeoColor/z7": "20260716T231115Z",
+    "goes19/FULLDISK/Channel13/z5": "20260722T221020Z",
+    "goes19/MESO1/Channel02/z8": "20260722T220525Z",
+    "himawari9/FULLDISK/Channel13/z5": "20260722T221000Z",
+    "himawari9/JAPAN/Channel13/z8": "20260722T222000Z_JP02",
+    "meteosat12/FULLDISK/Channel13/z5": "20260721T034500Z",
+    "meteosat12/FULLDISK/NighttimeMicrophysics/z5": "20260721T034500Z",
+    "meteosat9/FULLDISK/Channel13/z5": "20260721T034500Z"
+  },
+  "raw_output_dir": "cache/satellite/.bench/phase1-final-raw",
+  "scenarios": ["warm-parse", "hit"],
+  "tiles_per_row": "3x3",
+  "worker_state_note": "No scheduled Satellite tasks were registered."
+}
+

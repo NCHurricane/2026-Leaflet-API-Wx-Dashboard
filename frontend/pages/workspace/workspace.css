@@ -4983,7 +4983,7 @@ button.wx-tropical-outlook-card:focus-visible {
 .alerts-warning-card { width: 100%; padding: 9px 10px; color: #e2e8f0; background: #111d30; border: 1px solid #334155; border-left: 5px solid var(--alert-color); border-radius: 5px; text-align: left; }
 .alerts-warning-card:hover { background: #18283f; }
 .alerts-warning-card strong, .alerts-warning-card span { display: block; }
-.alerts-warning-card strong { color: var(--alert-text-color, var(--alert-color)); font-size: 0.75rem; }
+.alerts-warning-card strong { color: var(--alert-text-color, var(--alert-color)); font-size: 0.85rem; border-bottom: 2px solid var(--alert-color); margin-bottom: 5px; padding-bottom: 3px;}
 .alerts-warning-card .alerts-warning-area { margin-top: 3px; color: #cbd5e1; font-size: 0.68rem; }
 .alerts-warning-card .alerts-warning-meta { margin-top: 5px; color: #7f93ad; font-size: 0.62rem; }
 .alerts-lsr-rail-count { background: #0369a1; }
@@ -5235,7 +5235,12 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
 .workspace-pills button:disabled { cursor: not-allowed; }
 .workspace-radar-site-option[hidden] { display: none; }
 .workspace-footer { display: grid; gap: 8px; }
-.workspace-message { min-height: 0; font-size: .74rem; font-weight: 650; line-height: 1.35; }
+.workspace-message  { 
+    min-height: 1.25rem;
+    color: var(--core-hilite);
+    font-size: 0.9rem;
+    font-weight: 700;
+ }
 .workspace-auto-update { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #b8cadb; font-size: .72rem; font-weight: 800; }
 .workspace-auto-update > .workspace-layer-toggle { display: block; }
 #workspace-refresh { width: 100%; padding: 11px 12px; font-size: .8rem; font-weight: 850; }

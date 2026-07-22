@@ -42,6 +42,11 @@ _EARTH_EQUATORIAL_RADIUS_KM = 6378.137
 # instruments; ABI/AHI (and unspecified/legacy callers) keep the CIRA windows.
 _EUMETSAT_RECIPE_INSTRUMENTS = frozenset({"SEVIRI", "FCI"})
 
+# Only composites that use geographic/solar geometry should pay to allocate a
+# canvas-wide longitude/latitude mesh. GeoColor now needs it for ABI Rayleigh
+# correction as well as its day/night blend; Black Marble also samples by it.
+COMPOSITES_REQUIRING_LONLAT = frozenset({"GeoColor", "GeoColorBlkMar"})
+
 
 def normalize(value: np.ndarray, lower_limit: float, upper_limit: float, clip: bool = True) -> np.ndarray:
     result = (value - lower_limit) / (upper_limit - lower_limit)

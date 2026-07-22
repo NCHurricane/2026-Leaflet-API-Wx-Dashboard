@@ -103,7 +103,7 @@ Key measured facts driving the plan:
 | Supertile serial warps | `tiler.py:620` | radius 1 = 9 tiles, each its own 1×1 `render_zoom_canvas` = 9 × N-channel `rio_reproject`, all **before** the HTTP response |
 | FCI per-channel chunk opens | `fci_nc.py:123` | ~40 `netCDF4.Dataset` opens × N channels (3-channel composite = ~120 opens of the same files) |
 | AHI serial segment decompress | `ahi_hsd.py:227` | sequential read+bz2; all full-res uint16 grids held before decimation (~1.2 GB transient for FULLDISK B03) |
-| lon/lat meshgrid always built for RGB | `renderer.py:180` | float64 meshgrid per canvas; only `GeoColorBlkMar` consumes it |
+| lon/lat meshgrid always built for RGB | `renderer.py:180` | float64 meshgrid per canvas; current `GeoColor` and `GeoColorBlkMar` consume it |
 | Process pool per frame | `tiler.py:549` (called per frame from `rapid_worker.py:175`) | Windows spawn re-imports matplotlib/rasterio/xarray each frame; with zoom-per-task both procs parse the same source |
 
 ---
@@ -115,10 +115,9 @@ Key measured facts driving the plan:
 `docs/perf/`.
 
 **Status (2026-07-22):** implementation and the full baseline are complete
-locally, pending the Phase 0 commit. Results are under
+and committed at `a6f5f83`. Results are under
 `docs/perf/2026-07-22-baseline/`. The matrix produced 27 runs / 135 samples;
-all nine 3x3 golden blocks (81 PNGs) matched byte-for-byte. Phase 1 has not
-started.
+all nine 3x3 golden blocks (81 PNGs) matched byte-for-byte.
 
 ### 0.1 Stage-timing instrumentation
 
@@ -237,6 +236,13 @@ MESO render matched its golden block without writing timing data.
 
 ## Phase 1 — Hit-path + correctness (service.py, renderer.py)
 
+**Status (2026-07-22): complete locally, checkpoint commit pending.** The LRU
+fix, PNG signature hit path, and meshgrid gate are implemented. Four affected
+GOES rows passed the isolated LRU golden rerun, and the final full matrix passed
+81/81 byte-exact golden comparisons. Hit `validate_ms` p50 improved from
+1.349–2.603 ms to 0.051–0.067 ms. Compact results are under
+`docs/perf/2026-07-22-phase1/`.
+
 1. **Commit 1 (standalone): `_NETCDF_CACHE` fix** — `OrderedDict` LRU,
    `move_to_end` on hit, close evicted/replaced datasets. Knob value (16)
    unchanged.
@@ -250,13 +256,16 @@ MESO render matched its golden block without writing timing data.
    sniff fails. Keep `is_valid_tile_file` itself unchanged — the miss/render
    paths still use it.
 3. **Commit 3: gate the lon/lat meshgrid** (`renderer.py:180`) on products
-   that consume it (today: `GeoColorBlkMar` only). Introduce a
+   that consume it. Introduce a
    `COMPOSITES_REQUIRING_LONLAT` frozenset in `composites.py` next to the
-   recipes so renderer doesn't hard-code product names.
+   recipes so renderer doesn't hard-code product names. Implementation review
+   found that post-plan ABI GeoColor Rayleigh correction also consumes solar
+   geometry, so the set correctly contains `GeoColor` and `GeoColorBlkMar`.
 
-**Verify:** golden compare on the full matrix (byte-identical); `hit`
-scenario re-run — expect `validate_ms` to collapse to ~stat cost; row 2
-(`GeoColor`) `composite_ms`/allocation drop from the meshgrid gate.
+**Verified:** full matrix is byte-identical; `hit` validation collapsed to
+0.051–0.067 ms p50. The meshgrid allocation was removed from non-geographic
+composites; Meteosat-12 Nighttime Microphysics `composite_ms` p50 moved from
+13.893 to 12.280 ms. GeoColor deliberately retains its grid and pixels.
 
 **Risk:** stat-only hits could serve a corrupt-on-disk PNG that a crashed
 process… cannot actually produce (tmp+atomic-rename means partial files never
@@ -404,13 +413,11 @@ Implement only if Phase 5's numbers show warp dominating warm runs.
 
 1. Confirm the two open decisions: Phase 4 byte-budget knob (yes/no) and
    whether Phase 6 stays in scope at all.
-2. Phase 0 complete locally 2026-07-22: bench + instrumentation + full matrix
-   under `docs/perf/2026-07-22-baseline/`; commit the Phase 0 slice before
-   changing render behavior.
-3. Next: Phase 1 commit 1 (NetCDF cache bug) → re-run affected GOES rows (sanity,
-   numbers should be unchanged) → commits 2–3 → golden compare + hit-scenario
-   re-run.
-4. Phases 2 → 3 → 4 → 5 in order, each gated on: golden byte-identity, the
+2. Phase 0 complete and committed at `a6f5f83`; baseline is under
+   `docs/perf/2026-07-22-baseline/`.
+3. Phase 1 complete locally; commit the green slice and compact results under
+   `docs/perf/2026-07-22-phase1/`.
+4. Next: Phase 2, then phases 3 → 4 → 5 in order, each gated on: golden byte-identity, the
    phase's target metric moving, and a clean run of the full matrix.
 5. After each phase: commit with the phase number in the message; update the
    `docs/perf/` summary table with before/after p50s.

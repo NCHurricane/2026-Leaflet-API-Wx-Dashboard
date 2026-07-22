@@ -44,6 +44,9 @@ from satellite_v2.tiler import render_frame_tile
 logger = logging.getLogger(__name__)
 
 
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
 _ON_DEMAND_TILE_RENDER_POOL = ThreadPoolExecutor(
     max_workers=SATELLITE_V2_LIVE_TILE_RENDER_WORKERS,
     thread_name_prefix="sat-v2-live",
@@ -305,10 +308,25 @@ def resolve_tile(
     sector_key = normalize_sector(sector)
     channel_key = normalize_channel(channel)
     path = tile_path(cache_root, sat_key, sector_key, channel_key, frame_key, z, x, y)
-    path_exists_before = path.exists()
-    path_size_before = int(path.stat().st_size) if path_exists_before else 0
     validate_start = time.perf_counter()
-    tile_valid = is_valid_tile_file(path) if path_exists_before else False
+    try:
+        path_size_before = int(path.stat().st_size)
+        path_exists_before = True
+    except (FileNotFoundError, OSError):
+        path_size_before = 0
+        path_exists_before = False
+    tile_valid = False
+    if path_exists_before:
+        try:
+            with path.open("rb") as tile_file:
+                tile_valid = (
+                    path_size_before > 0
+                    and tile_file.read(len(_PNG_SIGNATURE)) == _PNG_SIGNATURE
+                )
+        except OSError:
+            tile_valid = False
+        if not tile_valid:
+            tile_valid = is_valid_tile_file(path)
     validate_elapsed_precise = (time.perf_counter() - validate_start) * 1000.0
     validate_elapsed = int(validate_elapsed_precise)
     bench_context = None

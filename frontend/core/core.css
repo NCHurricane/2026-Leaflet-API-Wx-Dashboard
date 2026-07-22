@@ -24,6 +24,7 @@
     --core-text: #eef6ff;
     --core-muted: #9db2c8;
     --core-accent: #55d7ff;
+    --core-hilite: #ffeb3b;
 }
 
 * { box-sizing: border-box; }
@@ -110,7 +111,13 @@ button:hover { border-color: var(--core-accent); }
 }
 .core-status-grid dt { color: var(--core-muted); }
 .core-status-grid dd { margin: 0; overflow-wrap: anywhere; }
-.core-message { min-height: 1.25rem; color: #bcecff; font-size: 0.8rem; }
+.core-message { 
+    min-height: 1.25rem;
+    color: var(--core-hilite);
+    font-size: 0.9rem;
+    font-weight: 700;
+ }
+
 .core-message[data-tone="error"] { color: #ff9b9b; }
 
 .core-visually-hidden {

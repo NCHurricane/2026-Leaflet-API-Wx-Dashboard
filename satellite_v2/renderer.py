@@ -35,6 +35,7 @@ from config.satellite_v2_config import (
 from satellite_v2.ahi_hsd import load_ahi_raster
 from satellite_v2._bench_timing import add_timing_ms, bench_enabled
 from satellite_v2.composites import (
+    COMPOSITES_REQUIRING_LONLAT,
     render_composite_rgb,
     scalar_reflectance,
 )
@@ -65,7 +66,7 @@ _AOD_ALPHA_FULL = 0.40
 
 
 # NetCDF dataset memory cache (keyed by file path, avoid re-reading from disk)
-_NETCDF_CACHE: dict[str, tuple[xr.Dataset, int]] = {}
+_NETCDF_CACHE: OrderedDict[str, tuple[xr.Dataset, int]] = OrderedDict()
 _NETCDF_CACHE_LOCK = threading.RLock()
 _NETCDF_CACHE_MAX = SATELLITE_V2_NETCDF_CACHE_SIZE
 
@@ -238,11 +239,11 @@ class SatelliteTileRenderer:
     ) -> Image.Image:
         valid = _valid_mask(samples)
         if self.product_key in RGB_COMPOSITE_KEYS:
-            # RGB composites need lon/lat for some products — derive them cheaply
-            # from the canvas grid.
-            lon_grid, lat_grid = _canvas_lon_lat_grid(
-                z, x_min, y_min, canvas_w, canvas_h, tile_size
-            )
+            lon_grid = lat_grid = None
+            if self.product_key in COMPOSITES_REQUIRING_LONLAT:
+                lon_grid, lat_grid = _canvas_lon_lat_grid(
+                    z, x_min, y_min, canvas_w, canvas_h, tile_size
+                )
             geometry_source = next(iter(self.source_rasters.values()))
             rgb = render_composite_rgb(
                 self.product_key,
@@ -381,10 +382,17 @@ def _load_netcdf_dataset(source_file: str | Path) -> xr.Dataset:
         if cached is not None:
             cached_dataset, cached_mtime = cached
             if cached_mtime == file_mtime:
+                _NETCDF_CACHE.move_to_end(cache_key)
                 return cached_dataset
 
         dataset = xr.open_dataset(source_path, engine="netcdf4", mask_and_scale=True)
+        replaced = _NETCDF_CACHE.pop(cache_key, None)
         _NETCDF_CACHE[cache_key] = (dataset, file_mtime)
+        if replaced is not None:
+            try:
+                replaced[0].close()
+            except Exception:
+                pass
 
         if len(_NETCDF_CACHE) > _NETCDF_CACHE_MAX:
             old_key, (old_ds, _) = _NETCDF_CACHE.popitem(last=False)

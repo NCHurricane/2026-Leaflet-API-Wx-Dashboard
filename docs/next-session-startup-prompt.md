@@ -15,12 +15,18 @@ Read first:
 
 Current checkpoint:
 - The cross-page correction set was committed at `aa05b7d`.
-- Satellite render optimization Phase 0 is complete locally and awaits its
-  checkpoint commit. `satellite_v2/bench.py` provides pinned cold-parse,
+- Satellite render optimization Phase 0 is committed at `a6f5f83`.
+  `satellite_v2/bench.py` provides pinned cold-parse,
   warm-parse, and hit scenarios; timing is gated by
   `WX_SATELLITE_V2_BENCH=1`. The full nine-row matrix produced 27 runs / 135
   samples under `docs/perf/2026-07-22-baseline/`. All nine 3x3 scratch golden
-  blocks (81 PNGs) passed byte-for-byte comparison. Phase 1 has not started.
+  blocks (81 PNGs) passed byte-for-byte comparison.
+- Phase 1 is complete locally and awaits its checkpoint commit. The NetCDF
+  cache is now a true closing LRU, normal tile hits use PNG size/signature
+  validation with deep fallback, and only GeoColor/GeoColorBlkMar allocate
+  lon/lat geometry. All 81 final golden comparisons passed. Hit validation
+  improved from 1.349–2.603 ms to 0.051–0.067 ms p50; compact results are in
+  `docs/perf/2026-07-22-phase1/`.
 - The user completed the 2026-07-20 all-page manual smoke and clarified every
   finding. The correction set is implemented; page-by-page browser re-smoke is
   in progress and has not yet covered the full set.
@@ -78,6 +84,10 @@ Current checkpoint:
   one visual type.
 
 Validation at handoff:
+- Phase 1: four affected GOES LRU reruns and the final 81-tile matrix are
+  byte-identical; all nine hit rows have five samples.
+- Phase 1 focused tests pass (14/14); full pytest passes 99 tests plus 42
+  subtests.
 - Phase 0 baseline integrity: 27 runs, five samples per run, nine pinned rows,
   matching cache statuses, no parse stages in warm samples, and 81/81 golden
   tiles byte-identical.
@@ -92,10 +102,9 @@ Validation at handoff:
   `.pytest_cache` write warning.
 
 Next step:
-1. Review and commit the Phase 0 harness, timing hooks, tests, docs, and baseline.
-2. Begin Phase 1 with the isolated `_NETCDF_CACHE` LRU correctness fix.
-3. Re-run the affected GOES rows and golden comparisons before the Phase 1
-   hit-validation and renderer meshgrid changes.
+1. Review and commit the Phase 1 code, tests, docs, and compact performance results.
+2. Begin Phase 2 with the single-canvas supertile change, gated by the same
+   byte-exact goldens before adding respond-first behavior.
 
 Guardrails:
 - Browser smoke is user-owned; report static versus browser proof honestly.

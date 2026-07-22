@@ -1,0 +1,16 @@
+{
+  "metric": "validate_ms_p50",
+  "samples_per_row": 5,
+  "rows": [
+    {"target": "goes19/CONUS/Channel13/z7", "phase0_ms": 1.349, "phase1_ms": 0.060, "speedup": 22.4},
+    {"target": "goes19/CONUS/GeoColor/z7", "phase0_ms": 2.566, "phase1_ms": 0.056, "speedup": 45.8},
+    {"target": "goes19/FULLDISK/Channel13/z5", "phase0_ms": 2.210, "phase1_ms": 0.058, "speedup": 38.1},
+    {"target": "goes19/MESO1/Channel02/z8", "phase0_ms": 2.051, "phase1_ms": 0.056, "speedup": 36.6},
+    {"target": "himawari9/FULLDISK/Channel13/z5", "phase0_ms": 1.983, "phase1_ms": 0.051, "speedup": 38.9},
+    {"target": "himawari9/JAPAN/Channel13/z8", "phase0_ms": 1.425, "phase1_ms": 0.053, "speedup": 26.8},
+    {"target": "meteosat12/FULLDISK/Channel13/z5", "phase0_ms": 1.660, "phase1_ms": 0.053, "speedup": 31.5},
+    {"target": "meteosat12/FULLDISK/NighttimeMicrophysics/z5", "phase0_ms": 2.579, "phase1_ms": 0.059, "speedup": 43.7},
+    {"target": "meteosat9/FULLDISK/Channel13/z5", "phase0_ms": 1.930, "phase1_ms": 0.067, "speedup": 28.8}
+  ]
+}
+
