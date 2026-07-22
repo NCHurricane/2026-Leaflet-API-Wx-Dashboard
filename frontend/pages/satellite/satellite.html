@@ -7,8 +7,8 @@
     <link rel="icon" href="/img/favicon.ico">
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719d">
-    <link rel="stylesheet" href="/frontend/pages/satellite/satellite.css?v=20260719d">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260720a">
+    <link rel="stylesheet" href="/frontend/pages/satellite/satellite.css?v=20260720a">
 </head>
 <body>
     <header class="core-header">
@@ -27,7 +27,6 @@
                         <dt>Valid</dt><dd id="satellite-updated">—</dd>
                         <dt>Data Age</dt><dd id="satellite-age">—</dd>
                         <dt>Provider</dt><dd id="satellite-provider">—</dd>
-                        <dt>Source</dt><dd id="satellite-source">—</dd>
                     </dl>
                 </div>
 
@@ -122,8 +121,8 @@
                         <select id="satellite-view-preset" disabled>
                             <option value="" selected>— Select View —</option>
                             <option value="conus">CONUS</option>
+                            <option value="southeast-us">Southeast US</option>
                             <option value="goes-west-full-disk">GOES-West Full Disk</option>
-                            <option value="goes-east-full-disk">GOES-East Full Disk</option>
                             <option value="west-pacific">West Pacific</option>
                             <option value="europe-africa">Europe/Africa</option>
                             <option value="indian-ocean">Indian Ocean</option>
@@ -168,12 +167,12 @@
                         </select>
                     </div>
 
-                    <div class="satellite-check-row satellite-auto-update-row">
+                    <label class="satellite-check-row satellite-control-block satellite-auto-update-row">
                         <span>Auto-Update</span>
                         <input id="satellite-auto-update" type="checkbox">
-                    </div>
+                    </label>
 
-                    <div id="satellite-lookback-block" class="satellite-lookback">
+                    <div id="satellite-lookback-block" class="satellite-lookback satellite-control-block">
                         <div class="satellite-lookback-header">
                             <span>Lookback Hours</span>
                             <span id="satellite-lookback-value">1h</span>
@@ -218,8 +217,8 @@
                     <div class="satellite-check-list core-check-list">
                         <label class="satellite-check core-check-row"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
                         <label class="satellite-check core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
-                        <label class="satellite-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
-                        <label class="satellite-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                        <label class="satellite-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox"></label>
+                        <label class="satellite-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox" checked></label>
                     </div>
                     </div>
                 </section>
@@ -247,6 +246,6 @@
     </main>
 
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/satellite/satellite-page.js?v=20260719c"></script>
+    <script type="module" src="/frontend/pages/satellite/satellite-page.js?v=20260720a"></script>
 </body>
 </html>

@@ -150,15 +150,17 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
         });
     }
 
-    async function load(view) {
+    async function load(view, options = {}) {
         if (!view.product || !view.region) return;
         const request = gate.begin();
         const label = SURFACE_PRODUCT_LABELS[view.product] || view.product;
         status.setMessage(`Loading surface ${label} for ${view.region}…`);
 
         try {
-            const data = await api.fetchJson(
-                `/api/data/surface?region=${encodeURIComponent(view.region)}&product=${encodeURIComponent(view.product)}`,
+            const url = `/api/data/surface?region=${encodeURIComponent(view.region)}&product=${encodeURIComponent(view.product)}`
+                + (options.forceRefresh ? '&force_refresh=true' : '');
+            let data = await api.fetchJson(
+                url,
                 { signal: request.signal },
             );
             if (!gate.isCurrent(request.sequence)) return;
@@ -168,6 +170,22 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
             renderView(lastView);
             legend.setHtml(legendHtml(view.product, stations.length));
             onStationCount?.(stations.length);
+
+            if (data?.cache_state === 'stale_refreshing' && !options.forceRefresh) {
+                status.setMessage(`Showing cached ${label}; refreshing…`);
+                for (let attempt = 0; attempt < 20; attempt += 1) {
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                    if (!gate.isCurrent(request.sequence)) return;
+                    const refreshed = await api.fetchJson(url, { signal: request.signal });
+                    if (refreshed?.cache_state === 'stale_refreshing') continue;
+                    data = refreshed;
+                    stations = Array.isArray(data?.stations) ? data.stations : [];
+                    renderView(lastView);
+                    legend.setHtml(legendHtml(view.product, stations.length));
+                    onStationCount?.(stations.length);
+                    break;
+                }
+            }
 
             const tsMs = new Date(data?.timestamp).getTime();
             const stale = Number.isFinite(tsMs) && (Date.now() - tsMs) > STALE_THRESHOLD_MS;
@@ -234,11 +252,23 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
         onStationCount?.(0);
     }
 
+    function renderArchiveFrame(frame, view) {
+        gate.cancel();
+        stations = Array.isArray(frame?.stations) ? frame.stations : [];
+        lastView = { ...view, gradientEnabled: false };
+        renderView(lastView);
+        legend.setHtml(legendHtml(view.product, stations.length));
+        onStationCount?.(stations.length);
+        status.setDataInfo({ timestamp: frame?.timestamp, provider: 'IEM' });
+        status.setMessage(`Surface archive: ${stations.length} stations.`, 'success');
+    }
+
     return Object.freeze({
         clear,
         destroy: clear,
         applyGradient,
         load,
+        renderArchiveFrame,
         rerender,
         get hasStations() { return stations.length > 0; },
     });

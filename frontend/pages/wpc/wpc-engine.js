@@ -201,7 +201,7 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
         });
     }
 
-    async function load(selection) {
+    async function load(selection, { refreshAttempt = 0 } = {}) {
         const { group, day, product } = selection;
         const request = gate.begin();
         status.setMessage('Loading WPC…');
@@ -210,8 +210,18 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
         try {
             const params = new URLSearchParams({ group, day: String(day) });
             if (product) params.set('product', product);
+            if (refreshAttempt) params.set('_refresh', String(Date.now()));
             const geojson = await api.fetchJson(`/api/data/wpc?${params}`, { signal: request.signal });
             if (!gate.isCurrent(request.sequence)) return;
+
+            const pollForFreshCache = () => {
+                if (geojson.cache_state !== 'stale_refreshing' || refreshAttempt >= 30) return;
+                window.setTimeout(() => {
+                    if (gate.isCurrent(request.sequence)) {
+                        load(selection, { refreshAttempt: refreshAttempt + 1 });
+                    }
+                }, 1000);
+            };
 
             removeLayer();
 
@@ -244,6 +254,7 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
                     `${geojson.product_label || 'WPC Surface Forecast'} — transparent overlay.${cacheNote}`,
                     cacheNote ? 'error' : 'success',
                 );
+                pollForFreshCache();
                 return;
             }
 
@@ -260,6 +271,7 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
                     : '';
                 status.setMessage(emptyMessage + cacheNote);
                 applyTimestamps(geojson);
+                pollForFreshCache();
                 return;
             }
 
@@ -318,6 +330,7 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
                 + cacheNote,
                 cacheNote ? 'error' : 'success',
             );
+            pollForFreshCache();
         } catch (err) {
             if (err.name === 'AbortError' || !gate.isCurrent(request.sequence)) return;
             console.error('[wpc] load failed', err);

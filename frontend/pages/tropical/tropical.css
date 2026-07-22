@@ -4520,17 +4520,20 @@ button.wx-tropical-outlook-card:focus-visible {
 .wx-tropical-summary {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px;
+    gap: 4px;
     margin-top: 10px;
+    border: 2px solid var(--wx-yellow);
+    border-radius: 15px;
+    text-align: center;
 }
 
 .wx-tropical-metric {
     border: 1px solid rgba(148, 163, 184, 0.28);
     border-radius: 6px;
-    background: rgba(15, 23, 42, 0.48);
+    /* background: rgba(15, 23, 42, 0.48); */
     padding: 6px 8px;
     min-width: 0;
-    grid-column: 1 / -1;
+    /* grid-column: 1 / -1; */
 }
 
 .wx-tropical-metric span {

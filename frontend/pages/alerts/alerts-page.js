@@ -8,7 +8,7 @@ import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from './alerts-config.js?v=20260719a';
 import { createAlertDetail } from './alerts-detail.js?v=20260719b';
-import { classifyLsrEvent, createAlertsEngine } from './alerts-engine.js?v=20260719g';
+import { classifyLsrEvent, createAlertsEngine } from './alerts-engine.js?v=20260721c';
 
 const byId = (id) => document.getElementById(id);
 const AUTO_UPDATE_MS = 60_000;
@@ -52,12 +52,15 @@ async function initialize() {
         onResetView: () => closeDetail(),
     });
     const legend = createLegendHost(byId('alerts-legend'), { align: 'left' });
+    const lsrLegend = createLegendHost(byId('alerts-lsr-legend'), { align: 'right' });
     const status = createStatusReporter({
         globalTimestamp: byId('global-timestamp'), message: byId('alerts-message'),
         updated: byId('alerts-updated'), age: byId('alerts-age'),
         provider: byId('alerts-provider'), source: byId('alerts-source'),
     });
     const detail = createAlertDetail(byId('alerts-detail'), {
+        initialTop: 70,
+        onZoom: (feature) => engine.zoomTo(feature, { maxZoom: 9 }),
         lsrColor(feature) {
             const category = classifyLsrEvent(feature?.properties?.event);
             return (LSR_CATEGORIES[category] || LSR_CATEGORIES.other)[1];
@@ -104,7 +107,7 @@ async function initialize() {
             meta.className = 'alerts-warning-meta';
             meta.textContent = minutes == null ? 'Expiration unavailable' : `Expires in ${minutes} min`;
             button.append(eventName, area, meta);
-            button.addEventListener('click', () => { engine.zoomTo(feature); detail.open(feature); });
+            button.addEventListener('click', () => { engine.zoomTo(feature, { maxZoom: 9 }); detail.open(feature); });
             return button;
         }));
         byId('alerts-warning-empty').hidden = visible.length > 0;
@@ -181,7 +184,7 @@ async function initialize() {
         close.type = 'button'; close.className = 'alerts-notification-close'; close.setAttribute('aria-label', 'Dismiss alert'); close.textContent = '×';
         close.addEventListener('click', (event) => { event.stopPropagation(); notice.remove(); });
         notice.append(title, area, close);
-        const openNotice = () => { engine.zoomTo(feature); detail.open(feature); notice.remove(); };
+        const openNotice = () => { engine.zoomTo(feature, { maxZoom: 9 }); detail.open(feature); notice.remove(); };
         notice.addEventListener('click', openNotice);
         notice.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openNotice(); } });
         root.prepend(notice);
@@ -204,7 +207,7 @@ async function initialize() {
     }
 
     const engine = createAlertsEngine({
-        api, mapCore, legend, status,
+        api, mapCore, legend, lsrLegend, status,
         onAlertCount: (count) => {
             displayedAlertCount = count;
             byId('alerts-count').textContent = String(count);
@@ -224,6 +227,7 @@ async function initialize() {
     });
     const scrubberBar = byId('alerts-scrubber-bar');
     const scrubber = createScrubber(byId('alerts-bottom-scrubber'), {
+        holdAtEnd: true,
         onFrame(frame) { engine.renderArchiveFrame(frame); },
     });
 
@@ -322,15 +326,29 @@ async function initialize() {
         const archive = event.detail.tab === 'archive';
         scrubber.pause(); scrubber.setFrames([]); scrubberBar.hidden = true;
         engine.clear(); detail.close(); status.clear();
-        if (!archive) void loadLive(); else status.setMessage('Choose an archive time range, then load.');
+        if (!archive) void loadLive(); else status.setMessage('Choose an ending time and lookback, then load.');
     });
 
     const now = new Date();
-    byId('alerts-archive-to').value = localDatetimeValue(now);
-    byId('alerts-archive-from').value = localDatetimeValue(new Date(now.getTime() - 60 * 60_000));
+    const archiveTime = byId('alerts-archive-time');
+    const archiveLookback = byId('alerts-archive-lookback');
+    const archiveLookbackValue = byId('alerts-archive-lookback-value');
+    archiveTime.value = localDatetimeValue(now);
+    function formatArchiveLookback(value) {
+        const minutes = Math.max(5, Math.round(Number(value)));
+        const wholeHours = Math.floor(minutes / 60);
+        const remainder = minutes % 60;
+        if (!wholeHours) return `${remainder} min`;
+        return remainder ? `${wholeHours}h ${remainder}m` : `${wholeHours} hour${wholeHours === 1 ? '' : 's'}`;
+    }
+    archiveLookback.addEventListener('input', () => {
+        archiveLookbackValue.textContent = formatArchiveLookback(archiveLookback.value);
+    });
     byId('alerts-load-archive').addEventListener('click', async () => {
-        const from = byId('alerts-archive-from').value; const to = byId('alerts-archive-to').value;
-        if (!from || !to || Date.parse(to) <= Date.parse(from)) { status.setMessage('Choose a valid archive time range.', 'error'); return; }
+        const to = archiveTime.value;
+        const endMs = Date.parse(to);
+        if (!to || !Number.isFinite(endMs)) { status.setMessage('Choose a valid archive ending time.', 'error'); return; }
+        const from = new Date(endMs - Number(archiveLookback.value) * 60_000).toISOString();
         try {
             const frames = await engine.loadArchive(from, to, regionSelect.value);
             const labeled = frames.map((frame) => ({ ...frame, label: frameLabel(frame) }));

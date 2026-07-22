@@ -251,7 +251,9 @@ def _kickoff_surface_refresh_if_needed(
     ).start()
 
 
-def get_surface_data(region: str = "NC", product: str = "temperature") -> dict:
+def get_surface_data(
+    region: str = "NC", product: str = "temperature", force_refresh: bool = False
+) -> dict:
     """Return surface observations JSON with stale-while-revalidate caching."""
     region_upper = region.upper().strip()
     product_lower = product.lower().strip()
@@ -265,7 +267,7 @@ def get_surface_data(region: str = "NC", product: str = "temperature") -> dict:
     os.makedirs(surface_cache_dir, exist_ok=True)
     cache_file = os.path.join(surface_cache_dir, f"{region_upper}_{product_lower}.json")
 
-    if os.path.exists(cache_file):
+    if not force_refresh and os.path.exists(cache_file):
         try:
             with open(cache_file, "r", encoding="utf-8") as fh:
                 cached = json.load(fh)
@@ -279,7 +281,8 @@ def get_surface_data(region: str = "NC", product: str = "temperature") -> dict:
                     _kickoff_surface_refresh_if_needed(
                         region_upper, product_lower, cache_file
                     )
-                return cached
+                    return {**cached, "cache_state": "stale_refreshing"}
+                return {**cached, "cache_state": "fresh"}
         except Exception:
             pass
 
@@ -298,6 +301,7 @@ def get_surface_data(region: str = "NC", product: str = "temperature") -> dict:
         "count": len(stations),
         "timestamp": source_ts,
         "timestamp_source": "station_valid",
+        "cache_state": "fresh",
     }
 
     try:

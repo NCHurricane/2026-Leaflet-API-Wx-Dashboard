@@ -156,8 +156,10 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
     let primaryPoints = [];
     let primaryUnits = '';
     let primaryProduct = '';
+    let primaryLabel = '';
     let secondaryPoints = [];
     let secondaryUnits = '';
+    let secondaryLabel = '';
 
     let renderSeq = 0;
     const frameCache = new Map();
@@ -244,7 +246,11 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
                 const icon = isWindDir
                     ? windDirectionBarbIcon(p.value)
                     : coloredTextIcon(p.value, primaryUnits, useIntegerLabels);
-                markers.push(leaflet.marker([p.lat, p.lon], { icon }));
+                const marker = leaflet.marker([p.lat, p.lon], { icon });
+                const location = [p.city, p.state].filter(Boolean).join(', ') || 'Sample location';
+                const value = isWindDir ? `${Math.round(p.value)}°` : `${p.value} ${primaryUnits}`.trim();
+                marker.bindPopup(`<strong>${escapeHtml(location)}</strong><br>${escapeHtml(primaryLabel || primaryProduct)}: ${escapeHtml(value)}`);
+                markers.push(marker);
             });
         }
         if (secondaryPoints.length) {
@@ -253,7 +259,11 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
                 const icon = isWindDir
                     ? windDirectionBarbIcon(p.value)
                     : coloredTextIcon(p.value, secondaryUnits, false);
-                markers.push(leaflet.marker([p.lat, p.lon], { icon }));
+                const marker = leaflet.marker([p.lat, p.lon], { icon });
+                const location = [p.city, p.state].filter(Boolean).join(', ') || 'Sample location';
+                const value = isWindDir ? `${Math.round(p.value)}°` : `${p.value} ${secondaryUnits}`.trim();
+                marker.bindPopup(`<strong>${escapeHtml(location)}</strong><br>${escapeHtml(secondaryLabel || 'Value')}: ${escapeHtml(value)}`);
+                markers.push(marker);
             });
         }
         if (markers.length) {
@@ -274,8 +284,10 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
         clearPointLayer();
         primaryPoints = [];
         primaryUnits = '';
+        primaryLabel = '';
         secondaryPoints = [];
         secondaryUnits = '';
+        secondaryLabel = '';
         frameCache.clear();
         legend.clear();
     }
@@ -283,6 +295,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
     function clearSecondary() {
         secondaryPoints = [];
         secondaryUnits = '';
+        secondaryLabel = '';
         renderPoints();
     }
 
@@ -433,6 +446,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
             primaryPoints = Array.isArray(data.points) ? data.points : [];
             primaryUnits = data.units || '';
             primaryProduct = product;
+            primaryLabel = data.full_name || product;
             renderPoints();
             if (!usedPrerender) {
                 clearGradientLayer();
@@ -464,6 +478,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
             const data = await fetchPoints({ ...selection, product }, '');
             secondaryPoints = Array.isArray(data.points) ? data.points : [];
             secondaryUnits = data.units || '';
+            secondaryLabel = data.full_name || product;
             renderPoints();
         } catch (_) { /* silent fail for the secondary product */ }
     }
@@ -476,6 +491,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
             primaryPoints = Array.isArray(data.points) ? data.points : [];
             primaryUnits = data.units || '';
             primaryProduct = selection.product;
+            primaryLabel = data.full_name || selection.product;
             renderPoints();
         } catch (_) { /* transient viewport fetch */ }
     }
@@ -615,6 +631,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
         primaryPoints = Array.isArray(pointsData?.points) ? pointsData.points : [];
         primaryUnits = pointsData?.units || '';
         primaryProduct = frame.product;
+        primaryLabel = pointsData?.full_name || data?.full_name || frame.product;
         renderPoints();
 
         legend.setHtml(rtmaLegendHtml(pointsData || data));

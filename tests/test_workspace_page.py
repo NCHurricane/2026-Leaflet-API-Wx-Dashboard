@@ -47,6 +47,14 @@ def test_workspace_preserves_projected_arrival_without_speed_estimator():
     assert "function _activateStormTrackDragProjection" in tools
     assert "_radarCal" not in tools
     assert "function hideProjectedArrival()" in app
+    assert "const PROJECTED_ARRIVAL_EVENTS = new Set([" in app
+    assert "'Tornado Warning'," in app
+    assert "'Severe Thunderstorm Warning'," in app
+    assert "'Special Marine Warning'," in app
+    assert "'Special Weather Statement'," in app
+    assert "function supportsProjectedArrival(feature)" in app
+    assert "['Polygon', 'MultiPolygon'].includes(geometryType)" in app
+    assert "if (supportsProjectedArrival(feature))" in app
     assert "group.hidden = false" in app
     assert "group.open = true" in app
     assert "onResetView: () => resetWorkspaceState()" in app
@@ -110,6 +118,25 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "byId('workspace-radar-enabled').addEventListener('change'" in app
     assert "function syncRightRailVisibility" in app
     assert "onLsrReports: renderLsrReports" in app
+    assert "onRenderedAlerts(features) { tools.setAlerts(features); }" in app
+    assert "onWarnings: renderWarnings" in app
+    assert "railScope: 'national'" in app
+    assert "refreshFeeds: false" in app
+    assert "const railScope = options.railScope === 'national' ? 'national' : 'rendered'" in (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+    assert "'/api/data/alerts?geometry_mode=full&zoom_bucket=high'" in (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+    assert "`/api/data/alerts/lsr?hours=${encodeURIComponent(String(hours || 24))}`" in (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+    assert "const rail = railScope === 'national' ? railAlertBaseFeatures : full" in engine
+    assert "const notificationFeatures = railScope === 'national' ? railAlertBaseFeatures : renderedAlerts" in engine
+    assert "if (!selection.categories.length && railScope !== 'national')" in engine
     assert "currentWarnings = [...features]" in app
     assert "alertIssuedMs(b) - alertIssuedMs(a)" in app
     assert "selectAlert(feature, { maxZoom: 9 })" in app
@@ -130,8 +157,12 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "holdAtEnd: true" in app
     assert "radarScrubber.setFrames" in app
     assert "onStormTrackLegend" in app
-    assert "collapse.className = 'core-legend-collapse'" in app
-    assert "fa-chevron-down" in app
+    assert "function createTabbedLegendTray" in app
+    assert "legendTray.legend('alerts')" in app
+    assert "legendTray.markReady()" in app
+    assert 'class="workspace-legend-tabs" role="tablist"' in page
+    assert page.count('class="workspace-legend-tab"') == 4
+    assert "fa-chevron-down" in page
     assert "panel.classList.toggle('is-collapsed', !isOpen)" in app
     assert "elevation: '0.5'" in app
     assert "radarEngine.loadFrames({ refresh: true })" in app
@@ -188,6 +219,31 @@ def test_workspace_hides_pointer_focus_rings_but_keeps_keyboard_focus_visible():
     assert ".leaflet-interactive:focus-visible" in styles
     assert ".leaflet-tooltip.alerts-lsr-hover-tip" in styles
     assert "width: min(260px, calc(100vw - 48px))" in styles
+
+
+def test_workspace_alerts_use_wide_unscrolled_legend_and_stale_while_revalidate_cache():
+    app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace-app.js"
+    ).read_text(encoding="utf-8")
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+    styles = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.css"
+    ).read_text(encoding="utf-8")
+
+    assert ".workspace-legends { position: absolute; right: 12px; bottom:" in styles
+    assert "left: 12px; z-index: 800" in styles
+    assert "#workspace-alerts-legend { max-height: none; overflow: visible; }" in styles
+    assert "#workspace-alerts-legend .core-legend-categories" in styles
+    assert "#workspace-alerts-legend .core-legend-category-code" in styles
+    assert "text-overflow: clip" in styles
+    assert "overflow-wrap: anywhere" in styles
+    assert "LIVE_ALERT_CACHE_NAME = 'nch-alerts-live-v1'" in engine
+    assert "const persisted = await readLiveAlertCache(api, paths)" in engine
+    assert "const freshPayloads = await freshPromise" in engine
+    assert "void writeLiveAlertCache(api, paths, freshPayloads)" in engine
+    assert "await Promise.all([radarEngine.loadCatalog(), refreshAlerts()])" in app
 
 
 def test_legacy_monolith_assets_are_deleted():

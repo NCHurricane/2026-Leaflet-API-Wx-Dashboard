@@ -7,8 +7,8 @@
     <link rel="icon" href="/img/favicon.ico">
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719d">
-    <link rel="stylesheet" href="/frontend/pages/surface/surface.css?v=20260717a">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260720a">
+    <link rel="stylesheet" href="/frontend/pages/surface/surface.css?v=20260720a">
 </head>
 <body>
     <header class="core-header">
@@ -27,7 +27,6 @@
                         <dt>Valid</dt><dd id="surface-updated">—</dd>
                         <dt>Data Age</dt><dd id="surface-age">—</dd>
                         <dt>Provider</dt><dd id="surface-provider">—</dd>
-                        <dt>Source</dt><dd id="surface-source">—</dd>
                         <dt>Stations</dt><dd id="surface-station-count">0</dd>
                     </dl>
                 </div>
@@ -155,15 +154,24 @@
                     <div class="surface-check-list core-check-list">
                         <label class="surface-check core-check-row"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
                         <label class="surface-check core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
-                        <label class="surface-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
-                        <label class="surface-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                        <label class="surface-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox"></label>
+                        <label class="surface-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox" checked></label>
                     </div>
                     </div>
                 </section>
 
-                <section id="surface-panel-archive" class="core-sidebar-panel core-placeholder-panel"
+                <section id="surface-panel-archive" class="core-sidebar-panel surface-panel-stack"
                     role="tabpanel" aria-labelledby="surface-tab-archive" data-sidebar-panel="archive" hidden>
-                    <p>Archive tools are planned for a future update.</p>
+                    <div class="core-field">
+                        <label for="surface-archive-time">Ending Date and Time</label>
+                        <input id="surface-archive-time" type="datetime-local">
+                    </div>
+                    <div class="core-adjustment surface-archive-lookback">
+                        <label for="surface-archive-lookback">Lookback <span id="surface-archive-lookback-value">2 hours</span></label>
+                        <input id="surface-archive-lookback" type="range" min="0.25" max="24" step="0.25" value="2">
+                        <div class="surface-lookback-labels"><span>15 min</span><span>24 hours</span></div>
+                    </div>
+                    <button id="surface-archive-load" type="button">Load Observations</button>
                 </section>
             </div>
 
@@ -177,10 +185,11 @@
             <div id="surface-map"></div>
             <div id="global-timestamp" class="core-global-timestamp">Last Updated: —</div>
             <div id="surface-legend" class="surface-legend" data-legend-align="left" hidden></div>
+            <div id="surface-scrubber-bar" hidden><div id="surface-bottom-scrubber"></div></div>
         </section>
     </main>
 
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/surface/surface-page.js?v=20260719c"></script>
+    <script type="module" src="/frontend/pages/surface/surface-page.js?v=20260720a"></script>
 </body>
 </html>

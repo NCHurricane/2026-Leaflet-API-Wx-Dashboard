@@ -7,7 +7,7 @@ import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { createStatusReporter } from '../../core/status.js';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
 import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260719c';
-import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260719i';
+import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260721c';
 import { createRadarEngine } from '../radar/radar-engine.js?v=20260719b';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 
@@ -23,6 +23,12 @@ const WORKSPACE_ALERT_EVENTS = Object.freeze({
     ...SEVERE_EVENTS,
     sps: 'Special Weather Statement',
 });
+const PROJECTED_ARRIVAL_EVENTS = new Set([
+    'Tornado Warning',
+    'Severe Thunderstorm Warning',
+    'Special Marine Warning',
+    'Special Weather Statement',
+]);
 
 const WORKSPACE_REGION_BOUNDS = Object.freeze({
     CONUS: [[24.0, -125.0], [50.0, -66.5]],
@@ -37,50 +43,84 @@ const LSR_FILTER_CATEGORIES = Object.freeze({
     other: ['winter', 'fire', 'heat', 'other'],
 });
 
-function createStackLegend(root, label, defaultOpen = false) {
-    let isOpen = defaultOpen;
+function createTabbedLegendTray(root, sourceIds, preferredId = sourceIds[0]) {
+    const panel = root.querySelector('.workspace-legend-panel');
+    const collapse = root.querySelector('.core-legend-collapse');
+    const tablist = root.querySelector('[role="tablist"]');
+    const sources = new Map(sourceIds.map((id) => [id, {
+        tab: root.querySelector(`[data-legend-tab="${id}"]`),
+        view: root.querySelector(`[data-legend-view="${id}"]`),
+        available: false,
+    }]));
+    let activeId = preferredId;
+    let isOpen = true;
+    let ready = false;
+
+    function availableIds() {
+        return sourceIds.filter((id) => sources.get(id).available);
+    }
+
+    function sync() {
+        const available = availableIds();
+        if (!available.includes(activeId)) activeId = available.includes(preferredId) ? preferredId : available[0];
+        root.hidden = available.length === 0;
+        panel.classList.toggle('is-collapsed', !isOpen);
+        collapse.setAttribute('aria-expanded', String(isOpen));
+        collapse.setAttribute('aria-label', isOpen ? 'Collapse legends' : 'Expand legends');
+        collapse.title = isOpen ? 'Collapse legends' : 'Expand legends';
+        sources.forEach((source, id) => {
+            const selected = id === activeId;
+            source.tab.hidden = !source.available;
+            source.tab.setAttribute('aria-selected', String(selected));
+            source.tab.tabIndex = selected ? 0 : -1;
+            source.view.hidden = !source.available || !selected;
+        });
+    }
+
+    sources.forEach((source, id) => {
+        source.tab.addEventListener('click', () => { activeId = id; sync(); });
+    });
+    tablist.addEventListener('keydown', (event) => {
+        if (!event.target.matches('[data-legend-tab]')) return;
+        const available = availableIds();
+        const current = available.indexOf(activeId);
+        let next = null;
+        if (event.key === 'ArrowRight') next = available[(current + 1) % available.length];
+        if (event.key === 'ArrowLeft') next = available[(current - 1 + available.length) % available.length];
+        if (event.key === 'Home') next = available[0];
+        if (event.key === 'End') next = available[available.length - 1];
+        if (!next) return;
+        event.preventDefault();
+        activeId = next;
+        sync();
+        sources.get(next).tab.focus();
+    });
+    collapse.addEventListener('click', () => { isOpen = !isOpen; sync(); });
+    sync();
+
     return Object.freeze({
-        clear() { root.replaceChildren(); root.hidden = true; },
-        setHtml(html) {
-            if (!html) { this.clear(); return; }
-            const panel = document.createElement('div');
-            panel.className = 'workspace-legend-panel';
-            panel.classList.toggle('is-collapsed', !isOpen);
-            const content = document.createElement('div');
-            content.className = 'workspace-legend-content';
-            content.innerHTML = html;
-            let header = content.querySelector(':scope > .core-legend-header');
-            if (!header) {
-                header = document.createElement('div');
-                header.className = 'core-legend-header';
-                const heading = document.createElement('div');
-                heading.className = 'core-legend-heading';
-                const title = document.createElement('div');
-                title.className = 'core-legend-title';
-                title.textContent = label;
-                heading.appendChild(title);
-                header.appendChild(heading);
-            }
-            const collapse = document.createElement('button');
-            collapse.type = 'button';
-            collapse.className = 'core-legend-collapse';
-            collapse.innerHTML = '<i class="fas fa-chevron-down" aria-hidden="true"></i>';
-            const syncCollapse = () => {
-                collapse.setAttribute('aria-expanded', String(isOpen));
-                collapse.setAttribute('aria-label', isOpen ? 'Collapse legend' : 'Expand legend');
-                collapse.title = isOpen ? 'Collapse legend' : 'Expand legend';
-            };
-            collapse.addEventListener('click', () => {
-                isOpen = !isOpen;
-                panel.classList.toggle('is-collapsed', !isOpen);
-                syncCollapse();
+        legend(id) {
+            const source = sources.get(id);
+            return Object.freeze({
+                clear() {
+                    source.view.replaceChildren();
+                    source.available = false;
+                    sync();
+                },
+                setHtml(html) {
+                    if (!html) { this.clear(); return; }
+                    const wasAvailable = source.available;
+                    source.view.innerHTML = html;
+                    source.view.querySelector(':scope > .core-legend-header')?.remove();
+                    source.available = true;
+                    if (!availableIds().includes(activeId)
+                        || (!ready && id === preferredId)
+                        || (ready && !wasAvailable)) activeId = id;
+                    sync();
+                },
             });
-            syncCollapse();
-            header.appendChild(collapse);
-            panel.append(header, content);
-            root.replaceChildren(panel);
-            root.hidden = false;
         },
+        markReady() { ready = true; },
     });
 }
 
@@ -166,10 +206,15 @@ async function initialize() {
         updated: byId('workspace-updated'), age: byId('workspace-age'),
         provider: byId('workspace-provider'), source: byId('workspace-source'),
     });
-    const alertsLegend = createStackLegend(byId('workspace-alerts-legend'), 'Active Alerts', true);
-    const lsrLegend = createStackLegend(byId('workspace-lsr-legend'), 'Storm Reports');
-    const radarLegend = createStackLegend(byId('workspace-radar-legend'), 'Radar');
-    const stormTrackLegend = createStackLegend(byId('workspace-storm-track-legend'), 'Storm Tracks');
+    const legendTray = createTabbedLegendTray(
+        byId('workspace-legends'),
+        ['radar', 'storm-tracks', 'alerts', 'storm-reports'],
+        'alerts',
+    );
+    const alertsLegend = legendTray.legend('alerts');
+    const lsrLegend = legendTray.legend('storm-reports');
+    const radarLegend = legendTray.legend('radar');
+    const stormTrackLegend = legendTray.legend('storm-tracks');
     const detail = createAlertDetail(byId('workspace-detail'), {
         initialTop: 70,
         lsrColor(feature) {
@@ -231,16 +276,28 @@ async function initialize() {
         byId('workspace-projected-arrival-alert').textContent = '';
     }
 
+    function supportsProjectedArrival(feature) {
+        const geometryType = feature?.geometry?.type;
+        return PROJECTED_ARRIVAL_EVENTS.has(feature?.properties?.event)
+            && ['Polygon', 'MultiPolygon'].includes(geometryType);
+    }
+
     function selectAlert(feature, options = { maxZoom: 9 }) {
-        tools.setSelectedAlert(feature);
-        const group = byId('workspace-projected-arrival-group');
-        group.hidden = false;
-        group.open = true;
         const props = feature?.properties || {};
-        byId('workspace-projected-arrival-alert').textContent = [props.event, props.areaDesc].filter(Boolean).join(' — ');
+        if (supportsProjectedArrival(feature)) {
+            tools.setSelectedAlert(feature);
+            const group = byId('workspace-projected-arrival-group');
+            group.hidden = false;
+            group.open = true;
+            byId('workspace-projected-arrival-alert').textContent = [props.event, props.areaDesc].filter(Boolean).join(' — ');
+        } else {
+            hideProjectedArrival();
+        }
         alertsEngine.zoomTo(feature, options);
         detail.open(feature);
-        status.setMessage(`${feature?.properties?.event || 'Alert'} selected for the Projected Arrival Tool.`);
+        status.setMessage(supportsProjectedArrival(feature)
+            ? `${props.event || 'Alert'} selected for the Projected Arrival Tool.`
+            : `${props.event || 'Alert'} selected.`);
     }
 
     function showNewAlert(feature) {
@@ -373,9 +430,11 @@ async function initialize() {
 
     const alertsEngine = createAlertsEngine({
         api, mapCore, legend: alertsLegend, lsrLegend, status,
+        railScope: 'national',
         onAlertCount(count) { byId('workspace-alert-count').textContent = String(count); },
         onLsrCount(count) { byId('workspace-lsr-count').textContent = String(count); },
-        onWarnings(features) { tools.setAlerts(features); renderWarnings(features); },
+        onRenderedAlerts(features) { tools.setAlerts(features); },
+        onWarnings: renderWarnings,
         onLsrReports: renderLsrReports,
         onDetail: selectAlert,
         onLsrDetail: (feature) => detail.openLsr(feature),
@@ -683,7 +742,7 @@ async function initialize() {
         if (input.checked) void mapCore.setOverlayVisible(input.dataset.mapOverlay, true);
     });
     mapCore.map.on('movestart zoomstart', detail.close);
-    mapCore.map.on('moveend', () => void refreshAlerts({ silent: true, notifyNewAlerts: false }));
+    mapCore.map.on('moveend', () => void refreshAlerts({ silent: true, notifyNewAlerts: false, refreshFeeds: false }));
 
     syncLayerToggle('workspace-alerts-enabled', 'workspace-warning-filters');
     syncLayerToggle('workspace-lsr-enabled', 'workspace-lsr-filters');
@@ -693,8 +752,8 @@ async function initialize() {
     syncRightRailVisibility();
     syncAutoUpdate();
 
-    await radarEngine.loadCatalog();
-    await refreshAlerts();
+    await Promise.all([radarEngine.loadCatalog(), refreshAlerts()]);
+    legendTray.markReady();
     status.setMessage('Workspace ready. Select a radar site to add live radar.');
     window.addEventListener('beforeunload', () => {
         clearInterval(autoUpdateTimer);

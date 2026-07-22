@@ -7,8 +7,8 @@
     <link rel="icon" href="/img/favicon.ico">
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719d">
-    <link rel="stylesheet" href="/frontend/pages/wpc/wpc.css?v=20260718b">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260720a">
+    <link rel="stylesheet" href="/frontend/pages/wpc/wpc.css?v=20260720a">
 </head>
 <body>
     <header class="core-header">
@@ -27,7 +27,6 @@
                         <dt>Valid</dt><dd id="wpc-updated">—</dd>
                         <dt>Data Age</dt><dd id="wpc-age">—</dd>
                         <dt>Provider</dt><dd id="wpc-provider">—</dd>
-                        <dt>Source</dt><dd id="wpc-source">—</dd>
                     </dl>
                 </div>
 
@@ -65,7 +64,13 @@
                         <button class="wpc-group-pill" role="tab" aria-selected="false" aria-controls="wpc-panel-forecast" data-wpc-group="forecast">Forecast</button>
                     </div>
 
+                    <div class="core-adjustment wpc-live-adjustment">
+                        <label for="wpc-opacity">Overlay Opacity (0.55)</label>
+                        <input id="wpc-opacity" type="range" min="0.1" max="1" step="0.05" value="0.55">
+                    </div>
+
                     <div id="wpc-panel-ero" class="wpc-group-panel is-active" role="tabpanel">
+                        <div class="wpc-panel-label">Select Forecast Day</div>
                         <div class="wpc-day-pills" role="group" aria-label="ERO forecast day">
                             <button class="wpc-day-pill" aria-selected="false" data-wpc-ero-day="1">Day 1</button>
                             <button class="wpc-day-pill" aria-selected="false" data-wpc-ero-day="2">Day 2</button>
@@ -76,6 +81,7 @@
                     </div>
 
                     <div id="wpc-panel-qpf" class="wpc-group-panel" role="tabpanel">
+                        <div class="wpc-panel-label">Select QPF Product</div>
                         <div class="wpc-subtabs" role="tablist" aria-label="QPF sub-products">
                             <button class="wpc-subtab-button" role="tab" aria-selected="true" aria-controls="wpc-qpf-panel-6hr" data-wpc-qpf-tab="6hr">6 hr</button>
                             <button class="wpc-subtab-button" role="tab" aria-selected="false" aria-controls="wpc-qpf-panel-24hr" data-wpc-qpf-tab="24hr">24 hr</button>
@@ -93,6 +99,7 @@
                     </div>
 
                     <div id="wpc-panel-winter" class="wpc-group-panel" role="tabpanel">
+                        <div class="wpc-panel-label">Select Winter Product</div>
                         <div class="wpc-subtabs" role="tablist" aria-label="Winter sub-products">
                             <button class="wpc-subtab-button" role="tab" aria-selected="true" aria-controls="wpc-winter-panel-snow" data-wpc-winter-tab="snow">Snow</button>
                             <button class="wpc-subtab-button" role="tab" aria-selected="false" aria-controls="wpc-winter-panel-ice" data-wpc-winter-tab="ice">Ice</button>
@@ -113,14 +120,17 @@
                     </div>
 
                     <div id="wpc-panel-fop" class="wpc-group-panel" role="tabpanel">
+                        <div class="wpc-panel-label">River Flood Outlook</div>
                         <p class="wpc-panel-note">5-Day River Flood Outlook — press Refresh to load.</p>
                     </div>
 
                     <div id="wpc-panel-mpd" class="wpc-group-panel" role="tabpanel">
+                        <div class="wpc-panel-label">Mesoscale Discussions</div>
                         <p class="wpc-panel-note">Active Mesoscale Precipitation Discussions — press Refresh to load.</p>
                     </div>
 
                     <div id="wpc-panel-sigwx" class="wpc-group-panel" role="tabpanel">
+                        <div class="wpc-panel-label">Select Significant Weather Day</div>
                         <ul class="wpc-radio-list" id="wpc-sigwx-list" role="radiogroup">
                             <li class="wpc-radio-item"><label for="wpc-sigwx-day1">Day 1</label><input type="radio" id="wpc-sigwx-day1" name="wpc-sigwx" value="sigwx_day1"></li>
                             <li class="wpc-radio-item"><label for="wpc-sigwx-day2">Day 2</label><input type="radio" id="wpc-sigwx-day2" name="wpc-sigwx" value="sigwx_day2"></li>
@@ -130,10 +140,12 @@
                     </div>
 
                     <div id="wpc-panel-surface" class="wpc-group-panel" role="tabpanel">
+                        <div class="wpc-panel-label">Surface Analysis</div>
                         <p class="wpc-panel-note">Latest WPC surface analysis — press Refresh to load.</p>
                     </div>
 
                     <div id="wpc-panel-forecast" class="wpc-group-panel" role="tabpanel">
+                        <div class="wpc-panel-label">Select Forecast Product</div>
                         <ul class="wpc-radio-list" id="wpc-forecast-list" role="radiogroup"></ul>
                     </div>
                 </section>
@@ -146,10 +158,6 @@
                             <option>Dark (No Labels)</option><option>Light (No Labels)</option>
                             <option>Voyager</option><option>USGS</option><option>Satellite</option>
                         </select>
-                    </div>
-                    <div class="core-adjustment">
-                        <label for="wpc-opacity">Overlay Opacity (0.55)</label>
-                        <input id="wpc-opacity" type="range" min="0.1" max="1" step="0.05" value="0.55">
                     </div>
                     <div class="core-settings-section">
                     <h2>Cities</h2>
@@ -173,8 +181,8 @@
                     <div class="wpc-check-list core-check-list">
                         <label class="wpc-check core-check-row"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
                         <label class="wpc-check core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
-                        <label class="wpc-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
-                        <label class="wpc-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                        <label class="wpc-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox"></label>
+                        <label class="wpc-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox" checked></label>
                     </div>
                     </div>
                 </section>
@@ -199,6 +207,6 @@
     </main>
 
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/wpc/wpc-page.js?v=20260719c"></script>
+    <script type="module" src="/frontend/pages/wpc/wpc-page.js?v=20260720a"></script>
 </body>
 </html>

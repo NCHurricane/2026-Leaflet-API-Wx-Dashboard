@@ -7,8 +7,8 @@
     <link rel="icon" href="/img/favicon.ico">
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719d">
-    <link rel="stylesheet" href="/frontend/pages/mrms/mrms.css?v=20260718a">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260720a">
+    <link rel="stylesheet" href="/frontend/pages/mrms/mrms.css?v=20260720a">
 </head>
 <body>
     <header class="core-header">
@@ -27,7 +27,6 @@
                         <dt>Valid</dt><dd id="mrms-updated">—</dd>
                         <dt>Data Age</dt><dd id="mrms-age">—</dd>
                         <dt>Provider</dt><dd id="mrms-provider">—</dd>
-                        <dt>Source</dt><dd id="mrms-source">—</dd>
                     </dl>
                 </div>
 
@@ -251,6 +250,10 @@
                         </div>
                     </div>
 
+                    <div id="mrms-opacity-block" class="core-adjustment mrms-live-adjustment" hidden>
+                        <label for="mrms-opacity">Overlay Opacity (0.8)</label>
+                        <input id="mrms-opacity" type="range" min="0.1" max="1" step="0.05" value="0.8">
+                    </div>
                     <div id="mrms-lookback-block" class="mrms-lookback">
                         <div class="mrms-lookback-header">
                             <span>Lookback Hours</span>
@@ -274,10 +277,6 @@
                             <option>Voyager</option><option>USGS</option><option>Satellite</option>
                         </select>
                     </div>
-                    <div class="core-adjustment">
-                        <label for="mrms-opacity">Overlay Opacity (0.8)</label>
-                        <input id="mrms-opacity" type="range" min="0.1" max="1" step="0.05" value="0.8">
-                    </div>
                     <div class="core-settings-section">
                     <h2>Cities</h2>
                     <div class="core-segmented" role="radiogroup" aria-label="Cities">
@@ -300,8 +299,8 @@
                     <div class="mrms-check-list core-check-list">
                         <label class="mrms-check core-check-row"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
                         <label class="mrms-check core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
-                        <label class="mrms-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
-                        <label class="mrms-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                        <label class="mrms-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox"></label>
+                        <label class="mrms-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox" checked></label>
                     </div>
                     </div>
                 </section>
@@ -329,6 +328,6 @@
     </main>
 
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/mrms/mrms-page.js?v=20260719b"></script>
+    <script type="module" src="/frontend/pages/mrms/mrms-page.js?v=20260720a"></script>
 </body>
 </html>

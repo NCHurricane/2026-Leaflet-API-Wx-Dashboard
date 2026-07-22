@@ -91,6 +91,20 @@
 
 .wpc-group-panel { display: none; }
 .wpc-group-panel.is-active { display: block; }
+.wpc-live-adjustment {
+    padding: 9px 10px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.55);
+}
+.wpc-panel-label {
+    margin: 0 0 8px;
+    color: var(--core-muted);
+    font-size: 0.7rem;
+    font-weight: 850;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
 
 /* ── Day pills (ERO, Winter snow) ───────────────────────────────────────── */
 .wpc-day-pills {

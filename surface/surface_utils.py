@@ -21,6 +21,7 @@ import pandas as pd
 import numpy as np
 import matplotlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import lru_cache
 
 matplotlib.use("Agg")
 
@@ -232,24 +233,25 @@ def is_cache_valid(file_path, minutes=30):
     return False
 
 
+@lru_cache(maxsize=256)
 def _get_station_names(network_id):
     """
     Fetch station metadata from IEM to get station names.
     Returns a dict mapping station_id -> name.
     """
     try:
-        url = f"https://mesonet.agron.iastate.edu/json/raob.py?ts=2000010100&station=_ALL_&network={network_id}"
+        url = f"https://mesonet.agron.iastate.edu/geojson/network/{network_id}.geojson"
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         data = resp.json()
 
         station_names = {}
-        if "profiles" in data:
-            for profile in data["profiles"]:
-                sid = profile.get("station_id", "").strip()
-                sname = profile.get("station_name", "").strip()
-                if sid and sname:
-                    station_names[sid] = sname
+        for feature in data.get("features", []):
+            props = feature.get("properties") or {}
+            sid = str(props.get("sid") or props.get("id") or "").strip()
+            sname = str(props.get("sname") or props.get("name") or "").strip()
+            if sid and sname:
+                station_names[sid] = sname
         return station_names
     except Exception:
         return {}
@@ -274,6 +276,15 @@ def _fetch_single_network(state_code, network_type):
 
         df = pd.DataFrame(data)
         df["network"] = network_type  # Tag with network type
+        names = _get_station_names(network_id)
+        if names:
+            station_ids = df.get("station", pd.Series("", index=df.index)).astype(str).str.strip()
+            fetched_names = station_ids.map(names).fillna("")
+            if "name" not in df.columns:
+                df["name"] = fetched_names
+            else:
+                blank = df["name"].fillna("").astype(str).str.strip().eq("")
+                df.loc[blank, "name"] = fetched_names[blank]
         return df
     except Exception:
         return pd.DataFrame()

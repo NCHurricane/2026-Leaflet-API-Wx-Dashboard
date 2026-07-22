@@ -192,6 +192,7 @@ async function initialize() {
         const el = byId('wpc-bottom-scrubber');
         if (!el || scrubber) return;
         scrubber = createScrubber(el, {
+            holdAtEnd: true,
             onFrame(frame, index) {
                 const key = scrubberKey();
                 if (key === 'forecast') {

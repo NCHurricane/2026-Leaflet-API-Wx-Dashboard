@@ -7,7 +7,7 @@
     <link rel="icon" href="/img/favicon.ico">
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719d">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260720a">
     <link rel="stylesheet" href="/frontend/pages/tropical/tropical.css?v=20260719i">
 </head>
 <body>
@@ -18,7 +18,7 @@
             <div class="core-sidebar-header">
                 <div class="core-card"><dl class="core-status-grid">
                     <dt>Valid</dt><dd id="tropical-updated">—</dd><dt>Data Age</dt><dd id="tropical-age">—</dd>
-                    <dt>Provider</dt><dd id="tropical-provider">—</dd><dt>Source</dt><dd id="tropical-source">—</dd>
+                    <dt>Provider</dt><dd id="tropical-provider">—</dd>
                 </dl></div>
             </div>
             <div class="core-sidebar-tabs" role="tablist" aria-label="Tropical controls">
@@ -75,7 +75,7 @@
                         <input id="tropical-city-font-size" type="range" min="0.4" max="1.2" step="0.05" value="0.6">
                     </div>
                     </div>
-                    <div class="core-settings-section"><h2>Map Overlays</h2><div class="tropical-checks core-check-list"><label class="core-check-row"><span>Lat/Lon Grid</span><input id="weather-tropical-graticule" type="checkbox"></label><label class="core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label><label class="core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label><label class="core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label></div></div>
+                    <div class="core-settings-section"><h2>Map Overlays</h2><div class="tropical-checks core-check-list"><label class="core-check-row"><span>Lat/Lon Grid</span><input id="weather-tropical-graticule" type="checkbox"></label><label class="core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label><label class="core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox"></label><label class="core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox" checked></label></div></div>
                 </section>
             </div>
             <div class="core-sidebar-footer"><div id="weather-tropical-status" class="core-message" aria-live="polite"></div><button id="weather-refresh-tropical" type="button">Refresh</button></div>
@@ -88,7 +88,7 @@
             <div class="tropical-system-rail-body">
                 <div id="weather-tropical-inspector">
                     <section id="wx-tropical-inspector-summary" class="wx-tropical-inspector-section wx-accordion" data-open="true"><button type="button" class="wx-accordion-header"><span>Summary</span><span>▾</span></button><div class="wx-accordion-body"><div id="wx-tropical-summary-head" class="wx-tropical-summary-head"></div><div id="weather-tropical-summary" class="wx-tropical-summary"></div></div></section>
-                    <section id="wx-tropical-inspector-layers-panel" class="wx-tropical-inspector-section wx-accordion" data-open="false"><button type="button" class="wx-accordion-header"><span>Storm Layers</span><span>▾</span></button><div class="wx-accordion-body"><div id="wx-tropical-inspector-layers"><div class="wx-tropical-layer-toggles">
+                    <section id="wx-tropical-inspector-layers-panel" class="wx-tropical-inspector-section wx-accordion" data-open="true"><button type="button" class="wx-accordion-header" aria-expanded="true"><span>Storm Layers</span><span>▾</span></button><div class="wx-accordion-body"><div id="wx-tropical-inspector-layers"><div class="wx-tropical-layer-toggles">
                         <label class="wx-tc-pill"><input type="checkbox" data-tc-layer="cone"><span>Cone</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="forecast_track"><span>Track</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="forecast_points"><span>Points</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="wind_radii"><span>Wind radii</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="initial_wind_extent"><span>Initial wind extent</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="watches_warnings"><span>Watch/warn</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="storm_surge"><span>Surge WW</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="peak_surge"><span>Peak surge</span></label><label class="wx-tc-pill"><input type="checkbox" data-tc-layer="best_track"><span>Best track</span></label>
                     </div></div></div></section>
                     <section id="wx-tropical-inspector-forecast" class="wx-tropical-inspector-section wx-accordion" data-open="false"><button type="button" class="wx-accordion-header"><span>Forecast</span><span>▾</span></button><div class="wx-accordion-body"><div id="weather-tropical-track"></div></div></section>
@@ -102,6 +102,6 @@
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
     <script src="/frontend/pages/tropical/tropical-engine.js?v=20260719c"></script>
     <script src="/frontend/pages/tropical/tropical-controller.js?v=20260719b"></script>
-    <script type="module" src="/frontend/pages/tropical/tropical-app.js?v=20260719h"></script>
+    <script type="module" src="/frontend/pages/tropical/tropical-app.js?v=20260720a"></script>
 </body>
 </html>

@@ -27,6 +27,7 @@ NODD_RTMA_ROOT = "https://noaa-rtma-pds.s3.amazonaws.com"
 # NOMADS kept as fallback reference only.
 NOMADS_RTMA_ROOT = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/rtma/prod"
 REQUEST_TIMEOUT = 30
+_RTMA_CITY_CACHE_SCHEMA = 2
 
 REGION_PREFIXES = {
     "CONUS": "rtma2p5",
@@ -1050,7 +1051,8 @@ def rtma_city_geojson_is_cached(
             meta = json.load(handle)
         cities_file, cities_size = _cities_cache_signature(cities_path)
         return (
-            meta.get("source_data_key") == source.data_key
+            meta.get("schema_version") == _RTMA_CITY_CACHE_SCHEMA
+            and meta.get("source_data_key") == source.data_key
             and meta.get("source_url") == source.url
             and meta.get("cities_file") == cities_file
             and meta.get("cities_size") == cities_size
@@ -1084,7 +1086,8 @@ def ensure_rtma_city_geojson(
             with open(meta_path, "r", encoding="utf-8") as handle:
                 meta = json.load(handle)
             if (
-                meta.get("source_data_key") == source.data_key
+                meta.get("schema_version") == _RTMA_CITY_CACHE_SCHEMA
+                and meta.get("source_data_key") == source.data_key
                 and meta.get("source_url") == source.url
                 and meta.get("cities_file") == cities_file
                 and meta.get("cities_size") == cities_size
@@ -1110,20 +1113,20 @@ def ensure_rtma_city_geojson(
             point["value"] = _format_display_value(product, float(point["value"]))
 
     # Compact format: constant fields go in a single header; per-point data is
-    # a flat list of [lat, lon, value, rank] tuples (no repeated keys).
+    # a flat list of [lat, lon, value, rank, city, state] tuples.
     # Compared to standard GeoJSON this cuts ~60-70% off the file size.
     points_compact = [
-        [round(p["lat"], 4), round(p["lon"], 4), p["value"], p["rank"]]
+        [round(p["lat"], 4), round(p["lon"], 4), p["value"], p["rank"], p["city"], p["state"]]
         for p in city_points
     ]
 
     compact_doc = {
-        "v": 1,  # format version sentinel
+        "v": _RTMA_CITY_CACHE_SCHEMA,
         "product": product,
         "stream": stream,
         "region": region,
         "units": config["units"],
-        "points": points_compact,  # [[lat, lon, value, rank], ...]
+        "points": points_compact,
     }
     tmp_geo = f"{out_path}.part"
     with open(tmp_geo, "w", encoding="utf-8") as handle:
@@ -1131,6 +1134,7 @@ def ensure_rtma_city_geojson(
     os.replace(tmp_geo, out_path)
 
     meta = {
+        "schema_version": _RTMA_CITY_CACHE_SCHEMA,
         "source_data_key": source.data_key,
         "source_url": source.url,
         "source_valid_time": source.valid_time.isoformat(),

@@ -73,6 +73,11 @@ const AUTO_VIEW_PRESETS = {
 
 const NAMED_VIEW_PRESETS = {
     conus: { bounds: [[23.0, -127.0], [50.5, -65.0]], platforms: new Set(['goes18', 'goes19']) },
+    'southeast-us': {
+        bounds: [[24.0, -92.5], [38.0, -74.0]],
+        platforms: new Set(['goes19']),
+        sectors: new Set(['CONUS']),
+    },
     'goes-west-full-disk': { bounds: [[-55, -220], [60, -55]], platforms: new Set(['goes18']) },
     'goes-east-full-disk': { bounds: [[-55, -155], [60, -15]], platforms: new Set(['goes19']) },
     'west-pacific': { bounds: [[-55, 80], [60, 200]], platforms: new Set(['himawari9']) },
@@ -153,6 +158,7 @@ function syncSectorVisibility() {
 
 function syncViewPresetVisibility() {
     const satId = activeSatId();
+    const sector = activeSector();
     const select = byId('satellite-view-preset');
     if (!select) return;
     select.disabled = !satId;
@@ -162,12 +168,16 @@ function syncViewPresetVisibility() {
             opt.style.display = '';
             return;
         }
-        const platforms = NAMED_VIEW_PRESETS[opt.value]?.platforms || null;
-        opt.style.display = (!satId || platforms?.has(satId)) ? '' : 'none';
+        const preset = NAMED_VIEW_PRESETS[opt.value];
+        const platformMatches = !satId || preset?.platforms?.has(satId);
+        const sectorMatches = !preset?.sectors || preset.sectors.has(sector);
+        opt.style.display = platformMatches && sectorMatches ? '' : 'none';
     });
 
-    const selectedPlatforms = NAMED_VIEW_PRESETS[select.value]?.platforms || null;
-    if (!satId || (selectedPlatforms && !selectedPlatforms.has(satId))) {
+    const selectedPreset = NAMED_VIEW_PRESETS[select.value];
+    if (!satId
+        || (selectedPreset?.platforms && !selectedPreset.platforms.has(satId))
+        || (selectedPreset?.sectors && !selectedPreset.sectors.has(sector))) {
         select.value = '';
     }
 }
@@ -294,6 +304,7 @@ async function initialize() {
 
     const scrubberBar = byId('satellite-scrubber-bar');
     const scrubber = createScrubber(byId('satellite-bottom-scrubber'), {
+        holdAtEnd: true,
         onFrame(frame, index) {
             void showFrame(index);
         },

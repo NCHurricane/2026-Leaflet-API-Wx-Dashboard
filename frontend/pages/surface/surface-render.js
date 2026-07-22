@@ -1,5 +1,11 @@
 import { apiUrl } from '../../core/api.js';
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[char]));
+}
+
 export const SURFACE_PRODUCTS = Object.freeze([
     { key: 'temperature', label: 'Temperature', unit: '°F' },
     { key: 'feels_like', label: 'Feels Like', unit: '°F' },
@@ -509,12 +515,12 @@ export function createSurfaceRenderer(mapCore) {
         const wspd = s.wind_speed != null ? `${Math.round(s.wind_speed)} kt` : '—';
         const gust = s.wind_gust != null ? ` G${Math.round(s.wind_gust)}` : '';
         const vis = s.visibility != null ? `${s.visibility} mi` : '—';
-        const stationName = s.name ? `${s.name} (${s.id})` : s.id;
+        const stationName = String(s.name || '').trim() || s.id;
         const stationId = String(s.id || '').trim().toUpperCase();
         const timeseriesSite = stationId.length === 3 ? `K${stationId}` : stationId;
         const timeseriesUrl = `https://www.weather.gov/wrh/timeseries?site=${encodeURIComponent(timeseriesSite)}`;
         return (
-            `<strong>${stationName}</strong><br>`
+            `<strong>${escapeHtml(stationName)}</strong><br>`
             + `Temp: ${s.temperature != null ? `${s.temperature}°F` : '—'}<br>`
             + `Feels Like: ${s.feels_like != null ? `${s.feels_like}°F` : '—'}<br>`
             + `Dew Point: ${s.dew_point != null ? `${s.dew_point}°F` : '—'}<br>`

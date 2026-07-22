@@ -7,8 +7,8 @@
     <link rel="icon" href="/img/favicon.ico">
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719d">
-    <link rel="stylesheet" href="/frontend/pages/alerts/alerts.css?v=20260719b">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260720a">
+    <link rel="stylesheet" href="/frontend/pages/alerts/alerts.css?v=20260720a">
 </head>
 <body>
     <header class="core-header">
@@ -26,7 +26,6 @@
                         <dt>Valid</dt><dd id="alerts-updated">—</dd>
                         <dt>Data Age</dt><dd id="alerts-age">—</dd>
                         <dt>Provider</dt><dd id="alerts-provider">—</dd>
-                        <dt>Source</dt><dd id="alerts-source">—</dd>
                     </dl>
                 </div>
                 <div class="core-field"><label for="alerts-region">Region</label><select id="alerts-region"></select></div>
@@ -98,8 +97,8 @@
                     <div class="core-settings-section"><h2>Map Overlays</h2><div class="alerts-check-list core-check-list">
                         <label class="alerts-check core-check-row"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
                         <label class="alerts-check core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
-                        <label class="alerts-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
-                        <label class="alerts-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                        <label class="alerts-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox"></label>
+                        <label class="alerts-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox" checked></label>
                     </div></div>
                     <div class="core-settings-section">
                         <h2>New Alert Notifications</h2>
@@ -121,8 +120,12 @@
                 <section id="alerts-panel-archive" class="core-sidebar-panel alerts-panel-stack" role="tabpanel"
                     aria-labelledby="alerts-tab-archive" data-sidebar-panel="archive" hidden>
                     <div id="alerts-archive-controls" class="alerts-panel-stack">
-                        <div class="core-field"><label for="alerts-archive-from">From</label><input id="alerts-archive-from" type="datetime-local"></div>
-                        <div class="core-field"><label for="alerts-archive-to">To</label><input id="alerts-archive-to" type="datetime-local"></div>
+                        <div class="core-field"><label for="alerts-archive-time">Ending Date and Time</label><input id="alerts-archive-time" type="datetime-local"></div>
+                        <div class="core-adjustment alerts-archive-lookback">
+                            <label for="alerts-archive-lookback">Lookback <span id="alerts-archive-lookback-value">1 hour</span></label>
+                            <input id="alerts-archive-lookback" type="range" min="5" max="360" step="5" value="60">
+                            <div class="alerts-lookback-labels"><span>5 min</span><span>6 hours</span></div>
+                        </div>
                         <button id="alerts-load-archive" class="alerts-primary" type="button">Load Archive</button>
                     </div>
                 </section>
@@ -137,6 +140,7 @@
             <div id="alerts-map"></div>
             <div id="global-timestamp" class="core-global-timestamp">Last Updated: —</div>
             <div id="alerts-legend" class="alerts-legend" data-legend-align="left" hidden></div>
+            <div id="alerts-lsr-legend" class="alerts-legend alerts-lsr-legend" data-legend-align="right" hidden></div>
             <div id="alerts-detail" class="alerts-detail" hidden></div>
             <div id="alerts-notifications" class="alerts-notifications" aria-live="assertive"></div>
             <div id="alerts-scrubber-bar" hidden><div id="alerts-bottom-scrubber"></div></div>
@@ -170,6 +174,6 @@
         </aside>
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/alerts/alerts-page.js?v=20260719g"></script>
+    <script type="module" src="/frontend/pages/alerts/alerts-page.js?v=20260721c"></script>
 </body>
 </html>

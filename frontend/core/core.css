@@ -152,9 +152,11 @@ button:hover { border-color: var(--core-accent); }
     white-space: nowrap;
 }
 .core-sidebar-tab.is-active {
-    color: var(--core-text);
-    background: #172943;
-    border-bottom: 2px solid var(--core-accent);
+    color: #ecfeff;
+    background: #164e63;
+    border-color: rgba(34, 211, 238, 0.56);
+    border-bottom: 3px solid #22d3ee;
+    box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.16);
 }
 .core-sidebar-tab:focus-visible { outline: 2px solid #7dd3fc; outline-offset: -2px; }
 .core-sidebar-content {
@@ -214,9 +216,9 @@ button:hover { border-color: var(--core-accent); }
     padding: 6px 11px;
     border: 1px solid rgba(218, 227, 7, 0.9);
     border-radius: 6px;
-    color: #74ddff;
-    background: rgba(10, 26, 74, 0.88);
-    font-size: 0.78rem;
+    color: var(--core-panel);
+    background: rgba(218, 227, 7, 0.9);
+    font-size: 0.95rem;
     font-weight: 850;
     letter-spacing: 0.12em;
     white-space: nowrap;
@@ -319,7 +321,7 @@ button:hover { border-color: var(--core-accent); }
     position: relative;
     display: grid;
     grid-template-columns: 5px minmax(0, 1fr);
-    gap: 7px;
+    gap: 12px;
     min-width: 0;
     overflow: hidden;
     padding: 7px 7px 7px 0;
@@ -328,7 +330,14 @@ button:hover { border-color: var(--core-accent); }
     border-radius: 6px;
 }
 .core-legend-category.is-disabled { opacity: 0.34; }
-.core-legend-color { width: 5px; height: 100%; min-height: 28px; }
+.core-legend-color {
+    width: 13px;
+    height: 13px;
+    min-height: 13px;
+    flex: 0 0 13px;
+    border-radius: 3px;
+    border: 1px solid rgba(2, 6, 23, 0.55);
+}
 .core-legend-category-copy { min-width: 0; }
 .core-legend-category-code {
     display: block;
@@ -404,6 +413,52 @@ button:hover { border-color: var(--core-accent); }
     box-shadow: inset 0 0 0 1px #22e8ff;
 }
 .core-segmented input:focus-visible + span { outline: 2px solid #7dd3fc; outline-offset: 1px; }
+
+/* Data/product selections use amber; navigation tabs retain the cyan active
+   treatment above so the two interaction levels remain distinguishable. */
+:is(
+    .wpc-group-pill,
+    .wpc-day-pill,
+    .wpc-subtab-button,
+    .spc-subtab-button,
+    .mrms-subtab-button,
+    .satellite-subtab-button
+)[aria-selected="true"],
+.alerts-pills button.is-active,
+.radar-level-pills button.is-active,
+.wx-tc-pill input:checked + span {
+    color: #211900 !important;
+    background: #facc15 !important;
+    border-color: #fde047 !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+/* Leaflet assigns DOM focus to clicked vector and marker elements. Keep a
+   visible keyboard focus ring without showing the browser's white click box. */
+.leaflet-container .leaflet-interactive:focus:not(:focus-visible),
+.leaflet-container .leaflet-marker-icon:focus:not(:focus-visible) {
+    outline: none !important;
+    box-shadow: none !important;
+}
+.leaflet-container .leaflet-interactive:focus-visible,
+.leaflet-container .leaflet-marker-icon:focus-visible {
+    outline: 2px solid #22d3ee !important;
+    outline-offset: 2px;
+}
+.leaflet-container .leaflet-tooltip.core-city-name-tag {
+    padding: 5px 8px;
+    color: #f8fafc;
+    background: rgba(7, 15, 24, 0.92);
+    border: 1px solid rgba(148, 196, 226, 0.72);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    font-size: 0.72rem;
+    font-weight: 750;
+    line-height: 1.2;
+    text-shadow: 0 1px 2px #000;
+}
+.leaflet-container .leaflet-tooltip.core-city-name-tag strong { color: #fff; }
+.leaflet-container .leaflet-tooltip-top.core-city-name-tag::before { border-top-color: rgba(148, 196, 226, 0.72); }
 .core-adjustment { display: grid; gap: 4px; }
 .core-adjustment.is-disabled { opacity: 0.45; }
 .core-adjustment label {

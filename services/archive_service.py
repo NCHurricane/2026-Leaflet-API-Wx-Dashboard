@@ -477,7 +477,7 @@ def get_archive_surface(
     product: str = "temperature",
     date_from: str = "",
     date_to: str = "",
-    max_frames: int = 24,
+    max_frames: int = 120,
     source: str = "iem",
     network: str = "ASOS",
 ) -> dict:
@@ -521,12 +521,10 @@ def get_archive_surface(
 
     total = int(max_frames)
     frame_times = []
-    cursor = dt_from.replace(minute=0, second=0, microsecond=0)
-    if cursor < dt_from:
-        cursor += timedelta(hours=1)
+    cursor = dt_from
     while cursor <= dt_to and len(frame_times) < total:
         frame_times.append(cursor)
-        cursor += timedelta(hours=1)
+        cursor += timedelta(minutes=15)
     if not frame_times:
         frame_times = [dt_from]
 

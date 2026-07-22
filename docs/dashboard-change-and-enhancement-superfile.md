@@ -1,8 +1,8 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-19 (Phases 20-27 complete. Consolidated browser smoke is
-in progress; the initial Workspace shell layout issue is fixed and awaiting
-user retest.)
+Last updated: 2026-07-21 (The user completed the consolidated manual smoke.
+The cross-page correction set is implemented and statically validated; focused
+page-by-page browser re-smoke and corrections are in progress.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -23,7 +23,7 @@ Keep separate:
 - `docs/satellite-radar-render-pipeline-files.md` for the satellite/radar
   render pipeline file reference (companion to the optimization plan).
 
-## Active Tracks (2026-07-19)
+## Active Tracks (2026-07-20)
 
 Priority order for upcoming work. Track 1 goes first because it may alter
 the plan for some future items; re-evaluate later tracks against the
@@ -51,6 +51,65 @@ post-split structure, not the monolith.
 ## Current State
 
 - Active repo: `F:\Python\dashboard_2026`.
+- The 2026-07-20 consolidated manual smoke is complete. Its correction set is
+  implemented and awaits user browser re-smoke. Shared changes: State + County
+  borders default on while Country + graticule default off; status cards omit
+  Source; pointer-click focus boxes are suppressed while keyboard focus remains;
+  categorical legend swatches are compact squares; data-selection pills use an
+  amber active state while sidebar navigation remains cyan; and every shared
+  scrubber pauses at the newest frame before wrapping.
+- Workspace follow-up 2026-07-21: the Active Alerts legend now expands to a
+  full-width tray, reflows categories into additional columns, and removes its
+  nested content scrollbar. Alert category columns have a wider minimum and
+  names wrap instead of being truncated with ellipses. Radar, Storm Tracks,
+  Alerts, and Storm Reports now share that one collapsible tray: tabs appear
+  only when their legend has content, one legend is visible at a time, tab
+  selection survives refreshes, and newly activated legend sources take focus
+  after initial startup. This is the Workspace prototype for possible reuse on
+  other pages after browser acceptance. Live alert payloads use a bounded
+  browser Cache Storage stale-while-revalidate path: cached active features render first on
+  reload/Home/manual refresh, the disk-backed API request runs concurrently,
+  and the fresh payload replaces cache/render state when it arrives. Workspace
+  also starts the initial Alerts request concurrently with the Radar catalog
+  instead of waiting for catalog completion. Projected Arrival is now exposed
+  only when the selected feature is a TOR, SVR, SMW, or SPS polygon; selecting
+  watches, advisories, or other alerts clears and hides the tool while retaining
+  normal alert detail and zoom behavior. The right-side Active Alerts and Local
+  Storm Reports feeds now retain nationwide results under map pan/zoom, while
+  polygon/marker rendering and both legends remain viewport-bounded. Map moves
+  refresh only the viewport data; manual/scheduled updates and filter or LSR-time
+  changes refresh the nationwide feeds. The left-side
+  `workspace-warning-filters` now affect only map polygons and their legend;
+  nationwide alert cards are affected only by `workspace-rail-warning-filters`.
+  New-alert comparison also uses the unfiltered nationwide feed, with the
+  existing notification event allowlist deciding which new records produce a
+  notice and sound. This awaits user browser re-smoke.
+- Product follow-ups from that smoke are implemented: Surface uses stale-while-
+  refresh live data, station-name popup headings, and a values-only 15-minute
+  archive scrubber up to 24 hours; Alerts has separate legends, cached viewport
+  payload reuse, bounded tooltips, a clear detail-panel offset, Zoom to Alert,
+  zoom level 9, and an active-at-time archive scrubber with exact 5-minute steps
+  up to 6 hours; Radar removes `(Live Cache)`, labels Site Tools, and shares the
+  corrected tooltip treatment; Satellite has harmonized Auto Update/Lookback
+  controls plus a GOES-19 CONUS-only Southeast US fit-bounds view and no
+  GOES-East Full Disk view preset (the Full Disk sector is unchanged); RTMA
+  groups value controls below Data Stream and value markers now open a location
+  + displayed-value popup; MRMS and WPC place opacity in Live; WPC refreshes
+  stale product cache in the background; SPC/Drought selector styling is
+  harmonized; and Tropical outlook polygons show Area/2-day/7-day tooltips,
+  Storm Layers opens by default, and Issued uses the printed NHC local issuance
+  with UTC in parentheses.
+- Cache lifecycle audit result: Surface and WPC needed the changes above. MRMS
+  already invokes its worker for missing/stale selected-product cache, and RTMA
+  already resolves/downloads and renders missing selected frames on demand.
+  Boundary requests consistently use the shared cached overlay endpoints and
+  browser/disk caching, so no boundary architecture change was made. Radar,
+  Alerts, Satellite, SPC, Drought, Tropical, and Water retain their approved
+  page-specific freshness policies.
+- Checkbox feasibility result: do not convert every checkbox indiscriminately.
+  Binary visibility/auto-update controls can use switch presentation without
+  changing their checked-state wiring, but multi-select products/categories
+  should remain checkboxes and exclusive choices should remain pills/radios.
 - The backend route/service refactor is complete enough that product routes and
   services should remain modular. Do not add route logic back to `main.py`.
 - The fixed map-first dashboard shell is accepted.
@@ -68,8 +127,8 @@ post-split structure, not the monolith.
   Off/US/World source, bounded density, and font-size implementation.
 - Standalone sidebar controls were harmonized on 2026-07-19 using Workspace as
   the styling reference. Surface, Alerts, Radar, Satellite, SPC, RTMA, and MRMS
-  use `Live / Settings / Archive`; Alerts owns a functional Archive panel while
-  the other Archive panels are explicit placeholders. Drought, WPC, and Water
+  use `Live / Settings / Archive`; Alerts and Surface own functional Archive
+  panels while the other Archive panels are explicit placeholders. Drought, WPC, and Water
   intentionally remain `Live / Settings`, and Tropical intentionally retains
   `Live / Archive / Settings`. Settings sections use the shared order Basemap,
   opacity controls when the product has them, Cities, Map Overlays, then any
@@ -85,11 +144,12 @@ post-split structure, not the monolith.
   Auto Update. Alerts starts Local Storm Reports collapsed and keeps All Alerts
   as the first item in the dynamically populated category list. Water now uses
   the shared Cities controls but intentionally has no opacity control.
-- Validation for this pass: all 10 changed JavaScript modules passed
-  `node --check`; the 40 focused page/layout tests passed; and browser interaction
-  smoke covered Surface, Alerts, Radar, Satellite, Water, and Tropical control
-  state. The full repository suite still has five unrelated pre-existing Radar
-  backend expectation failures in product-catalog/storm-attribute tests.
+- Validation for the 2026-07-20 correction pass: all changed JavaScript passed
+  `node --check`, changed Python passed `py_compile`, `git diff --check` passed,
+  and all 85 current repository tests passed. The formerly failing Radar catalog,
+  unit-conversion, cache-key, and storm-icon assertions were confirmed as stale
+  expectations and synchronized with the active production configuration before
+  browser re-smoke. Browser-visible corrections still require user re-smoke.
 - `config/user_settings.default.json` is the tracked baseline for user-facing
   dashboard preferences. `GET /api/user-settings/defaults` serves this file,
   and standalone pages read it through `frontend/core/settings.js`. It separates
@@ -423,7 +483,10 @@ found it.
   `renderContinuousLegend`, `_formatSurfaceTick`), the `wx-section-current`
   controls and `wx-side-group-current` styling blocks were removed from
   `weather.html`, and `js/surface-engine.js` + `js/surface-page.js` were
-  deleted. `weather.js?v=20260717a`.
+  deleted. `weather.js?v=20260717a`. Superseded 2026-07-20: a bounded,
+  standalone values-only Surface archive was restored using one endpoint time
+  plus a 15-minute-step lookback (maximum 24 hours) and the shared scrubber;
+  it does not restore the old monolith archive path.
 - Phase 21: spc, wpc. **SPC half COMPLETE 2026-07-18.** User parity smoke
   passed 2026-07-17 (minor UI spacing issues noted; deferred with the other
   pages' polish to the end of the superplan). The monolith deletion then
@@ -846,15 +909,43 @@ found it.
   Final quick filter follow-up: Active Alerts now includes a default-off `SPS`
   pill for exact `Special Weather Statement` matching. SPS remains informational:
   it is not added to severe-warning notification, pulse, or standalone Alerts
-  defaults.
+  defaults. Projected Arrival remains available for SPS polygons alongside TOR,
+  SVR, and SMW polygons, but is hidden for every other alert event and for
+  non-polygon alert features.
   Radar loop timing follow-up: Workspace and standalone Radar opt into the shared
   scrubber's `holdAtEnd` behavior, so the longer loop pause occurs on the newest
   frame before wraparound instead of on the oldest frame after wraparound. Other
   scrubber consumers retain their existing timing.
-  Workspace legend follow-up: the stacked Radar, Storm Tracks, Alerts, and Storm
-  Reports panels preserve their independent state and placement while reusing the
-  shared product-page legend header and boxed chevron collapse presentation in
-  place of the former native-details `+ / −` headers.
+  Workspace legend follow-up: the formerly stacked Radar, Storm Tracks, Alerts,
+  and Storm Reports panels were consolidated into one full-width, collapsible,
+  keyboard-navigable tabbed tray. Only available legend sources expose tabs and
+  the selected tab determines the single visible legend.
+  **Shared tabbed-legend adoption plan (reviewed 2026-07-21; deferred until the
+  Workspace prototype passes browser smoke):** do not copy the Workspace-local
+  manager and CSS into individual pages. Promote the outer tray, dynamic tabs,
+  shared collapse state, keyboard navigation, selected-tab lifecycle, and source
+  registration into an opt-in companion to `createLegendHost` in
+  `frontend/core/legend.js`, with shared shell styling in `frontend/core/core.css`.
+  Product engines retain ownership of their legend HTML, swatches, scales,
+  statistics, and viewport semantics.
+  - Standalone Alerts is the next and lowest-risk proof because it already has
+    independent Alerts and Local Storm Reports legend hosts. Consolidate those
+    into one full-width two-tab tray without changing either viewport filter.
+  - Standalone Radar requires moderate source-state work before adoption: Site
+    Status and product color legends currently replace one another, and Storm
+    Tracks does not expose a separate standalone legend callback.
+  - SPC requires moderate source-state work because `applyLegend()` currently
+    chooses one winner by precedence among outlook, reports, watches, and fire
+    content. Tabs require independently retained legend sources.
+  - Tropical requires the most page-specific adaptation because overview,
+    intensity, surge, watches/warnings, and wind-layer renderers overwrite one
+    shared host. Add a keyed legend registry tied to layer activation before
+    adopting the shared tray.
+  - Surface, Satellite, RTMA, MRMS, Drought, WPC, and Water should retain the
+    existing single collapsible legend host. They may share compatible full-width
+    shell styling later, but a one-tab tray adds no useful interaction.
+  Treat successful Workspace plus standalone Alerts browser smoke as the gate
+  before considering Radar, SPC, or Tropical conversion.
   **Radar/Alerts Workspace closure (2026-07-19):** the user accepted this slice
   for now and reported all tests passed. Treat the current Radar, Alerts, Storm
   Reports, scrubber, value-inspector, storm-track, Projected Arrival, and Home-reset

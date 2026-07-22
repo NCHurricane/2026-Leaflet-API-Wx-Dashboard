@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -15,6 +16,31 @@ from config.wpc_config import WPC_PRODUCTS, get_product
 _WPC_CACHE = os.path.join(CACHE_ROOT, "wpc")
 _WPC_STATUS = os.path.join(_WPC_CACHE, ".status")
 _WPC_STALE_SECONDS = 12 * 60 * 60
+_WPC_REFRESH_LOCK = threading.Lock()
+_WPC_REFRESHING: set[str] = set()
+
+
+def _refresh_product(product_id: str) -> None:
+    try:
+        from workers.wpc_worker import run_wpc_worker
+
+        run_wpc_worker(product_ids={product_id})
+    finally:
+        with _WPC_REFRESH_LOCK:
+            _WPC_REFRESHING.discard(product_id)
+
+
+def _start_product_refresh(product_id: str) -> None:
+    with _WPC_REFRESH_LOCK:
+        if product_id in _WPC_REFRESHING:
+            return
+        _WPC_REFRESHING.add(product_id)
+    threading.Thread(
+        target=_refresh_product,
+        args=(product_id,),
+        name=f"wpc-refresh-{product_id}",
+        daemon=True,
+    ).start()
 
 
 def _read_json_file(path: str) -> dict:
@@ -87,6 +113,7 @@ def _shape_collection(
             "source_status": status.get("status") or "unknown",
             "source_error": status.get("error"),
             "stale": stale,
+            "cache_state": "stale_refreshing" if stale else "fresh",
             "cache_age_seconds": cache_age_seconds,
         }
     geojson = payload.get("geojson") if isinstance(payload, dict) else None
@@ -122,6 +149,7 @@ def _shape_collection(
         "source_status": status.get("status") or "unknown",
         "source_error": status.get("error"),
         "stale": stale,
+        "cache_state": "stale_refreshing" if stale else "fresh",
         "cache_age_seconds": cache_age_seconds,
     }
 
@@ -166,6 +194,8 @@ def get_wpc_layer(
         raise HTTPException(status_code=500, detail=str(exc))
 
     cache_age_seconds, stale = _cache_state(cache_file)
+    if stale:
+        _start_product_refresh(product["id"])
     return _shape_collection(
         payload,
         group_key,

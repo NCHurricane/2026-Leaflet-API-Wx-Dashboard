@@ -86,9 +86,16 @@
 }
 
 .satellite-auto-update-row {
-    padding-top: 8px;
-    border-top: 1px solid var(--core-line);
+    cursor: pointer;
 }
+
+.satellite-control-block {
+    padding: 9px 10px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.55);
+}
+.satellite-control-block input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--core-accent); }
 
 .satellite-check-list { display: flex; flex-direction: column; gap: 6px; }
 
@@ -107,8 +114,11 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.74rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
     color: var(--core-muted);
+    text-transform: uppercase;
 }
 
 #satellite-lookback-value { color: var(--core-text); font-weight: 700; }

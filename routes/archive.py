@@ -54,7 +54,7 @@ def archive_surface(
     product: str = "temperature",
     date_from: str = "",
     date_to: str = "",
-    max_frames: int = 24,
+    max_frames: int = 120,
     source: str = "iem",
     network: str = "ASOS",
 ):

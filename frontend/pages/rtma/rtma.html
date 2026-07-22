@@ -7,8 +7,8 @@
     <link rel="icon" href="/img/favicon.ico">
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719d">
-    <link rel="stylesheet" href="/frontend/pages/rtma/rtma.css?v=20260718a">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260720a">
+    <link rel="stylesheet" href="/frontend/pages/rtma/rtma.css?v=20260720a">
 </head>
 <body>
     <header class="core-header">
@@ -27,7 +27,6 @@
                         <dt>Valid</dt><dd id="rtma-updated">—</dd>
                         <dt>Data Age</dt><dd id="rtma-age">—</dd>
                         <dt>Provider</dt><dd id="rtma-provider">—</dd>
-                        <dt>Source</dt><dd id="rtma-source">—</dd>
                     </dl>
                 </div>
 
@@ -68,6 +67,18 @@
                         <div class="rtma-check-row rtma-stream-row">
                             <span>RTMA Rapid Update 15-Min</span>
                             <input class="rtma-stream" type="checkbox" value="rtma_rapid_update">
+                        </div>
+                    </div>
+
+                    <div class="rtma-sub-group rtma-value-controls">
+                        <span class="rtma-sub-group-label">Value Markers</span>
+                        <div class="rtma-check-row">
+                            <span>Show Values</span>
+                            <input id="rtma-show-values" type="checkbox">
+                        </div>
+                        <div class="core-adjustment">
+                            <label id="rtma-density-label" for="rtma-density">Station Density</label>
+                            <input id="rtma-density" type="range" min="0.01" max="2" step="0.005" value="0.25">
                         </div>
                     </div>
 
@@ -116,18 +127,6 @@
                         <div class="rtma-check-row rtma-product-row">
                             <span>Feels Like</span>
                             <input class="rtma-product" type="checkbox" value="apparent_temperature">
-                        </div>
-                    </div>
-
-                    <div class="rtma-sub-group">
-                        <span class="rtma-sub-group-label">Value Markers</span>
-                        <div class="rtma-check-row">
-                            <span>Show Values</span>
-                            <input id="rtma-show-values" type="checkbox">
-                        </div>
-                        <div class="core-adjustment">
-                            <label id="rtma-density-label" for="rtma-density">Station Density</label>
-                            <input id="rtma-density" type="range" min="0.01" max="2" step="0.005" value="0.25">
                         </div>
                     </div>
 
@@ -180,8 +179,8 @@
                     <div class="rtma-check-list core-check-list">
                         <label class="rtma-check core-check-row"><span>Lat/Lon Grid</span><input data-map-overlay="graticule" type="checkbox"></label>
                         <label class="rtma-check core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label>
-                        <label class="rtma-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label>
-                        <label class="rtma-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
+                        <label class="rtma-check core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox"></label>
+                        <label class="rtma-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox" checked></label>
                     </div>
                     </div>
                 </section>
@@ -209,6 +208,6 @@
     </main>
 
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/rtma/rtma-page.js?v=20260719b"></script>
+    <script type="module" src="/frontend/pages/rtma/rtma-page.js?v=20260720a"></script>
 </body>
 </html>

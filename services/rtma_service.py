@@ -61,12 +61,14 @@ def get_rtma_points(
             )
 
         points: list[dict] = []
-        if data.get("v") == 1:
+        if data.get("v") in {1, 2}:
             for row in data.get("points", []):
                 if len(row) < 3:
                     continue
                 lat, lon, val = float(row[0]), float(row[1]), float(row[2])
                 rank = row[3] if len(row) > 3 else None
+                city = str(row[4]) if len(row) > 4 else ""
+                state = str(row[5]) if len(row) > 5 else ""
                 if bounds_values is not None:
                     bound_s, bound_w, bound_n, bound_e = bounds_values
                     if (
@@ -76,7 +78,9 @@ def get_rtma_points(
                         or lon > bound_e
                     ):
                         continue
-                points.append({"lat": lat, "lon": lon, "value": val, "rank": rank})
+                points.append(
+                    {"lat": lat, "lon": lon, "value": val, "rank": rank, "city": city, "state": state}
+                )
             return points
 
         for feat in data.get("features", []):
@@ -102,6 +106,8 @@ def get_rtma_points(
                     "lon": lon,
                     "value": float(val),
                     "rank": props.get("rank"),
+                    "city": props.get("city") or "",
+                    "state": props.get("state") or "",
                 }
             )
         return points

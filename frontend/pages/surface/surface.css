@@ -37,7 +37,8 @@
     align-items: center;
     gap: 8px;
     color: #d7e6f5;
-    font-size: 0.78rem;
+    font-size: 0.73rem;
+    font-weight: 800;
 }
 .surface-product-row input { width: 16px; height: 16px; margin: 0; }
 .surface-grad-label {
@@ -58,6 +59,16 @@
     font-size: 0.81rem;
     font-weight: 800;
 }
+
+.surface-archive-lookback {
+    padding: 9px 10px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.55);
+}
+.surface-lookback-labels { display: flex; justify-content: space-between; color: var(--core-muted); font-size: 0.66rem; }
+#surface-scrubber-bar { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 620; min-width: 0; padding: 6px 10px; background: rgba(15,23,42,0.96); border: 1px solid #334155; border-radius: 8px; }
+#surface-scrubber-bar[hidden] { display: none; }
 .core-sidebar-footer .core-message { margin-bottom: 6px; }
 .core-segmented + .core-adjustment { margin-top: 8px; }
 .core-adjustment + .core-adjustment { margin-top: 7px; }

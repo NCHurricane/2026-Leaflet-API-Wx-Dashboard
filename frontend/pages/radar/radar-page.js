@@ -185,7 +185,7 @@ async function initialize() {
         const options = (catalog.sites || []).map((site) => {
             const option = document.createElement('option');
             option.value = String(site.site || '').toUpperCase();
-            option.textContent = site.configured ? `${option.value} (Live Cache)` : option.value;
+            option.textContent = option.value;
             return option;
         });
         select.replaceChildren(placeholder, ...options);

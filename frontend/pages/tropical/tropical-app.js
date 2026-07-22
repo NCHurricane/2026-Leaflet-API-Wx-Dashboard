@@ -486,6 +486,14 @@ function _renderTropicalOutlookLayer(geojson) {
                 fillColor: color,
             },
         });
+        const props = feature.properties || {};
+        const area = props.disturbance || props.area || '';
+        const twoDay = props.twoDayPct != null ? `${props.twoDayPct}%` : '—';
+        const sevenDay = props.sevenDayPct != null ? `${props.sevenDayPct}%` : '—';
+        layer.bindTooltip(
+            `<strong>Area ${escapeHtml(area || '—')}</strong><br>2-day: ${escapeHtml(twoDay)}<br>7-day: ${escapeHtml(sevenDay)}`,
+            { direction: 'top', className: 'core-city-name-tag' },
+        );
         layer.on('click', () => _highlightOutlookFeature(feature));
         group.addLayer(layer);
     });
@@ -1009,12 +1017,22 @@ function _formatLatLon(lat, lon) {
     return `${Math.abs(a).toFixed(1)}${a >= 0 ? 'N' : 'S'} ${Math.abs(o).toFixed(1)}${o >= 0 ? 'E' : 'W'}`;
 }
 
-function _formatTropicalIssued(iso) {
-    // NHC issuance is UTC (…Z); show it unambiguously without timezone conversion.
+function _formatTropicalIssued(iso, advisoryText = '') {
     const s = String(iso || '');
-    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)
-        ? `${s.slice(0, 10)} ${s.slice(11, 16)} UTC`
-        : '--';
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return '--';
+    const utc = new Date(s);
+    const utcLabel = Number.isFinite(utc.getTime())
+        ? `${String(utc.getUTCHours()).padStart(2, '0')}:${String(utc.getUTCMinutes()).padStart(2, '0')} UTC`
+        : `${s.slice(11, 16)} UTC`;
+    const localMatch = String(advisoryText || '').match(
+        /\b(\d{1,4})\s+(AM|PM)\s+([A-Z]{2,5})\s+\w{3}\s+([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})\b/,
+    );
+    if (!localMatch) return `${s.slice(5, 7)}-${s.slice(8, 10)}-${s.slice(0, 4)} ${s.slice(11, 16)} UTC`;
+    const [, rawTime, meridiem, zone, monthName, day, year] = localMatch;
+    const months = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+    const padded = rawTime.padStart(4, '0');
+    const localTime = `${Number(padded.slice(0, -2))}:${padded.slice(-2)}`;
+    return `${months[monthName] || '--'}-${String(day).padStart(2, '0')}-${year} ${localTime} ${meridiem} ${zone} (${utcLabel})`;
 }
 
 function _renderTropicalSummary(data) {
@@ -1061,7 +1079,10 @@ function _renderTropicalSummary(data) {
             const motion = _tropicalMotionText(storm);
             const advNum = storm.publicAdvisory?.advNum || storm.forecastAdvisory?.advNum;
             const advNumText = advNum ? String(parseInt(advNum, 10) || advNum) : '--';
-            const issued = _formatTropicalIssued(storm.publicAdvisory?.issuance || storm.lastUpdate);
+            const issued = _formatTropicalIssued(
+                storm.publicAdvisory?.issuance || storm.lastUpdate,
+                data?.products?.TCP?.text,
+            );
             const locationText = data?.advisory?.location?.text || '';
             summary.innerHTML = [
                 ['Issued', issued, ' is-wide'],

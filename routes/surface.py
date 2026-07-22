@@ -22,8 +22,12 @@ def get_surface_products():
 
 
 @router.get("/api/data/surface")
-def get_data_surface(region: str = "NC", product: str = "temperature"):
-    return get_surface_data(region=region, product=product)
+def get_data_surface(
+    region: str = "NC", product: str = "temperature", force_refresh: bool = False
+):
+    return get_surface_data(
+        region=region, product=product, force_refresh=force_refresh
+    )
 
 
 @router.get("/api/data/surface-gradient")

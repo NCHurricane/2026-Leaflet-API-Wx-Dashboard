@@ -55,7 +55,7 @@ class BuildCellsTest(unittest.TestCase):
     def test_icon_priority_order(self):
         cases = [
             (dict(tvs="TVS", meso="MESO", posh=100, poh=100), "tvs"),
-            (dict(meso="3D", posh=100, poh=100), "meso"),
+            (dict(meso=4, posh=100, poh=100), "meso"),
             (dict(posh=60), "pos_hail"),
             (dict(poh=70), "prob_hail"),
             (dict(), "cell"),

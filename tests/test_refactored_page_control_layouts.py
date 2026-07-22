@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -46,9 +47,9 @@ def test_settings_controls_follow_reference_order():
         "satellite": ("satellite-basemap", "satellite-opacity", "satellite-city-density", 'data-map-overlay="graticule"'),
         "spc": ("spc-basemap", "spc-fill-opacity", "spc-stroke-opacity", "spc-city-density", 'data-map-overlay="graticule"'),
         "rtma": ("rtma-basemap", "rtma-gradient-opacity", "rtma-city-density", 'data-map-overlay="graticule"'),
-        "mrms": ("mrms-basemap", "mrms-opacity", "mrms-city-density", 'data-map-overlay="graticule"'),
+        "mrms": ("mrms-basemap", "mrms-city-density", 'data-map-overlay="graticule"'),
         "drought": ("drought-basemap", "drought-opacity", "drought-city-density", 'data-map-overlay="graticule"'),
-        "wpc": ("wpc-basemap", "wpc-opacity", "wpc-city-density", 'data-map-overlay="graticule"'),
+        "wpc": ("wpc-basemap", "wpc-city-density", 'data-map-overlay="graticule"'),
         "water": ("water-basemap", "water-city-density", 'data-map-overlay="graticule"'),
     }
     for page, controls in expected.items():
@@ -81,7 +82,29 @@ def test_live_control_moves_and_conditional_wiring_are_preserved():
     rtma = page_text("rtma")
     assert rtma.index('id="rtma-density"') < rtma.index('id="rtma-lookback"') < rtma.index('id="rtma-auto-update"')
     mrms = page_text("mrms")
-    assert mrms.index('id="mrms-lookback"') < mrms.index('id="mrms-auto-update"')
+    assert_in_order(mrms, 'id="mrms-opacity"', 'id="mrms-lookback"', 'id="mrms-auto-update"')
+    wpc = page_text("wpc")
+    assert wpc.index('class="wpc-group-pills"') < wpc.index('id="wpc-opacity"') < wpc.index('class="wpc-group-panel')
+
+
+def test_shared_border_defaults_enable_state_and_county_only():
+    for page in ("surface", "alerts", "radar", "satellite", "spc", "rtma", "mrms", "drought", "wpc", "water", "workspace", "tropical"):
+        html = page_text(page)
+        state = re.search(r'<input[^>]*data-map-overlay="states"[^>]*>', html).group()
+        county = re.search(r'<input[^>]*data-map-overlay="counties"[^>]*>', html).group()
+        country = re.search(r'<input[^>]*data-map-overlay="countries"[^>]*>', html).group()
+        assert "checked" in state
+        assert "checked" in county
+        assert "checked" not in country
+        graticule = re.search(r'<input[^>]*(?:data-map-overlay="graticule"|id="weather-tropical-graticule")[^>]*>', html).group()
+        assert "checked" not in graticule
+
+
+def test_archive_sliders_use_exact_requested_steps():
+    surface = page_text("surface")
+    alerts = page_text("alerts")
+    assert 'id="surface-archive-lookback" type="range" min="0.25" max="24" step="0.25"' in surface
+    assert 'id="alerts-archive-lookback" type="range" min="5" max="360" step="5"' in alerts
 
 
 def test_tropical_keeps_tab_order_and_uses_shared_settings_spacing():

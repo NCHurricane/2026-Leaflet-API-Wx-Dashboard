@@ -6,8 +6,8 @@
     <title>Severe Weather Workspace | NCHurricane</title>
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260719a">
-    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260719x">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260720a">
+    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260721c">
 </head>
 <body>
     <header class="core-header">
@@ -24,7 +24,6 @@
                         <dt>Valid</dt><dd id="workspace-updated">—</dd>
                         <dt>Data Age</dt><dd id="workspace-age">—</dd>
                         <dt>Provider</dt><dd id="workspace-provider">—</dd>
-                        <dt>Source</dt><dd id="workspace-source">—</dd>
                     </dl>
                 </div>
                 <div class="core-field workspace-region-field">
@@ -184,11 +183,24 @@
         <section class="core-map-panel weather-map-wrap">
             <div id="workspace-map" class="core-map"></div>
             <time id="global-timestamp" class="core-global-timestamp">Last Updated: —</time>
-            <div id="workspace-legends" class="workspace-legends">
-                <div id="workspace-radar-legend"></div>
-                <div id="workspace-storm-track-legend"></div>
-                <div id="workspace-alerts-legend"></div>
-                <div id="workspace-lsr-legend"></div>
+            <div id="workspace-legends" class="workspace-legends" hidden>
+                <div class="workspace-legend-panel">
+                    <div class="workspace-legend-toolbar">
+                        <div class="workspace-legend-tabs" role="tablist" aria-label="Map legends">
+                            <button id="workspace-radar-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="radar" aria-controls="workspace-radar-legend" hidden>Radar</button>
+                            <button id="workspace-storm-track-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="storm-tracks" aria-controls="workspace-storm-track-legend" hidden>Storm Tracks</button>
+                            <button id="workspace-alerts-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="alerts" aria-controls="workspace-alerts-legend" hidden>Alerts</button>
+                            <button id="workspace-lsr-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="storm-reports" aria-controls="workspace-lsr-legend" hidden>Storm Reports</button>
+                        </div>
+                        <button class="core-legend-collapse" type="button" aria-expanded="true" aria-label="Collapse legends" title="Collapse legends"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                    </div>
+                    <div class="workspace-legend-views">
+                        <section id="workspace-radar-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="radar" aria-labelledby="workspace-radar-legend-tab" hidden></section>
+                        <section id="workspace-storm-track-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="storm-tracks" aria-labelledby="workspace-storm-track-legend-tab" hidden></section>
+                        <section id="workspace-alerts-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="alerts" aria-labelledby="workspace-alerts-legend-tab" hidden></section>
+                        <section id="workspace-lsr-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="storm-reports" aria-labelledby="workspace-lsr-legend-tab" hidden></section>
+                    </div>
+                </div>
             </div>
             <div id="workspace-radar-scrubber-bar" hidden><div id="workspace-radar-bottom-scrubber"></div></div>
             <div id="workspace-detail" class="alerts-detail" hidden></div>
@@ -217,12 +229,12 @@
                     <button type="button" data-filter="other">OTHER <span data-count="other">0</span></button>
                 </div>
                 <div id="workspace-lsr-rail-list" class="alerts-warning-list alerts-lsr-rail-list"></div>
-                <div id="workspace-lsr-rail-empty" class="alerts-warning-empty">No Local Storm Reports in view.</div>
+                <div id="workspace-lsr-rail-empty" class="alerts-warning-empty">No Local Storm Reports for the selected time window.</div>
             </section>
         </aside>
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
     <script src="/frontend/lib/tz-lookup/tz.js?v=6.1.25"></script>
-    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260719ae"></script>
+    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260721e"></script>
 </body>
 </html>

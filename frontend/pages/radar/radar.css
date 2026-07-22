@@ -34,6 +34,7 @@
 .radar-auto-update-row { padding-top: 8px; border-top: 1px solid var(--core-line); }
 .radar-product-options { display: grid; gap: 8px; }
 .radar-product-options[hidden], .radar-site-option[hidden] { display: none; }
+.radar-site-tools { display: grid; gap: 7px; padding-top: 8px; border-top: 1px solid var(--core-line); }
 .radar-level-pills { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .radar-level-pills button {
     min-width: 0;

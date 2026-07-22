@@ -147,8 +147,10 @@ export function createAlertDetail(root, options = {}) {
                 ${locations ? `<div class="alerts-detail-section"><h3>Locations Impacted</h3>${formatText(locations)}</div>` : ''}
                 ${props.instruction ? `<div class="alerts-detail-section"><h3>Precautionary / Preparedness Actions</h3>${formatText(props.instruction)}</div>` : ''}
                 ${link ? `<a class="alerts-detail-link" href="${escapeHtml(link)}" target="_blank" rel="noopener">View Full NWS Alert Text</a>` : ''}
+                ${options.onZoom ? '<button class="alerts-detail-zoom" type="button">Zoom to Alert</button>' : ''}
             </div>`;
         finishOpen(feature, 'alert');
+        root.querySelector('.alerts-detail-zoom')?.addEventListener('click', () => options.onZoom(feature));
     }
     function openLsr(feature) {
         const props = feature?.properties || {};

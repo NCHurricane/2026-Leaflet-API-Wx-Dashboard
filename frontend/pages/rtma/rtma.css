@@ -96,6 +96,12 @@
 }
 
 .rtma-sub-group { margin-bottom: 2px; }
+.rtma-value-controls {
+    padding: 9px 10px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.55);
+}
 
 .rtma-sub-group-label {
     display: block;

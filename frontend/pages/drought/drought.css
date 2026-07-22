@@ -57,6 +57,23 @@
 }
 .drought-status-card .core-status-grid { gap: 4px 10px; font-size: 0.75rem; }
 .drought-status-card .core-status-grid dt { white-space: nowrap; }
+.drought-category-list { display: grid; gap: 6px; }
+.drought-category {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 32px;
+    padding: 6px 8px;
+    color: var(--core-text);
+    background: rgba(15, 23, 42, 0.48);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 5px;
+    font-size: 0.76rem;
+    font-weight: 750;
+    cursor: pointer;
+}
+.drought-category input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: #facc15; }
 .drought-legend .core-legend-header::before {
     content: "";
     position: absolute;

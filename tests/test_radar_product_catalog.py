@@ -144,7 +144,6 @@ class RadarProductCatalogTests(unittest.TestCase):
                 "L2_SW",
                 "L2_ZDR",
                 "L2_RHO",
-                "L2_KDP",
                 "L2_PHI",
                 "L3_N0B",
                 "L3_N0G",
@@ -152,9 +151,15 @@ class RadarProductCatalogTests(unittest.TestCase):
                 "L3_N0X",
                 "L3_N0C",
                 "L3_N0K",
+                "L3_N0H",
+                "L3_DPR",
+                "L3_DAA",
+                "L3_DTA",
+                "L3_EET",
+                "L3_DVL",
             ],
         )
-        self.assertNotIn("L3_DTA", LIVE_RADAR_PRODUCTS)
+        self.assertNotIn("L2_KDP", LIVE_RADAR_PRODUCTS)
 
         required = {
             "level",
@@ -190,8 +195,8 @@ class RadarProductCatalogTests(unittest.TestCase):
         data = get_radar_colortable_data("L3_N0G")
         self.assertEqual(data["product"], "L3_N0G")
         self.assertEqual(data["palette"], "BV")
-        self.assertEqual(data["vmin"], -120.0)
-        self.assertEqual(data["vmax"], 120.0)
+        self.assertEqual(data["vmin"], -150.0)
+        self.assertEqual(data["vmax"], 64.0)
         self.assertTrue(data["entries"])
 
     def test_all_catalog_palettes_generate_legends(self):
@@ -309,13 +314,13 @@ class RadarProductCatalogTests(unittest.TestCase):
         self.assertEqual(data["vmax"], 160.0)
         self.assertTrue(data["entries"])
 
-    def test_velocity_and_spectrum_width_convert_to_knots(self):
+    def test_velocity_converts_to_mph_and_spectrum_width_to_knots(self):
         velocity = _prepare_field_data(
             np.ma.array([-10.0, 0.0, 10.0]),
             "VEL",
             LIVE_RADAR_PRODUCTS["L2_VEL"],
         )
-        self.assertAlmostEqual(float(velocity[2]), 19.4384449)
+        self.assertAlmostEqual(float(velocity[2]), 22.369363)
 
         spectrum_width = _prepare_field_data(
             np.ma.array([-1.0, 5.0, np.nan]),
@@ -332,13 +337,16 @@ class RadarProductCatalogTests(unittest.TestCase):
         self.assertEqual(normalize_radar_elevation("L3_N0B", "1.5"), "auto")
         self.assertEqual(
             radar_cache_product_key("L2_REF", "auto"),
-            "L2_REF__ELEV_AUTO",
+            "L2_REF__BR_MIN5DBZ_V4__ELEV_AUTO",
         )
         self.assertEqual(
             radar_cache_product_key("L2_REF", "1.5"),
-            "L2_REF__ELEV_1P5",
+            "L2_REF__BR_MIN5DBZ_V4__ELEV_1P5",
         )
-        self.assertEqual(radar_cache_product_key("L3_N0B", "auto"), "L3_N0B")
+        self.assertEqual(
+            radar_cache_product_key("L3_N0B", "auto"),
+            "L3_N0B__BR_MIN5DBZ_V4",
+        )
 
     def test_nearest_elevation_sweep_selection(self):
         class FakeRadar:

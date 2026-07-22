@@ -133,6 +133,7 @@ async function initialize() {
 
     const scrubberBar = byId('rtma-scrubber-bar');
     const scrubber = createScrubber(byId('rtma-bottom-scrubber'), {
+        holdAtEnd: true,
         onFrame(frame, index) {
             void engine.renderFrame(frame).then(() => {
                 engine.prefetchFrames(frames, index);

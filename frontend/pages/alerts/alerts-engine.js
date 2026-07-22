@@ -69,8 +69,48 @@ function legendHeader(title) {
     return `<div class="core-legend-header"><span class="core-legend-provider">Alerts</span><div class="core-legend-heading"><div class="core-legend-title">${escapeHtml(title)}</div></div></div>`;
 }
 
+const LIVE_ALERT_CACHE_NAME = 'nch-alerts-live-v1';
+const LIVE_ALERT_CACHE_LIMIT = 32;
+const LIVE_ALERT_CACHE_INDEX = `${LIVE_ALERT_CACHE_NAME}:keys`;
+
+async function readLiveAlertCache(api, paths) {
+    if (!('caches' in window)) return null;
+    try {
+        const cache = await window.caches.open(LIVE_ALERT_CACHE_NAME);
+        const responses = await Promise.all(paths.map((path) => cache.match(api.apiUrl(path))));
+        if (responses.some((response) => !response)) return null;
+        return Promise.all(responses.map((response) => response.json()));
+    } catch (_) {
+        return null;
+    }
+}
+
+async function writeLiveAlertCache(api, paths, payloads) {
+    if (!('caches' in window)) return;
+    try {
+        const cache = await window.caches.open(LIVE_ALERT_CACHE_NAME);
+        const urls = paths.map((path) => api.apiUrl(path));
+        await Promise.all(urls.map((url, index) => cache.put(
+            url,
+            new Response(JSON.stringify(payloads[index]), {
+                headers: { 'Content-Type': 'application/json' },
+            }),
+        )));
+        let keys = [];
+        try { keys = JSON.parse(window.localStorage.getItem(LIVE_ALERT_CACHE_INDEX) || '[]'); }
+        catch (_) { keys = []; }
+        keys = [...keys.filter((key) => !urls.includes(key)), ...urls];
+        while (keys.length > LIVE_ALERT_CACHE_LIMIT) {
+            await cache.delete(keys.shift());
+        }
+        try { window.localStorage.setItem(LIVE_ALERT_CACHE_INDEX, JSON.stringify(keys)); }
+        catch (_) { /* Cache Storage remains usable when localStorage is blocked. */ }
+    } catch (_) { /* Browser cache is an optimization; live fetch remains authoritative. */ }
+}
+
 export function createAlertsEngine(options) {
-    const { api, mapCore, legend, lsrLegend = null, status, onAlertCount, onLsrCount, onWarnings, onDetail, onNewAlert, onLsrDetail, onLsrDetailClose, shouldHandleAlertClick } = options;
+    const { api, mapCore, legend, lsrLegend = null, status, onAlertCount, onLsrCount, onWarnings, onRenderedAlerts, onDetail, onNewAlert, onLsrDetail, onLsrDetailClose, shouldHandleAlertClick } = options;
+    const railScope = options.railScope === 'national' ? 'national' : 'rendered';
     const { leaflet, map } = mapCore;
     const alertsPane = map.createPane('alerts-polygons');
     alertsPane.style.zIndex = '360';
@@ -80,8 +120,12 @@ export function createAlertsEngine(options) {
     let lsrLayer = null;
     let fullBaseFeatures = [];
     let displayBaseFeatures = [];
+    let railAlertBaseFeatures = [];
     let alertCacheReady = false;
+    const alertPayloadCache = new Map();
+    const lsrPayloadCache = new Map();
     let lsrBaseFeatures = [];
+    let railLsrBaseFeatures = [];
     let lsrCacheKey = '';
     let lsrCacheReady = false;
     let renderedAlerts = [];
@@ -168,10 +212,12 @@ export function createAlertsEngine(options) {
     function renderAlerts() {
         const full = fullBaseFeatures.filter((feature) => matchesSelection(feature, selection));
         const display = displayBaseFeatures.filter((feature) => matchesSelection(feature, selection));
+        const rail = railScope === 'national' ? railAlertBaseFeatures : full;
         renderedAlerts = full;
         alertLayer = replaceLayer(alertLayer, display.length ? buildAlertLayer(display) : null);
         onAlertCount?.(full.length);
-        onWarnings?.(full);
+        onRenderedAlerts?.(full);
+        onWarnings?.(rail);
         renderLegend();
     }
 
@@ -227,27 +273,70 @@ export function createAlertsEngine(options) {
     async function loadLive(nextSelection, region, loadOptions = {}) {
         selection = { ...nextSelection };
         const seq = ++liveSequence;
-        if (!selection.categories.length) { renderAlerts(); return; }
+        if (!selection.categories.length && railScope !== 'national') { renderAlerts(); return; }
         if (!loadOptions.silent) status.setMessage('Loading active alerts…');
+        let renderedCache = false;
         try {
-            const [full, display] = await Promise.all([
-                api.fetchJson(`/api/data/alerts?${requestParams(region, 'full')}`, { cache: 'no-store' }),
-                api.fetchJson(`/api/data/alerts?${requestParams(region, 'display')}`, { cache: 'no-store' }),
-            ]);
+            const fullParams = requestParams(region, 'full');
+            const displayParams = requestParams(region, 'display');
+            const cacheKey = `${fullParams.toString()}|${displayParams.toString()}`;
+            const paths = [
+                `/api/data/alerts?${fullParams}`,
+                `/api/data/alerts?${displayParams}`,
+            ];
+            const includeNationalRail = railScope === 'national' && loadOptions.refreshFeeds !== false;
+            if (includeNationalRail) paths.push('/api/data/alerts?geometry_mode=full&zoom_bucket=high');
+            const applyPayloads = (payloads, applyOptions = loadOptions) => {
+                if (!payloads || seq !== liveSequence) return false;
+                const [full, display, nationalRail] = payloads;
+                fullBaseFeatures = activeFeatures(full?.features);
+                displayBaseFeatures = activeFeatures(display?.features || full?.features);
+                if (railScope !== 'national') railAlertBaseFeatures = fullBaseFeatures;
+                else if (nationalRail) railAlertBaseFeatures = activeFeatures(nationalRail.features);
+                alertCacheReady = true;
+                renderAlerts();
+                const hasNotificationPayload = railScope !== 'national' || Boolean(nationalRail);
+                if (hasNotificationPayload) {
+                    const notificationFeatures = railScope === 'national' ? railAlertBaseFeatures : renderedAlerts;
+                    const nextIds = new Set(notificationFeatures.map(featureId));
+                    if (knownAlertIds && applyOptions.notifyNewAlerts !== false) notificationFeatures.forEach((feature) => {
+                        if (!knownAlertIds.has(featureId(feature))) onNewAlert?.(feature);
+                    });
+                    knownAlertIds = nextIds;
+                }
+                const updated = full?._updated || display?._updated || new Date().toISOString();
+                status.setDataInfo({ timestamp: updated, provider: 'NWS / IEM', source: full?._source || 'alerts cache' });
+                return true;
+            };
+
+            const memoryPayloads = alertPayloadCache.get(cacheKey);
+            if (memoryPayloads) {
+                renderedCache = applyPayloads(memoryPayloads, { ...loadOptions, notifyNewAlerts: false });
+                if (!loadOptions.refresh) return;
+            }
+
+            const freshPromise = Promise.all(paths.map((path) => api.fetchJson(path, { cache: 'no-store' })));
+            if (!memoryPayloads) {
+                const persisted = await readLiveAlertCache(api, paths);
+                if (persisted && seq === liveSequence) {
+                    alertPayloadCache.set(cacheKey, persisted);
+                    renderedCache = applyPayloads(persisted, { ...loadOptions, notifyNewAlerts: false });
+                }
+            }
+
+            const freshPayloads = await freshPromise;
             if (seq !== liveSequence) return;
-            fullBaseFeatures = activeFeatures(full?.features);
-            displayBaseFeatures = activeFeatures(display?.features || full?.features);
-            alertCacheReady = true;
-            renderAlerts();
-            const nextIds = new Set(fullBaseFeatures.map(featureId));
-            if (knownAlertIds && loadOptions.notifyNewAlerts !== false) renderedAlerts.forEach((feature) => {
-                if (!knownAlertIds.has(featureId(feature))) onNewAlert?.(feature);
-            });
-            knownAlertIds = nextIds;
-            const updated = full?._updated || display?._updated || new Date().toISOString();
-            status.setDataInfo({ timestamp: updated, provider: 'NWS / IEM', source: full?._source || 'alerts cache' });
+            alertPayloadCache.set(cacheKey, freshPayloads);
+            if (alertPayloadCache.size > 16) alertPayloadCache.delete(alertPayloadCache.keys().next().value);
+            void writeLiveAlertCache(api, paths, freshPayloads);
+            applyPayloads(freshPayloads);
         } catch (error) {
-            if (seq === liveSequence) status.setMessage(`Alerts unavailable: ${error.message}`, 'error');
+            if (seq === liveSequence) {
+                status.setMessage(
+                    `${renderedCache ? 'Showing cached alerts; update' : 'Alerts'} unavailable: ${error.message}`,
+                    'error',
+                );
+            }
         }
     }
 
@@ -300,18 +389,39 @@ export function createAlertsEngine(options) {
             .map((value) => Number(value).toFixed(2)).concat(String(hours || 24)).join('|');
         const applySelection = () => {
             renderedLsr = lsrBaseFeatures.filter((feature) => categories.includes(classifyLsrEvent(feature?.properties?.event)));
+            const railReports = (railScope === 'national' ? railLsrBaseFeatures : lsrBaseFeatures)
+                .filter((feature) => categories.includes(classifyLsrEvent(feature?.properties?.event)));
             lsrLayer = replaceLayer(lsrLayer, renderedLsr.length ? buildLsrLayer(renderedLsr) : null);
             openSelectedLsrPopup();
-            onLsrCount?.(renderedLsr.length); options.onLsrReports?.([...renderedLsr]); renderLegend();
+            onLsrCount?.(renderedLsr.length); options.onLsrReports?.(railReports); renderLegend();
         };
+        const cachedLsr = !loadOptions.refresh ? lsrPayloadCache.get(cacheKey) : null;
+        if (cachedLsr) {
+            lsrBaseFeatures = cachedLsr.mapFeatures;
+            if (cachedLsr.railFeatures) railLsrBaseFeatures = cachedLsr.railFeatures;
+            lsrCacheKey = cacheKey;
+            lsrCacheReady = true;
+            applySelection();
+            return;
+        }
         if (lsrCacheReady && lsrCacheKey === cacheKey && !loadOptions.refresh) {
             applySelection();
             return;
         }
         try {
-            const data = await api.fetchJson(`/api/data/alerts/lsr?${params}`, { cache: 'no-store' });
+            const paths = [`/api/data/alerts/lsr?${params}`];
+            const includeNationalRail = railScope === 'national' && loadOptions.refreshFeeds !== false;
+            if (includeNationalRail) paths.push(`/api/data/alerts/lsr?hours=${encodeURIComponent(String(hours || 24))}`);
+            const [data, nationalRail] = await Promise.all(paths.map((path) => api.fetchJson(path, { cache: 'no-store' })));
             if (seq !== lsrSequence) return;
             lsrBaseFeatures = Array.isArray(data?.features) ? data.features : [];
+            if (railScope !== 'national') railLsrBaseFeatures = lsrBaseFeatures;
+            else if (nationalRail) railLsrBaseFeatures = Array.isArray(nationalRail.features) ? nationalRail.features : [];
+            lsrPayloadCache.set(cacheKey, {
+                mapFeatures: lsrBaseFeatures,
+                railFeatures: includeNationalRail ? railLsrBaseFeatures : null,
+            });
+            if (lsrPayloadCache.size > 16) lsrPayloadCache.delete(lsrPayloadCache.keys().next().value);
             lsrCacheKey = cacheKey;
             lsrCacheReady = true;
             applySelection();
@@ -322,8 +432,7 @@ export function createAlertsEngine(options) {
 
     function sliceArchive(features, fromValue, toValue) {
         const start = timestampMs(fromValue); const end = timestampMs(toValue);
-        const span = Math.max(60_000, end - start);
-        const step = Math.max(60_000, Math.ceil(span / 599 / 60_000) * 60_000);
+        const step = 5 * 60_000;
         const parsed = (features || []).map((feature) => ({ feature, start: timestampMs(feature?.properties?.onset || feature?.properties?.sent, start), end: timestampMs(feature?.properties?.expires, end) }));
         const frames = [];
         for (let time = start; time <= end; time += step) frames.push({ timestamp: new Date(time).toISOString(), features: parsed.filter((item) => item.start <= time && item.end > time).map((item) => item.feature) });
@@ -353,12 +462,12 @@ export function createAlertsEngine(options) {
 
     function clear() {
         liveSequence += 1; lsrSequence += 1; archiveSequence += 1;
-        fullBaseFeatures = []; displayBaseFeatures = []; renderedAlerts = []; renderedLsr = [];
-        alertCacheReady = false; lsrBaseFeatures = []; lsrCacheKey = ''; lsrCacheReady = false;
+        fullBaseFeatures = []; displayBaseFeatures = []; railAlertBaseFeatures = []; renderedAlerts = []; renderedLsr = [];
+        alertCacheReady = false; lsrBaseFeatures = []; railLsrBaseFeatures = []; lsrCacheKey = ''; lsrCacheReady = false;
         knownAlertIds = null;
         clearLsrSelection();
         alertLayer = replaceLayer(alertLayer, null); lsrLayer = replaceLayer(lsrLayer, null);
-        onAlertCount?.(0); onLsrCount?.(0); onWarnings?.([]); options.onLsrReports?.([]); legend.clear(); lsrLegend?.clear();
+        onAlertCount?.(0); onLsrCount?.(0); onRenderedAlerts?.([]); onWarnings?.([]); options.onLsrReports?.([]); legend.clear(); lsrLegend?.clear();
     }
 
     return Object.freeze({

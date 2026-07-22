@@ -99,6 +99,8 @@ function setSubtab(tabKey) {
 
 function updateSubControls() {
     const family = activeProductFamily();
+    const opacityBlock = byId('mrms-opacity-block');
+    if (opacityBlock) opacityBlock.hidden = !family;
     document.querySelectorAll('.mrms-sub-panel').forEach((element) => {
         element.style.display = 'none';
     });
@@ -148,6 +150,7 @@ async function initialize() {
 
     const scrubberBar = byId('mrms-scrubber-bar');
     const scrubber = createScrubber(byId('mrms-bottom-scrubber'), {
+        holdAtEnd: true,
         onFrame(frame, index) {
             void engine.renderFrame(frame).then(() => {
                 engine.prefetchFrames(frames, index);
