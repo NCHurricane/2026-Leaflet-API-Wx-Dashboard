@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 import threading
+import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -32,6 +33,7 @@ from config.satellite_v2_config import (
     source_channels_for_product,
 )
 from satellite_v2.ahi_hsd import load_ahi_raster
+from satellite_v2._bench_timing import add_timing_ms, bench_enabled
 from satellite_v2.composites import (
     render_composite_rgb,
     scalar_reflectance,
@@ -201,12 +203,39 @@ class SatelliteTileRenderer:
             )
             return dst
 
-        samples = {
-            channel: _warp_channel(raster)
-            for channel, raster in self.source_rasters.items()
-        }
+        samples = {}
+        for channel, raster in self.source_rasters.items():
+            warp_started = time.perf_counter() if bench_enabled() else 0.0
+            samples[channel] = _warp_channel(raster)
+            if bench_enabled():
+                add_timing_ms(
+                    f"warp_ms{{{channel}}}",
+                    (time.perf_counter() - warp_started) * 1000.0,
+                )
 
         # --- colorise (same logic as before) ---
+        composite_started = time.perf_counter() if bench_enabled() else 0.0
+        try:
+            return self._composite_image(
+                samples, z, x_min, y_min, canvas_w, canvas_h, tile_size
+            )
+        finally:
+            if bench_enabled():
+                add_timing_ms(
+                    "composite_ms",
+                    (time.perf_counter() - composite_started) * 1000.0,
+                )
+
+    def _composite_image(
+        self,
+        samples: dict[str, np.ndarray],
+        z: int,
+        x_min: int,
+        y_min: int,
+        canvas_w: int,
+        canvas_h: int,
+        tile_size: int,
+    ) -> Image.Image:
         valid = _valid_mask(samples)
         if self.product_key in RGB_COMPOSITE_KEYS:
             # RGB composites need lon/lat for some products — derive them cheaply
@@ -275,12 +304,17 @@ def _load_renderer_uncached(
     required: tuple[str, ...],
     instrument: str | None,
 ) -> "SatelliteTileRenderer":
-    rasters = {
-        source_channel: _load_source_raster(
+    rasters = {}
+    for source_channel in required:
+        parse_started = time.perf_counter() if bench_enabled() else 0.0
+        rasters[source_channel] = _load_source_raster(
             source_files[source_channel], source_channel
         )
-        for source_channel in required
-    }
+        if bench_enabled():
+            add_timing_ms(
+                f"parse_ms{{{source_channel}}}",
+                (time.perf_counter() - parse_started) * 1000.0,
+            )
     return renderer_cls(
         product_key=product_key,
         source_rasters=rasters,

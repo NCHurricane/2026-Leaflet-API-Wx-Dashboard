@@ -1,11 +1,11 @@
 # Next Session Startup Prompt
 
-Date prepared: 2026-07-21
+Date prepared: 2026-07-22
 
 Start in `F:\Python\dashboard_2026`.
 
 ```text
-Continue the dashboard correction pass in F:\Python\dashboard_2026.
+Continue Satellite render optimization in F:\Python\dashboard_2026.
 
 Read first:
 - docs/dashboard-change-and-enhancement-superfile.md
@@ -14,6 +14,13 @@ Read first:
   those boundaries
 
 Current checkpoint:
+- The cross-page correction set was committed at `aa05b7d`.
+- Satellite render optimization Phase 0 is complete locally and awaits its
+  checkpoint commit. `satellite_v2/bench.py` provides pinned cold-parse,
+  warm-parse, and hit scenarios; timing is gated by
+  `WX_SATELLITE_V2_BENCH=1`. The full nine-row matrix produced 27 runs / 135
+  samples under `docs/perf/2026-07-22-baseline/`. All nine 3x3 scratch golden
+  blocks (81 PNGs) passed byte-for-byte comparison. Phase 1 has not started.
 - The user completed the 2026-07-20 all-page manual smoke and clarified every
   finding. The correction set is implemented; page-by-page browser re-smoke is
   in progress and has not yet covered the full set.
@@ -71,25 +78,24 @@ Current checkpoint:
   one visual type.
 
 Validation at handoff:
+- Phase 0 baseline integrity: 27 runs, five samples per run, nine pinned rows,
+  matching cache statuses, no parse stages in warm samples, and 81/81 golden
+  tiles byte-identical.
+- Bench-disabled MESO1 render matched its golden block and wrote no timing data.
+- Phase 0 focused Satellite tests pass (21/21).
 - All changed JavaScript passes node --check.
 - Changed Python passes py_compile.
 - git diff --check passes.
 - Focused Workspace + standalone Alerts tests pass (14/14).
-- Full pytest: 85 passed plus 42 subtests. Stale Radar catalog, units, cache-key,
-  and storm-icon
-  test expectations were synchronized with the active production configuration;
-  no Radar production behavior changed.
+- Full pytest after Phase 0: 93 passed plus 42 subtests. The only output was
+  existing Radar colormap deprecation warnings and the environment's denied
+  `.pytest_cache` write warning.
 
 Next step:
-1. Have the user run focused browser re-smoke of the changed behaviors.
-2. Fix only confirmed regressions from that re-smoke.
-3. When the Workspace tabbed legend is accepted, promote it to the shared opt-in
-   primitive and convert standalone Alerts as the second proof; keep the other
-   page decisions above deferred.
-4. When the full correction set is accepted, commit it, then begin Satellite
-   render
-   optimization Phase 0 (timing instrumentation and a pixel-identical golden-
-   tile baseline) from docs/satellite-render-optimization-plan.md.
+1. Review and commit the Phase 0 harness, timing hooks, tests, docs, and baseline.
+2. Begin Phase 1 with the isolated `_NETCDF_CACHE` LRU correctness fix.
+3. Re-run the affected GOES rows and golden comparisons before the Phase 1
+   hit-validation and renderer meshgrid changes.
 
 Guardrails:
 - Browser smoke is user-owned; report static versus browser proof honestly.

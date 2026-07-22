@@ -1,6 +1,6 @@
 # Satellite Render Pipeline — Latency Optimization Plan
 
-Prepared 2026-07-11 for execution starting 2026-07-12. Companion to
+Prepared 2026-07-11; execution began 2026-07-22. Companion to
 `docs/satellite-radar-render-pipeline-files.md` (file reference). Scope is
 `satellite_v2` only; radar is explicitly out of scope for Phases 0–6 (the
 Phase 0 harness methodology is reusable there later).
@@ -77,7 +77,7 @@ change (`renderer.py:305`) never closes the old dataset (HDF5 handle leak).
 
 ---
 
-## Pipeline map (for orientation tomorrow)
+## Pipeline map
 
 ```
 routes/satellite_v2.py
@@ -113,6 +113,12 @@ Key measured facts driving the plan:
 **Deliverables:** `satellite_v2/bench.py` (new), env-gated timing hooks in
 `tiler.py`/`renderer.py`/`service.py`, baseline results committed under
 `docs/perf/`.
+
+**Status (2026-07-22):** implementation and the full baseline are complete
+locally, pending the Phase 0 commit. Results are under
+`docs/perf/2026-07-22-baseline/`. The matrix produced 27 runs / 135 samples;
+all nine 3x3 golden blocks (81 PNGs) matched byte-for-byte. Phase 1 has not
+started.
 
 ### 0.1 Stage-timing instrumentation
 
@@ -166,7 +172,7 @@ Key measured facts driving the plan:
   `/api/satellite-v2/tile/...` for one hit and one miss per platform, noted
   in the summary file. (User preference: curl checks, no browser driving.)
 
-### 0.3 Baseline matrix (run tomorrow, before any other change)
+### 0.3 Baseline matrix (captured 2026-07-22 before any optimization)
 
 | # | sat | sector | product | z | why |
 |---|-----|--------|---------|---|-----|
@@ -217,9 +223,15 @@ defined as:
 ### 0.6 Acceptance
 
 - Matrix runs green end to end; JSONL + manifest + summary md committed under
-  `docs/perf/2026-07-12-baseline/`.
+  `docs/perf/2026-07-22-baseline/`.
 - `WX_SATELLITE_V2_BENCH` unset ⇒ zero functional change (spot-check: tile
   responses identical, no new files).
+
+Accepted locally 2026-07-22: all matrix scenarios completed with five samples;
+the 135 raw records, matrix manifest, and summaries were consolidated under the
+baseline directory. Warm runs contain no parse stages, cold downloads were
+disk-cache hits, all 81 golden PNG comparisons passed, and a bench-disabled
+MESO render matched its golden block without writing timing data.
 
 ---
 
@@ -388,13 +400,14 @@ Implement only if Phase 5's numbers show warp dominating warm runs.
 
 ---
 
-## Execution order & session checklist for tomorrow
+## Execution order & session checklist
 
 1. Confirm the two open decisions: Phase 4 byte-budget knob (yes/no) and
    whether Phase 6 stays in scope at all.
-2. Phase 0: build bench + instrumentation → run baseline matrix → commit
-   `docs/perf/2026-07-12-baseline/`.
-3. Phase 1 commit 1 (NetCDF cache bug) → re-run affected GOES rows (sanity,
+2. Phase 0 complete locally 2026-07-22: bench + instrumentation + full matrix
+   under `docs/perf/2026-07-22-baseline/`; commit the Phase 0 slice before
+   changing render behavior.
+3. Next: Phase 1 commit 1 (NetCDF cache bug) → re-run affected GOES rows (sanity,
    numbers should be unchanged) → commits 2–3 → golden compare + hit-scenario
    re-run.
 4. Phases 2 → 3 → 4 → 5 in order, each gated on: golden byte-identity, the

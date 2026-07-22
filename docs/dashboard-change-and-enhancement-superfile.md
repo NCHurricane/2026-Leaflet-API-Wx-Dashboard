@@ -1,8 +1,9 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-21 (The user completed the consolidated manual smoke.
-The cross-page correction set is implemented and statically validated; focused
-page-by-page browser re-smoke and corrections are in progress.)
+Last updated: 2026-07-22 (The cross-page correction set is committed. Satellite
+render optimization Phase 0 is complete locally with a reproducible benchmark,
+full baseline matrix, and byte-identical golden gate; the Phase 0 commit is
+pending.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -42,7 +43,8 @@ post-split structure, not the monolith.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
-   may interleave with track 1; the two touch disjoint files.
+   may interleave with track 1; the two touch disjoint files. Phase 0 is
+   complete locally; Phase 1 is next after the Phase 0 checkpoint commit.
 3. GK2A + GMGSI new platforms. Adds `PLATFORM_*` entries to
    `js/satellite-page.js`; if started mid-split those entries must be
    ported to `pages/satellite/`, so prefer starting it before the split
@@ -51,6 +53,10 @@ post-split structure, not the monolith.
 ## Current State
 
 - Active repo: `F:\Python\dashboard_2026`.
+- Satellite optimization Phase 0 completed locally 2026-07-22: env-gated
+  timing hooks, safe benchmark CLI, nine-row/three-scenario baseline, manifests,
+  summaries, and 81 byte-identical golden-tile checks. Baseline artifacts live
+  under `docs/perf/2026-07-22-baseline/`; Phase 1 has not started.
 - The 2026-07-20 consolidated manual smoke is complete. Its correction set is
   implemented and awaits user browser re-smoke. Shared changes: State + County
   borders default on while Country + graticule default off; status cards omit
@@ -2252,7 +2258,8 @@ GeoColor opacity work).
 
 ### Satellite render pipeline latency optimization — registered 2026-07-16
 
-Active track 2 (see Active Tracks). Status: not started. The standalone
+Active track 2 (see Active Tracks). Status: Phase 0 complete locally on
+2026-07-22; checkpoint commit pending and Phase 1 not started. The standalone
 execution plan is `docs/satellite-render-optimization-plan.md` (prepared
 2026-07-11), with the file-reference companion
 `docs/satellite-radar-render-pipeline-files.md`. Both stay standalone while
@@ -2266,6 +2273,11 @@ when the phases complete.
   post-GeoColor/opacity renderer, using `products-v5` for the GOES/default
   namespace. Do not compare optimized output against pre-v5 translucent or
   pre-Rayleigh tiles.
+- Phase 0 result: 27 runs / 135 samples across the complete nine-row matrix;
+  nine 3x3 scratch golden blocks (81 PNGs) passed byte-for-byte comparison.
+  Consolidated results and the environment/pinned-frame manifest are in
+  `docs/perf/2026-07-22-baseline/`. The scratch goldens remain ignored. Focused
+  Satellite tests pass 21/21; the full suite passes 93 tests plus 42 subtests.
 - Phases: 0 benchmark harness + committed baseline; 1 hit-path validation
   cheapening + `_NETCDF_CACHE` LRU bugfix; 2 supertile single-canvas +
   respond-first; 3 multi-channel single-pass parse + AHI threaded segment

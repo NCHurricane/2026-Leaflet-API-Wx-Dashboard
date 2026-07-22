@@ -30,6 +30,12 @@ from satellite_v2.cache import (
     tile_path,
     write_negative_tile_marker,
 )
+from satellite_v2._bench_timing import (
+    add_timing_ms,
+    begin_timing,
+    bench_enabled,
+    finish_timing,
+)
 from satellite_v2.providers import download_product_source_frames
 from satellite_v2.renderer import SatelliteTileRenderer
 
@@ -151,15 +157,27 @@ def _render_tile_to_target(
             write_negative_tile_marker(target)
             os.unlink(tmp_name)
             return "invalid"
+        encode_started = time.perf_counter() if bench_enabled() else 0.0
         image.save(tmp_name, format="PNG", optimize=False, compress_level=1)
-        if not is_valid_tile_file(Path(tmp_name)):
+        if bench_enabled():
+            add_timing_ms("encode_ms", (time.perf_counter() - encode_started) * 1000.0)
+        validate_started = time.perf_counter() if bench_enabled() else 0.0
+        tmp_valid = is_valid_tile_file(Path(tmp_name))
+        if bench_enabled():
+            add_timing_ms(
+                "validate_ms", (time.perf_counter() - validate_started) * 1000.0
+            )
+        if not tmp_valid:
             if target_was_invalid:
                 target.unlink(missing_ok=True)
             write_negative_tile_marker(target)
             os.unlink(tmp_name)
             return "invalid"
+        write_started = time.perf_counter() if bench_enabled() else 0.0
         os.replace(tmp_name, target)
         clear_negative_tile_marker(target)
+        if bench_enabled():
+            add_timing_ms("write_ms", (time.perf_counter() - write_started) * 1000.0)
         return "rendered"
     except Exception:
         try:
@@ -184,11 +202,22 @@ def _live_supertile_coords(z: int, x: int, y: int) -> list[tuple[int, int]]:
 
 
 def _target_needs_live_render(target: Path, overwrite: bool) -> tuple[bool, bool]:
+    validate_started = time.perf_counter() if bench_enabled() else 0.0
     target_was_invalid = target.exists() and not is_valid_tile_file(target)
     if target.exists() and is_valid_tile_file(target) and not overwrite:
+        if bench_enabled():
+            add_timing_ms(
+                "validate_ms", (time.perf_counter() - validate_started) * 1000.0
+            )
         return False, target_was_invalid
     if is_negative_tile_cached(target) and not overwrite:
+        if bench_enabled():
+            add_timing_ms(
+                "validate_ms", (time.perf_counter() - validate_started) * 1000.0
+            )
         return False, target_was_invalid
+    if bench_enabled():
+        add_timing_ms("validate_ms", (time.perf_counter() - validate_started) * 1000.0)
     return True, target_was_invalid
 
 
@@ -566,6 +595,7 @@ def render_frame_tile(
     x: int,
     y: int,
     overwrite: bool = False,
+    bench_seed: dict[str, Any] | None = None,
 ) -> tuple[Path, dict[str, int | str]]:
     started = time.perf_counter()
     sat_key = normalize_sat_id(sat_id)
@@ -575,9 +605,26 @@ def render_frame_tile(
     if not frame_key:
         raise ValueError("Satellite v2 frame is missing frame_key.")
 
+    timing_token = None
+    if bench_enabled():
+        timing_token = begin_timing(
+            cache_root,
+            {
+                "sat_id": sat_key,
+                "sector": sector_key,
+                "product": channel,
+                "frame_key": frame_key,
+                "z": int(z),
+                "x": int(x),
+                "y": int(y),
+            },
+            initial=bench_seed,
+        )
+
     target = tile_path(cache_root, sat_key, sector_key, channel, frame_key, z, x, y)
     target_needs_render, target_was_invalid = _target_needs_live_render(target, overwrite)
     if not target_needs_render:
+        finish_timing(timing_token, cache_status="hit")
         return target, {"cache_status": "hit", "rendered": 0, "skipped": 1, "errors": 0}
 
     tile_id = f"{sat_key}/{sector_key}/{channel}/{frame_key}/z{z}/{x}/{y}"
@@ -586,6 +633,8 @@ def render_frame_tile(
     source_files = download_product_source_frames(
         cache_root, sat_key, sector_key, channel, frame
     )
+    if bench_enabled():
+        add_timing_ms("download_ms", (time.perf_counter() - source_start) * 1000.0)
     source_elapsed = int((time.perf_counter() - source_start) * 1000)
     print(
         "[satellite-v2 tile] "
@@ -685,5 +734,5 @@ def render_frame_tile(
         f"total_ms={total_elapsed}",
         flush=True,
     )
+    finish_timing(timing_token, cache_status=str(stats.get("cache_status") or "miss"))
     return target, stats
-

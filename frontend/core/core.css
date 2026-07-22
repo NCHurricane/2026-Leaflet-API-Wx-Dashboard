@@ -29,7 +29,16 @@
 * { box-sizing: border-box; }
 html, body { width: 100%; height: 100%; margin: 0; }
 body { background: var(--core-bg); color: var(--core-text); overflow: hidden; text-transform: uppercase; }
-button, select, input { font: inherit; }
+
+button,
+select,
+input {
+  font-family: "Montserrat", sans-serif;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
 
 .core-header {
     height: 58px;

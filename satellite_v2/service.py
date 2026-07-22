@@ -28,6 +28,7 @@ from config.satellite_v2_config import (
     source_channels_for_product,
 )
 from satellite_v2 import catalog
+from satellite_v2._bench_timing import begin_timing, bench_enabled, finish_timing
 from satellite_v2.cache import (
     catalog_path,
     is_negative_tile_cached,
@@ -308,7 +309,19 @@ def resolve_tile(
     path_size_before = int(path.stat().st_size) if path_exists_before else 0
     validate_start = time.perf_counter()
     tile_valid = is_valid_tile_file(path) if path_exists_before else False
-    validate_elapsed = int((time.perf_counter() - validate_start) * 1000)
+    validate_elapsed_precise = (time.perf_counter() - validate_start) * 1000.0
+    validate_elapsed = int(validate_elapsed_precise)
+    bench_context = None
+    if bench_enabled():
+        bench_context = {
+            "sat_id": sat_key,
+            "sector": sector_key,
+            "product": channel_key,
+            "frame_key": frame_key,
+            "z": int(z),
+            "x": int(x),
+            "y": int(y),
+        }
     cache_status = "hit"
     miss_reason = ""
     if not tile_valid:
@@ -327,6 +340,16 @@ def resolve_tile(
                 "sector": sector_key,
                 "channel": channel_key,
             }
+            if bench_context is not None:
+                timing_token = begin_timing(
+                    cache_root,
+                    bench_context,
+                    initial={
+                        "validate_ms": validate_elapsed_precise,
+                        "_total_started": started,
+                    },
+                )
+                finish_timing(timing_token, cache_status=cache_status)
             return path, stats
         if is_negative_tile_cached(path):
             cache_status = "invalid"
@@ -343,6 +366,16 @@ def resolve_tile(
                 "channel": channel_key,
                 "negative_cached": 1,
             }
+            if bench_context is not None:
+                timing_token = begin_timing(
+                    cache_root,
+                    bench_context,
+                    initial={
+                        "validate_ms": validate_elapsed_precise,
+                        "_total_started": started,
+                    },
+                )
+                finish_timing(timing_token, cache_status=cache_status)
             return path, stats
         frame = _catalog_frame_for_tile(
             cache_root, sat_key, sector_key, channel_key, frame_key
@@ -367,6 +400,11 @@ def resolve_tile(
             z=z,
             x=x,
             y=y,
+            bench_seed=(
+                {"validate_ms": validate_elapsed_precise, "_total_started": started}
+                if bench_enabled()
+                else None
+            ),
         )
         render_start = time.perf_counter()
         path, render_stats = future.result()
@@ -406,4 +444,14 @@ def resolve_tile(
                 "supertile_radius": int(render_stats.get("supertile_radius") or 0),
             }
         )
+    elif bench_context is not None:
+        timing_token = begin_timing(
+            cache_root,
+            bench_context,
+            initial={
+                "validate_ms": validate_elapsed_precise,
+                "_total_started": started,
+            },
+        )
+        finish_timing(timing_token, cache_status=cache_status)
     return path, stats

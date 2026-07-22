@@ -29,15 +29,9 @@
     gap: 8px;
     color: #d7e6f5;
     font-size: 0.78rem;
-    min-height: 32px;
-    padding: 6px 8px;
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    border-radius: 5px;
-    background: rgba(15, 23, 42, 0.48);
     cursor: pointer;
 }
 .spc-check input { width: 16px; height: 16px; margin: 0; accent-color: #facc15; }
-.spc-check + .spc-check { margin-top: 6px; }
 
 /* ── SPC product-group subtabs ─────────────────────────────────────────── */
 .spc-subtabs {
@@ -77,7 +71,7 @@
     align-items: center;
     gap: 8px;
     padding: 2px 0;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     line-height: 1.08;
 }
 
@@ -117,7 +111,7 @@
     gap: 4px;
     margin: 0;
     padding: 0;
-    font-size: 0.74rem;
+    font-size: 0.78rem;
     color: #d7e6f5;
     cursor: pointer;
 }
