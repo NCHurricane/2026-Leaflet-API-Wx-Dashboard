@@ -1,8 +1,8 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-23 (Task-scheduler-free rendering Phase 4 is complete.
-The corrected MRMS/RTMA scrubber browser re-smoke passed with no other issues;
-Phase 5 Water is next.)
+Last updated: 2026-07-23 (Task-scheduler-free rendering Phase 5 Water is
+complete. The corrected user browser re-smoke passed; Phase 6 Surface gradients
+is next.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -39,7 +39,7 @@ post-split structure, not the monolith.
    Its later detail-panel, Region, legend, and sidebar-style follow-ups are
    implemented and statically validated but still need browser re-smoke;
    optional Water enhancements remain deferred.
-2. Task-scheduler-free refresh/rendering — Phases 0-4 are complete under
+2. Task-scheduler-free refresh/rendering — Phases 0-5 are complete under
    `docs/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
    recorded, and the remediated live-NWS warm pass reused 471/471 alerts. It
@@ -61,7 +61,16 @@ post-split structure, not the monolith.
    and serializes heavyweight MRMS/RTMA/Radar/Satellite rendering. Its first
    browser smoke exposed partial-history and empty-response polling defects.
    The correction passes focused tests and the user's restart/hard-refresh
-   re-smoke for MRMS, RTMA Hourly, and RTMA-RU. Phase 5 Water is next.
+   re-smoke for MRMS, RTMA Hourly, and RTMA-RU. Phase 5 Water is implemented:
+   missing/stale station indexes now use one shared coordinator rebuild,
+   stale data remains available, the client honors response retry timing,
+   provider detail requests use a bounded five-minute cache with serialization
+   and backoff, and network balancing fills available capacity. Its automated
+   gate passes. The first browser smoke exposed an incomplete index with zero
+   river stations. Required-network validation now prevents partial publication,
+   the request path automatically rebuilds even a fresh incomplete index, and a
+   corrected live rebuild restored 12,761 river stations. The corrected user
+   browser re-smoke passed, closing Phase 5; Phase 6 Surface gradients is next.
 3. Radar render pipeline latency optimization — execution-grade plan prepared
    in `docs/radar-render-optimization-plan.md`; Phase 0 benchmark/golden capture
    is next. Backend-only and may interleave with Track 1.
@@ -141,6 +150,24 @@ post-split structure, not the monolith.
   corrected browser re-smoke passed for MRMS, RTMA Hourly, and RTMA-RU with no
   other issues found, closing Phase 4. Evidence is in
   `docs/perf/2026-07-23-worker-free-phase4/`.
+- Worker-free Phase 5 is implemented: a missing or older-than-30-minute Water
+  station index submits one coordinator rebuild while missing responses report
+  warming and stale responses retain the prior complete index. The client
+  retries from `retry_after_seconds`; the shared worker fetches NWPS, CO-OPS,
+  and NDBC once per rebuild before atomic publication. NWPS/CO-OPS detail calls
+  are serialized per provider and share a five-minute, 512-entry LRU with
+  bounded backoff. The first browser smoke showed no river markers because a
+  partial rebuild had published zero river stations. Publication now rejects
+  missing or greater-than-50% reduced required networks while retaining the
+  prior index; the request path also treats fresh-but-incomplete indexes as
+  rebuild-worthy and returns retry timing. The optional unavailable CO-OPS
+  Current layer remains skippable. A corrected live rebuild published 12,761
+  river, 301 coastal, and 894 NDBC stations, and the CONUS API returned 12,162
+  river stations from a fresh generation. The focused Phase 5 tests pass 10/10
+  and the combined Water run passes 18/18. The corrected user-owned browser
+  re-smoke passed on 2026-07-23, closing Phase 5 and authorizing Phase 6.
+  Evidence is in
+  `docs/perf/2026-07-23-worker-free-phase5/`.
 - The worker-free plan now treats optional Windows task workers as a supported
   cache-warming mode, but only after migration to the same persistent
   cross-process leases, provider budgets, deduplication keys, freshness state,

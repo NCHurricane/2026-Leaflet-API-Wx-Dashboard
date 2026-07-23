@@ -386,6 +386,16 @@ closed and Phase 5 Water is authorized next. Evidence is in
 
 ### Phase 5 - Water
 
+Implementation status: automated gate passed on 2026-07-23. The first user
+browser smoke exposed a partial index with zero river stations. Publication now
+rejects missing or sharply reduced required networks; a corrected live rebuild
+restored 12,761 river stations and the running CONUS API returned 12,162. The
+request path now also treats a fresh-but-incomplete index as rebuild-worthy,
+automatically queues recovery, and returns retry timing. The corrected
+user-owned browser re-smoke passed on 2026-07-23. Phase 5 is closed and Phase 6
+is authorized next. Evidence is in
+`docs/perf/2026-07-23-worker-free-phase5/`.
+
 - When the station index is missing or older than 20-30 minutes, enqueue `run_water_worker` once and return an explicit warming/stale response.
 - Keep the prior complete index available while a rebuild runs.
 - Have the client retry after the response's `retry_after_seconds` instead of treating zero stations as current truth.

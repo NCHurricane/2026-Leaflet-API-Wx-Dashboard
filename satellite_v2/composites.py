@@ -19,6 +19,8 @@ Image.MAX_IMAGE_PIXELS = None
 
 _SCALAR_REFLECTANCE_BLACK_POINT = 0.02
 _SCALAR_REFLECTANCE_WHITE_POINT = 0.90
+_CHANNEL02_REFLECTANCE_BLACK_POINT = 0.0
+_CHANNEL02_REFLECTANCE_WHITE_POINT = 1.20
 _CIRA_VISIBLE_BLACK_POINT = 0.0223
 _CIRA_VISIBLE_LOG_ROOT = np.log10(_CIRA_VISIBLE_BLACK_POINT)
 _CIRA_VISIBLE_DENOMINATOR = (1.0 - _CIRA_VISIBLE_LOG_ROOT) * 0.75
@@ -61,12 +63,16 @@ def gamma_correction(value: np.ndarray, gamma: float) -> np.ndarray:
     return np.power(value, 1.0 / gamma).astype(np.float32)
 
 
-def reflectance(values: np.ndarray, gamma: float | None = None) -> np.ndarray:
+def reflectance(
+    values: np.ndarray,
+    gamma: float | None = None,
+    upper_limit: float = 1.0,
+) -> np.ndarray:
     data = np.asarray(values, dtype=np.float32)
     finite = np.isfinite(data)
     if finite.any() and float(np.nanmax(data[finite])) > 1.5:
         data = data / 100.0
-    data = np.clip(data, 0.0, 1.0)
+    data = np.clip(data, 0.0, float(upper_limit))
     if gamma is not None:
         data = np.power(data, gamma)
     return data.astype(np.float32)
@@ -94,13 +100,27 @@ def cira_visible_stretch(values: np.ndarray) -> np.ndarray:
     return np.clip(data, 0.0, 1.0).astype(np.float32)
 
 
-def scalar_reflectance(values: np.ndarray) -> np.ndarray:
+def scalar_reflectance(
+    values: np.ndarray,
+    source_channel: str | None = None,
+) -> np.ndarray:
     """Apply a stable contrast stretch for scalar VIS/NIR display products."""
-    data = reflectance(values)
+    is_channel02 = str(source_channel or "").strip() == "Channel02"
+    black_point = (
+        _CHANNEL02_REFLECTANCE_BLACK_POINT
+        if is_channel02
+        else _SCALAR_REFLECTANCE_BLACK_POINT
+    )
+    white_point = (
+        _CHANNEL02_REFLECTANCE_WHITE_POINT
+        if is_channel02
+        else _SCALAR_REFLECTANCE_WHITE_POINT
+    )
+    data = reflectance(values, upper_limit=white_point)
     data = normalize(
         data,
-        _SCALAR_REFLECTANCE_BLACK_POINT,
-        _SCALAR_REFLECTANCE_WHITE_POINT,
+        black_point,
+        white_point,
     )
     return np.sqrt(data).astype(np.float32)
 

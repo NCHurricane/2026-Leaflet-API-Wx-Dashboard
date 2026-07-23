@@ -9,16 +9,18 @@ Continue dashboard enhancement work in F:\Python\dashboard_2026.
 
 Read first:
 - docs/dashboard-change-and-enhancement-superfile.md
-- docs/worker-free-render-plan.md, Phase 5 only
+- docs/worker-free-render-plan.md, Phase 6 only
 - docs/phases-25-27-manual-smoke-checklist.md only when checking the older gate
 - docs/architecture.md or docs/patterns.md only when the next change crosses
   those boundaries
 
 Mandatory session-start directive:
-- Start worker-free Phase 5 only: Water station-index stale-while-refresh,
-  shared rebuilds, and bounded station-detail caching.
+- Start worker-free Phase 6 only: targeted on-demand Surface gradients,
+  last-complete serving, shared observation snapshots, and bounded rendering.
+- Do not begin Phase 7 unless the Phase 6 gate passes or the user explicitly
+  changes the priority.
 - Do not start, investigate, benchmark, or implement Radar optimization Phase 0
-  in this session. Radar remains deferred until worker-free Phase 5 passes its
+  in this session. Radar remains deferred until worker-free Phase 6 passes its
   documented gate or the user explicitly changes the priority.
 - Do not read `docs/radar-render-optimization-plan.md` or
   `docs/satellite-radar-render-pipeline-files.md` at startup unless the user
@@ -103,6 +105,23 @@ Current checkpoint:
   hard refresh for MRMS, RTMA Hourly, and RTMA-RU, with no other issues found.
   Phase 4 is closed. Evidence is in
   `docs/perf/2026-07-23-worker-free-phase4/`.
+- Task-scheduler-free Phase 5 Water is implemented. Missing or
+  older-than-30-minute indexes submit one shared coordinator rebuild; missing
+  responses report warming, stale responses retain the prior complete index,
+  and the client retries from `retry_after_seconds`. One rebuild fetches NWPS,
+  CO-OPS, and NDBC once before atomic publication. NWPS/CO-OPS detail calls are
+  serialized per provider and share a five-minute, 512-entry LRU with bounded
+  backoff. The first browser smoke showed no river markers because the current
+  index contained zero river stations. Publication now rejects missing or
+  sharply reduced required networks while preserving the prior index; the
+  request path also automatically rebuilds a fresh-but-incomplete index and
+  returns retry timing. Only the historically unavailable optional CO-OPS
+  Current layer may be skipped. A live rebuild published 12,761 river, 301
+  coastal, and 894 NDBC stations, and the running CONUS API returned 12,162
+  river stations from a fresh generation. The Phase 5 tests pass 10/10 and the
+  combined Water run passes 18/18. The corrected user-owned browser re-smoke
+  passed on 2026-07-23, so Phase 5 is closed and Phase 6 is authorized.
+  Evidence is in `docs/perf/2026-07-23-worker-free-phase5/`.
 - Phase 1 supports one application process only. `WEB_CONCURRENCY` and
   `UVICORN_WORKERS` above 1 are rejected; do not use CLI multi-worker settings
   or legacy direct-write Windows tasks until persistent cross-process leases
@@ -224,6 +243,12 @@ Current checkpoint:
   convert all controls to one visual type.
 
 Validation at handoff:
+- Worker-free Phase 5 focused tests pass 10/10 and the combined Water run passes
+  18/18. Focused Ruff, changed-Python compilation, Water JavaScript syntax, and
+  `git diff --check` pass. The complete suite reaches 189 passing tests plus 42
+  subtests; the only failure is the already-documented unrelated Workspace
+  assertion against concurrent user-owned `fitRegion` edits. The corrected
+  user-owned Water browser re-smoke passed.
 - The corrected worker-free Phase 4/coordinator suite passes 19/19. The isolated updated API
   registered `noaa-mrms`/`noaa-rtma`, rendered only selected `PrecipRate` and
   one 17Z RTMA hourly frame, and returned `current` on immediate repeats with
@@ -298,14 +323,15 @@ Validation at handoff:
   `.pytest_cache` write warning.
 
 Next step:
-1. Begin worker-free Phase 5 only: enqueue one Water rebuild when the station
-   index is missing/stale, serve the prior complete index during refresh, make
-   the client honor `retry_after_seconds`, share bulk NWPS/CO-OPS/NDBC fetches,
-   and add bounded station-detail caching. Keep Surface gradients and
-   Radar/Satellite lease work out of this slice.
+1. Begin worker-free Phase 6 only: add a targeted on-demand Surface-gradient
+   entry point for `(WORLD|CONUS, product)`, serve observations and the prior
+   complete gradient while rendering, reuse one shared observation snapshot,
+   cache station metadata, and bound gradient rendering separately from other
+   heavy renders.
 
 Radar optimization Phase 0 is not an alternative next step. It stays deferred
-until Phase 5 is complete and its gate has been reviewed.
+until Phase 6 is complete and its gate has been reviewed. Phase 7 is also
+blocked until the Phase 6 gate passes.
 
 Guardrails:
 - Browser smoke is user-owned; report static versus browser proof honestly.

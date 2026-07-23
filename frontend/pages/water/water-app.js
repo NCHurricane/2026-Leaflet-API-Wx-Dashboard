@@ -469,7 +469,7 @@ async function _loadWaterStations({ force = false } = {}) {
         const stations = Array.isArray(data?.stations) ? data.stations : [];
         _renderWaterStations(stations);
         const totalAvailable = Number(data?.total_available || stations.length);
-        const cachePrefix = data?.cache === 'empty' ? 'Cache warming: ' : '';
+        const cachePrefix = data?.cache_state === 'refreshing' ? 'Cache warming: ' : '';
         const staleSuffix = data?.stale ? ' Cache may be stale.' : '';
         const selectedNetworks = _selectedWaterNetworks();
         const networkLabel = selectedNetworks.length
@@ -486,6 +486,14 @@ async function _loadWaterStations({ force = false } = {}) {
             _setViewerTimestamp(latest.getTime());
             _setReliability('water', 'NOAA water gauges', 'Observed river, coastal, and marine stations', latest.getTime());
             _setTimestampSource('water', 'noaa_water_gauges', latest.getTime());
+        }
+        const retryAfterSeconds = Number(data?.retry_after_seconds);
+        if (
+            Number.isFinite(retryAfterSeconds)
+            && retryAfterSeconds > 0
+            && data?.cache_state !== 'fresh'
+        ) {
+            _scheduleWaterReload(Math.max(500, retryAfterSeconds * 1000));
         }
     } catch (err) {
         if (requestSeq !== _waterRequestSeq) return;

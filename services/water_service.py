@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import re
+import threading
 import time
 from urllib.parse import urlencode
 import urllib.error
 import urllib.request
 
+from app_core.refresh_coordinator import Submission, get_refresh_coordinator
 from app_core.upstream_ledger import urlopen
 
 from fastapi import HTTPException
@@ -19,10 +22,21 @@ NWPS_GAUGE_URL = "https://api.water.noaa.gov/nwps/v1/gauges/{identifier}"
 NWPS_GAUGE_PAGE_URL = "https://water.noaa.gov/gauges/{identifier}"
 COOPS_DATA_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
 WATER_CACHE_TTL_SEC = 180
-WATER_RIV_GAUGES_CACHE_MAX_AGE_SEC = 45 * 60
+WATER_DETAIL_CACHE_TTL_SEC = 5 * 60
+WATER_DETAIL_CACHE_MAX_ENTRIES = 512
+WATER_RIV_GAUGES_CACHE_MAX_AGE_SEC = 30 * 60
+WATER_INDEX_RETRY_AFTER_SEC = 2.0
+WATER_REQUIRED_NETWORKS = frozenset({"river", "coastal", "buoy"})
 WATER_RIV_GAUGES_INDEX_FILE = Path(__file__).resolve().parent.parent / "cache" / "water" / "riv_gauges.json"
 
 _WATER_CACHE: dict[str, tuple[float, dict]] = {}
+_WATER_DETAIL_CACHE: OrderedDict[str, tuple[float, dict]] = OrderedDict()
+_WATER_DETAIL_CACHE_LOCK = threading.RLock()
+_DETAIL_PROVIDER_LOCKS = {
+    "coops": threading.Lock(),
+    "nwps": threading.Lock(),
+}
+_DETAIL_PROVIDER_BACKOFF: dict[str, tuple[int, float]] = {}
 _NWPS_MISSING_VALUE = {-999, -9999}
 
 
@@ -58,6 +72,57 @@ def _cache_get(key: str) -> dict | None:
 def _cache_set(key: str, data: dict) -> dict:
     _WATER_CACHE[key] = (time.monotonic(), data)
     return data
+
+
+def _detail_cache_get(key: str) -> dict | None:
+    with _WATER_DETAIL_CACHE_LOCK:
+        cached = _WATER_DETAIL_CACHE.get(key)
+        if not cached:
+            return None
+        ts, data = cached
+        if time.monotonic() - ts > WATER_DETAIL_CACHE_TTL_SEC:
+            _WATER_DETAIL_CACHE.pop(key, None)
+            return None
+        _WATER_DETAIL_CACHE.move_to_end(key)
+        return data
+
+
+def _detail_cache_set(key: str, data: dict) -> dict:
+    with _WATER_DETAIL_CACHE_LOCK:
+        _WATER_DETAIL_CACHE[key] = (time.monotonic(), data)
+        _WATER_DETAIL_CACHE.move_to_end(key)
+        while len(_WATER_DETAIL_CACHE) > WATER_DETAIL_CACHE_MAX_ENTRIES:
+            _WATER_DETAIL_CACHE.popitem(last=False)
+    return data
+
+
+def _fetch_station_detail(provider: str, cache_key: str, fetcher) -> dict:
+    cached = _detail_cache_get(cache_key)
+    if cached is not None:
+        return cached
+    with _DETAIL_PROVIDER_LOCKS[provider]:
+        cached = _detail_cache_get(cache_key)
+        if cached is not None:
+            return cached
+        failures, retry_at = _DETAIL_PROVIDER_BACKOFF.get(provider, (0, 0.0))
+        now = time.monotonic()
+        if retry_at > now:
+            raise RuntimeError(
+                f"{provider.upper()} detail requests are backed off for "
+                f"{max(1, int(retry_at - now))} seconds."
+            )
+        try:
+            data = fetcher()
+        except Exception:
+            failures += 1
+            delay = min(300.0, 5.0 * (2 ** (failures - 1)))
+            _DETAIL_PROVIDER_BACKOFF[provider] = (
+                failures,
+                time.monotonic() + delay,
+            )
+            raise
+        _DETAIL_PROVIDER_BACKOFF.pop(provider, None)
+        return _detail_cache_set(cache_key, data)
 
 
 def _fetch_json(url: str, params: dict, timeout: int = 20) -> dict:
@@ -314,25 +379,130 @@ def _station_in_bbox(station: dict, west: float, south: float, east: float, nort
     return west <= lon <= east and south <= lat <= north
 
 
+def _water_index_refresh() -> dict:
+    from workers.water_worker import run_water_worker
+
+    run_water_worker(force=True)
+    payload = _read_riv_gauges_index() or {}
+    return {"source_timestamp": payload.get("updated")}
+
+
+def _kickoff_water_index_refresh() -> Submission:
+    return get_refresh_coordinator().submit(
+        key=("water", "station-index"),
+        provider="noaa-water",
+        function=_water_index_refresh,
+        min_success_interval_seconds=WATER_RIV_GAUGES_CACHE_MAX_AGE_SEC,
+    )
+
+
+def _missing_water_networks(payload: dict | None) -> list[str]:
+    if not payload:
+        return sorted(WATER_REQUIRED_NETWORKS)
+    counts = payload.get("network_counts")
+    if not isinstance(counts, dict) or not counts:
+        counts = {}
+        for station in payload.get("stations") or []:
+            network = str(station.get("network") or "river").lower()
+            counts[network] = counts.get(network, 0) + 1
+    missing = []
+    for network in WATER_REQUIRED_NETWORKS:
+        try:
+            count = int(counts.get(network, 0) or 0)
+        except (TypeError, ValueError):
+            count = 0
+        if count <= 0:
+            missing.append(network)
+    return sorted(missing)
+
+
+def _balanced_station_limit(
+    stations: list[dict],
+    selected_networks: set[str],
+    limit: int,
+) -> list[dict]:
+    if len(selected_networks) <= 1:
+        return stations[:limit]
+    buckets = {
+        network: [
+            station
+            for station in stations
+            if (station.get("network") or "river") == network
+        ]
+        for network in ("coastal", "buoy", "river")
+        if network in selected_networks
+    }
+    per_network = limit // len(selected_networks)
+    selected = []
+    selected_ids = set()
+    for bucket in buckets.values():
+        for station in bucket[:per_network]:
+            selected.append(station)
+            selected_ids.add(str(station.get("site_id") or id(station)))
+    if len(selected) < limit:
+        for station in stations:
+            station_id = str(station.get("site_id") or id(station))
+            if station_id in selected_ids:
+                continue
+            selected.append(station)
+            selected_ids.add(station_id)
+            if len(selected) >= limit:
+                break
+    return selected
+
+
 def get_water_stations_data(bbox: str, max_sites: int = 300, networks: str | None = None) -> dict:
     west, south, east, north = _parse_bbox(bbox)
     limit = max(1, min(int(max_sites or 300), 15000))
     selected_networks = _parse_water_networks(networks)
     payload = _read_riv_gauges_index()
+    updated = payload.get("updated") if payload else ""
+    updated_dt = _parse_dt(updated)
+    cache_age_seconds = (
+        max(0, int((datetime.now(timezone.utc) - updated_dt).total_seconds()))
+        if updated_dt
+        else None
+    )
+    missing_networks = _missing_water_networks(payload)
+    stale = payload is None or cache_age_seconds is None or (
+        cache_age_seconds > WATER_RIV_GAUGES_CACHE_MAX_AGE_SEC
+    ) or bool(missing_networks)
+    submission = _kickoff_water_index_refresh() if stale else None
+    refreshing = bool(
+        submission and submission.status in {"queued", "running"}
+    )
+    retry_after_seconds = None
+    if submission:
+        retry_after_seconds = submission.retry_after_seconds
+        if refreshing and retry_after_seconds is None:
+            retry_after_seconds = WATER_INDEX_RETRY_AFTER_SEC
+        elif stale and retry_after_seconds is None:
+            retry_after_seconds = 5.0
     if not payload:
         return {
-            "status": "success",
+            "status": "warming",
             "stations": [],
             "count": 0,
             "provider": "NOAA",
             "source": "NOAA water gauges",
             "networks": sorted(selected_networks),
             "cache": "empty",
-            "message": "NOAA water gauge cache is warming.",
+            "cache_state": (
+                "backoff"
+                if submission and submission.status == "backoff"
+                else "refreshing" if refreshing else "missing"
+            ),
+            "refreshing": refreshing,
+            "retry_after_seconds": retry_after_seconds,
+            "missing_networks": missing_networks,
+            "message": "NOAA water gauge index is warming.",
         }
 
     network_key = ",".join(sorted(selected_networks))
-    cache_key = f"water-gauges:{west:.3f},{south:.3f},{east:.3f},{north:.3f}:{int(max_sites)}:{network_key}"
+    cache_key = (
+        f"water-gauges:{updated}:{west:.3f},{south:.3f},{east:.3f},"
+        f"{north:.3f}:{int(max_sites)}:{network_key}"
+    )
     cached = _cache_get(cache_key)
     if cached:
         return {**cached, "cache": "hit"}
@@ -347,33 +517,16 @@ def get_water_stations_data(bbox: str, max_sites: int = 300, networks: str | Non
         ),
         key=lambda item: str(item.get("name") or item.get("site_id") or ""),
     )
-    if len(selected_networks) > 1:
-        # Give each selected network an equal share so no network starves another.
-        # Any unused slots from smaller networks roll over to the others in order.
-        per_network = max(1, limit // len(selected_networks))
-        network_buckets: dict[str, list] = {
-            "coastal": [s for s in stations if s.get("network") == "coastal"],
-            "buoy":    [s for s in stations if s.get("network") == "buoy"],
-            "river":   [s for s in stations if (s.get("network") or "river") == "river"],
-        }
-        limited_stations = []
-        leftover = 0
-        for net in ("coastal", "buoy", "river"):
-            if net not in selected_networks:
-                continue
-            alloc = per_network + leftover
-            taken = network_buckets[net][:alloc]
-            limited_stations.extend(taken)
-            leftover = max(0, alloc - len(taken))
-    else:
-        limited_stations = stations[:limit]
-    updated = payload.get("updated") or ""
-    updated_dt = _parse_dt(updated)
-    cache_age_seconds = None
-    stale = False
-    if updated_dt:
-        cache_age_seconds = max(0, int((datetime.now(timezone.utc) - updated_dt).total_seconds()))
-        stale = cache_age_seconds > WATER_RIV_GAUGES_CACHE_MAX_AGE_SEC
+    limited_stations = _balanced_station_limit(
+        stations,
+        selected_networks,
+        limit,
+    )
+    cache_state = (
+        "backoff"
+        if submission and submission.status == "backoff"
+        else "stale_refreshing" if refreshing else "stale" if stale else "fresh"
+    )
 
     return _cache_set(
         cache_key,
@@ -389,6 +542,16 @@ def get_water_stations_data(bbox: str, max_sites: int = 300, networks: str | Non
             "cache_age_seconds": cache_age_seconds,
             "cache": "miss",
             "stale": stale,
+            "cache_state": cache_state,
+            "refreshing": refreshing,
+            "retry_after_seconds": retry_after_seconds,
+            "missing_networks": missing_networks,
+            "message": (
+                "Water station index is missing "
+                f"{', '.join(missing_networks)} stations; rebuilding."
+                if missing_networks
+                else None
+            ),
             "updated": updated,
         },
     )
@@ -416,15 +579,21 @@ def get_water_station_data(site_id: str) -> dict:
             coops_id = str(station.get("coops_id") or "").strip()
             if coops_id:
                 live_cache_key = f"coops-live:{coops_id}"
-                live_cached = _cache_get(live_cache_key)
-                if live_cached:
-                    station = {**station, "readings": live_cached.get("readings", {})}
+                live_cached = _detail_cache_get(live_cache_key)
+                if live_cached is not None:
+                    station = {**station, "readings": live_cached}
                 else:
                     try:
-                        live_readings = _fetch_coops_live_readings(coops_id, str(station.get("station_type") or ""))
+                        live_readings = _fetch_station_detail(
+                            "coops",
+                            live_cache_key,
+                            lambda: _fetch_coops_live_readings(
+                                coops_id,
+                                str(station.get("station_type") or ""),
+                            ),
+                        )
                         if live_readings:
                             station = {**station, "readings": live_readings}
-                            _cache_set(live_cache_key, {"readings": live_readings})
                     except Exception:
                         pass
         return {
@@ -446,26 +615,27 @@ def get_nwps_station_data(identifier: str) -> dict:
         raise HTTPException(status_code=422, detail="Invalid NWPS gauge id.")
 
     cache_key = f"nwps-station:{gauge_id}"
-    cached = _cache_get(cache_key)
-    if cached:
+    cached = _detail_cache_get(cache_key)
+    if cached is not None:
         return {**cached, "cache": "hit"}
 
     try:
-        raw = _fetch_json_url(NWPS_GAUGE_URL.format(identifier=gauge_id))
-        station = _parse_nwps_gauge(raw)
+        result = _fetch_station_detail(
+            "nwps",
+            cache_key,
+            lambda: {
+                "status": "success",
+                "station": _parse_nwps_gauge(
+                    _fetch_json_url(NWPS_GAUGE_URL.format(identifier=gauge_id))
+                ),
+                "provider": "NOAA",
+                "source": "NOAA NWPS",
+                "updated": datetime.now(timezone.utc).isoformat(),
+            },
+        )
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"NWPS station data unavailable: {exc}") from exc
 
-    return _cache_set(
-        cache_key,
-        {
-            "status": "success",
-            "station": station,
-            "provider": "NOAA",
-            "source": "NOAA NWPS",
-            "cache": "miss",
-            "updated": datetime.now(timezone.utc).isoformat(),
-        },
-    )
+    return {**result, "cache": "miss"}

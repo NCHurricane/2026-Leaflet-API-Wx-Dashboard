@@ -657,6 +657,14 @@ for _policy_entry in (
         presence_required=True,
     ),
     RefreshPolicy(
+        provider="noaa-water",
+        min_request_interval=1.0,
+        max_concurrency=1,
+        base_backoff_seconds=30.0,
+        max_backoff_seconds=600.0,
+        presence_required=True,
+    ),
+    RefreshPolicy(
         provider="local",
         min_request_interval=0.0,
         max_concurrency=1,

@@ -275,7 +275,7 @@ class SatelliteTileRenderer:
         if self.product_key in _ADP_CATEGORICAL_KEYS:
             return _colorize_categorical(values, valid)
         if _is_reflectance_channel(source_channel):
-            values = scalar_reflectance(values)
+            values = scalar_reflectance(values, source_channel=source_channel)
         cmap = product.get("cmap") or plt.get_cmap("Greys_r")
         norm = product.get("norm")
         if self.product_key in _AOD_KEYS:

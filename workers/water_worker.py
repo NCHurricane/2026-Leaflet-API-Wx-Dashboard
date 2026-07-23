@@ -76,6 +76,8 @@ COOPS_LAYERS = (
     (0, "water_level", "Water Level"),
     (2, "current", "Current"),
 )
+OPTIONAL_COOPS_LAYERS = {2}
+REQUIRED_NETWORKS = ("river", "coastal", "buoy")
 
 
 def _log(message: str) -> None:
@@ -358,6 +360,8 @@ def _fetch_feature_page(offset: int) -> list[dict]:
         },
         timeout=30,
     )
+    if payload.get("error"):
+        raise RuntimeError(f"River gauge source error: {payload['error']}")
     return payload.get("features") if isinstance(payload.get("features"), list) else []
 
 
@@ -375,6 +379,14 @@ def _fetch_coops_feature_page(layer: int, offset: int) -> list[dict]:
         },
         timeout=30,
     )
+    if payload.get("error"):
+        if layer in OPTIONAL_COOPS_LAYERS:
+            _log(
+                f"optional CO-OPS layer {layer} unavailable; "
+                f"skipping: {payload['error']}"
+            )
+            return []
+        raise RuntimeError(f"CO-OPS source error: {payload['error']}")
     return payload.get("features") if isinstance(payload.get("features"), list) else []
 
 
@@ -406,6 +418,37 @@ def _dedupe_stations(stations: list[dict]) -> list[dict]:
         elif site_id not in by_site:
             by_site[site_id] = station
     return sorted(by_site.values(), key=lambda item: str(item.get("name") or item.get("site_id") or ""))
+
+
+def _existing_network_counts() -> dict[str, int]:
+    try:
+        payload = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+    counts = payload.get("network_counts")
+    if isinstance(counts, dict):
+        return {
+            str(network): int(count)
+            for network, count in counts.items()
+            if str(count).isdigit()
+        }
+    return {}
+
+
+def _validate_network_counts(network_counts: dict[str, int]) -> None:
+    existing_counts = _existing_network_counts()
+    for network in REQUIRED_NETWORKS:
+        count = int(network_counts.get(network, 0))
+        if count <= 0:
+            raise RuntimeError(
+                f"Refusing to publish Water index without {network} stations."
+            )
+        prior_count = int(existing_counts.get(network, 0))
+        if prior_count > 0 and count < prior_count / 2:
+            raise RuntimeError(
+                "Refusing to publish sharply reduced Water network "
+                f"{network}: {count} stations versus prior {prior_count}."
+            )
 
 
 def refresh_riv_gauges_cache() -> dict:
@@ -456,6 +499,7 @@ def refresh_riv_gauges_cache() -> dict:
     for station in deduped:
         network = station.get("network") or "unknown"
         network_counts[network] = network_counts.get(network, 0) + 1
+    _validate_network_counts(network_counts)
     payload = {
         "status": "success",
         "provider": "NOAA",

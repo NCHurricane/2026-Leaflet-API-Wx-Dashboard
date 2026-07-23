@@ -793,13 +793,12 @@ SATELLITE_V2_DEFAULT_MAX_FRAMES = 360
 
 SATELLITE_V2_PROVIDER = "aws"
 SATELLITE_V2_CACHE_NAMESPACE = "satellite"
-# These versions invalidate tiles rendered with the former 230/255 image
-# alpha so each platform picks up the filled-image opacity policy immediately.
-SATELLITE_V2_RENDER_VERSION = "products-v5"
-SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi3"
-# fci3 retains the Meteosat-12 east-west mirror invalidation from fci1 and
-# invalidates tiles rendered before the full-opacity imagery policy.
-SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci3"
+# These versions retain the filled-image opacity invalidation and advance each
+# platform past Channel02 tiles rendered with the former 0.90 white point.
+SATELLITE_V2_RENDER_VERSION = "products-v6"
+SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi4"
+# fci4 also retains the Meteosat-12 east-west mirror invalidation from fci1.
+SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci4"
 SATELLITE_V2_TILE_SIZE = 256
 SATELLITE_V2_CATALOG_MAX_AGE_SECONDS = 20 * 60
 

@@ -20,9 +20,9 @@ export const REGION_LABELS = Object.freeze({
 // curated { center: [lat, lng], zoom } view applied with setView. Boxes suit whole
 // states/basins (fitBounds adapts them to the viewport's aspect ratio); the curated
 // form pins an exact default framing where a fitted box would drift off after the
-// integer zoom-snap — CONUS uses it so its default matches a hand-picked view.
+// integer zoom-snap — WORLD and CONUS use it so their defaults match hand-picked views.
 const REGION_BOUNDS = Object.freeze({
-    WORLD: [-179.9, 179.9, -85.0, 85.0],
+    WORLD: { center: [17.9, 1.48], zoom: 3 },
     CONUS: { center: [37.58, -96.42], zoom: 5 },
     AL: [-89.0, -84.4, 29.8, 35.7], AK: [-179.5, -129.6, 50.8, 71.8],
     AZ: [-115.8, -107.7, 29.7, 38.3], AR: [-95.0, -89.3, 32.7, 36.9],
@@ -181,6 +181,9 @@ export function createMapCore(element, options = {}) {
     let cityDensity = 0.25;
     let cityRequestSequence = 0;
     let activeRegion = String(options.region || 'CONUS').toUpperCase();
+    // The page's home region, fixed at init. The reset (⌂) button returns here no
+    // matter what the region dropdown has since been changed to.
+    const defaultRegion = activeRegion;
     const cityDataBySource = new Map();
     const overlays = new Map();
 
@@ -207,13 +210,13 @@ export function createMapCore(element, options = {}) {
             const root = leaflet.DomUtil.create('div', 'core-reset-view leaflet-bar');
             const button = leaflet.DomUtil.create('button', '', root);
             button.type = 'button';
-            button.title = 'Reset to selected region';
-            button.setAttribute('aria-label', 'Reset to selected region');
+            button.title = 'Reset to default view';
+            button.setAttribute('aria-label', 'Reset to default view');
             button.textContent = '⌂';
             leaflet.DomEvent.disableClickPropagation(root);
             leaflet.DomEvent.on(button, 'click', () => {
                 options.onResetView?.();
-                fitRegion(activeRegion);
+                fitRegion(defaultRegion);
             });
             return root;
         },
