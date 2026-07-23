@@ -654,9 +654,29 @@ export function createSpcEngine({ api, renderer, legend, status, onCount, onEmpt
                         ? `SPC Day ${effectiveDay} ${hazardLabels}: ${uniqueLabels.join(' · ')}`
                         : `No SPC data available for Day ${effectiveDay} ${hazardLabels}`;
                 } else {
-                    msg = supplementalTimedOut
-                        ? 'SPC supplemental overlays timed out. Try again.'
-                        : 'No SPC supplemental overlays available for the current selection.';
+                    if (supplementalTimedOut) {
+                        msg = 'SPC supplemental overlays timed out. Try again.';
+                    } else if (
+                        supplemental.watchesEnabled
+                        && !supplemental.mdsEnabled
+                        && !supplemental.reportsEnabled
+                    ) {
+                        msg = 'No active tornado or severe thunderstorm watches.';
+                    } else if (
+                        supplemental.mdsEnabled
+                        && !supplemental.watchesEnabled
+                        && !supplemental.reportsEnabled
+                    ) {
+                        msg = 'No active mesoscale discussions.';
+                    } else if (
+                        supplemental.reportsEnabled
+                        && !supplemental.watchesEnabled
+                        && !supplemental.mdsEnabled
+                    ) {
+                        msg = 'No storm reports for the current selection.';
+                    } else {
+                        msg = 'No active SPC supplemental overlays for the current selection.';
+                    }
                 }
                 onEmptyMessage?.(msg);
             } else {

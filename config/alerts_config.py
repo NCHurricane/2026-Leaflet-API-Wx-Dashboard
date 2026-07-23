@@ -523,8 +523,9 @@ NWS_WFO_MAP = {
 # ============================================================================
 # Geometry Optimization Configuration (Phase 1)
 # ============================================================================
-# Events excluded from geometry simplification. These must always use full
-# geometry at every zoom level for display and interaction.
+# Retained compatibility list for callers outside the live-cache path. Phase 2
+# live-cache simplification is provenance-based: native geometry is exact and
+# zone/SAME-derived geometry may be simplified below zoom 8.
 GEOMETRY_EXCLUDED_EVENTS = {
     "Tornado Warning",
     "Severe Thunderstorm Warning",

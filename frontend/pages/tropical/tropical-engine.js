@@ -43,6 +43,18 @@
             context.syncLayerPills(syncKeys, layerToggles);
         }
 
+        // Every storm-layer tooltip shares the outlook polygons' dark panel: a bold title
+        // line followed by plain detail lines. Empty details are dropped, so a layer with
+        // nothing worth adding renders as a single line.
+        const TOOLTIP_OPTIONS = { direction: 'top', className: 'core-city-name-tag' };
+
+        function tooltipHtml(title, ...details) {
+            const escape = context.escapeHtml;
+            return [`<strong>${escape(title)}</strong>`]
+                .concat(details.filter(Boolean).map((detail) => escape(detail)))
+                .join('<br>');
+        }
+
         function renderGisLayers(data, layer) {
             const leaflet = context.leaflet;
             const addGeoJson = (layerId, options, toggleId = layerId) => {
@@ -74,9 +86,12 @@
                 }),
                 onEachFeature: (feature, featureLayer) => {
                     const properties = feature?.properties || {};
-                    const windKt = Number(properties.INTENSITY);
                     featureLayer.bindTooltip(
-                        `${context.escapeHtml(context.windClass(windKt))} ${Number.isFinite(windKt) ? windKt : '--'} kt`,
+                        tooltipHtml(
+                            context.stormTypeLabel(properties),
+                            context.windText(properties.INTENSITY),
+                        ),
+                        TOOLTIP_OPTIONS,
                     );
                 },
             }, 'best_track');
@@ -94,7 +109,8 @@
                 onEachFeature: (feature, featureLayer) => {
                     const code = String(feature?.properties?.TCWW || '').toUpperCase();
                     featureLayer.bindTooltip(
-                        context.escapeHtml(context.watchWarningEvent(code) || code || 'Watch / Warning'),
+                        tooltipHtml(context.watchWarningEvent(code) || code || 'Watch / Warning'),
+                        TOOLTIP_OPTIONS,
                     );
                 },
             });
@@ -112,9 +128,13 @@
                     const properties = feature?.properties || {};
                     const label = properties.DATELBL || properties.FLDATELBL
                         || properties.VALIDTIME || 'Forecast point';
-                    const wind = properties.MAXWIND ? `${properties.MAXWIND} kt` : '--';
                     marker.bindTooltip(
-                        `${context.escapeHtml(label)}<br>${context.escapeHtml(context.pointCategory(properties))} ${context.escapeHtml(wind)}`,
+                        tooltipHtml(
+                            label,
+                            context.stormTypeLabel(properties),
+                            context.windText(properties.MAXWIND),
+                        ),
+                        TOOLTIP_OPTIONS,
                     );
                     marker.on('click', () => context.openProductDetail('TCP'));
                 },
@@ -130,9 +150,16 @@
                 },
                 onEachFeature: (feature, featureLayer) => {
                     const properties = feature?.properties || {};
-                    const radii = properties.RADII ? `${properties.RADII} kt` : '--';
-                    const tau = properties.TAU ? `τ${properties.TAU}` : '';
-                    featureLayer.bindTooltip(context.escapeHtml(`Wind radii ${radii} ${tau}`.trim()));
+                    const radii = Number(properties.RADII);
+                    const tau = Number(properties.TAU);
+                    featureLayer.bindTooltip(
+                        tooltipHtml(
+                            'Wind Radii',
+                            Number.isFinite(radii) ? `${radii} kt` : '--',
+                            Number.isFinite(tau) ? `Forecast hour ${tau}` : '',
+                        ),
+                        TOOLTIP_OPTIONS,
+                    );
                 },
             });
             addGeoJson('initial_wind_extent', {
@@ -145,8 +172,13 @@
                 },
                 onEachFeature: (feature, featureLayer) => {
                     const properties = feature?.properties || {};
+                    const windField = Number(properties.windField);
                     featureLayer.bindTooltip(
-                        context.escapeHtml(properties.label || `${properties.windField || ''} kt wind extent`.trim()),
+                        tooltipHtml(
+                            'Wind Extent',
+                            Number.isFinite(windField) ? `${windField} kt` : (properties.label || '--'),
+                        ),
+                        TOOLTIP_OPTIONS,
                     );
                 },
             });
@@ -160,7 +192,8 @@
                 },
                 onEachFeature: (feature, featureLayer) => {
                     featureLayer.bindTooltip(
-                        context.escapeHtml(feature?.properties?.name || 'Storm Surge Watch/Warning'),
+                        tooltipHtml(feature?.properties?.name || 'Storm Surge Watch/Warning'),
+                        TOOLTIP_OPTIONS,
                     );
                 },
             });
@@ -178,9 +211,14 @@
                 },
                 onEachFeature: (feature, featureLayer) => {
                     const properties = feature?.properties || {};
-                    const label = (properties.name || '').replace(/\.\.\./g, ':');
-                    const range = properties.peak_surge_range ? ` (${properties.peak_surge_range})` : '';
-                    featureLayer.bindTooltip(context.escapeHtml(`${label}${range}`.trim()));
+                    // Names arrive as "Vermilion Bay...1-2 ft" — the range is already its
+                    // own field, so the title carries it and the breakpoint stands alone.
+                    const breakpoint = String(properties.name || '').split('...')[0].trim();
+                    const range = String(properties.peak_surge_range || '').trim();
+                    featureLayer.bindTooltip(
+                        tooltipHtml(range || breakpoint || 'Peak surge', range ? breakpoint : ''),
+                        TOOLTIP_OPTIONS,
+                    );
                 },
             });
         }
@@ -214,8 +252,12 @@
                         fillOpacity: 0.95,
                     })
                         .bindTooltip(
-                            `${context.escapeHtml(point.hour)} ${context.escapeHtml(point.time)}<br>`
-                            + `${context.escapeHtml(context.windClass(point.windKt))} ${context.escapeHtml(point.windKt)} kt`,
+                            tooltipHtml(
+                                `${point.hour} ${point.time}`.trim(),
+                                context.stormTypeLabel({ INTENSITY: point.windKt }),
+                                context.windText(point.windKt),
+                            ),
+                            TOOLTIP_OPTIONS,
                         )
                         .on('click', () => context.openProductDetail('TCM'))
                         .addTo(layer);
@@ -225,7 +267,7 @@
                     radius: 8, color: '#020617', weight: 1.8,
                     fillColor: '#f59e0b', fillOpacity: 0.95,
                 })
-                    .bindTooltip(context.escapeHtml(data?.stormId || 'Tropical system'))
+                    .bindTooltip(tooltipHtml(data?.stormId || 'Tropical system'), TOOLTIP_OPTIONS)
                     .on('click', () => context.openProductDetail('TCP'))
                     .addTo(layer);
             }
@@ -247,11 +289,13 @@
             if (storm) renderLayer(storm, { fitBounds: false });
         }
 
+        // The map render is the primary effect and runs first: the legend is a derived
+        // view of the toggle state, so a legend failure must never block the layers.
         function handleLayerToggle(layerId, checked) {
             if (!(layerId in layerToggles)) return;
             layerToggles[layerId] = !!checked;
-            context.renderLayerLegend(layerId, !!checked);
             refreshLayer();
+            context.renderLayerLegend({ ...layerToggles });
         }
 
         async function loadArchiveCatalog() {

@@ -1,7 +1,7 @@
 # Worker-free Phase 0 measurement ledger
 
-Status: Phase 0 measurements complete; Alerts gate failed and Phase 1 is
-blocked.
+Status: Phase 0 complete; Alerts remediation passed the continuation gate and
+Phase 1 is authorized.
 
 ## Upstream request ledger
 
@@ -33,7 +33,7 @@ Run with:
 .\.venv\Scripts\python.exe -m workers.alerts_worker --measure-twice
 ```
 
-The valid post-decision live-NWS result is in `alerts-two-pass.json`. Phase 0
+The initial post-decision live-NWS result is in `alerts-two-pass.json`. Phase 0
 removed `enriched_geom_cache.json` from the worker read/write path and replaced
 it with a 1,024-entry process-local LRU keyed only by `affectedZones` and SAME
 codes. The pre-existing disk artifact was not deleted.
@@ -43,9 +43,17 @@ zone unions. Peak RSS fell from 3.291 GB in the disk-cache baseline to 1.022 GB.
 The complete warm pass was still 5.306 seconds, or 4.992 seconds after the NWS
 response. Low-detail simplification took 3.853 seconds and full-cache
 serialization/write took 0.997 seconds. Those stages still process the full
-alert set, so the refresh path is not changed-alert proportional and misses the
-near-one-second gate. The plan assigns changed-alert simplification and
-generation publishing to Phase 2; Phase 1 must not start.
+alert set, so that run missed the near-one-second gate.
+
+The bounded remediation is recorded in `alerts-two-pass-remediation.json`, with
+raw rows in `alerts-remediation-ledger.jsonl`. A 2,048-entry process-local LRU
+now caches each alert's enriched full and simplified serialization by stable
+alert ID, raw feature digest, and display-policy digest. Unresolved geometry is
+not cached and is retried. The warm pass reused all 471 unchanged alerts,
+completed in 0.504 seconds total and 0.082 seconds after the NWS response, and
+reduced full-cache serialize/write to 44.660 ms. The unchanged near-one-second
+gate passed; Phase 1 may begin. This does not pull Phase 2 cadence, SWR,
+zoom-vocabulary, or generation-publishing work forward.
 
 ## Cold-render measurements
 
@@ -70,8 +78,8 @@ was changed.
 
 These are runtime measurements only. No browser smoke was performed.
 
-Static validation: full pytest passes 117 tests plus 42 subtests; the only
-warnings are the existing Radar colormap deprecations and denied
-`.pytest_cache` write. Focused geometry-cache and ledger tests pass 8/8,
-changed Python compiles, focused Ruff checks pass, the measurement JSON parses,
-and `git diff --check` passes.
+Static validation after remediation: full pytest passes 121 tests plus 42
+subtests; the only warnings are the existing Radar colormap deprecations and
+denied `.pytest_cache` write. Remediation-focused geometry/cache/ledger tests
+pass 12/12; changed Python compiles, focused Ruff checks pass, both measurement
+JSON files parse, and `git diff --check` passes.

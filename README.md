@@ -160,12 +160,14 @@ The default local startup path is:
 python main.py
 ```
 
-The app supports explicit worker behavior through `WX_INPROC_WORKERS`, but the
-previously documented `tools/*.ps1` launcher scripts are not present in this
-checkout. The refactor target is a cross-platform app-managed worker supervisor
-so Windows Task Scheduler is not required for normal local use.
+The app-owned refresh coordinator always starts with the API. It currently owns
+bounded request-driven Surface/WPC/Alerts refresh work and six-hour cache cleanup;
+the older broad APScheduler profile remains opt-in through
+`WX_INPROC_WORKERS`. Phase 1 supports exactly one application process. Do not
+launch Uvicorn with multiple workers or set `WEB_CONCURRENCY` /
+`UVICORN_WORKERS` above 1 until persistent cross-process leases are available.
 
-- API-only mode (no in-process APScheduler):
+- Coordinator mode (default; no legacy broad APScheduler profile):
 
 ```powershell
 Remove `WX_INPROC_WORKERS` from the current shell, then run `python main.py`.
@@ -178,14 +180,17 @@ $env:WX_INPROC_WORKERS = "1"
 python main.py
 ```
 
-- Dual mode (Task Scheduler + in-process workers):
+- Legacy fallback mode:
 
 ```powershell
 $env:WX_INPROC_WORKERS = "1"
 python main.py
 ```
 
-Dual mode is intended for validation/stress testing because it can duplicate refresh work.
+Existing direct-write Windows task definitions are not coordinator-compatible
+and must not run concurrently with migrated application refreshes. Optional
+warmers require the shared persistent lease/provider-budget protocol planned
+for later phases.
 
 Server starts on:
 
@@ -201,6 +206,7 @@ Open in browser:
 ### Health and status
 
 - `GET /api/status`
+- `GET /api/health/coordinator`
 
 ### Surface
 

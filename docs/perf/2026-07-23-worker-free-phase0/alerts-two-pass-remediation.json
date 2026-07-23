@@ -1,0 +1,56 @@
+{
+  "measured_at_utc": "2026-07-23T15:38:56Z",
+  "run_id": "9dfbb1ad84034613a438ae3d43026767",
+  "source_result": "live NWS response",
+  "browser_proof": false,
+  "gate_result": "pass",
+  "gate_reason": "The warm pass reused enriched and simplified serialization for all 471 unchanged alerts. It completed in 0.504 seconds total and 0.082 seconds after the NWS response, below the unchanged near-one-second Phase 0 requirement.",
+  "processed_feature_cache": {
+    "replacement": "bounded process-local LRU keyed by stable alert ID, raw feature digest, and display-policy digest",
+    "max_entries": 2048,
+    "unresolved_geometry_behavior": "not cached; retried on the next refresh"
+  },
+  "cold_process": {
+    "features": 471,
+    "changed_features": 471,
+    "reused_features": 0,
+    "total_ms": 10456.138,
+    "fetch_ms": 539.514,
+    "downloaded_bytes": 2235991,
+    "zone_cache_parse_ms": 3157.785,
+    "enrichment_wall_ms": 2956.157,
+    "per_alert_zone_union_accumulated_ms": 2976.425,
+    "low_detail_simplification_ms": 3103.717,
+    "full_cache_serialize_write_ms": 44.7,
+    "low_detail_cache_serialize_write_ms": 3.955,
+    "legacy_cache_write_ms": 24.725,
+    "peak_rss_bytes": 1057026048
+  },
+  "warm_process": {
+    "features": 471,
+    "changed_features": 0,
+    "reused_features": 471,
+    "total_ms": 504.323,
+    "fetch_ms": 422.252,
+    "post_response_ms": 82.071,
+    "downloaded_bytes": 2235991,
+    "enrichment_wall_ms": 0.0,
+    "low_detail_simplification_ms": 0.001,
+    "full_cache_serialize_write_ms": 44.66,
+    "low_detail_cache_serialize_write_ms": 3.637,
+    "legacy_cache_write_ms": 25.315,
+    "peak_rss_bytes": 1057034240
+  },
+  "validation": {
+    "focused_tests": "12 passed",
+    "full_pytest": "121 passed plus 42 subtests",
+    "ruff": "passed",
+    "py_compile": "passed",
+    "git_diff_check": "passed"
+  },
+  "notes": [
+    "The raw JSONL measurement rows are in alerts-remediation-ledger.jsonl.",
+    "The original failed gate remains documented in alerts-two-pass.json.",
+    "Runtime worker evidence is separate from browser proof."
+  ]
+}

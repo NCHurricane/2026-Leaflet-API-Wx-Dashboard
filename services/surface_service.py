@@ -3,12 +3,13 @@
 from datetime import datetime, timezone
 import json
 import os
-import threading
 import time as _time
 
 from fastapi import HTTPException
 
+from app_core.atomic_io import atomic_write_json
 from app_core.paths import CACHE_ROOT
+from app_core.refresh_coordinator import Submission, get_refresh_coordinator
 from surface import surface_utils
 
 try:
@@ -71,8 +72,14 @@ SURFACE_PRODUCTS = {
 }
 
 _SURFACE_CACHE_TTL_SECONDS = 300
-_surface_refresh_lock = threading.Lock()
-_surface_refresh_inflight = set()
+
+
+def _surface_refresh_key(region_upper: str) -> tuple[str, ...]:
+    return ("surface", "observations", region_upper)
+
+
+def _surface_refresh_provider(region_upper: str) -> str:
+    return "aviationweather" if region_upper in {"CONUS", "WORLD"} else "iem"
 
 
 def _interpolate_color(anchors: list, value: float) -> str:
@@ -204,51 +211,50 @@ def _surface_source_timestamp_iso(df) -> str | None:
     return latest_dt.isoformat() if latest_dt else None
 
 
-def _refresh_surface_cache_async(
-    region_upper: str, product_lower: str, cache_file: str
-) -> None:
-    """Refresh stale surface cache in background."""
-    cache_key = f"{region_upper}:{product_lower}"
-    try:
-        df = surface_utils.fetch_metar_data(region_upper)
-        stations = build_surface_stations(df, product_lower)
-        source_ts = _surface_source_timestamp_iso(df)
+def _refresh_surface_region(
+    region_upper: str,
+    surface_cache_dir: str,
+) -> dict:
+    """Fetch one regional observation set and publish every product cache."""
+    df = surface_utils.fetch_metar_data(region_upper)
+    source_ts = _surface_source_timestamp_iso(df)
+    published_products = []
+    for product, product_config in SURFACE_PRODUCTS.items():
+        stations = build_surface_stations(df, product)
         result = {
             "stations": stations,
-            "product": product_lower,
-            "unit": SURFACE_PRODUCTS[product_lower]["unit"],
+            "product": product,
+            "unit": product_config["unit"],
             "region": region_upper,
             "count": len(stations),
             "timestamp": source_ts,
             "timestamp_source": "station_valid",
         }
-        try:
-            with open(cache_file, "w", encoding="utf-8") as fh:
-                json.dump(result, fh)
-        except Exception:
-            pass
-    except Exception as exc:
-        print(f"[WARN] Surface background refresh failed ({cache_key}): {exc}")
-    finally:
-        with _surface_refresh_lock:
-            _surface_refresh_inflight.discard(cache_key)
+        cache_file = os.path.join(
+            surface_cache_dir,
+            f"{region_upper}_{product}.json",
+        )
+        atomic_write_json(cache_file, result)
+        published_products.append(product)
+    return {
+        "source_timestamp": source_ts,
+        "published_products": published_products,
+    }
 
 
 def _kickoff_surface_refresh_if_needed(
-    region_upper: str, product_lower: str, cache_file: str
-) -> None:
-    """Start at most one background refresh per region/product cache key."""
-    cache_key = f"{region_upper}:{product_lower}"
-    with _surface_refresh_lock:
-        if cache_key in _surface_refresh_inflight:
-            return
-        _surface_refresh_inflight.add(cache_key)
-    threading.Thread(
-        target=_refresh_surface_cache_async,
-        args=(region_upper, product_lower, cache_file),
-        name=f"surface-refresh-{region_upper}-{product_lower}",
-        daemon=True,
-    ).start()
+    region_upper: str,
+    surface_cache_dir: str,
+) -> Submission:
+    """Start at most one background refresh for a regional observation set."""
+    return get_refresh_coordinator().submit(
+        key=_surface_refresh_key(region_upper),
+        provider=_surface_refresh_provider(region_upper),
+        function=lambda: _refresh_surface_region(
+            region_upper,
+            surface_cache_dir,
+        ),
+    )
 
 
 def get_surface_data(
@@ -266,51 +272,70 @@ def get_surface_data(
     surface_cache_dir = os.path.join(CACHE_ROOT, "surface")
     os.makedirs(surface_cache_dir, exist_ok=True)
     cache_file = os.path.join(surface_cache_dir, f"{region_upper}_{product_lower}.json")
+    get_refresh_coordinator().record_presence(
+        key=_surface_refresh_key(region_upper),
+        provider=_surface_refresh_provider(region_upper),
+    )
 
-    if not force_refresh and os.path.exists(cache_file):
+    cached: dict | None = None
+    if os.path.exists(cache_file):
         try:
             with open(cache_file, "r", encoding="utf-8") as fh:
-                cached = json.load(fh)
+                loaded = json.load(fh)
 
             if (
-                cached.get("timestamp_source") == "station_valid"
-                and cached.get("timestamp") is not None
+                isinstance(loaded, dict)
+                and loaded.get("timestamp_source") == "station_valid"
+                and loaded.get("timestamp") is not None
             ):
+                cached = loaded
                 age = _time.time() - os.path.getmtime(cache_file)
-                if age >= _SURFACE_CACHE_TTL_SECONDS:
-                    _kickoff_surface_refresh_if_needed(
-                        region_upper, product_lower, cache_file
-                    )
-                    return {**cached, "cache_state": "stale_refreshing"}
-                return {**cached, "cache_state": "fresh"}
+                if not force_refresh and age < _SURFACE_CACHE_TTL_SECONDS:
+                    return {
+                        **cached,
+                        "cache_state": "fresh",
+                        "refreshing": False,
+                        "retry_after_seconds": None,
+                    }
         except Exception:
-            pass
+            cached = None
 
-    try:
-        df = surface_utils.fetch_metar_data(region_upper)
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Surface data unavailable: {exc}")
+    submission = _kickoff_surface_refresh_if_needed(
+        region_upper,
+        surface_cache_dir,
+    )
+    refreshing = submission.status in {"queued", "running"}
+    if cached is not None:
+        cache_state = (
+            "backoff"
+            if submission.status == "backoff"
+            else "stale_refreshing" if refreshing else "stale"
+        )
+        return {
+            **cached,
+            "cache_state": cache_state,
+            "refreshing": refreshing,
+            "retry_after_seconds": submission.retry_after_seconds,
+        }
 
-    stations = build_surface_stations(df, product_lower)
-    source_ts = _surface_source_timestamp_iso(df)
-    result = {
-        "stations": stations,
+    cache_state = (
+        "backoff"
+        if submission.status == "backoff"
+        else "refreshing" if refreshing else "missing"
+    )
+    return {
+        "stations": [],
         "product": product_lower,
         "unit": SURFACE_PRODUCTS[product_lower]["unit"],
         "region": region_upper,
-        "count": len(stations),
-        "timestamp": source_ts,
+        "count": 0,
+        "timestamp": None,
         "timestamp_source": "station_valid",
-        "cache_state": "fresh",
+        "cache_state": cache_state,
+        "refreshing": refreshing,
+        "retry_after_seconds": submission.retry_after_seconds,
+        "capability": "available",
     }
-
-    try:
-        with open(cache_file, "w", encoding="utf-8") as fh:
-            json.dump(result, fh)
-    except Exception:
-        pass
-
-    return result
 
 
 def get_surface_gradient(region: str = "CONUS", product: str = "temperature") -> dict:

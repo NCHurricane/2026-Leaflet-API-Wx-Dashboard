@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 import time
 
+from app_core.refresh_coordinator import get_refresh_coordinator
+
 router = APIRouter()
 
 start_time = time.time()
@@ -13,3 +15,9 @@ def health():
         "uptime_seconds": uptime,
         "version": "2026.1"
     }
+
+
+@router.get("/api/health/coordinator")
+def coordinator_health():
+    """Report credential-safe application refresh state."""
+    return get_refresh_coordinator().snapshot()

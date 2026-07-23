@@ -87,6 +87,17 @@ def test_live_control_moves_and_conditional_wiring_are_preserved():
     assert wpc.index('class="wpc-group-pills"') < wpc.index('id="wpc-opacity"') < wpc.index('class="wpc-group-panel')
 
 
+def test_surface_cached_gradient_does_not_depend_on_marker_rows():
+    renderer = script_text("surface", "surface-render.js")
+    render_start = renderer.index("    function render(stations, view) {")
+    render_end = renderer.index("\n    function clear()", render_start)
+    render_body = renderer[render_start:render_end]
+
+    assert "if (!view.product) return;" in render_body
+    assert "if (!stations.length || !view.product) return;" not in render_body
+    assert "if (stations.length) {" in render_body
+
+
 def test_shared_border_defaults_enable_state_and_county_only():
     for page in ("surface", "alerts", "radar", "satellite", "spc", "rtma", "mrms", "drought", "wpc", "water", "workspace", "tropical"):
         html = page_text(page)

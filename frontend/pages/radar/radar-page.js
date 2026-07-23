@@ -1,8 +1,8 @@
 import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
-import { createMapCore, REGION_LABELS } from '../../core/map-core.js?v=20260718b';
+import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
-import { createScrubber } from '../../core/scrubber.js?v=20260719a';
+import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js';

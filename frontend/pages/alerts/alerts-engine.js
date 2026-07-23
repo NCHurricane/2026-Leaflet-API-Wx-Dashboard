@@ -259,10 +259,11 @@ export function createAlertsEngine(options) {
         legend.setHtml(`${legendHeader('Active Alerts')}<div class="core-legend-body">${sections}</div>`);
     }
 
-    function requestParams(region, geometryMode) {
-        const params = new URLSearchParams({ geometry_mode: geometryMode, zoom_bucket: map.getZoom() >= 8 ? 'local' : map.getZoom() >= 6 ? 'regional' : 'national' });
+    function requestParams(region) {
+        const highZoom = map.getZoom() >= 8;
+        const params = new URLSearchParams({ geometry_mode: highZoom ? 'full' : 'display', zoom_bucket: highZoom ? 'high' : 'low' });
         if (region && !['CONUS', 'WORLD'].includes(region)) params.set('state', region);
-        else {
+        else if (highZoom) {
             const bounds = map.getBounds();
             params.set('west', bounds.getWest().toFixed(4)); params.set('east', bounds.getEast().toFixed(4));
             params.set('south', bounds.getSouth().toFixed(4)); params.set('north', bounds.getNorth().toFixed(4));
@@ -277,20 +278,18 @@ export function createAlertsEngine(options) {
         if (!loadOptions.silent) status.setMessage('Loading active alerts…');
         let renderedCache = false;
         try {
-            const fullParams = requestParams(region, 'full');
-            const displayParams = requestParams(region, 'display');
-            const cacheKey = `${fullParams.toString()}|${displayParams.toString()}`;
+            const mapParams = requestParams(region);
+            const cacheKey = mapParams.toString();
             const paths = [
-                `/api/data/alerts?${fullParams}`,
-                `/api/data/alerts?${displayParams}`,
+                `/api/data/alerts?${mapParams}`,
             ];
             const includeNationalRail = railScope === 'national' && loadOptions.refreshFeeds !== false;
             if (includeNationalRail) paths.push('/api/data/alerts?geometry_mode=full&zoom_bucket=high');
             const applyPayloads = (payloads, applyOptions = loadOptions) => {
                 if (!payloads || seq !== liveSequence) return false;
-                const [full, display, nationalRail] = payloads;
-                fullBaseFeatures = activeFeatures(full?.features);
-                displayBaseFeatures = activeFeatures(display?.features || full?.features);
+                const [mapPayload, nationalRail] = payloads;
+                fullBaseFeatures = activeFeatures(mapPayload?.features);
+                displayBaseFeatures = fullBaseFeatures;
                 if (railScope !== 'national') railAlertBaseFeatures = fullBaseFeatures;
                 else if (nationalRail) railAlertBaseFeatures = activeFeatures(nationalRail.features);
                 alertCacheReady = true;
@@ -304,8 +303,8 @@ export function createAlertsEngine(options) {
                     });
                     knownAlertIds = nextIds;
                 }
-                const updated = full?._updated || display?._updated || new Date().toISOString();
-                status.setDataInfo({ timestamp: updated, provider: 'NWS / IEM', source: full?._source || 'alerts cache' });
+                const updated = mapPayload?._updated || new Date().toISOString();
+                status.setDataInfo({ timestamp: updated, provider: 'NWS / IEM', source: mapPayload?._source || 'alerts cache' });
                 return true;
             };
 

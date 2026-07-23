@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260720a">
-    <link rel="stylesheet" href="/frontend/pages/wpc/wpc.css?v=20260720a">
+    <link rel="stylesheet" href="/frontend/pages/wpc/wpc.css?v=20260723b">
 </head>
 <body>
     <header class="core-header">
@@ -88,13 +88,13 @@
                             <button class="wpc-subtab-button" role="tab" aria-selected="false" aria-controls="wpc-qpf-panel-multiday" data-wpc-qpf-tab="multiday">Multi-day</button>
                         </div>
                         <div id="wpc-qpf-panel-6hr" class="wpc-subtab-panel is-active">
-                            <ul class="wpc-radio-list" id="wpc-qpf-6hr-list" role="radiogroup"></ul>
+                            <ul class="wpc-radio-list" id="wpc-qpf-6hr-list" role="group"></ul>
                         </div>
                         <div id="wpc-qpf-panel-24hr" class="wpc-subtab-panel">
-                            <ul class="wpc-radio-list" id="wpc-qpf-24hr-list" role="radiogroup"></ul>
+                            <ul class="wpc-radio-list" id="wpc-qpf-24hr-list" role="group"></ul>
                         </div>
                         <div id="wpc-qpf-panel-multiday" class="wpc-subtab-panel">
-                            <ul class="wpc-radio-list" id="wpc-qpf-multiday-list" role="radiogroup"></ul>
+                            <ul class="wpc-radio-list" id="wpc-qpf-multiday-list" role="group"></ul>
                         </div>
                     </div>
 
@@ -112,41 +112,47 @@
                                 <button class="wpc-day-pill" aria-selected="false" data-wpc-snow-day="4">Day 4-5</button>
                                 <button class="wpc-day-pill" aria-selected="false" data-wpc-snow-day="5">Day 6-7</button>
                             </div>
-                            <ul class="wpc-radio-list" id="wpc-winter-snow-list" role="radiogroup"></ul>
+                            <ul class="wpc-radio-list" id="wpc-winter-snow-list" role="group"></ul>
                         </div>
                         <div id="wpc-winter-panel-ice" class="wpc-subtab-panel">
-                            <ul class="wpc-radio-list" id="wpc-winter-ice-list" role="radiogroup"></ul>
+                            <ul class="wpc-radio-list" id="wpc-winter-ice-list" role="group"></ul>
                         </div>
                     </div>
 
                     <div id="wpc-panel-fop" class="wpc-group-panel" role="tabpanel">
                         <div class="wpc-panel-label">River Flood Outlook</div>
-                        <p class="wpc-panel-note">5-Day River Flood Outlook — press Refresh to load.</p>
+                        <ul class="wpc-radio-list" role="group">
+                            <li class="wpc-radio-item"><label for="wpc-fop-toggle">5-Day River Flood Outlook</label><input type="checkbox" id="wpc-fop-toggle"></li>
+                        </ul>
                     </div>
 
                     <div id="wpc-panel-mpd" class="wpc-group-panel" role="tabpanel">
                         <div class="wpc-panel-label">Mesoscale Discussions</div>
-                        <p class="wpc-panel-note">Active Mesoscale Precipitation Discussions — press Refresh to load.</p>
+                        <ul class="wpc-radio-list" role="group">
+                            <li class="wpc-radio-item"><label for="wpc-mpd-toggle">Active Mesoscale Precipitation Discussions</label><input type="checkbox" id="wpc-mpd-toggle"></li>
+                        </ul>
                     </div>
 
                     <div id="wpc-panel-sigwx" class="wpc-group-panel" role="tabpanel">
                         <div class="wpc-panel-label">Select Significant Weather Day</div>
-                        <ul class="wpc-radio-list" id="wpc-sigwx-list" role="radiogroup">
-                            <li class="wpc-radio-item"><label for="wpc-sigwx-day1">Day 1</label><input type="radio" id="wpc-sigwx-day1" name="wpc-sigwx" value="sigwx_day1"></li>
-                            <li class="wpc-radio-item"><label for="wpc-sigwx-day2">Day 2</label><input type="radio" id="wpc-sigwx-day2" name="wpc-sigwx" value="sigwx_day2"></li>
-                            <li class="wpc-radio-item"><label for="wpc-sigwx-day3">Day 3</label><input type="radio" id="wpc-sigwx-day3" name="wpc-sigwx" value="sigwx_day3"></li>
-                            <li class="wpc-radio-item"><label for="wpc-sigwx-day1-3">Days 1&ndash;3</label><input type="radio" id="wpc-sigwx-day1-3" name="wpc-sigwx" value="sigwx_day1_3"></li>
+                        <ul class="wpc-radio-list" id="wpc-sigwx-list" role="group">
+                            <li class="wpc-radio-item"><label for="wpc-sigwx-day1">Day 1</label><input type="checkbox" id="wpc-sigwx-day1" name="wpc-sigwx" value="sigwx_day1"></li>
+                            <li class="wpc-radio-item"><label for="wpc-sigwx-day2">Day 2</label><input type="checkbox" id="wpc-sigwx-day2" name="wpc-sigwx" value="sigwx_day2"></li>
+                            <li class="wpc-radio-item"><label for="wpc-sigwx-day3">Day 3</label><input type="checkbox" id="wpc-sigwx-day3" name="wpc-sigwx" value="sigwx_day3"></li>
+                            <li class="wpc-radio-item"><label for="wpc-sigwx-day1-3">Days 1&ndash;3</label><input type="checkbox" id="wpc-sigwx-day1-3" name="wpc-sigwx" value="sigwx_day1_3"></li>
                         </ul>
                     </div>
 
                     <div id="wpc-panel-surface" class="wpc-group-panel" role="tabpanel">
                         <div class="wpc-panel-label">Surface Analysis</div>
-                        <p class="wpc-panel-note">Latest WPC surface analysis — press Refresh to load.</p>
+                        <ul class="wpc-radio-list" role="group">
+                            <li class="wpc-radio-item"><label for="wpc-surface-toggle">Latest WPC Surface Analysis</label><input type="checkbox" id="wpc-surface-toggle"></li>
+                        </ul>
                     </div>
 
                     <div id="wpc-panel-forecast" class="wpc-group-panel" role="tabpanel">
                         <div class="wpc-panel-label">Select Forecast Product</div>
-                        <ul class="wpc-radio-list" id="wpc-forecast-list" role="radiogroup"></ul>
+                        <ul class="wpc-radio-list" id="wpc-forecast-list" role="group"></ul>
                     </div>
                 </section>
 
@@ -207,6 +213,6 @@
     </main>
 
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/wpc/wpc-page.js?v=20260720a"></script>
+    <script type="module" src="/frontend/pages/wpc/wpc-page.js?v=20260723b"></script>
 </body>
 </html>

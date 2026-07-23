@@ -6,7 +6,7 @@ import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js';
 import { createWpcDetailPanel } from './wpc-detail.js';
-import { createWpcEngine } from './wpc-engine.js';
+import { createWpcEngine } from './wpc-engine.js?v=20260723b';
 import { createScrubber } from '../../core/scrubber.js';
 
 const byId = (id) => document.getElementById(id);
@@ -15,18 +15,21 @@ const SELECT_PRODUCT_MESSAGE = 'Pick a WPC product group, then a day or product,
 // ── Selection state (ported from the shell's wpc-page controller) ───────────
 const state = {
     group: 'ero',
-    eroDay: 1,
+    eroDay: null,
     qpfTab: '6hr',
     qpf24hrId: '',
-    qpf6hrIndex: 0,
+    qpf6hrIndex: -1,
     qpfMultiId: '',
     winterTab: 'snow',
     snowDay: 1,
     snowId: '',
     iceId: '',
-    sigwxId: 'sigwx_day1',
+    sigwxId: '',
+    fopEnabled: false,
+    mpdEnabled: false,
+    surfaceEnabled: false,
     surfaceIndex: 0,
-    forecastIndex: 0,
+    forecastIndex: -1,
 };
 
 let catalogGroups = new Map();
@@ -83,7 +86,7 @@ function selectPill(container, selectedBtn) {
     });
 }
 
-function buildRadioList(ulEl, products, name, currentId) {
+function buildProductList(ulEl, products, name, currentId) {
     if (!ulEl) return;
     ulEl.replaceChildren(...products.map((p) => {
         const inputId = `${name}-${p.id}`;
@@ -93,7 +96,7 @@ function buildRadioList(ulEl, products, name, currentId) {
         label.htmlFor = inputId;
         label.textContent = p.label;
         const input = document.createElement('input');
-        input.type = 'radio';
+        input.type = 'checkbox';
         input.id = inputId;
         input.name = name;
         input.value = p.id;
@@ -155,8 +158,27 @@ async function initialize() {
 
     let suppressReload = false;
 
+    function canLoadSelection() {
+        if (state.group === 'ero') return Number.isInteger(state.eroDay);
+        if (state.group === 'fop') return state.fopEnabled;
+        if (state.group === 'mpd') return state.mpdEnabled;
+        if (state.group === 'surface') return state.surfaceEnabled;
+        return Boolean(activeProduct());
+    }
+
+    function showSelectionPrompt(message = SELECT_PRODUCT_MESSAGE) {
+        detail.close();
+        engine.clear();
+        status.clear();
+        status.setMessage(message);
+    }
+
     function reload() {
         if (suppressReload) return;
+        if (!canLoadSelection()) {
+            showSelectionPrompt();
+            return;
+        }
         detail.close();
         void engine.load({ group: state.group, day: activeDay(), product: activeProduct() });
     }
@@ -180,10 +202,10 @@ async function initialize() {
         return null;
     }
 
-    function syncSidebarRadio(listId, index) {
+    function syncSidebarProduct(listId, index) {
         const ul = byId(listId);
         if (!ul) return;
-        ul.querySelectorAll('input[type="radio"]').forEach((input, i) => {
+        ul.querySelectorAll('input[type="checkbox"]').forEach((input, i) => {
             input.checked = i === index;
         });
     }
@@ -197,11 +219,11 @@ async function initialize() {
                 const key = scrubberKey();
                 if (key === 'forecast') {
                     state.forecastIndex = index;
-                    syncSidebarRadio('wpc-forecast-list', index);
+                    syncSidebarProduct('wpc-forecast-list', index);
                 }
                 if (key === 'qpf6hr') {
                     state.qpf6hrIndex = index;
-                    syncSidebarRadio('wpc-qpf-6hr-list', index);
+                    syncSidebarProduct('wpc-qpf-6hr-list', index);
                 }
                 reload();
             },
@@ -212,22 +234,69 @@ async function initialize() {
         const key = scrubberKey();
         const bar = byId('wpc-scrubber-bar');
         if (!bar) return;
-        bar.hidden = !key;
+        bar.hidden = true;
         if (!key) return;
-        if (!scrubber) initScrubber();
         const savedIndex = key === 'forecast' ? state.forecastIndex : state.qpf6hrIndex;
-        scrubber?.setFrames(scrubFrames[key]);
-        scrubber?.goTo(savedIndex);
+        if (savedIndex < 0) return;
+        if (!scrubber) initScrubber();
+        scrubber?.setFrames(scrubFrames[key], { index: savedIndex, silent: true });
+        bar.hidden = false;
+    }
+
+    function clearProductSelections(listId) {
+        byId(listId)?.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+            input.checked = false;
+        });
+    }
+
+    function selectOnlyProduct(listId, selectedInput) {
+        byId(listId)?.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+            if (input !== selectedInput) input.checked = false;
+        });
+    }
+
+    function resetGroupSelection(group) {
+        if (group === 'ero') {
+            state.eroDay = null;
+            selectPill(byId('wpc-panel-ero')?.querySelector('.wpc-day-pills'), null);
+        } else if (group === 'qpf') {
+            state.qpf24hrId = '';
+            state.qpf6hrIndex = -1;
+            state.qpfMultiId = '';
+            clearProductSelections('wpc-qpf-6hr-list');
+            clearProductSelections('wpc-qpf-24hr-list');
+            clearProductSelections('wpc-qpf-multiday-list');
+        } else if (group === 'winter') {
+            state.snowId = '';
+            state.iceId = '';
+            clearProductSelections('wpc-winter-snow-list');
+            clearProductSelections('wpc-winter-ice-list');
+        } else if (group === 'fop') {
+            state.fopEnabled = false;
+            byId('wpc-fop-toggle').checked = false;
+        } else if (group === 'mpd') {
+            state.mpdEnabled = false;
+            byId('wpc-mpd-toggle').checked = false;
+        } else if (group === 'sigwx') {
+            state.sigwxId = '';
+            clearProductSelections('wpc-sigwx-list');
+        } else if (group === 'surface') {
+            state.surfaceEnabled = false;
+            byId('wpc-surface-toggle').checked = false;
+        } else if (group === 'forecast') {
+            state.forecastIndex = -1;
+            clearProductSelections('wpc-forecast-list');
+        }
     }
 
     // ── Catalog-driven lists ────────────────────────────────────────────────
     function populateCatalogLists() {
-        buildRadioList(
+        buildProductList(
             byId('wpc-qpf-24hr-list'),
             (catalogGroups.get('qpf')?.products || []).filter((p) => p.id.startsWith('qpf24_')),
             'wpc-qpf-24hr-list', state.qpf24hrId,
         );
-        buildRadioList(
+        buildProductList(
             byId('wpc-qpf-multiday-list'),
             (catalogGroups.get('qpf')?.products || []).filter(
                 (p) => !p.id.startsWith('qpf24_') && !p.id.startsWith('qpf6_'),
@@ -235,7 +304,7 @@ async function initialize() {
             'wpc-qpf-multiday-list', state.qpfMultiId,
         );
         populateWinterSnowList();
-        buildRadioList(
+        buildProductList(
             byId('wpc-winter-ice-list'),
             (catalogGroups.get('winter')?.products || []).filter((p) => p.id.includes('_ice')),
             'wpc-winter-ice-list', state.iceId,
@@ -245,9 +314,9 @@ async function initialize() {
             .map((p) => ({ label: p.label, id: p.id }));
         scrubFrames.qpf6hr = qpf6hrProducts().map((p) => ({ label: p.label, id: p.id }));
         const forecastProducts = catalogGroups.get('forecast')?.products || [];
-        buildRadioList(byId('wpc-forecast-list'), forecastProducts, 'wpc-forecast-list',
+        buildProductList(byId('wpc-forecast-list'), forecastProducts, 'wpc-forecast-list',
             forecastProducts[state.forecastIndex]?.id || '');
-        buildRadioList(byId('wpc-qpf-6hr-list'), qpf6hrProducts(), 'wpc-qpf-6hr-list',
+        buildProductList(byId('wpc-qpf-6hr-list'), qpf6hrProducts(), 'wpc-qpf-6hr-list',
             qpf6hrProducts()[state.qpf6hrIndex]?.id || '');
         withoutReload(() => activateScrubber());
     }
@@ -256,20 +325,30 @@ async function initialize() {
         const products = (catalogGroups.get('winter')?.products || []).filter(
             (p) => p.id.includes('_snow') && (p.days || []).includes(state.snowDay),
         );
-        buildRadioList(byId('wpc-winter-snow-list'), products, 'wpc-winter-snow-list', state.snowId);
+        buildProductList(byId('wpc-winter-snow-list'), products, 'wpc-winter-snow-list', state.snowId);
     }
 
-    // ── Group pills: navigation only — clear the overlay, no auto-load ──────
+    // ── Group pills: River Flood and Surface are direct-load exceptions ─────
     document.querySelectorAll('.wpc-group-pill').forEach((pill) => {
         pill.addEventListener('click', () => {
             state.group = pill.dataset.wpcGroup;
+            resetGroupSelection(state.group);
+            if (state.group === 'fop') {
+                state.fopEnabled = true;
+                byId('wpc-fop-toggle').checked = true;
+            } else if (state.group === 'surface') {
+                state.surfaceEnabled = true;
+                byId('wpc-surface-toggle').checked = true;
+            }
             selectPill(pill.closest('.wpc-group-pills'), pill);
             document.querySelectorAll('.wpc-group-panel').forEach((panel) => {
                 panel.classList.toggle('is-active', panel.id === `wpc-panel-${state.group}`);
             });
-            detail.close();
-            engine.clear();
-            status.setMessage(SELECT_PRODUCT_MESSAGE);
+            showSelectionPrompt(
+                state.group === 'mpd'
+                    ? 'Check the active mesoscale discussions product to load it.'
+                    : SELECT_PRODUCT_MESSAGE,
+            );
             withoutReload(() => {
                 if (state.group === 'qpf') {
                     byId('wpc-panel-qpf')?.querySelector('[data-wpc-qpf-tab="6hr"]')?.click();
@@ -278,19 +357,25 @@ async function initialize() {
                 }
                 activateScrubber();
             });
+            if (['fop', 'surface'].includes(state.group)) reload();
         });
     });
 
     // ── ERO day pills ───────────────────────────────────────────────────────
     byId('wpc-panel-ero')?.querySelectorAll('[data-wpc-ero-day]').forEach((btn) => {
         btn.addEventListener('click', () => {
-            state.eroDay = Number(btn.dataset.wpcEroDay);
-            selectPill(btn.closest('.wpc-day-pills'), btn);
-            if (state.group === 'ero') reload();
+            const day = Number(btn.dataset.wpcEroDay);
+            const unchecking = state.eroDay === day;
+            state.eroDay = unchecking ? null : day;
+            selectPill(btn.closest('.wpc-day-pills'), unchecking ? null : btn);
+            if (state.group === 'ero') {
+                if (unchecking) showSelectionPrompt();
+                else reload();
+            }
         });
     });
 
-    // ── QPF sub-tabs + radio lists ──────────────────────────────────────────
+    // ── QPF sub-tabs + product lists ────────────────────────────────────────
     const qpfPanel = byId('wpc-panel-qpf');
     qpfPanel?.querySelectorAll('[data-wpc-qpf-tab]').forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -299,22 +384,36 @@ async function initialize() {
             qpfPanel.querySelectorAll('.wpc-subtab-panel').forEach((p) => {
                 p.classList.toggle('is-active', p.id === `wpc-qpf-panel-${state.qpfTab}`);
             });
+            if (state.qpfTab === '6hr') {
+                state.qpf6hrIndex = -1;
+                clearProductSelections('wpc-qpf-6hr-list');
+            } else if (state.qpfTab === '24hr') {
+                state.qpf24hrId = '';
+                clearProductSelections('wpc-qpf-24hr-list');
+            } else {
+                state.qpfMultiId = '';
+                clearProductSelections('wpc-qpf-multiday-list');
+            }
             activateScrubber();
-            if (state.group === 'qpf') reload();
+            if (state.group === 'qpf' && !suppressReload) showSelectionPrompt();
         });
     });
-    const wireQpfRadioList = (listId, stateKey, tab) => {
+    const wireQpfProductList = (listId, stateKey, tab) => {
         byId(listId)?.addEventListener('change', (e) => {
             if (e.target.name === listId) {
-                state[stateKey] = e.target.value;
-                if (state.group === 'qpf' && state.qpfTab === tab) reload();
+                if (e.target.checked) selectOnlyProduct(listId, e.target);
+                state[stateKey] = e.target.checked ? e.target.value : '';
+                if (state.group === 'qpf' && state.qpfTab === tab) {
+                    if (e.target.checked) reload();
+                    else showSelectionPrompt();
+                }
             }
         });
     };
-    wireQpfRadioList('wpc-qpf-24hr-list', 'qpf24hrId', '24hr');
-    wireQpfRadioList('wpc-qpf-multiday-list', 'qpfMultiId', 'multiday');
+    wireQpfProductList('wpc-qpf-24hr-list', 'qpf24hrId', '24hr');
+    wireQpfProductList('wpc-qpf-multiday-list', 'qpfMultiId', 'multiday');
 
-    // ── Winter sub-tabs, day pills, radio lists ─────────────────────────────
+    // ── Winter sub-tabs, day pills, product lists ───────────────────────────
     const winterPanel = byId('wpc-panel-winter');
     winterPanel?.querySelectorAll('[data-wpc-winter-tab]').forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -323,47 +422,83 @@ async function initialize() {
             winterPanel.querySelectorAll('.wpc-subtab-panel').forEach((p) => {
                 p.classList.toggle('is-active', p.id === `wpc-winter-panel-${state.winterTab}`);
             });
-            if (state.group === 'winter') reload();
+            if (state.winterTab === 'snow') {
+                state.snowId = '';
+                clearProductSelections('wpc-winter-snow-list');
+            } else {
+                state.iceId = '';
+                clearProductSelections('wpc-winter-ice-list');
+            }
+            if (state.group === 'winter' && !suppressReload) showSelectionPrompt();
         });
     });
     winterPanel?.querySelectorAll('[data-wpc-snow-day]').forEach((btn) => {
         btn.addEventListener('click', () => {
             state.snowDay = Number(btn.dataset.wpcSnowDay);
             selectPill(btn.closest('.wpc-day-pills'), btn);
+            state.snowId = '';
             populateWinterSnowList();
-            if (state.group === 'winter' && state.winterTab === 'snow') reload();
+            if (state.group === 'winter' && state.winterTab === 'snow') showSelectionPrompt();
         });
     });
     byId('wpc-winter-snow-list')?.addEventListener('change', (e) => {
         if (e.target.name === 'wpc-winter-snow-list') {
-            state.snowId = e.target.value;
-            if (state.group === 'winter' && state.winterTab === 'snow') reload();
+            if (e.target.checked) selectOnlyProduct('wpc-winter-snow-list', e.target);
+            state.snowId = e.target.checked ? e.target.value : '';
+            if (state.group === 'winter' && state.winterTab === 'snow') {
+                if (e.target.checked) reload();
+                else showSelectionPrompt();
+            }
         }
     });
     byId('wpc-winter-ice-list')?.addEventListener('change', (e) => {
         if (e.target.name === 'wpc-winter-ice-list') {
-            state.iceId = e.target.value;
-            if (state.group === 'winter' && state.winterTab === 'ice') reload();
+            if (e.target.checked) selectOnlyProduct('wpc-winter-ice-list', e.target);
+            state.iceId = e.target.checked ? e.target.value : '';
+            if (state.group === 'winter' && state.winterTab === 'ice') {
+                if (e.target.checked) reload();
+                else showSelectionPrompt();
+            }
         }
     });
 
-    // ── SigWx radio list ────────────────────────────────────────────────────
+    // ── Direct products and SigWx product list ──────────────────────────────
+    [
+        ['wpc-fop-toggle', 'fopEnabled', 'fop'],
+        ['wpc-mpd-toggle', 'mpdEnabled', 'mpd'],
+        ['wpc-surface-toggle', 'surfaceEnabled', 'surface'],
+    ].forEach(([inputId, stateKey, group]) => {
+        byId(inputId)?.addEventListener('change', (e) => {
+            state[stateKey] = e.target.checked;
+            if (state.group !== group) return;
+            if (e.target.checked) reload();
+            else showSelectionPrompt();
+        });
+    });
+
     byId('wpc-sigwx-list')?.addEventListener('change', (e) => {
         if (e.target.name === 'wpc-sigwx') {
-            state.sigwxId = e.target.value;
-            if (state.group === 'sigwx') reload();
+            if (e.target.checked) selectOnlyProduct('wpc-sigwx-list', e.target);
+            state.sigwxId = e.target.checked ? e.target.value : '';
+            if (state.group === 'sigwx') {
+                if (e.target.checked) reload();
+                else showSelectionPrompt();
+            }
         }
     });
 
-    // ── Scrubber sidebar radio lists ────────────────────────────────────────
+    // ── Scrubber sidebar product lists ──────────────────────────────────────
     const wireScrubberSidebarList = (listId, indexKey) => {
         byId(listId)?.addEventListener('change', (e) => {
             if (e.target.name !== listId) return;
-            const inputs = [...byId(listId).querySelectorAll('input[type="radio"]')];
+            const inputs = [...byId(listId).querySelectorAll('input[type="checkbox"]')];
             const index = inputs.indexOf(e.target);
             if (index < 0) return;
-            state[indexKey] = index;
-            scrubber?.goTo(index);
+            if (e.target.checked) selectOnlyProduct(listId, e.target);
+            state[indexKey] = e.target.checked ? index : -1;
+            activateScrubber();
+            if (e.target.checked) scrubber?.goTo(index);
+            else showSelectionPrompt();
         });
     };
     wireScrubberSidebarList('wpc-forecast-list', 'forecastIndex');

@@ -95,10 +95,30 @@ Removed in Phase 0:
 - `legacy/` pages and JS are retained but unrouted
 - Legacy API render endpoints removed from main.py
 
-## Backend Workers (Cross-Platform Supervisor Target)
+## Backend Refresh Coordinator and Workers
 
-Current cache refresh is OS-first via Windows Task Scheduler. In-process
-APScheduler jobs are fallback-only and enabled only when `WX_INPROC_WORKERS=1`.
+Task-scheduler-free Phase 1 adds the application-owned coordinator in
+`app_core/refresh_coordinator.py`. FastAPI starts and gracefully stops it
+through application lifespan. It provides a bounded executor/queue,
+actual-resource-key deduplication, provider concurrency and minimum intervals,
+90-second request-presence leases, exponential backoff, state pruning, and
+credential-safe reporting at `/api/health/coordinator`.
+
+Surface observation cold/stale refresh, WPC, SPC outlook, and Tropical
+advisory/GTWO refreshes are migrated request paths. Surface JSON uses the
+unique-temp atomic publisher in
+`app_core/atomic_io.py`. Its coordinator key identifies the regional upstream
+observation set, so one fetch publishes every Surface product cache. A cold
+response reports `refreshing` and the standalone Surface engine polls local
+state until the cache is ready. Presence-only states report `idle`. Six-hour
+cache cleanup is coordinator-owned and does not require an open page.
+
+Phase 1 supports one application process. `WEB_CONCURRENCY` and
+`UVICORN_WORKERS` above 1 are rejected, and CLI multi-worker launches are
+unsupported until persistent cross-process leases/provider state exist.
+Existing direct-write OS tasks are not safe to overlap with migrated paths.
+The older broad APScheduler profile remains fallback-only behind
+`WX_INPROC_WORKERS=1`.
 
 The post-refactor deployability target is cross-platform:
 
@@ -127,9 +147,9 @@ Manual RTMA backfill/preload:
 - `workers/rtma_preload.py` primes the full lookback cache (hourly + rapid update)
 - Intended for one-time rebuilds and cold-start priming
 
-Current default runtime behavior (no env var): no APScheduler jobs are
-registered and cache freshness is delegated to OS tasks. This is expected to
-change when the cross-platform worker supervisor is implemented.
+Current default runtime behavior (no env var): the coordinator and its cleanup
+schedule run, while the older broad APScheduler worker profile is not
+registered. Unmigrated products retain their existing paths until later phases.
 
 ### Local Dev Run Profiles
 
@@ -139,12 +159,10 @@ The default local startup path is currently:
 python main.py
 ```
 
-The architecture still supports API-only, in-process worker, and dual-mode
-runtime profiles through `WX_INPROC_WORKERS`, but the previously documented
-helper launchers under `tools/` are not present in this checkout. Recreate those
-launchers or update this section before relying on them operationally.
-
-Dual mode is intended for validation and stress testing only. It can duplicate refresh work and increase network/disk activity.
+`WX_INPROC_WORKERS=1` enables the legacy broad in-process schedule for fallback
+testing. Do not combine migrated application refreshes with existing
+direct-write task definitions; optional warmers require the later shared
+persistent coordination protocol.
 
 Future launcher expectation:
 
@@ -156,8 +174,9 @@ Future launcher expectation:
 
 ```
 GET /api/data/alerts?state={STATE}   # optional state filter
-GET /api/data/alerts?geometry_mode={full|display}&zoom_bucket={national|regional|local}&west={W}&east={E}&south={S}&north={N}
+GET /api/data/alerts?geometry_mode={full|display}&zoom_bucket={low|high}&west={W}&east={E}&south={S}&north={N}
 GET /api/data/alerts/lsr?west={W}&east={E}&south={S}&north={N}&hours={1|6|12|24}
+GET /api/health/coordinator
 GET /api/data/spc?day={1-8}&hazard={cat|torn|wind|hail|prob|windrh|dryt}
 GET /api/overlay/latest?family=rtma&region={REGION}&stream={STREAM}&product={PRODUCT}[&frame_key=YYYY_MM_DD_HH_MM_SS]
 GET /api/overlay/frames?family=rtma&region={REGION}&stream={STREAM}&product={PRODUCT}
@@ -169,11 +188,23 @@ GET /api/satellite-v2/catalog?sat_id={SAT}&sector={SECTOR}&channel={PRODUCT}
 GET /api/satellite-v2/tile/{z}/{x}/{y}?sat_id={SAT}&sector={SECTOR}&channel={PRODUCT}&frame_key={FRAME}
 ```
 
-Alerts/SPC endpoints:
+Alerts:
 
-1. Read from the corresponding cache file.
-2. If cache is missing (cold start), trigger a synchronous worker run inline.
-3. Return GeoJSON with an added `count` field.
+1. Read the current immutable generation through
+   `cache/alerts/current_generation.json`.
+2. Below zoom 8, return the national low-detail payload; at zoom 8+, return
+   bbox-filtered full geometry.
+3. Serve a stale complete generation immediately and submit one deduplicated
+   refresh through the coordinator's 35-second `nws-alerts` provider budget.
+4. Return an explicit 503 warming/backoff status on a cold missing cache rather
+   than a successful empty GeoJSON collection.
+
+SPC remains on its product cache path, but Phase 3 makes recovery and
+post-issuance refresh product-specific. `config/refresh_schedules.py` resolves
+official UTC and `America/Chicago` boundaries; the request path never launches
+the broad outlook matrix for one selected/missing product. Tropical similarly
+uses separate coordinator keys for advisory and GTWO scopes while active page
+leases permit a conservative ten-minute special-advisory probe.
 
 RTMA overlay endpoints:
 
@@ -275,6 +306,10 @@ Radar/Satellite archive workflows: unchanged — synchronous render pipeline, La
 cache/
   alerts/
     national.geojson
+    national_full.geojson
+    national_display_low.geojson
+    current_generation.json
+    generations/{generation}/
   rtma/
     points/
       {REGION}/{stream}/{product}__{source_data_key}.geojson
@@ -320,6 +355,9 @@ cache/
 | `app_core/static_assets.py`    | Cache-aware static file serving                                               |
 | `routes/*.py`                  | Product/page API route registration via `APIRouter`                           |
 | `services/*.py`                | Product cache, render, worker-fallback, and serialization logic               |
+| `app_core/refresh_coordinator.py` | Bounded request refresh, leases, provider policies, backoff, and status     |
+| `app_core/atomic_io.py`        | Unique-temp atomic text/JSON publication                                       |
+| `config/refresh_schedules.py`  | Issuance boundaries and due-window policy for Phase 3 products                  |
 | `workers/scheduler.py`         | APScheduler setup and lifecycle                                               |
 | `workers/alerts_worker.py`     | NWS alerts fetch → cache                                                      |
 | `workers/spc_worker.py`        | SPC outlook fetch → cache                                                     |

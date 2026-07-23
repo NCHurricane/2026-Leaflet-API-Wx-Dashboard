@@ -1,6 +1,8 @@
 """Tropical cyclone current and archive services."""
 
 from pathlib import Path
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import json
 import time as _time
 from typing import Any
@@ -8,6 +10,12 @@ from typing import Any
 from fastapi import HTTPException
 
 from app_core.paths import BASE_DIR
+from app_core.refresh_coordinator import get_refresh_coordinator
+from config.refresh_schedules import (
+    GTWO_SCHEDULE,
+    TROPICAL_INTERMEDIATE_SCHEDULE,
+    TROPICAL_ROUTINE_SCHEDULE,
+)
 
 _TROPICAL_BASINS = {"AL": "Atlantic", "EP": "Eastern Pacific", "CP": "Central Pacific"}
 _TROPICAL_PRODUCTS = {
@@ -26,10 +34,13 @@ _TROPICAL_ARCHIVE_CATALOG = _TROPICAL_ARCHIVE_DIR / "catalog" / "seasons.json"
 _TROPICAL_ARCHIVE_STORMS_DIR = _TROPICAL_ARCHIVE_DIR / "storms"
 
 
-def _run_tropical_worker_once(force: bool = False) -> None:
+def _run_tropical_worker_once(
+    force: bool = False,
+    scopes: set[str] | None = None,
+) -> dict[str, Any]:
     from workers.tropical_worker import run_tropical_worker
 
-    run_tropical_worker(force=force)
+    return run_tropical_worker(force=force, scopes=scopes)
 
 
 def _run_tropical_archive_worker_once(force: bool = False) -> None:
@@ -67,6 +78,164 @@ def _read_tropical_cache(path: Path, max_age_seconds: float) -> dict[str, Any] |
 def _read_tropical_cache_any_age(path: Path) -> dict[str, Any] | None:
     """Read the latest worker artifact without making a page request refresh it."""
     return _read_tropical_cache(path, float("inf"))
+
+
+def _parse_timestamp(value: object) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, timezone.utc)
+    raw = str(value)
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            parsed = parsedate_to_datetime(raw)
+        except (TypeError, ValueError):
+            return None
+    return (
+        parsed.replace(tzinfo=timezone.utc)
+        if parsed.tzinfo is None
+        else parsed.astimezone(timezone.utc)
+    )
+
+
+def _latest_timestamp(values: list[object]) -> datetime | None:
+    parsed = [timestamp for value in values if (timestamp := _parse_timestamp(value))]
+    return max(parsed) if parsed else None
+
+
+def _tropical_scope_state(scope: str) -> tuple[datetime | None, datetime | None]:
+    source_values: list[object] = []
+    checked_values: list[object] = []
+    if scope == "gtwo":
+        for basin in _TROPICAL_BASINS:
+            basin_dir = _TROPICAL_CACHE_DIR / "basins" / basin
+            payload = _read_tropical_cache_any_age(basin_dir / "gtwo.json") or {}
+            meta = _read_tropical_cache_any_age(basin_dir / "gtwo.kmz.meta.json") or {}
+            source_values.append(payload.get("issued"))
+            checked_values.extend((meta.get("checked_at"), meta.get("fetched_at")))
+    else:
+        summary = _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE) or {}
+        for storm in summary.get("storms") or []:
+            storm_id = str(storm.get("id") or "").upper()
+            if not storm_id:
+                continue
+            storm_dir = _TROPICAL_CACHE_DIR / "storms" / storm_id
+            payload = _read_tropical_cache_any_age(storm_dir / "storm.json") or {}
+            meta = _read_tropical_cache_any_age(
+                storm_dir / "products" / "TCP.xml.meta.json"
+            ) or {}
+            source_values.append(payload.get("updated"))
+            checked_values.extend((meta.get("checked_at"), meta.get("fetched_at")))
+        current_meta = _read_tropical_cache_any_age(
+            _TROPICAL_STORMS_CACHE.with_suffix(".json.meta.json")
+        ) or {}
+        checked_values.extend(
+            (current_meta.get("checked_at"), current_meta.get("fetched_at"))
+        )
+    return _latest_timestamp(source_values), _latest_timestamp(checked_values)
+
+
+def _tropical_warnings_in_effect() -> bool:
+    summary = _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE) or {}
+    for storm in summary.get("storms") or []:
+        storm_id = str(storm.get("id") or "").upper()
+        payload = _read_tropical_cache_any_age(
+            _TROPICAL_CACHE_DIR / "storms" / storm_id / "storm.json"
+        ) or {}
+        text = str(
+            payload.get("products", {}).get("TCP", {}).get("text") or ""
+        ).upper()
+        if "WATCHES AND WARNINGS" in text and not any(
+            marker in text
+            for marker in (
+                "THERE ARE NO COASTAL WATCHES OR WARNINGS",
+                "NO COASTAL WATCHES OR WARNINGS ARE IN EFFECT",
+            )
+        ):
+            return True
+    return False
+
+
+def _submit_tropical_scope(scope: str) -> None:
+    get_refresh_coordinator().submit(
+        key=("tropical", scope),
+        provider="nhc",
+        function=lambda: _run_tropical_worker_once(scopes={scope}),
+    )
+
+
+def _maybe_schedule_tropical_refresh() -> None:
+    """Apply boundary gates plus a ten-minute active-page special probe."""
+    now = datetime.now(timezone.utc)
+    coordinator = get_refresh_coordinator()
+    for scope in ("advisories", "gtwo"):
+        key = ("tropical", scope)
+        coordinator.record_presence(key=key, provider="nhc")
+        source_issued, last_checked = _tropical_scope_state(scope)
+        schedule = GTWO_SCHEDULE if scope == "gtwo" else TROPICAL_ROUTINE_SCHEDULE
+        due = schedule.refresh_due(
+            now=now,
+            source_issued_at=source_issued,
+            last_checked_at=last_checked,
+        )
+        if scope == "advisories" and _tropical_warnings_in_effect():
+            due = due or TROPICAL_INTERMEDIATE_SCHEDULE.refresh_due(
+                now=now,
+                source_issued_at=source_issued,
+                last_checked_at=last_checked,
+            )
+        safety_due = (
+            last_checked is None
+            or (now - last_checked).total_seconds() >= 10 * 60
+        )
+        if due or safety_due:
+            _submit_tropical_scope(scope)
+
+
+def _maybe_schedule_current_season_refresh(catalog: dict[str, Any]) -> None:
+    """Refresh only mutable current-season b-decks while archive is present."""
+    now = datetime.now(timezone.utc)
+    current_year = str(now.year)
+    seasons = catalog.get("seasons") or []
+    has_current_season = any(
+        str(item.get("year") if isinstance(item, dict) else item) == current_year
+        for item in seasons
+    )
+    if not has_current_season:
+        has_current_season = any(
+            current_year in years
+            for years in (catalog.get("basins") or {}).values()
+            if isinstance(years, dict)
+        )
+    if not has_current_season:
+        return
+    coordinator = get_refresh_coordinator()
+    key = ("tropical", "archive-current-season", current_year)
+    coordinator.record_presence(key=key, provider="nhc")
+    state = coordinator.describe(key) or {}
+    last_success = _parse_timestamp(
+        state.get("source_timestamp") or state.get("last_success_at")
+    )
+    if last_success and not GTWO_SCHEDULE.refresh_due(
+        now=now,
+        source_issued_at=last_success,
+        last_checked_at=last_success,
+    ):
+        return
+
+    def _refresh() -> dict[str, Any]:
+        from workers.tropical_archive_worker import refresh_current_season
+
+        refresh_current_season(now.year)
+        return {"source_timestamp": datetime.now(timezone.utc).isoformat()}
+
+    coordinator.submit(
+        key=key,
+        provider="nhc",
+        function=_refresh,
+    )
 
 
 def _write_tropical_cache(path: Path, payload: dict[str, Any]) -> None:
@@ -142,6 +311,32 @@ def _normalize_tropical_storms(payload: dict[str, Any]) -> list[dict[str, Any]]:
         merged["basinName"] = _TROPICAL_BASINS[basin]
         storms.append(merged)
     return storms
+
+
+def _normalize_storm_graphic_urls(payload: dict[str, Any]) -> dict[str, Any]:
+    """Upgrade retired standard-cone URLs in existing worker artifacts."""
+    replacements = {
+        "_3day_cone_no_line_and_wind.png": "_3day_cone_sm2.png",
+        "_5day_cone_no_line_and_wind.png": "_5day_cone_sm2.png",
+    }
+    graphics = payload.get("graphics")
+    if not isinstance(graphics, list):
+        return payload
+    normalized_graphics = []
+    changed = False
+    for graphic in graphics:
+        if not isinstance(graphic, dict):
+            normalized_graphics.append(graphic)
+            continue
+        url = str(graphic.get("url") or "")
+        normalized_url = url
+        for retired, current in replacements.items():
+            normalized_url = normalized_url.replace(retired, current)
+        changed = changed or normalized_url != url
+        normalized_graphics.append(
+            {**graphic, "url": normalized_url} if normalized_url != url else graphic
+        )
+    return {**payload, "graphics": normalized_graphics} if changed else payload
 
 
 def _tropical_wallet(storm_id: str) -> int:
@@ -306,6 +501,8 @@ def get_tropical_storms_data(basin: str = "WORLD", force: bool = False) -> dict:
     if basin_key not in {"WORLD", "AL", "EP", "CP"}:
         raise HTTPException(status_code=400, detail="Invalid tropical basin.")
 
+    if not force:
+        _maybe_schedule_tropical_refresh()
     summary = None if force else _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
     source = "worker-cache"
     if summary is None:
@@ -344,6 +541,8 @@ def get_tropical_storms_data(basin: str = "WORLD", force: bool = False) -> dict:
 
 def get_tropical_summary_data(force: bool = False) -> dict:
     """Return the cached tropical worker summary."""
+    if not force:
+        _maybe_schedule_tropical_refresh()
     summary = None if force else _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
     if summary is None:
         try:
@@ -374,6 +573,7 @@ def get_tropical_basin_feeds_data(basin_id: str) -> dict:
     if basin_key not in _TROPICAL_BASINS:
         raise HTTPException(status_code=400, detail="Invalid tropical basin.")
 
+    _maybe_schedule_tropical_refresh()
     basin_dir = _TROPICAL_CACHE_DIR / "basins" / basin_key
     index_payload = _read_tropical_cache_any_age(basin_dir / "index.json")
     gis_payload = _read_tropical_cache_any_age(basin_dir / "gis.json")
@@ -381,7 +581,7 @@ def get_tropical_basin_feeds_data(basin_id: str) -> dict:
     gtwo_payload = _read_tropical_cache_any_age(basin_dir / "gtwo.json")
     if index_payload is None or gis_payload is None or assets_payload is None:
         try:
-            _run_tropical_worker_once(force=False)
+            _run_tropical_worker_once(force=False, scopes={"advisories", "gtwo"})
         except Exception as exc:
             raise HTTPException(
                 status_code=502,
@@ -414,11 +614,12 @@ def get_tropical_storm_data(storm_id: str) -> dict:
     if not re.fullmatch(r"(AL|EP|CP)[0-9]{2}[0-9]{4}", sid):
         raise HTTPException(status_code=400, detail="Invalid tropical storm id.")
 
+    _maybe_schedule_tropical_refresh()
     storm_cache = _TROPICAL_CACHE_DIR / "storms" / sid / "storm.json"
     payload = _read_tropical_cache_any_age(storm_cache)
     if payload is None:
         try:
-            _run_tropical_worker_once(force=False)
+            _run_tropical_worker_once(force=False, scopes={"advisories"})
         except Exception as exc:
             fallback = _read_tropical_cache_any_age(storm_cache)
             if fallback is None:
@@ -432,7 +633,7 @@ def get_tropical_storm_data(storm_id: str) -> dict:
 
     if payload is None:
         raise HTTPException(status_code=404, detail=f"No cached tropical storm: {sid}")
-    return payload
+    return _normalize_storm_graphic_urls(payload)
 
 
 def get_tropical_archive_catalog_data() -> dict:
@@ -450,6 +651,7 @@ def get_tropical_archive_catalog_data() -> dict:
         raise HTTPException(
             status_code=404, detail="Tropical archive catalog unavailable."
         )
+    _maybe_schedule_current_season_refresh(payload)
     return payload
 
 

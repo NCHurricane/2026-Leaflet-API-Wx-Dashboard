@@ -33,7 +33,6 @@ let _tropicalArchiveStormBase = null;
 let _tropicalArchiveStormId = null;
 let _tropicalArchiveStormName = null;
 let _tropicalFixMarker = null;
-let _tropicalArchiveReliabilityLabel = null;
 let _activeOutlookDetail = null;
 let _activeOutlookFeature = null;
 let _outlookFeatureMap = {};
@@ -64,6 +63,13 @@ function escapeHtml(value) {
         .replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 const _escapeHtml = escapeHtml;
+// Square colour swatch + label row for the floating legend. Callers pass an
+// already-escaped label, matching the shared legend markup used by the other pages.
+function swatch(color, label, swatchModifier = '') {
+    const modifier = swatchModifier ? ` ${swatchModifier}` : '';
+    return `<div class="legend-item"><span class="legend-swatch${modifier}" style="background:${color}"></span>`
+        + `<span class="legend-text">${label}</span></div>`;
+}
 function setLegend(html) { if (html) legend.setHtml(html); else legend.clear(); }
 function _setTropicalLegend(title, bodyHtml, meta = '') {
     setLegend(`<div class="core-legend-header">
@@ -207,14 +213,11 @@ function _syncLiveBasinPills() {
 }
 
 function _selectLiveBasin(basin) {
-    if (basin === 'WORLD') {
-        _selectedTropicalBasins = new Set(['WORLD']);
-    } else {
-        _selectedTropicalBasins.delete('WORLD');
-        if (_selectedTropicalBasins.has(basin)) _selectedTropicalBasins.delete(basin);
-        else _selectedTropicalBasins.add(basin);
-        if (!_selectedTropicalBasins.size) _selectedTropicalBasins.add('WORLD');
-    }
+    if (!basin) return;
+    // Single-select: the chosen region replaces the selection outright. Re-clicking
+    // the active pill is a no-op — one region is always selected, none can toggle off.
+    if (_selectedTropicalBasins.size === 1 && _selectedTropicalBasins.has(basin)) return;
+    _selectedTropicalBasins = new Set([basin]);
     _syncLiveBasinPills();
     _closeOutlookDetail();
     const selectedStormId = _activeTropicalSystemId();
@@ -399,7 +402,11 @@ function _renderActiveSystemsOverview(storms) {
             zIndexOffset: 900,
         });
         const name = storm?.name || stormId;
-        marker.bindTooltip(`${escapeHtml(name)} · ${escapeHtml(_tropicalWindClass(storm?.intensity))}`);
+        marker.bindTooltip(
+            `<strong>${escapeHtml(name)}</strong><br>${escapeHtml(_tropicalSystemType(storm))}`
+            + `<br>${escapeHtml(_tropicalWindText(_tropicalIntensityKt(storm)))}`,
+            { direction: 'top', className: 'core-city-name-tag' },
+        );
         marker.on('click', () => _selectTropicalStormCard(stormId));
         marker.addTo(layer);
     });
@@ -750,6 +757,77 @@ function _tropicalWindClass(windKt) {
     return 'Depression';
 }
 
+// NHC classification codes that carry information the wind speed alone cannot — a
+// potential/subtropical/post-tropical system would otherwise be labelled from its
+// intensity and lose that status.
+const _TROPICAL_CLASSIFICATION_LABEL = {
+    PTC: 'Potential Tropical Cyclone',
+    STD: 'Subtropical Depression',
+    STS: 'Subtropical Storm',
+    PT: 'Post-Tropical Cyclone',
+    EX: 'Post-Tropical Cyclone',
+    LO: 'Remnant Low',
+    DB: 'Remnant Low',
+};
+
+// NHC sends intensity as a string; a missing value must read as unknown rather than
+// coercing to 0 kt (Number(null) === 0), which would label the system a depression.
+function _tropicalIntensityKt(storm) {
+    const raw = String(storm?.intensity ?? '').trim();
+    if (!raw) return NaN;
+    const kt = Number(raw);
+    return Number.isFinite(kt) ? kt : NaN;
+}
+
+// Type line for the system tooltip. Falls back to the Saffir-Simpson class so
+// hurricanes read "Category 3" rather than a flat "Hurricane", matching the cards.
+function _tropicalSystemType(storm) {
+    const code = String(storm?.classification || '').trim().toUpperCase();
+    if (_TROPICAL_CLASSIFICATION_LABEL[code]) return _TROPICAL_CLASSIFICATION_LABEL[code];
+    const windClass = _tropicalWindClass(_tropicalIntensityKt(storm));
+    return windClass === 'Depression' ? 'Tropical Depression' : windClass;
+}
+
+// STORMTYPE codes on the best-track and forecast-point shapefiles. These cover stages
+// the Saffir-Simpson scale has no word for (disturbance, wave, subtropical), which is
+// why the layer tooltips use this rather than the wind-derived class.
+const _TROPICAL_STORMTYPE_LABEL = {
+    DB: 'Disturbance',
+    WV: 'Tropical Wave',
+    LO: 'Low',
+    TD: 'Tropical Depression',
+    TS: 'Tropical Storm',
+    HU: 'Hurricane',
+    SD: 'Subtropical Depression',
+    SS: 'Subtropical Storm',
+    STD: 'Subtropical Depression',
+    STS: 'Subtropical Storm',
+    EX: 'Extratropical Cyclone',
+    ET: 'Extratropical Cyclone',
+    PT: 'Post-Tropical Cyclone',
+    PTC: 'Potential Tropical Cyclone',
+};
+
+function _tropicalStormTypeLabel(props = {}) {
+    const code = String(props.STORMTYPE || '').trim().toUpperCase();
+    if (_TROPICAL_STORMTYPE_LABEL[code]) return _TROPICAL_STORMTYPE_LABEL[code];
+    const declared = String(props.TCDVLP || '').trim();
+    if (declared) return declared;
+    const windClass = _tropicalWindClass(props.INTENSITY ?? props.MAXWIND);
+    return windClass === 'Depression' ? 'Tropical Depression' : windClass;
+}
+
+// "45 mph (40 kt)" — mph first to match the storm cards, knots kept because every NHC
+// product quotes them. Null/blank (a best track with no valid fixes) reads as "--"
+// rather than coercing to 0, so call sites need no separate guard.
+function _tropicalWindText(kt) {
+    if (kt == null || kt === '') return '--';
+    const value = Number(kt);
+    if (!Number.isFinite(value)) return '--';
+    const mph = _ktToMph(value);
+    return mph != null ? `${mph} mph (${value} kt)` : `${value} kt`;
+}
+
 // Saffir-Simpson + tropical classification palette (coast.noaa.gov hurricane viewer aligned).
 // Single source of truth for marker icons, storm-card bars, and the Inspector legend.
 const TROPICAL_CATEGORIES = {
@@ -940,6 +1018,18 @@ function _renderStormSurgeWWLegend() {
     _setTropicalLegend('Storm Surge Watches & Warnings', '<div class="legend-flow">' + rows + '</div>', 'System');
 }
 
+// Legend renderers for the toggleable storm layers, in display priority order. The
+// floating legend is a single slot, so when several of these are on at once the first
+// match wins. Layers absent from this list (cone, track, points, best track) are
+// covered by the intensity legend.
+const _TROPICAL_LAYER_LEGENDS = [
+    ['peak_surge', _renderPeakSurgeLegend],
+    ['storm_surge', _renderStormSurgeWWLegend],
+    ['watches_warnings', _renderWatchesWarningsLegend],
+    ['wind_radii', _renderWindRadiiLegend],
+    ['initial_wind_extent', _renderInitialWindExtentLegend],
+];
+
 function _tropicalGisGeoJson(data, layerId) {
     return _tropicalEngine?.getGisGeoJson?.(data, layerId) || null;
 }
@@ -1074,7 +1164,6 @@ function _renderTropicalSummary(data) {
         }
 
         if (summary) {
-            const windMph = _ktToMph(storm.intensity);
             const pressure = Number(storm.pressure);
             const motion = _tropicalMotionText(storm);
             const advNum = storm.publicAdvisory?.advNum || storm.forecastAdvisory?.advNum;
@@ -1086,7 +1175,7 @@ function _renderTropicalSummary(data) {
             const locationText = data?.advisory?.location?.text || '';
             summary.innerHTML = [
                 ['Issued', issued, ' is-wide'],
-                ['Wind', windMph != null ? `${windMph} mph` : '--', ''],
+                ['Wind', _tropicalWindText(storm.intensity), ''],
                 ['Pressure', Number.isFinite(pressure) ? `${pressure} mb` : '--', ''],
                 ['Motion', motion || '--', ''],
                 ['Advisory #', advNumText, ''],
@@ -1276,8 +1365,6 @@ function _loadArchiveFix(index, options = {}) {
     _renderTropicalLegend();
     _renderArchiveScrubberBar();
 
-    const issued = _formatFixDTG(feature.properties?.DTG);
-    _tropicalArchiveReliabilityLabel = issued;
     _setReliability('tropical', 'Best Track — HURDAT2', 'NOAA NHC', base.updated || Date.now());
     _setTimestampSource('tropical', 'Best Track — HURDAT2', base.updated || Date.now());
     _setTropicalArchiveStatus(`${_tropicalArchiveStormName || ''} — Fix ${index + 1}/${fixes.length}`);
@@ -1301,7 +1388,7 @@ function configureProductModules() {
         getArchiveStormName: () => _tropicalArchiveStormName, getActiveStorm: () => _activeTropicalStorm,
         getTropicalGisGeoJson: _tropicalGisGeoJson, getPlaybackSpeeds: () => SCRUBBER_PLAYBACK_SPEEDS,
         getSelectedArchiveId: () => _tropicalArchiveSelectedId, ktToMph: _ktToMph,
-        motionText: _tropicalMotionText, pointColor: _tropicalPointColor,
+        motionText: _tropicalMotionText, pointColor: _tropicalPointColor, windText: _tropicalWindText,
         loadArchiveAdvisory: (step, options) => _tropicalEngine?.loadArchiveAdvisory(_tropicalArchiveStormId, step, options),
         loadArchiveFix: _loadArchiveFix, openGraphicDetail: _openTropicalGraphicDetail,
         openProductDetail: _openTropicalProductDetail, selectArchiveStorm: _selectTropicalArchiveStorm,
@@ -1326,24 +1413,25 @@ function configureProductModules() {
         liveStormLabel: (data) => _tropicalStorms.find((storm) => String(storm?.id).toUpperCase() === String(data?.stormId).toUpperCase())?.name || data.advisory?.headline || `${data.stormId} advisory loaded`,
         nextRequestSeq: () => ++_tropicalRequestSeq, map, openProductDetail: _openTropicalProductDetail,
         pointCategory: _tropicalPointCategory, pointColor: _tropicalPointColor,
+        stormTypeLabel: _tropicalStormTypeLabel, windText: _tropicalWindText,
         prepareArchiveAdvisoryMode: (items) => _tropicalPageController.setArchiveAdvisoryMode(items),
         prepareArchiveBestTrackMode: () => _tropicalPageController.setArchiveBestTrackMode(),
         prepareArchiveStorm: (data, atcfId) => { _stopArchiveScrubPlay(); _clearArchiveFixHighlight(); _tropicalArchiveStormBase = data; _tropicalArchiveStormId = atcfId; _tropicalArchiveStormName = data.storm?.name || atcfId; _tropicalPageController.setArchiveFixes(data.gis_layers?.best_track_points?.geojson?.features || []); },
         renderOutlookLegend: _renderTropicalOutlookLegend,
-        renderLayerLegend: (layerId, checked) => { const renderers = { peak_surge: _renderPeakSurgeLegend, watches_warnings: _renderWatchesWarningsLegend, wind_radii: _renderWindRadiiLegend, initial_wind_extent: _renderInitialWindExtentLegend, storm_surge: _renderStormSurgeWWLegend }; if (checked && renderers[layerId]) renderers[layerId](); else if (!checked && _activeTropicalStorm) _renderTropicalLegend(); },
+        renderLayerLegend: (toggles) => { const active = _TROPICAL_LAYER_LEGENDS.find(([key]) => toggles[key]); if (active) active[1](); else if (_activeTropicalStorm) _renderTropicalLegend(); },
         renderLiveStormDetail: (data, options) => { _renderTropicalSummary(data); _renderTropicalFloater(data.stormId); _highlightSelectedTropicalCard(); _tropicalEngine.setLayerToggles({ cone: true, forecast_points: true, forecast_track: false }); _renderTropicalLayer(data, options); _renderTropicalLegend(); if (options.zoomToLatest) _zoomTropicalToLatest(data); },
         renderArchiveCatalog: (catalog) => _tropicalPageController.renderArchiveCatalog(catalog),
         renderArchiveAdvisory: _renderArchiveAdvisory, renderInitialArchiveFix: () => _loadArchiveFix(0, { fit: true, initial: true }),
         filterStorms: _filterLiveStorms, clearFilteredStorm: _clearFilteredLiveStorm,
         renderStormList: (storms) => _tropicalPageController.renderStormList(storms),
         renderActiveStorms: _renderActiveSystemsOverview, renderSummary: _renderTropicalSummary,
-        resetLiveArchiveState: () => { _tropicalArchiveReliabilityLabel = null; _tropicalArchiveSelectedId = null; _tropicalPageController.resetArchiveScrubber(); _setTropicalDetailSectionsVisible(true); _highlightTropicalArchiveCard(); },
+        resetLiveArchiveState: () => { _tropicalArchiveSelectedId = null; _tropicalPageController.resetArchiveScrubber(); _setTropicalDetailSectionsVisible(true); _highlightTropicalArchiveCard(); },
         setActiveStorm: (data) => { _activeTropicalStorm = data; }, setArchiveCatalog: (catalog) => { _tropicalArchiveCatalog = catalog; },
         setArchiveStatus: _setTropicalArchiveStatus, setHubMode: _setTropicalHubMode, setStatus: _setTropicalStatus,
         setStorms: (storms) => { _tropicalStorms = storms; }, selectStorm: _selectTropicalStormCard,
         syncLayerPills: (keys, toggles) => keys.forEach((key) => { const input = byId('wx-tropical-inspector-layers')?.querySelector(`[data-tc-layer="${key}"]`); if (input) input.checked = !!toggles[key]; }),
         updateLiveStormMetadata: (data) => { const updated = data.updated || Date.now(); _setReliability('tropical', 'Tropical Cyclones', 'NOAA NHC', updated); _setTimestampSource('tropical', 'NHC Public Advisory', updated); },
-        updateArchiveAdvisoryMetadata: (advisory, step, atcfId) => { _tropicalArchiveReliabilityLabel = advisory.issued || null; const label = `Advisory ${advisory.advisoryStep || step}`; const updated = advisory.updated || Date.now(); _setReliability('tropical', `${label} — NHC Archive`, 'NOAA NHC', updated); _setTimestampSource('tropical', `${label} — NHC Archive`, updated); _setTropicalArchiveStatus(`${_tropicalArchiveStormName || atcfId} — ${label}`); },
+        updateArchiveAdvisoryMetadata: (advisory, step, atcfId) => { const label = `Advisory ${advisory.advisoryStep || step}`; const updated = advisory.updated || Date.now(); _setReliability('tropical', `${label} — NHC Archive`, 'NOAA NHC', updated); _setTimestampSource('tropical', `${label} — NHC Archive`, updated); _setTropicalArchiveStatus(`${_tropicalArchiveStormName || atcfId} — ${label}`); },
         updateArchiveStormMetadata: (data) => _setViewerTimestamp(data.updated || Date.now()),
         regionFitBottomPaddingPx: REGION_FIT_BOTTOM_PADDING_PX, watchWarningEvent: (code) => _TROPICAL_WW_EVENT[code], windClass: _tropicalWindClass, escapeHtml,
     });

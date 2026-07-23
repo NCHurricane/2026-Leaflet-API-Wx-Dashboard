@@ -1,4 +1,5 @@
 function formatTimestamp(value) {
+    if (value == null || value === '') return '—';
     const date = value instanceof Date ? value : new Date(value);
     if (!Number.isFinite(date.getTime())) return '—';
     return date.toLocaleString([], {
@@ -8,6 +9,7 @@ function formatTimestamp(value) {
 }
 
 function formatAge(value) {
+    if (value == null || value === '') return '—';
     const timestamp = new Date(value).getTime();
     if (!Number.isFinite(timestamp)) return '—';
     const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));

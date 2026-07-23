@@ -14,6 +14,8 @@ from fastapi import HTTPException
 from fastapi.responses import Response
 
 from app_core.paths import CACHE_ROOT
+from app_core.atomic_io import atomic_write_json, atomic_write_text
+from config.refresh_schedules import latest_usdm_valid_date
 
 _STATE_TO_FIPS = {
     "AL": "01",
@@ -108,7 +110,7 @@ async def get_drought_geojson(date: str = "latest") -> Response:
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"USDM unreachable: {exc}") from exc
 
-    cache_file.write_bytes(raw)
+    atomic_write_text(cache_file, raw.decode("utf-8"))
     return Response(content=raw, media_type="application/json")
 
 
@@ -208,16 +210,10 @@ async def get_drought_state_stats(date: str = "latest", state: str = "NC") -> di
         "dsci": float(dsci.get("dsci") or 0.0),
     }
 
-    with cache_file.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, ensure_ascii=True)
+    atomic_write_json(cache_file, payload)
 
     return payload
 
 
 def _latest_usdm_date() -> _date:
-    today = _date.today()
-    days_since_tuesday = (today.weekday() - 1) % 7
-    candidate = today - timedelta(days=days_since_tuesday)
-    if today.weekday() in (1, 2):
-        candidate -= timedelta(weeks=1)
-    return candidate
+    return latest_usdm_valid_date()

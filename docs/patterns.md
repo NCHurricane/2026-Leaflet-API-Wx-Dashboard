@@ -30,13 +30,28 @@ Current weather-radar live endpoints:
 
 ## Worker / Scheduler Pattern
 
-Current mode is OS-scheduled cache refresh (Windows Task Scheduler). In-process
-APScheduler is fallback-only and opt-in via `WX_INPROC_WORKERS=1`.
+The application-owned coordinator in `app_core/refresh_coordinator.py` is the
+required pattern for migrated request refreshes:
 
-Refactor target: make an app-managed Python worker supervisor the default
-runtime path so the dashboard can run consistently on Windows, macOS, and Linux.
-OS schedulers should become optional advanced deployment integrations, not the
-only comfortable way to keep caches fresh.
+1. Use a key identifying the actual upstream work. Do not include a product
+   when one regional provider response can populate every product cache.
+2. Record or renew the 90-second request-presence lease.
+3. Return the best complete cache immediately.
+4. Submit missing/stale work through the bounded coordinator.
+5. Report `refreshing` or `backoff` without exposing exception text or
+   credentials.
+6. Publish through `app_core/atomic_io.py` so readers see the previous or next
+   complete generation, never an in-progress write.
+
+Do not add raw daemon threads or per-service in-flight sets. Provider minimum
+intervals, concurrency, retry/backoff, state reporting, periodic cleanup, and
+graceful shutdown belong to the coordinator. Phase 1 is explicitly
+single-process; persistent coordination is required before multi-worker Uvicorn
+or optional OS warmers can safely share ownership.
+
+The older broad APScheduler profile is fallback-only and opt-in via
+`WX_INPROC_WORKERS=1`. Existing direct-write Windows task definitions are not
+coordinator-compatible.
 
 When fallback mode is enabled, `workers/scheduler.py` registers:
 
@@ -45,15 +60,19 @@ When fallback mode is enabled, `workers/scheduler.py` registers:
 - mrms: 15 min (first tick delayed 30s)
 - surface: 30 min
 
-Workers write cache artifacts that API endpoints read directly. Cold-cache
-endpoint fallbacks can still run workers synchronously when needed.
+Workers write cache artifacts that API endpoints read directly. Migrated heavy
+cold paths return an explicit warming response and let the client poll the
+local cache; Surface observations are the first implementation.
+Surface uses one observation key per region and fans one upstream response into
+all product cache artifacts.
 
 Supervisor requirements:
 
 - Use existing freshness markers and per-worker skip gates.
 - Keep API-only mode available.
 - Keep one-off worker module commands available.
-- Avoid duplicate refresh work when an OS scheduler is also enabled.
+- Do not overlap legacy direct-write OS tasks with migrated coordinator paths;
+  later optional warmers must share persistent leases and provider state.
 - Log worker output consistently under `logs/scheduled/` or a replacement
   cross-platform log directory.
 
@@ -105,6 +124,15 @@ with the panel does not also manipulate or close the map view.
   turned off; empty selection removes layers without discarding good data.
 - Category re-selection filters cached data immediately. LSR cache identity is
   viewport plus time window; scope changes or explicit refresh fetch new data.
+- Active Alerts uses one map payload per refresh. Below zoom 8 it requests the
+  national `low` payload; zoom 8+ requests `high` with the visible bbox.
+- Native NWS polygons are never simplified. Only zone/SAME-derived geometry may
+  use the topology-preserving low-detail path.
+- Full, low-detail, and compatibility artifacts share one generation ID and
+  become API-visible only when `current_generation.json` is atomically replaced.
+- Stale active-alert data stays visible while one coordinator refresh observes
+  the application-wide 35-second NWS floor. Cold missing cache is warming/error
+  state, not a valid empty alert set.
 - The page, not parallel loaders, owns the combined footer message so a later
   LSR response cannot overwrite active-alert status.
 - The default-on timer explicitly refreshes selected live data every 60 seconds.
@@ -423,9 +451,10 @@ For Tropical backend changes, follow the post-refactor ownership boundaries:
   `services/tropical_service.py`.
 - NHC ingestion, GTWO parsing, GIS parsing, and cache generation belong in
   `workers/tropical_worker.py`.
-- Page, basin, overlay/vector, and storm-detail reads must serve the most recent
-  worker-written disk artifact regardless of age. Scheduled workers discover
-  new upstream updates; ordinary UI reads must not become NHC polling triggers.
+- Page, basin, overlay/vector, and storm-detail reads serve the most recent
+  complete worker-written artifact immediately. While Tropical/Workspace is
+  active, reads renew coordinator presence; the issuance registry permits only
+  due advisory/GTWO checks and a conservative ten-minute special-product probe.
 - Do not add Tropical route logic back to `main.py`.
 
 ## Clean-Cut Migration Pattern

@@ -53,7 +53,30 @@ def initialize_runtime() -> None:
             (f"[WARN] NODD fallback to THREDDS: {import_error}", _time.time() - _t0)
         )
 
-    # 2. Initialize Background Scheduler
+    # 2. Start the application-owned refresh coordinator. Phase 1 supports one
+    # application process until persistent cross-process leases are available.
+    _t0 = _time.time()
+    from app_core.refresh_coordinator import (
+        get_refresh_coordinator,
+        validate_single_process_configuration,
+    )
+    from workers.cache_cleanup_worker import run_cache_cleanup_worker
+
+    validate_single_process_configuration()
+    refresh_coordinator = get_refresh_coordinator()
+    refresh_coordinator.register_periodic(
+        key=("maintenance", "cache-cleanup"),
+        provider="local",
+        interval_seconds=6 * 60 * 60,
+        initial_delay_seconds=60,
+        function=run_cache_cleanup_worker,
+    )
+    refresh_coordinator.start()
+    startup_events.append(
+        ("[OK] Refresh coordinator (single process)", _time.time() - _t0)
+    )
+
+    # 3. Initialize Background Scheduler
     _t0 = _time.time()
     try:
         from workers.scheduler import start_scheduler as _start, stop_scheduler as _stop
@@ -67,7 +90,7 @@ def initialize_runtime() -> None:
             (f"[WARN] APScheduler unavailable: {sched_err}", _time.time() - _t0)
         )
 
-    # 3. Start background workers (scheduler returns immediately; first ticks
+    # 4. Start background workers (scheduler returns immediately; first ticks
     # run in background threads via APScheduler `next_run_time=now`)
     _t0 = _time.time()
     if _SCHEDULER_AVAILABLE and start_scheduler is not None:
@@ -81,7 +104,7 @@ def initialize_runtime() -> None:
                 (f"[WARN] Background workers failed: {e}", _time.time() - _t0)
             )
 
-    # 4. Cache freshness health check. The OS-level Task Scheduler is the
+    # 5. Cache freshness health check. The OS-level Task Scheduler is the
     # default source of truth for cache refresh; warn loudly if any sentinel
     # is missing or stale so the operator knows to check `tools/install_tasks.ps1`.
     _t0 = _time.time()
@@ -127,3 +150,9 @@ def shutdown_runtime() -> None:
             stop_scheduler()
         except Exception:
             pass
+    try:
+        from app_core.refresh_coordinator import get_refresh_coordinator
+
+        get_refresh_coordinator().stop(wait=True)
+    except Exception:
+        pass

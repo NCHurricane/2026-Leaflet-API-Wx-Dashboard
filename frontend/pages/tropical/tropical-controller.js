@@ -98,11 +98,10 @@
         const name = storm.name || data?.stormId || 'System';
 
         renderSummaryHeader(head, name, category);
-        const peakMph = context.ktToMph(peakKt);
         const fixes = Array.isArray(data?.track) ? data.track.length : 0;
         renderSummaryMetrics(summary, [
             ['Dates', archiveDateRange(data) || '--', ' is-wide'],
-            ['Peak wind', peakMph != null ? `${peakMph} mph` : '--'],
+            ['Peak wind', context.windText(peakKt)],
             ['Min pressure', Number.isFinite(minimumPressure) ? `${minimumPressure} mb` : '--'],
             ['Peak category', category.label],
             ['Track fixes', String(fixes)],
@@ -134,7 +133,7 @@
 
         renderSummaryMetrics(summary, [
             ['Issued', data.issued || '--', ' is-wide'],
-            ['Wind', Number.isFinite(mph) ? `${mph} mph` : '--'],
+            ['Wind', context.windText(windKt)],
             ['Pressure', Number.isFinite(advisory.pressureMb) ? `${advisory.pressureMb} mb` : '--'],
             ['Motion', motion || '--'],
             ['Advisory', stepper, '', true],
@@ -146,7 +145,6 @@
         const context = requirePageContext();
         const properties = data._fixFeature?.properties || {};
         const windKt = Number(properties.INTENSITY);
-        const mph = Number.isFinite(windKt) ? Math.round(windKt * 1.15078) : null;
         const category = context.categoryFromProperties(properties);
         const name = context.getArchiveStormName() || data.stormId || 'System';
 
@@ -163,7 +161,7 @@
 
         renderSummaryMetrics(summary, [
             ['Time', context.formatFixDate(properties.DTG), ' is-wide'],
-            ['Wind', Number.isFinite(mph) ? `${mph} mph` : '--'],
+            ['Wind', context.windText(windKt)],
             ['Pressure', Number.isFinite(pressure) && pressure > 0 ? `${pressure} mb` : '--'],
             ['Category', category.label, ' is-wide'],
             ['Fix', stepper, '', true, ' is-wide'],
@@ -842,11 +840,10 @@
         const name = storm?.name || stormId || 'Unnamed';
         const type = storm?.classification || storm?.systemType || '';
         const basin = String(storm?.basin || '').toUpperCase();
-        const windMph = context.ktToMph(storm?.intensity);
         const pressure = Number(storm?.pressure);
         const color = context.pointColor(storm?.intensity);
         const metrics = [
-            ['Wind', windMph != null ? `${windMph} mph` : '--'],
+            ['Wind', context.windText(storm?.intensity)],
             ['Pressure', Number.isFinite(pressure) ? `${pressure} mb` : '--'],
             ['Motion', context.motionText(storm) || '--'],
         ];

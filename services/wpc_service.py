@@ -4,43 +4,34 @@ from __future__ import annotations
 
 import json
 import os
-import threading
 import time
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
 from app_core.paths import CACHE_ROOT
+from app_core.refresh_coordinator import Submission, get_refresh_coordinator
+from config.refresh_schedules import wpc_schedule_for
 from config.wpc_config import WPC_PRODUCTS, get_product
 
 _WPC_CACHE = os.path.join(CACHE_ROOT, "wpc")
 _WPC_STATUS = os.path.join(_WPC_CACHE, ".status")
-_WPC_STALE_SECONDS = 12 * 60 * 60
-_WPC_REFRESH_LOCK = threading.Lock()
-_WPC_REFRESHING: set[str] = set()
+def _refresh_product(product_id: str) -> dict:
+    from workers.wpc_worker import run_wpc_worker
+
+    run_wpc_worker(product_ids={product_id})
+    status = _product_status({"id": product_id})
+    if status.get("status") == "error":
+        raise RuntimeError("WPC targeted refresh failed")
+    return {"source_timestamp": status.get("checked_at")}
 
 
-def _refresh_product(product_id: str) -> None:
-    try:
-        from workers.wpc_worker import run_wpc_worker
-
-        run_wpc_worker(product_ids={product_id})
-    finally:
-        with _WPC_REFRESH_LOCK:
-            _WPC_REFRESHING.discard(product_id)
-
-
-def _start_product_refresh(product_id: str) -> None:
-    with _WPC_REFRESH_LOCK:
-        if product_id in _WPC_REFRESHING:
-            return
-        _WPC_REFRESHING.add(product_id)
-    threading.Thread(
-        target=_refresh_product,
-        args=(product_id,),
-        name=f"wpc-refresh-{product_id}",
-        daemon=True,
-    ).start()
+def _start_product_refresh(product_id: str) -> Submission:
+    return get_refresh_coordinator().submit(
+        key=("wpc", "product", product_id),
+        provider="wpc",
+        function=lambda: _refresh_product(product_id),
+    )
 
 
 def _read_json_file(path: str) -> dict:
@@ -56,11 +47,34 @@ def _product_status(product: dict) -> dict:
     return _read_json_file(os.path.join(_WPC_STATUS, f"{product['id']}.json"))
 
 
-def _cache_state(cache_file: str) -> tuple[float | None, bool]:
+def _parse_iso(value: object) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+
+def _cache_state(
+    cache_file: str,
+    product: dict,
+    status: dict,
+    payload: dict | None = None,
+) -> tuple[float | None, bool]:
     if not os.path.exists(cache_file):
         return None, False
     age_seconds = max(0.0, time.time() - os.path.getmtime(cache_file))
-    return age_seconds, age_seconds > _WPC_STALE_SECONDS
+    if product.get("group") == "mpd":
+        return age_seconds, age_seconds >= 90.0
+    payload = payload or _read_json_file(cache_file)
+    stale = wpc_schedule_for(product).refresh_due(
+        now=datetime.now(timezone.utc),
+        source_issued_at=_parse_iso(payload.get("updated")),
+        last_checked_at=_parse_iso(status.get("checked_at")),
+    )
+    return age_seconds, stale
 
 
 def _empty_collection(group: str, day: int, product: dict, status: dict) -> dict:
@@ -76,6 +90,9 @@ def _empty_collection(group: str, day: int, product: dict, status: dict) -> dict
         "product": product["id"],
         "product_label": product["label"],
         "empty_message": None,
+        "issued_text": None,
+        "valid_text": None,
+        "no_significant_weather": False,
         "unavailable": True,
         "source_available": False,
         "source_status": source_status,
@@ -93,7 +110,21 @@ def _shape_collection(
     status: dict,
     cache_age_seconds: float | None,
     stale: bool,
+    refresh_submission: Submission | None = None,
 ) -> dict:
+    refresh_status = refresh_submission.status if refresh_submission else None
+    refreshing = refresh_status in {"queued", "running"}
+    if refresh_status == "backoff":
+        cache_state = "backoff"
+    elif stale and refreshing:
+        cache_state = "stale_refreshing"
+    elif stale:
+        cache_state = "stale"
+    else:
+        cache_state = "fresh"
+    retry_after_seconds = (
+        refresh_submission.retry_after_seconds if refresh_submission else None
+    )
     if payload.get("image_url"):
         return {
             "type": "WpcImageOverlay",
@@ -108,12 +139,17 @@ def _shape_collection(
             "image_url": payload.get("image_url"),
             "bounds": payload.get("bounds"),
             "forecast_hour": payload.get("forecast_hour"),
+            "issued_text": payload.get("issued_text"),
+            "valid_text": payload.get("valid_text"),
+            "no_significant_weather": bool(payload.get("no_significant_weather")),
             "unavailable": False,
             "source_available": status.get("available", True),
             "source_status": status.get("status") or "unknown",
             "source_error": status.get("error"),
             "stale": stale,
-            "cache_state": "stale_refreshing" if stale else "fresh",
+            "cache_state": cache_state,
+            "refreshing": refreshing,
+            "retry_after_seconds": retry_after_seconds,
             "cache_age_seconds": cache_age_seconds,
         }
     geojson = payload.get("geojson") if isinstance(payload, dict) else None
@@ -144,12 +180,17 @@ def _shape_collection(
         "product": product["id"],
         "product_label": product["label"],
         "empty_message": payload.get("empty_message") if not features else None,
+        "issued_text": payload.get("issued_text"),
+        "valid_text": payload.get("valid_text"),
+        "no_significant_weather": bool(payload.get("no_significant_weather")),
         "unavailable": False,
         "source_available": status.get("available", True),
         "source_status": status.get("status") or "unknown",
         "source_error": status.get("error"),
         "stale": stale,
-        "cache_state": "stale_refreshing" if stale else "fresh",
+        "cache_state": cache_state,
+        "refreshing": refreshing,
+        "retry_after_seconds": retry_after_seconds,
         "cache_age_seconds": cache_age_seconds,
     }
 
@@ -172,6 +213,10 @@ def get_wpc_layer(
         )
 
     cache_file = os.path.join(_WPC_CACHE, product["cache_path"].replace("/", os.sep))
+    get_refresh_coordinator().record_presence(
+        key=("wpc", "product", product["id"]),
+        provider="wpc",
+    )
 
     if not os.path.exists(cache_file):
         try:
@@ -193,17 +238,25 @@ def get_wpc_layer(
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc))
 
-    cache_age_seconds, stale = _cache_state(cache_file)
+    status = _product_status(product)
+    cache_age_seconds, stale = _cache_state(
+        cache_file,
+        product,
+        status,
+        payload,
+    )
+    refresh_submission = None
     if stale:
-        _start_product_refresh(product["id"])
+        refresh_submission = _start_product_refresh(product["id"])
     return _shape_collection(
         payload,
         group_key,
         day,
         product,
-        _product_status(product),
+        status,
         cache_age_seconds,
         stale,
+        refresh_submission,
     )
 
 
@@ -217,7 +270,11 @@ def get_wpc_catalog() -> dict:
                 _WPC_CACHE, product["cache_path"].replace("/", os.sep)
             )
             status = _product_status(product)
-            cache_age_seconds, stale = _cache_state(cache_file)
+            cache_age_seconds, stale = _cache_state(
+                cache_file,
+                product,
+                status,
+            )
             cache_exists = os.path.exists(cache_file)
             product_entries.append(
                 {

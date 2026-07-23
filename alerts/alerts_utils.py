@@ -40,6 +40,14 @@ import threading
 from alerts import alerts_iem_utils
 
 ACTIVE_ALERTS_CACHE_SECONDS = 60
+_GEOMETRY_PROVENANCE_KEY = "_geometry_provenance"
+_GEOMETRY_PROVENANCE_NATIVE = "native"
+_GEOMETRY_PROVENANCE_ZONE = "zone_derived"
+_GEOMETRY_PROVENANCE_SAME = "same_derived"
+_SIMPLIFIABLE_GEOMETRY_PROVENANCE = {
+    _GEOMETRY_PROVENANCE_ZONE,
+    _GEOMETRY_PROVENANCE_SAME,
+}
 
 # Ensure all Montserrat weights are available to Matplotlib.
 register_montserrat_fonts()
@@ -603,7 +611,7 @@ def _supplement_state_marine_alerts(features, state, headers):
     )
 
 
-def fetch_active_alerts_with_source(state=None, source="nws"):
+def fetch_active_alerts_with_source(state=None, source="nws", *, strict=False):
     source_key = str(source or "nws").lower()
     if source_key not in {"nws", "iem"}:
         source_key = "nws"
@@ -611,6 +619,8 @@ def fetch_active_alerts_with_source(state=None, source="nws"):
     if source_key == "iem":
         try:
             iem_features = alerts_iem_utils.fetch_active_alerts_iem(state)
+            if strict and not iem_features:
+                raise RuntimeError("IEM alerts download returned no features")
             iem_features = _supplement_state_marine_alerts(
                 iem_features,
                 state,
@@ -621,6 +631,8 @@ def fetch_active_alerts_with_source(state=None, source="nws"):
             return iem_features, "IEM"
         except Exception as e:
             print(f"[WARN] IEM live alert download failed: {e}")
+            if strict:
+                raise RuntimeError("IEM alerts download failed") from e
             return [], "IEM"
 
     headers = {
@@ -648,9 +660,15 @@ def fetch_active_alerts_with_source(state=None, source="nws"):
 
     try:
         iem_features = alerts_iem_utils.fetch_active_alerts_iem(state)
+        if strict and not iem_features:
+            raise RuntimeError(
+                "IEM fallback returned no features after NWS failure"
+            )
         return iem_features, "IEM"
     except Exception as e:
         print(f"[WARN] IEM live fallback failed: {e}")
+        if strict:
+            raise RuntimeError("NWS and IEM alerts downloads failed") from e
         return [], "IEM"
 
 
@@ -1278,10 +1296,7 @@ def _create_display_low_features(full_features: list[dict]) -> tuple[list[dict],
     Returns:
         (display_features, metrics) where metrics is a dict with simplification stats.
     """
-    from config.alerts_config import (
-        GEOMETRY_EXCLUDED_EVENTS,
-        GEOMETRY_SIMPLIFICATION_SETTINGS,
-    )
+    from config.alerts_config import GEOMETRY_SIMPLIFICATION_SETTINGS
 
     tolerance_m = GEOMETRY_SIMPLIFICATION_SETTINGS["low_zoom_tolerance_m"]
     display_features = []
@@ -1296,11 +1311,11 @@ def _create_display_low_features(full_features: list[dict]) -> tuple[list[dict],
             continue
 
         total_features += 1
-        props = feat.get("properties", {})
-        event_name = str(props.get("event", "") or "").strip()
+        provenance = str(feat.get(_GEOMETRY_PROVENANCE_KEY) or "").strip()
 
-        # Skip excluded events – always use full geometry.
-        if event_name in GEOMETRY_EXCLUDED_EVENTS:
+        # Native polygons are authoritative. Only zone/SAME-derived geometry
+        # may be simplified, regardless of alert event.
+        if provenance not in _SIMPLIFIABLE_GEOMETRY_PROVENANCE:
             display_feat = dict(feat)
             # Mark as not simplified
             display_feat.setdefault("_simplified", False)

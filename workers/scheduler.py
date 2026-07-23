@@ -1,8 +1,9 @@
 """APScheduler configuration and (optional) job registration for background data workers.
 
-Default mode: **OS-only fetching**. Windows Task Scheduler (see
-``tools/install_tasks.ps1``) is the source of truth for refreshing the
-alerts / SPC / surface / MRMS / RTMA caches. ``main.py`` simply reads from disk.
+Default mode: the application-owned refresh coordinator handles migrated
+request-driven work and cache cleanup. The older broad fixed worker schedule is
+disabled unless explicitly enabled. Unmigrated Windows tasks remain separate
+legacy producers and are not coordinator-compatible.
 
 To temporarily bring the in-process fallback scheduler back (e.g. while
 developing on a machine without the OS tasks installed), set the env var
@@ -46,9 +47,10 @@ def start_scheduler() -> None:
     """
     if not _INPROC_ENABLED:
         print(
-            "[scheduler] In-process workers disabled (default). "
-            "Cache refresh is delegated to Windows Task Scheduler. "
-            "Set WX_INPROC_WORKERS=1 to enable the in-process fallback."
+            "[scheduler] Legacy broad in-process schedule disabled (default). "
+            "The refresh coordinator remains active for migrated request paths "
+            "and cache cleanup. Set WX_INPROC_WORKERS=1 only for legacy "
+            "fallback testing."
         )
         return
 
@@ -66,7 +68,25 @@ def start_scheduler() -> None:
     )
     from workers.surface_worker import run_surface_worker
     from workers.water_worker import run_water_worker
-    from workers.cache_cleanup_worker import run_cache_cleanup_worker
+    from app_core.refresh_coordinator import get_refresh_coordinator
+
+    refresh_coordinator = get_refresh_coordinator()
+
+    def _submit_wpc_worker() -> None:
+        refresh_coordinator.submit(
+            key=("wpc", "legacy-catalog", "all"),
+            provider="wpc",
+            function=run_wpc_worker,
+            lease_seconds=0,
+        )
+
+    def _submit_surface_worker() -> None:
+        refresh_coordinator.submit(
+            key=("surface", "gradients", "all"),
+            provider="aviationweather",
+            function=run_surface_worker,
+            lease_seconds=0,
+        )
 
     now = datetime.now(timezone.utc)
 
@@ -98,7 +118,7 @@ def start_scheduler() -> None:
         next_run_time=now + timedelta(seconds=10),
     )
     _scheduler.add_job(
-        run_wpc_worker,
+        _submit_wpc_worker,
         "interval",
         minutes=30,
         id="wpc_worker",
@@ -157,7 +177,7 @@ def start_scheduler() -> None:
         next_run_time=now + timedelta(seconds=50),
     )
     _scheduler.add_job(
-        run_surface_worker,
+        _submit_surface_worker,
         "interval",
         minutes=30,
         id="surface_worker",
@@ -192,16 +212,6 @@ def start_scheduler() -> None:
         misfire_grace_time=300,
         next_run_time=now + timedelta(seconds=75),
     )
-    _scheduler.add_job(
-        run_cache_cleanup_worker,
-        "interval",
-        hours=6,
-        id="cache_cleanup_worker",
-        max_instances=1,
-        misfire_grace_time=600,
-        next_run_time=now + timedelta(minutes=1),
-    )
-
     _scheduler.start()
 
     print(
@@ -210,8 +220,8 @@ def start_scheduler() -> None:
         "rtma_hourly (60 min, +45s delay), rtma_rapid (15 min, +50s delay), "
         "surface (30 min), water_riv_gauges (30 min, +95s delay), "
         "satellite_v2_rapid (5 min, +65s delay), "
-        "satellite_v2_meteosat_prefetch (10 min, +75s delay), "
-        "cache_cleanup (6 hours, +1 min delay)"
+        "satellite_v2_meteosat_prefetch (10 min, +75s delay). "
+        "Cache cleanup is owned by the refresh coordinator."
     )
 
 

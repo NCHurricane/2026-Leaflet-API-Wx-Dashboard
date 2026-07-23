@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import time
 import urllib.parse
 import urllib.request
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from threading import Lock
 from typing import Any, Optional
 
@@ -20,6 +20,7 @@ from shapely.geometry import mapping, shape
 from app_core.upstream_ledger import record_measurement, urlopen
 
 from app_core.paths import CACHE_ROOT
+from app_core.refresh_coordinator import Submission, get_refresh_coordinator
 from config.alerts_config import (
     ALERT_COLORS,
     DEFAULT_COLOR,
@@ -39,6 +40,11 @@ _LSR_CACHE_LOCK = Lock()
 _ENRICHED_GEOMETRY_CACHE_MAX_ENTRIES = 1024
 _ENRICHED_GEOMETRY_CACHE: OrderedDict[str, dict] = OrderedDict()
 _ENRICHED_GEOMETRY_CACHE_LOCK = Lock()
+_ALERTS_CACHE_DIR = Path(CACHE_ROOT) / "alerts"
+_ALERTS_GENERATION_MANIFEST = _ALERTS_CACHE_DIR / "current_generation.json"
+_ALERTS_CACHE_TTL_SECONDS = 35.0
+_ALERTS_REFRESH_KEY = ("alerts", "national")
+_ALERTS_REFRESH_PROVIDER = "nws-alerts"
 
 
 def _get_enriched_geometry(cache_key: str) -> Optional[dict]:
@@ -213,6 +219,10 @@ def enrich_alert_features_geometry(
     try:
         from alerts.alerts_utils import (
             CensusCounties,
+            _GEOMETRY_PROVENANCE_KEY,
+            _GEOMETRY_PROVENANCE_NATIVE,
+            _GEOMETRY_PROVENANCE_SAME,
+            _GEOMETRY_PROVENANCE_ZONE,
             _prefetch_zone_geometries,
             _resolve_zone_geometry,
         )
@@ -254,6 +264,11 @@ def enrich_alert_features_geometry(
             if cached_geom:
                 with union_metrics_lock:
                     union_metrics["cache_hits"] += 1
+                feat[_GEOMETRY_PROVENANCE_KEY] = (
+                    _GEOMETRY_PROVENANCE_ZONE
+                    if (feat.get("properties") or {}).get("affectedZones")
+                    else _GEOMETRY_PROVENANCE_SAME
+                )
                 return feat, cached_geom, cache_key
 
             raw_geom = feat.get("geometry")
@@ -265,6 +280,7 @@ def enrich_alert_features_geometry(
                 except Exception:
                     has_valid_geom = False
             if has_valid_geom:
+                feat[_GEOMETRY_PROVENANCE_KEY] = _GEOMETRY_PROVENANCE_NATIVE
                 return feat, None, cache_key
 
             props = feat.get("properties") or {}
@@ -313,6 +329,12 @@ def enrich_alert_features_geometry(
                         feat["geometry"] = geom_dict
                         if cache_key:
                             _put_enriched_geometry(cache_key, geom_dict)
+                    props = feat.get("properties") or {}
+                    feat[_GEOMETRY_PROVENANCE_KEY] = (
+                        _GEOMETRY_PROVENANCE_ZONE
+                        if props.get("affectedZones")
+                        else _GEOMETRY_PROVENANCE_SAME
+                    )
                 except Exception:
                     pass
         record_measurement(
@@ -329,6 +351,59 @@ def enrich_alert_features_geometry(
 
     except Exception as exc:
         print(f"[WARN] Alert geometry enrichment skipped: {exc}")
+
+
+def _refresh_alerts_cache() -> dict:
+    from workers.alerts_worker import run_alerts_worker
+
+    summary = run_alerts_worker(force=True)
+    if summary is None:
+        raise RuntimeError("Alerts refresh did not publish a generation")
+    return {
+        "source_timestamp": summary.get("updated"),
+        "generation": summary.get("generation"),
+    }
+
+
+def _start_alerts_refresh() -> Submission:
+    return get_refresh_coordinator().submit(
+        key=_ALERTS_REFRESH_KEY,
+        provider=_ALERTS_REFRESH_PROVIDER,
+        function=_refresh_alerts_cache,
+    )
+
+
+def _safe_generation_path(relative_path: object) -> Path | None:
+    if not isinstance(relative_path, str) or not relative_path.strip():
+        return None
+    candidate = (_ALERTS_CACHE_DIR / relative_path).resolve()
+    try:
+        candidate.relative_to(_ALERTS_CACHE_DIR.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
+def _resolve_alerts_cache_file(use_low_detail: bool) -> tuple[Path | None, str | None, Path | None]:
+    try:
+        manifest = json.loads(_ALERTS_GENERATION_MANIFEST.read_text(encoding="utf-8"))
+        files = manifest.get("files") or {}
+        relative_path = files.get("display_low" if use_low_detail else "full")
+        cache_file = _safe_generation_path(relative_path)
+        generation = str(manifest.get("generation") or "").strip() or None
+        if cache_file is not None and cache_file.is_file():
+            return cache_file, generation, _ALERTS_GENERATION_MANIFEST
+    except (OSError, json.JSONDecodeError, AttributeError):
+        pass
+
+    fallback = _ALERTS_CACHE_DIR / (
+        "national_display_low.geojson" if use_low_detail else "national_full.geojson"
+    )
+    if not fallback.is_file():
+        fallback = _ALERTS_CACHE_DIR / "national.geojson"
+    return (fallback if fallback.is_file() else None), None, (
+        fallback if fallback.is_file() else None
+    )
 
 
 def get_alerts_data(
@@ -353,30 +428,63 @@ def get_alerts_data(
     if bucket not in {"low", "high"}:
         bucket = GEOMETRY_ENDPOINT_DEFAULTS["zoom_bucket"]
 
-    if mode == "display" and bucket == "low":
-        cache_file = os.path.join(CACHE_ROOT, "alerts", "national_display_low.geojson")
-    else:
-        cache_file = os.path.join(CACHE_ROOT, "alerts", "national_full.geojson")
-
-    if not os.path.exists(cache_file):
-        cache_file = os.path.join(CACHE_ROOT, "alerts", "national.geojson")
-
-    if not os.path.exists(cache_file):
-        try:
-            from workers.alerts_worker import run_alerts_worker
-
-            run_alerts_worker()
-        except Exception as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=f"Alerts cache not yet available: {exc}",
-            )
+    # Zoom owns the payload contract. Below z8, serve the national simplified
+    # derived geometry; at z8+, serve bbox-filtered canonical geometry.
+    use_low_detail = bucket == "low"
+    mode = "display" if use_low_detail else "full"
+    coordinator = get_refresh_coordinator()
+    coordinator.record_presence(
+        key=_ALERTS_REFRESH_KEY,
+        provider=_ALERTS_REFRESH_PROVIDER,
+    )
+    cache_file, generation, freshness_file = _resolve_alerts_cache_file(
+        use_low_detail
+    )
+    if cache_file is None:
+        submission = _start_alerts_refresh()
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Alerts cache is warming",
+                "cache_state": (
+                    "backoff"
+                    if submission.status == "backoff"
+                    else "refreshing"
+                    if submission.status in {"queued", "running"}
+                    else "missing"
+                ),
+                "refreshing": submission.status in {"queued", "running"},
+                "retry_after_seconds": submission.retry_after_seconds,
+                "capability": "available",
+            },
+        )
 
     try:
-        with open(cache_file, "r", encoding="utf-8") as fh:
+        with cache_file.open("r", encoding="utf-8") as fh:
             data = json.load(fh)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+    if generation and data.get("_generation") != generation:
+        raise HTTPException(status_code=503, detail="Alerts generation is changing")
+
+    cache_age_seconds = max(
+        0.0,
+        time.time() - (freshness_file or cache_file).stat().st_mtime,
+    )
+    stale = cache_age_seconds >= _ALERTS_CACHE_TTL_SECONDS
+    submission = _start_alerts_refresh() if stale else None
+    refreshing = bool(
+        submission and submission.status in {"queued", "running"}
+    )
+    if submission and submission.status == "backoff":
+        cache_state = "backoff"
+    elif stale and refreshing:
+        cache_state = "stale_refreshing"
+    elif stale:
+        cache_state = "stale"
+    else:
+        cache_state = "fresh"
 
     features = data.get("features", [])
 
@@ -392,7 +500,13 @@ def get_alerts_data(
 
         features = [f for f in features if _matches(f)]
 
-    if west is not None and east is not None and south is not None and north is not None:
+    if (
+        bucket == "high"
+        and west is not None
+        and east is not None
+        and south is not None
+        and north is not None
+    ):
         try:
             w = float(west)
             e = float(east)
@@ -417,6 +531,7 @@ def get_alerts_data(
             continue
         clean_feature = dict(feat)
         clean_feature.pop("_simplified", None)
+        clean_feature.pop("_geometry_provenance", None)
         response_features.append(clean_feature)
 
     return {
@@ -424,11 +539,20 @@ def get_alerts_data(
         "features": response_features,
         "_source": data.get("_source", "NWS"),
         "_updated": data.get("_updated"),
+        "_generation": data.get("_generation") or generation,
         "count": len(response_features),
         "_geometry_mode": mode,
         "_zoom_bucket": bucket,
         "_simplified_feature_count": simplified_count,
         "_simplification_metrics": data.get("_simplification_metrics", {}),
+        "cache_state": cache_state,
+        "refreshing": refreshing,
+        "source_timestamp": data.get("_updated"),
+        "cache_age_seconds": round(cache_age_seconds, 3),
+        "retry_after_seconds": (
+            submission.retry_after_seconds if submission else None
+        ),
+        "capability": "available",
     }
 
 

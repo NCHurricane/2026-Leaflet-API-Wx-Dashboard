@@ -536,7 +536,7 @@ export function createSurfaceRenderer(mapCore) {
     //         gradientOpacity, gradientMeta, gradientStations }
     function render(stations, view) {
         clear();
-        if (!stations.length || !view.product) return;
+        if (!view.product) return;
 
         const layers = [];
 
@@ -556,16 +556,18 @@ export function createSurfaceRenderer(mapCore) {
             if (gradientLayer) layers.push(gradientLayer);
         }
 
-        const thin = thinStations(stations, view);
-        layers.push(leaflet.layerGroup(thin.map((s) => {
-            const marker = leaflet.marker([s.lat, s.lon], {
-                icon: coloredTextIcon(s.value, s.unit, view.valueOpacity),
-            });
-            marker.bindPopup(stationPopupHtml(s));
-            return marker;
-        })));
+        if (stations.length) {
+            const thin = thinStations(stations, view);
+            layers.push(leaflet.layerGroup(thin.map((s) => {
+                const marker = leaflet.marker([s.lat, s.lon], {
+                    icon: coloredTextIcon(s.value, s.unit, view.valueOpacity),
+                });
+                marker.bindPopup(stationPopupHtml(s));
+                return marker;
+            })));
+        }
 
-        layer = leaflet.layerGroup(layers).addTo(map);
+        if (layers.length) layer = leaflet.layerGroup(layers).addTo(map);
     }
 
     function clear() {

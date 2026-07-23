@@ -1,6 +1,5 @@
 """Background worker: fetches SPC outlook GeoJSON and writes to cache/spc/."""
 
-import json
 import os
 import sys
 import time
@@ -12,7 +11,8 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from workers._freshness import is_cache_fresh, mark_run_complete
+from app_core.atomic_io import atomic_write_json  # noqa: E402
+from workers._freshness import is_cache_fresh, mark_run_complete  # noqa: E402
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "spc"
 
@@ -32,6 +32,16 @@ _FIRE_WX_HAZARDS_12 = ["windrh", "dryt"]
 _FIRE_WX_HAZARDS_38 = ["drytcat", "drytprob", "windrhcat", "windrhprob"]
 
 
+def _source_issue_iso(payload: dict) -> str | None:
+    for feature in payload.get("features") or []:
+        properties = feature.get("properties") or {}
+        for field in ("ISSUE_ISO", "issue_iso", "issued", "issue"):
+            value = properties.get(field)
+            if value:
+                return str(value)
+    return None
+
+
 def _write_cache(name: str, payload: dict, source: str) -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     if not isinstance(payload, dict):
@@ -39,17 +49,21 @@ def _write_cache(name: str, payload: dict, source: str) -> None:
     out = {
         "_source": source,
         "_updated": datetime.now(timezone.utc).isoformat(),
+        "_issued": _source_issue_iso(payload),
         **payload,
     }
     path = CACHE_DIR / f"{name}.geojson"
-    path.write_text(json.dumps(out), encoding="utf-8")
+    atomic_write_json(path, out)
 
 
-def run_spc_worker(force: bool = False) -> None:
-    """Fetch all SPC convective + fire weather GeoJSON in parallel and write to cache/spc/."""
-    if not force and is_cache_fresh("spc", _FRESH_WINDOW_SEC):
+def run_spc_worker(
+    force: bool = False,
+    product_ids: set[str] | None = None,
+) -> dict:
+    """Fetch selected SPC outlooks, or the legacy complete matrix."""
+    if not force and not product_ids and is_cache_fresh("spc", _FRESH_WINDOW_SEC):
         print("[spc_worker] Cache fresh — skipping run")
-        return
+        return {"status": "current", "products": []}
     from concurrent.futures import ThreadPoolExecutor
     from spc.spc_utils import (
         fetch_outlook_geojson,
@@ -75,6 +89,12 @@ def run_spc_worker(force: bool = False) -> None:
     for day in range(3, 9):
         for hazard in _FIRE_WX_HAZARDS_38:
             tasks.append((f"fire_{day}_{hazard}", fetch_fire_wx_geojson, day, hazard))
+    if product_ids:
+        requested = {str(product_id).strip().lower() for product_id in product_ids}
+        tasks = [task for task in tasks if task[0] in requested]
+        unknown = requested - {task[0] for task in tasks}
+        if unknown:
+            raise ValueError(f"Unknown SPC product id(s): {', '.join(sorted(unknown))}")
 
     def _fetch_and_cache(task):
         """Fetch one outlook and write to cache. Returns (cache_name, success, error_msg)."""
@@ -103,8 +123,17 @@ def run_spc_worker(force: bool = False) -> None:
     )
     if errors == len(tasks):
         print("[spc_worker] All fetches failed — cache not marked fresh")
-    else:
+    elif not product_ids:
         mark_run_complete("spc")
+    else:
+        print("[spc_worker] Targeted refresh complete — global freshness unchanged")
+    if errors:
+        raise RuntimeError(f"{errors} of {len(tasks)} SPC product refreshes failed")
+    return {
+        "status": "warmed",
+        "products": [task[0] for task in tasks],
+        "source_timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 if __name__ == "__main__":

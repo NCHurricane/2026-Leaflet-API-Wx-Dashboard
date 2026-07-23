@@ -3,10 +3,43 @@
 from datetime import datetime, timedelta, timezone
 import json
 import os
+from threading import Lock
+import time
 
 from fastapi import HTTPException
 
 from app_core.paths import CACHE_ROOT
+from app_core.refresh_coordinator import Submission, get_refresh_coordinator
+from config.refresh_schedules import SPC_OUTLOOK_SCHEDULES
+
+
+_SPC_ACTIVE_TTL_SECONDS = 90.0
+_SPC_ACTIVE_CACHE: dict[tuple[str, str, str], tuple[float, dict]] = {}
+_SPC_ACTIVE_CACHE_LOCK = Lock()
+
+
+def _parse_iso(value: object) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+
+def _refresh_spc_product(cache_name: str) -> dict:
+    from workers.spc_worker import run_spc_worker
+
+    return run_spc_worker(product_ids={cache_name})
+
+
+def _start_spc_product_refresh(cache_name: str) -> Submission:
+    return get_refresh_coordinator().submit(
+        key=("spc", "outlook", cache_name),
+        provider="spc",
+        function=lambda: _refresh_spc_product(cache_name),
+    )
 
 
 def _latest_item_issue_iso(items: list[dict]) -> str | None:
@@ -68,6 +101,19 @@ def get_spc_outlook(day: int = 1, hazard: str = "cat") -> dict:
         "drytcat",
         "drytprob",
     }
+    if is_fire:
+        valid_fire_hazards = (
+            {"windrh", "dryt"}
+            if day in {1, 2}
+            else {"windrhcat", "windrhprob", "drytcat", "drytprob"}
+            if 3 <= day <= 8
+            else set()
+        )
+        if hazard_lower not in valid_fire_hazards:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Fire weather product {hazard_lower!r} is not valid for Day {day}",
+            )
     cache_name = f"fire_{day}_{hazard_lower}" if is_fire else f"{day}_{hazard_lower}"
     cache_file = os.path.join(CACHE_ROOT, "spc", f"{cache_name}.geojson")
 
@@ -75,7 +121,7 @@ def get_spc_outlook(day: int = 1, hazard: str = "cat") -> dict:
         try:
             from workers.spc_worker import run_spc_worker
 
-            run_spc_worker()
+            run_spc_worker(product_ids={cache_name})
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -97,6 +143,24 @@ def get_spc_outlook(day: int = 1, hazard: str = "cat") -> dict:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
+    schedule = SPC_OUTLOOK_SCHEDULES.get(cache_name)
+    refresh_submission = None
+    if schedule and schedule.refresh_due(
+        now=datetime.now(timezone.utc),
+        source_issued_at=_parse_iso(data.get("_issued")),
+        last_checked_at=_parse_iso(data.get("_updated")),
+    ):
+        refresh_submission = _start_spc_product_refresh(cache_name)
+    data["cache_state"] = (
+        "refreshing"
+        if refresh_submission and refresh_submission.status in {"queued", "running"}
+        else refresh_submission.status
+        if refresh_submission
+        else "current"
+    )
+    data["retry_after_seconds"] = (
+        refresh_submission.retry_after_seconds if refresh_submission else None
+    )
     data["count"] = len(data.get("features") or [])
     if is_fire:
         try:
@@ -193,7 +257,7 @@ def get_spc_reports(
     }
 
 
-def get_spc_active(
+def _get_spc_active_uncached(
     product: str = "watches",
     watch_mode: str = "polygon",
     watch_types: str = "all",
@@ -385,3 +449,29 @@ def get_spc_active(
         "product": "watches",
         "watch_mode": watch_mode_key,
     }
+
+
+def get_spc_active(
+    product: str = "watches",
+    watch_mode: str = "polygon",
+    watch_types: str = "all",
+) -> dict:
+    """Return active watches/MDs from one shared 90-second application TTL."""
+    cache_key = (
+        (product or "watches").strip().lower(),
+        (watch_mode or "polygon").strip().lower(),
+        (watch_types or "all").strip().lower(),
+    )
+    now = time.monotonic()
+    with _SPC_ACTIVE_CACHE_LOCK:
+        cached = _SPC_ACTIVE_CACHE.get(cache_key)
+        if cached and now - cached[0] < _SPC_ACTIVE_TTL_SECONDS:
+            return cached[1]
+    payload = _get_spc_active_uncached(
+        product=product,
+        watch_mode=watch_mode,
+        watch_types=watch_types,
+    )
+    with _SPC_ACTIVE_CACHE_LOCK:
+        _SPC_ACTIVE_CACHE[cache_key] = (time.monotonic(), payload)
+    return payload

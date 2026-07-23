@@ -6,7 +6,7 @@ import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js';
-import { createSurfaceEngine } from './surface-engine.js';
+import { createSurfaceEngine } from './surface-engine.js?v=20260723a';
 import { baseDistKm, createSurfaceRenderer } from './surface-render.js';
 
 const byId = (id) => document.getElementById(id);

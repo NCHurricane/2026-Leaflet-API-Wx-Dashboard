@@ -169,7 +169,7 @@ Clients continue displaying the last complete cache while clearly showing stale,
 
 ### Phase 0 - Measurement and request ledger
 
-Implementation status (2026-07-23): Phase 0 measurements complete; gate failed.
+Implementation status (2026-07-23): Phase 0 complete; continuation gate passed.
 The credential-safe JSONL
 request ledger now covers application-owned `requests`, `urllib`, and NODD S3
 transports, and Alerts emits structured timings for every stage listed below.
@@ -177,11 +177,12 @@ A valid post-decision two-pass live-NWS run and all required isolated cold
 renders are recorded under `docs/perf/2026-07-23-worker-free-phase0/`.
 `enriched_geom_cache.json` is no longer read or written; a bounded 1,024-entry
 process-local geometry LRU reduced warm enrichment to 0.024 seconds and sampled
-peak RSS from 3.291 GB to 1.022 GB. The complete warm path still took 5.306
-seconds, or 4.992 seconds after the NWS response, including 3.853 seconds of
-full-set low-detail simplification and 0.997 seconds serializing/writing the
-full cache. The path is therefore not yet changed-alert proportional and the
-near-one-second gate is not met. Phase 1 remains blocked. No browser proof has
+peak RSS from 3.291 GB to 1.022 GB. A second bounded process-local LRU now
+reuses per-alert enriched and simplified serialization by stable alert ID, raw
+feature digest, and display-policy digest; unresolved geometries are retried.
+The remediation run reused all 471 unchanged alerts and completed in 0.504
+seconds total, or 0.082 seconds after the NWS response. The unchanged
+near-one-second gate is met and Phase 1 is authorized. No browser proof has
 been performed.
 
 Do this before changing cadence.
@@ -202,6 +203,27 @@ If module-resident zone geometry makes enrichment cheap, remove `enriched_geom_c
 
 ### Phase 1 - Coordinator foundation
 
+Implementation status (2026-07-23): complete. `app_core/refresh_coordinator.py`
+provides a bounded executor/queue, actual-key deduplication, 90-second presence
+leases, provider concurrency/minimum-interval policies, exponential
+backoff-with-jitter, credential-safe state reporting, periodic state pruning,
+and graceful shutdown. FastAPI owns the coordinator through its lifespan and
+exposes `/api/health/coordinator`. `app_core/atomic_io.py` provides unique-temp
+atomic JSON/text publication; Surface observations are the first migrated
+publisher and now return `refreshing` on a cold cache while the client retries.
+Surface uses one region-level observation key and fans a single upstream fetch
+into every product cache. Surface and stale WPC refreshes no longer create
+bespoke daemon threads. Presence-only coordinator records report `idle`, not a
+successful execution.
+Six-hour cache cleanup is registered with the coordinator independently of page
+presence and was removed from the optional legacy APScheduler profile.
+
+This phase explicitly supports one application process. Startup rejects
+`WEB_CONCURRENCY` or `UVICORN_WORKERS` values above 1; CLI worker-count settings
+are also unsupported until persistent cross-process leases and provider-budget
+state exist. Existing direct-write Windows tasks remain incompatible with
+migrated refresh paths.
+
 1. Implement the coordinator, provider policies, state reporting, bounded executor, backoff, and graceful shutdown.
 2. Add atomic-write utilities and migrate a small low-risk endpoint first.
 3. Replace the duplicate WPC and Surface thread/lock implementations with coordinator calls.
@@ -210,7 +232,47 @@ If module-resident zone geometry makes enrichment cheap, remove `enriched_geom_c
 
 Phase gate: ten simultaneous requests for the same cold key produce exactly one upstream fetch/render, shutdown leaves the prior cache readable, and a failed request enters bounded backoff rather than retrying on every client poll.
 
+Phase 1 gate result: passed. Focused tests prove mixed-product simultaneous
+Surface requests for one region and ten direct coordinator submissions each
+execute one refresh, and that one Surface fetch publishes every product cache,
+bounded queue rejection, provider serialization/minimum spacing, request-lease
+expiry, periodic work without page presence, credential-safe backoff,
+atomic-file readability during graceful shutdown, lifespan start/stop, and the
+Surface/WPC migrations. The full suite passes 135 tests plus 42 subtests.
+A browser coordinator snapshot found product-level Surface queue fanout and
+misleading success states for presence-only records; both are corrected.
+Browser re-verification confirmed one successful Surface state per region,
+truthful `idle` presence states, zero remaining active jobs, and maintenance
+execution during the provider wait. Browser re-smoke also confirmed that every
+Surface product loads its masked gradient; Altimeter took about five seconds on
+its first load, which was accepted as cosmetic and needs no further change.
+
 ### Phase 2 - Alerts optimization and NWS-safe SWR
+
+Implementation status (2026-07-23): complete. The Phase 0 processed-feature
+LRU remains the changed-alert boundary. Geometry enrichment now records native
+versus zone/SAME-derived provenance; low zoom simplifies only derived geometry
+with topology preservation, while native NWS polygons remain exact. The
+frontend and backend now share `low/high` zoom buckets: below zoom 8 one
+national low-detail generation is used, and zoom 8+ reads bbox-filtered full
+geometry. Alerts stale reads return the prior complete cache and submit one
+coordinator refresh under a 35-second `nws-alerts` provider floor. Cold missing
+cache returns an explicit 503 warming/backoff state rather than a successful
+empty collection. Full, low-detail, and compatibility artifacts publish behind
+one atomic generation manifest; interrupted/failing refreshes leave the prior
+manifest readable.
+
+The focused Phase 2 and retained Phase 0 geometry/cache tests pass. The full
+suite passes 145 tests plus 42 subtests. A live 489-alert generation contained
+36 native polygons with zero geometry changes and 453 simplified derived
+polygons, reducing vertices by 94.54%. A forced upstream-failure run preserved
+the prior generation. The running port-8000 process was not restarted and
+still served pre-change endpoint behavior during the implementation pass.
+After the operator disabled scheduled workers and restarted the terminal/API,
+port 8000 returned 489 fresh national low-detail features and 25 fresh
+bbox-filtered full features from the same generation. This is API/runtime
+proof, not browser proof. Compact evidence is in
+`docs/perf/2026-07-23-worker-free-phase2/`.
 
 1. Apply the Phase 0 geometry-cache decision and process only new/changed alert IDs.
 2. Base simplification on geometry provenance:
@@ -224,6 +286,33 @@ Phase gate: ten simultaneous requests for the same cold key produce exactly one 
 Do not implement the prior approximately 20-second NWS refresh proposal; it conflicts with NWS guidance.
 
 ### Phase 3 - SPC, Tropical, WPC, and Drought schedules
+
+Implementation status (2026-07-23): complete. The tested registry in
+`config/refresh_schedules.py` owns SPC local/UTC issuance boundaries, NHC
+routine/intermediate and GTWO boundaries, product-specific WPC schedules, and
+the Thursday 08:30 ET USDM release boundary. SPC request recovery now fetches
+only the selected product and bypasses the legacy global sentinel; watches and
+MDs share a 90-second application TTL. Tropical live reads renew coordinator
+presence and submit separate advisory/GTWO scopes, using payload issue values,
+two-minute post-boundary retries, warning-driven three-hour intermediates, and
+a ten-minute active-page special probe. Only current-season b-decks are mutable.
+WPC uses its existing targeted worker through the coordinator without the
+universal 12-hour threshold; active MPDs use a 90-second TTL. Dated USDM
+artifacts remain immutable and `latest` does not advance before publication.
+
+Phase gate result: passed. Boundary tests cover every registered SPC and WPC
+rule, including SPC CST/CDT conversion, plus NHC, GTWO, and USDM transitions.
+Scratch-cache tests prove one selected SPC product is the only fetch even with a
+fresh legacy sentinel, GTWO-only work does not fetch storm advisories, and a
+dated USDM key is fetched once and then reused. Focused Phase 3 tests pass
+13/13. After the first user browser smoke, focused corrections covered SPC
+empty-watch timestamps/messages and valid Day 3-8 Fire products, WPC empty
+selection/direct-load behavior, Drought selected-date styling, and current NHC
+standard cone URLs. The focused browser-smoke regression set passes 18/18 and
+the full suite passes 162 tests plus 42 subtests. Changed JavaScript syntax and
+Python compilation, focused Ruff, and `git diff --check` pass. Local browser
+proof covers those reported UI paths; issuance-boundary live-upstream proof was
+not performed.
 
 #### SPC
 

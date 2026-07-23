@@ -25,6 +25,12 @@ const MPD_CATEGORIES = Object.freeze([
     ['POSSIBLE', '#F59E0B', 'Flash Flooding Possible'],
     ['UNLIKELY', '#64748B', 'Flash Flooding Unlikely'],
 ]);
+const SIGWX_CATEGORIES = Object.freeze([
+    ['snow', '#FFFFFF', 'Heavy Snowfall'],
+    ['zr', '#FF00FF', 'Freezing Rain'],
+    ['severe', '#FFFF00', 'Severe Thunderstorms'],
+    ['flooding', '#FF0000', 'Flash Flooding'],
+]);
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -101,6 +107,16 @@ export function wpcLegendHtml({ group, day, label, features }) {
         return legendShellHtml(label || `WPC QPF — Day ${day}`, rows);
     }
 
+    if (group === 'sigwx') {
+        const present = new Set((features || []).map(
+            (feature) => String(feature.properties?.category || '').toLowerCase(),
+        ));
+        const rows = SIGWX_CATEGORIES.map(([category, color, categoryLabel]) => (
+            swatchHtml(color, categoryLabel, present.size > 0 && !present.has(category))
+        )).join('');
+        return legendShellHtml(label || `WPC Significant Weather — Day ${day}`, rows);
+    }
+
     const present = new Set((features || [])
         .map((feature) => String(feature.properties?.category || '').toUpperCase())
         .filter((category) => ERO_ORDER.includes(category)));
@@ -133,6 +149,13 @@ function wpcForecastDetailFeature(feature, geojson, group, day) {
             metricLabel: 'Probability',
             metricValue: label,
         },
+        sigwx: {
+            event: `${productLabel} — ${label}`,
+            description: [geojson?.issued_text, geojson?.valid_text].filter(Boolean).join(' • '),
+            severity: 'Significant Weather',
+            metricLabel: 'Hazard',
+            metricValue: label,
+        },
     };
     const detail = detailByGroup[group];
     if (!detail) return null;
@@ -145,7 +168,7 @@ function wpcForecastDetailFeature(feature, geojson, group, day) {
             description: detail.description,
             color: detail.color || properties.color,
             sent: geojson?._updated || '',
-            source_url: properties.discussion_url || '',
+            source_url: properties.discussion_url || geojson?._source_url || '',
             senderName: 'NWS Weather Prediction Center',
             severity: detail.severity,
             certainty: 'Forecast',
@@ -261,10 +284,14 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
             const features = geojson.features || [];
             if (!features.length) {
                 legend.setHtml(wpcLegendHtml({ group, day, label: geojson.product_label, features: [] }));
-                const emptyMessage = geojson.unavailable
+                const baseEmptyMessage = geojson.unavailable
                     ? `${geojson.product_label || 'WPC product'} is temporarily unavailable from WPC.`
                     : (geojson.empty_message
                         || `No ${geojson.product_label || group.toUpperCase()} area issued.`);
+                const issuance = group === 'sigwx'
+                    ? [geojson.issued_text, geojson.valid_text].filter(Boolean).join(' • ')
+                    : '';
+                const emptyMessage = `${baseEmptyMessage}${issuance ? ` ${issuance}.` : ''}`;
                 onEmptyMessage?.(emptyMessage);
                 const cacheNote = geojson.source_available === false && !geojson.unavailable
                     ? ' Showing the last cached WPC result.'

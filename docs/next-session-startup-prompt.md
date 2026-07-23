@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date prepared: 2026-07-22
+Date prepared: 2026-07-23
 
 Start in `F:\Python\dashboard_2026`.
 
@@ -9,35 +9,88 @@ Continue dashboard enhancement work in F:\Python\dashboard_2026.
 
 Read first:
 - docs/dashboard-change-and-enhancement-superfile.md
-- docs/worker-free-render-plan.md when continuing task-scheduler-free work
-- docs/radar-render-optimization-plan.md when continuing Radar performance work
-- docs/satellite-radar-render-pipeline-files.md as the Radar pipeline map
+- docs/worker-free-render-plan.md, Phase 4 only
 - docs/phases-25-27-manual-smoke-checklist.md only when checking the older gate
 - docs/architecture.md or docs/patterns.md only when the next change crosses
   those boundaries
 
+Mandatory session-start directive:
+- Start worker-free Phase 4 only: selected-product MRMS refresh and bounded
+  hourly RTMA behavior.
+- Do not start, investigate, benchmark, or implement Radar optimization Phase 0
+  in this session. Radar remains deferred until worker-free Phase 4 passes its
+  documented gate or the user explicitly changes the priority.
+- Do not read `docs/radar-render-optimization-plan.md` or
+  `docs/satellite-radar-render-pipeline-files.md` at startup unless the user
+  explicitly redirects the session to Radar.
+
 Current checkpoint:
-- Task-scheduler-free rendering Phase 0 measurement and request-ledger work is
-  complete. `app_core/upstream_ledger.py` covers application-owned Requests,
+- Task-scheduler-free rendering Phase 0 and request-ledger work is complete.
+  `app_core/upstream_ledger.py` covers application-owned Requests,
   urllib, and NODD S3 calls without logging query values or credentials. Alerts
   records the required stages and supports
   `python -m workers.alerts_worker --measure-twice`.
-- The post-decision live-NWS run measured 12.472 seconds cold and 5.306 seconds
-  warm, with a 4.992-second warm path after the NWS response. Replacing the
-  322 MB enriched-geometry disk-cache path with a bounded process-local LRU
-  reduced warm enrichment to 0.024 seconds and sampled peak RSS to 1.022 GB.
-  Full-set simplification and serialization remain dominant, so the
-  changed-alert-proportional near-one-second gate failed and Phase 1 remains
-  blocked.
+- A bounded processed-feature LRU now reuses enriched and simplified per-alert
+  serialization by stable alert ID, raw feature digest, and display-policy
+  digest; unresolved geometries are retried. The live-NWS remediation warm pass
+  reused all 471 alerts and measured 0.504 seconds total, or 0.082 seconds after
+  the response. The unchanged near-one-second gate passed and authorized the
+  now-complete Phase 1. Evidence is in
+  `docs/perf/2026-07-23-worker-free-phase0/alerts-two-pass-remediation.json`.
+- Task-scheduler-free Phase 1 is complete. The app-owned refresh coordinator
+  supplies a bounded executor/queue, actual-key deduplication, provider
+  throttles, 90-second presence leases, exponential backoff, state reporting,
+  periodic pruning, and graceful FastAPI-lifespan shutdown. Surface cold/stale
+  observations and stale WPC refreshes use it. Surface now keys observations by
+  region, fetches upstream once, and atomically publishes every product cache;
+  its client retries cold warming. Presence-only records report `idle`. Cache
+  cleanup is coordinator-owned every six hours and does not require page
+  presence. Gate evidence is in
+  `docs/perf/2026-07-23-worker-free-phase1/`.
+- Task-scheduler-free Phase 2 is complete. Alerts processes only new/changed
+  IDs, preserves native NWS polygons exactly, simplifies only zone/SAME-derived
+  geometry below zoom 8, and serves bbox-filtered full geometry at zoom 8+.
+  `low/high` is now the shared frontend/backend zoom vocabulary. Stale cache is
+  served while one coordinator refresh observes the 35-second `nws-alerts`
+  floor; a cold missing cache reports warming instead of empty success. Full,
+  low-detail, and compatibility artifacts publish behind one atomic generation
+  manifest. The full suite passes 145 tests plus 42 subtests. Runtime cache
+  evidence found 36/36 native geometries unchanged and simplified 453 derived
+  geometries with a 94.54% vertex reduction; an upstream-failure probe preserved
+  the previous generation. Evidence is in
+  `docs/perf/2026-07-23-worker-free-phase2/`.
+- Task-scheduler-free Phase 3 is complete. `config/refresh_schedules.py`
+  resolves SPC CST/CDT and UTC issuance boundaries, NHC routine/intermediate
+  advisory and GTWO boundaries, product-specific WPC schedules, and the
+  Thursday 08:30 ET USDM publication boundary. SPC refreshes only the selected
+  product and cannot be suppressed by the legacy global sentinel; watches/MDs
+  share a 90-second TTL. Tropical uses separate advisory/GTWO coordinator keys,
+  payload issuance values, warning-driven three-hour intermediates, and a
+  ten-minute active-page safety probe; only current-season archive data is
+  mutable. WPC no longer uses one 12-hour threshold, and dated USDM caches are
+  immutable. The user's first browser smoke and a focused local re-smoke then
+  corrected SPC empty-watch status/timestamps and Day 3-8 Fire choices, WPC
+  empty/default selection wiring plus River Flood/Surface direct loading,
+  Drought's selected-date color, and retired standard NHC cone URLs. The
+  user's follow-up browser smoke passed everywhere else. WPC product rows now
+  remain exclusive but can be unchecked to clear the overlay; River Flood and
+  Surface retain direct loading through an explicit checked row. SigWx now
+  carries WPC's issued/valid text, a specific legend, and a clear authoritative
+  no-areas state. The supplied current Day 1 shapefile bundle was legitimately
+  empty (zero-byte SHP/SHX/DBF), while the parser produced five polygons from a
+  non-empty official archived KML. The coordinator log was healthy; no
+  issuance-boundary live-upstream proof was performed.
+- Phase 1 supports one application process only. `WEB_CONCURRENCY` and
+  `UVICORN_WORKERS` above 1 are rejected; do not use CLI multi-worker settings
+  or legacy direct-write Windows tasks until persistent cross-process leases
+  and provider budgets are implemented. Coordinator state is available at
+  `/api/health/coordinator`.
 - All six required isolated Surface/Radar/GOES/Himawari/EUMETSAT cold-render
   measurements are complete under
   `docs/perf/2026-07-23-worker-free-phase0/`. Runtime/worker evidence is
   recorded separately from browser proof; no browser proof was performed.
-- The user explicitly chose to keep the near-one-second Phase 0 requirement
-  unchanged for now. If later measurements indicate it is realistically
-  unachievable, resuggest relaxing the interim latency threshold without
-  weakening correctness or the eventual changed-alert-proportional
-  requirement; do not change the gate without approval.
+- The user kept the near-one-second Phase 0 requirement unchanged; the
+  remediation passed it without relaxing correctness.
 - The cross-page correction set was committed at `aa05b7d`.
 - Satellite render optimization Phase 0 is committed at `a6f5f83`.
   `satellite_v2/bench.py` provides pinned cold-parse,
@@ -119,8 +172,10 @@ Current checkpoint:
   no Source row in status cards, amber selected data pills, stronger cyan
   sidebar tabs, shared tooltips, and newest-frame animation holds.
 - Surface now uses stale-while-refresh live data, station names in popup headings,
-  and a values-only archive scrubber. The endpoint time plus lookback generates
-  every 15-minute frame up to 24 hours with no artificial frame thinning.
+  and a values-only archive scrubber. Cached gradient PNGs, including their
+  embedded land mask, render independently of marker-row availability. The
+  endpoint time plus lookback generates every 15-minute frame up to 24 hours
+  with no artificial frame thinning.
 - Alerts now separates Alerts/LSR legends, reuses cached viewport payloads,
   bounds long tooltips, offsets its detail panel below the logo, adds Zoom to
   Alert, caps alert navigation at z9, and uses one endpoint plus a 5-minute-step
@@ -140,13 +195,39 @@ Current checkpoint:
   Boundary endpoints already share server/browser/disk caching. Keep SPC,
   Drought, Tropical, and Water freshness behavior unchanged.
 - Checkbox audit: binary visibility switches can safely retain checkbox state
-  underneath, but multi-select products/categories should remain checkboxes and
-  exclusive choices should remain pills/radios. Do not convert all controls to
-  one visual type.
+  underneath, while most exclusive choices remain pills/radios. WPC product
+  lists are the explicit exception: they use mutually exclusive checkboxes so
+  the active product can be unchecked without choosing a replacement. Do not
+  convert all controls to one visual type.
 
 Validation at handoff:
-- Worker-free Phase 0 measurement is complete. Focused geometry-cache and
-  ledger tests pass 8/8; full pytest passes 117 tests plus 42 subtests. Changed
+- WPC follow-up tests pass 11/11. Browser proof on the running page confirms
+  QPF and direct River Flood products load when checked and fully clear when
+  unchecked; SigWx uses its product-specific legend. The isolated updated API
+  returns the current no-areas message plus issued/valid metadata. A port 8000
+  restart is still required before that running browser page can display the
+  new backend metadata.
+- Worker-free Phase 3 policy/scratch tests pass 13/13, and the focused
+  browser-smoke regression set passes 18/18. They cover every
+  registered SPC/WPC boundary, SPC CST/CDT conversion, separate NHC/GTWO
+  boundaries, the USDM release transition, selected-only SPC recovery despite
+  a fresh legacy sentinel, GTWO-only targeting, and immutable dated USDM cache
+  reuse. Focused Ruff, changed-Python compilation, changed-JavaScript syntax,
+  and `git diff --check` pass; full pytest passes 166 tests plus 42 subtests.
+  Local browser proof confirms the reported SPC, WPC, and Drought corrections.
+- Worker-free Phase 1 focused tests pass 13/13, covering mixed-product regional
+  Surface dedupe/fanout, bounded queue, provider pacing, truthful presence
+  state, leases, backoff, periodic cleanup mechanics, atomic shutdown safety,
+  FastAPI lifespan, and Surface/WPC migrations. Changed Python compiles,
+  focused Ruff checks pass, Surface JavaScript passes `node --check`, the full
+  suite passes 135 tests plus 42 subtests, and `git diff --check` passes.
+  Browser inspection found and drove the Surface-key and presence-state
+  corrections; browser re-verification confirmed both. Browser re-smoke also
+  confirmed masked gradients for every Surface product. Altimeter took about
+  five seconds on its first load; that cosmetic delay was accepted and needs no
+  further change.
+- Worker-free Phase 0 is complete. Remediation-focused geometry/cache/ledger
+  tests pass 12/12; full pytest passes 121 tests plus 42 subtests. Changed
   Python compiles, focused Ruff checks pass, measurement JSON parses, and `git
   diff --check` passes. The live Alerts and isolated render measurements are
   runtime/worker evidence, not browser proof.
@@ -185,23 +266,24 @@ Validation at handoff:
   `.pytest_cache` write warning.
 
 Next step:
-1. Continue worker-free Phase 0 gate remediation only; do not begin Phase 1.
-   Address the remaining full-set Alerts simplification/serialization cost in
-   the smallest bounded changed-alert slice, then rerun the documented
-   two-pass gate. Do not pull unrelated Alerts SWR, cadence, or frontend work
-   forward.
-2. If repeated measurements show the near-one-second target is impractical,
-   raise the previously discussed interim-gate alternative for approval; do
-   not change the requirement automatically.
-3. Begin Radar optimization Phase 0 only: benchmark harness, pinned baseline,
-   structured timings, and golden capture with no behavior changes.
-4. Review measurements before implementing Phase 1. Track 1 browser re-smoke
-   remains user-owned and can continue independently.
+1. Begin worker-free Phase 4 only: pass the selected MRMS product through
+   discovery/download/render/catalog work, check its source key no more than
+   every two minutes while present, and preserve RTMA's hourly on-demand and
+   progressive-history behavior. Keep Water, Surface gradients, and
+   Radar/Satellite lease work out of this slice.
+
+Radar optimization Phase 0 is not an alternative next step. It stays deferred
+until Phase 4 is complete and its gate has been reviewed. Track 1 browser
+re-smoke remains user-owned and may continue independently.
 
 Guardrails:
 - Browser smoke is user-owned; report static versus browser proof honestly.
+- The operator disabled the scheduled workers and restarted port 8000.
+  Restarted-API verification returned 489 fresh national low-detail features
+  and 25 fresh bbox-filtered full features from the same generation. Keep the
+  legacy tasks disabled; browser smoke remains user-owned and unclaimed.
 - Preserve optional Windows task warming, but do not run or advertise legacy
-  task definitions concurrently with the future coordinator. Task support
+  task definitions concurrently with the coordinator. Task support
   requires the same persistent cross-process leases, provider budgets,
   deduplication keys, freshness state, and atomic publisher as request-driven
   work, plus mixed task/browser acceptance testing.

@@ -581,6 +581,7 @@ def _write_layer(
     features: list[dict[str, Any]],
     source_url: str,
     empty_message: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     payload = {
         "updated": _utc_now_iso(),
@@ -593,6 +594,8 @@ def _write_layer(
     }
     if not features and empty_message:
         payload["empty_message"] = empty_message
+    if metadata:
+        payload.update(metadata)
     _write_json_atomic(CACHE_DIR / cache_path, payload)
 
 
@@ -756,7 +759,9 @@ def _parse_sigwx_kml(kml_text: str) -> list[dict[str, Any]]:
     """Parse a WPC SigWx KML into GeoJSON features (flooding/severe/zr/snow)."""
     root = ET.fromstring(kml_text)
     features: list[dict[str, Any]] = []
-    for placemark in (n for n in root.iter() if _kml_local(n.tag) == "Placemark"):
+    for index, placemark in enumerate(
+        n for n in root.iter() if _kml_local(n.tag) == "Placemark"
+    ):
         style_id = _placemark_style_id(placemark)
         if style_id not in SIGWX_COLORS:
             continue
@@ -766,7 +771,7 @@ def _parse_sigwx_kml(kml_text: str) -> list[dict[str, Any]]:
         features.append(
             {
                 "type": "Feature",
-                "id": f"wpc-sigwx-{style_id}",
+                "id": f"wpc-sigwx-{style_id}-{index}",
                 "geometry": geometry,
                 "properties": {
                     "category": style_id,
@@ -778,6 +783,45 @@ def _parse_sigwx_kml(kml_text: str) -> list[dict[str, Any]]:
         )
     features.sort(key=lambda f: f["properties"]["rank"])
     return features
+
+
+def _parse_sigwx_metadata(kml_text: str) -> dict[str, Any]:
+    """Extract authoritative issuance text and the explicit no-areas marker."""
+    root = ET.fromstring(kml_text)
+    snippet = next(
+        (node for node in root.iter() if _kml_local(node.tag) == "Snippet"),
+        None,
+    )
+    snippet_text = (
+        re.sub(r"\s+", " ", "".join(snippet.itertext())).strip()
+        if snippet is not None
+        else ""
+    )
+    issued_match = re.search(
+        r"\b(Issued\s*:?\s*.*?)(?=\s+Valid\b|\Z)",
+        snippet_text,
+        flags=re.IGNORECASE,
+    )
+    valid_match = re.search(
+        r"\b(Valid\s+.*)\Z",
+        snippet_text,
+        flags=re.IGNORECASE,
+    )
+    overlay_names = [
+        re.sub(r"\s+", " ", "".join(child.itertext())).strip()
+        for overlay in root.iter()
+        if _kml_local(overlay.tag) == "GroundOverlay"
+        for child in overlay
+        if _kml_local(child.tag) == "name"
+    ]
+    return {
+        "issued_text": issued_match.group(1).strip() if issued_match else None,
+        "valid_text": valid_match.group(1).strip() if valid_match else None,
+        "no_significant_weather": any(
+            name.casefold().startswith("no areas of significant weather")
+            for name in overlay_names
+        ),
+    }
 
 
 _GROUP_PARSERS = {
@@ -952,6 +996,7 @@ def _process_layer(
         return 0, f"{product['id']}: no readable KML"
 
     features = parser(kml_text)
+    layer_metadata = _parse_sigwx_metadata(kml_text) if group == "sigwx" else None
     discussion_text = ""
     discussion_url = ""
     if group == "ero":
@@ -988,6 +1033,7 @@ def _process_layer(
         features=features,
         source_url=product["url"],
         empty_message=product.get("empty_message"),
+        metadata=layer_metadata,
     )
     return len(features), ""
 

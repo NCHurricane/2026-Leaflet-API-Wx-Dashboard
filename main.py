@@ -1,4 +1,5 @@
 import os as _os
+from contextlib import asynccontextmanager
 
 import certifi as _certifi
 from dotenv import load_dotenv as _load_dotenv
@@ -40,8 +41,22 @@ from services.rtma_service import get_rtma_data
 
 # --- IMPORT YOUR UTILITIES ---
 
+
+@asynccontextmanager
+async def _application_lifespan(_app: FastAPI):
+    """Own startup and graceful shutdown of application background work."""
+    initialize_runtime()
+    try:
+        yield
+    finally:
+        shutdown_runtime()
+
+
 # Defer directory creation and module initialization to startup handler
-app = FastAPI(title="NCHurricane Weather API")
+app = FastAPI(
+    title="NCHurricane Weather API",
+    lifespan=_application_lifespan,
+)
 app.include_router(health_router)
 app.include_router(pages_router)
 app.include_router(core_router)
@@ -58,19 +73,6 @@ app.include_router(radar_router)
 app.include_router(tropical_router)
 app.include_router(water_router)
 app.include_router(wpc_router)
-
-
-@app.on_event("startup")
-def _run_startup_sequence():
-    """Execute the complete startup sequence with initialization."""
-    initialize_runtime()
-
-
-@app.on_event("shutdown")
-def _stop_background_workers():
-    """Shut down background schedulers and live render pools on app exit."""
-    shutdown_runtime()
-
 
 app.add_middleware(
     CORSMiddleware,

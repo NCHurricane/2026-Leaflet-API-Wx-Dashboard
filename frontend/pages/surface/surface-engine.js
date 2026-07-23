@@ -157,7 +157,8 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
         status.setMessage(`Loading surface ${label} for ${view.region}…`);
 
         try {
-            const url = `/api/data/surface?region=${encodeURIComponent(view.region)}&product=${encodeURIComponent(view.product)}`
+            const baseUrl = `/api/data/surface?region=${encodeURIComponent(view.region)}&product=${encodeURIComponent(view.product)}`;
+            const url = baseUrl
                 + (options.forceRefresh ? '&force_refresh=true' : '');
             let data = await api.fetchJson(
                 url,
@@ -171,19 +172,30 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
             legend.setHtml(legendHtml(view.product, stations.length));
             onStationCount?.(stations.length);
 
-            if (data?.cache_state === 'stale_refreshing' && !options.forceRefresh) {
-                status.setMessage(`Showing cached ${label}; refreshing…`);
-                for (let attempt = 0; attempt < 20; attempt += 1) {
+            const refreshStates = new Set(['refreshing', 'stale_refreshing', 'backoff']);
+            if (refreshStates.has(data?.cache_state)) {
+                status.setMessage(
+                    data?.cache_state === 'stale_refreshing'
+                        ? `Showing cached ${label}; refreshing…`
+                        : `Warming surface ${label} for ${view.region}…`,
+                );
+                for (let attempt = 0; attempt < 60; attempt += 1) {
                     await new Promise((resolve) => setTimeout(resolve, 1000));
                     if (!gate.isCurrent(request.sequence)) return;
-                    const refreshed = await api.fetchJson(url, { signal: request.signal });
-                    if (refreshed?.cache_state === 'stale_refreshing') continue;
+                    const refreshed = await api.fetchJson(baseUrl, { signal: request.signal });
                     data = refreshed;
+                    if (refreshStates.has(data?.cache_state)) continue;
                     stations = Array.isArray(data?.stations) ? data.stations : [];
                     renderView(lastView);
                     legend.setHtml(legendHtml(view.product, stations.length));
                     onStationCount?.(stations.length);
                     break;
+                }
+                if (refreshStates.has(data?.cache_state)) {
+                    status.setMessage(
+                        `Surface ${label} is still warming; retrying on the next refresh.`,
+                    );
+                    return;
                 }
             }
 

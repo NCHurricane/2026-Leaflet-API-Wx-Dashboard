@@ -167,13 +167,16 @@ function syncFireWeatherOptions(resetSelection = false) {
     const fireDay = getFireDay();
     const fireList = byId('spc-fire-list');
     if (!fireList) return;
-    // Categorical fire weather products exist for Days 3-8 only.
-    fireList.querySelectorAll('.spc-fire-row[data-categorical="1"]').forEach((row) => {
-        const visible = fireDay >= 3 && fireDay <= 8;
+    // Base products exist on Days 1-2; categorical/probabilistic products
+    // replace them on Days 3-8.
+    fireList.querySelectorAll('.spc-fire-row').forEach((row) => {
+        const categorical = row.dataset.categorical === '1';
+        const visible = categorical ? fireDay >= 3 && fireDay <= 8 : fireDay <= 2;
         row.style.display = visible ? '' : 'none';
-        if (!visible) {
-            const input = row.querySelector('input[type="checkbox"]');
-            if (input) input.checked = false;
+        const input = row.querySelector('input[type="checkbox"]');
+        if (input) {
+            input.disabled = !visible;
+            if (!visible) input.checked = false;
         }
     });
     if (resetSelection) {

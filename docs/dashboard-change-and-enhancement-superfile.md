@@ -1,9 +1,8 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-23 (Task-scheduler-free rendering Phase 0 instrumentation
-and the upstream-request ledger are implemented. The valid two-pass Alerts
-measurement failed its continuation gate, so Phase 1 is blocked while the
-remaining cold-render measurements stay pending.)
+Last updated: 2026-07-23 (Task-scheduler-free rendering Phases 0-3 are
+complete. Issuance-aware SPC/Tropical/WPC/Drought schedules passed their
+automated gate; Phase 4 MRMS/RTMA is next.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -40,12 +39,24 @@ post-split structure, not the monolith.
    Its later detail-panel, Region, legend, and sidebar-style follow-ups are
    implemented and statically validated but still need browser re-smoke;
    optional Water enhancements remain deferred.
-2. Task-scheduler-free refresh/rendering — Phase 0 is active under
+2. Task-scheduler-free refresh/rendering — Phases 0-3 are complete under
    `docs/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
-   now emit a credential-safe ledger, and the required live-NWS two-pass Alerts
-   run is recorded. Its 13.530-second warm path is not changed-alert-proportional,
-   so do not begin Phase 1. Surface/Radar/GOES/Himawari/EUMETSAT cold-render
-   measurements remain pending and must use isolated cache/output roots.
+   emit a credential-safe ledger, all required isolated cold renders are
+   recorded, and the remediated live-NWS warm pass reused 471/471 alerts. It
+   completed in 0.504 seconds total and 0.082 seconds after the response, so
+   the Phase 0 gate passed. The Phase 1 bounded coordinator, provider policies,
+   backoff/state reporting, atomic writes, lifespan ownership, cleanup schedule,
+   and Surface/WPC migrations passed their focused gate. Phase 2 adds
+   changed-alert processing, provenance-safe low-detail geometry, aligned
+   `low/high` zoom selection, bbox-filtered full geometry at zoom 8+, a
+   35-second NWS provider floor, stale-while-revalidate, and atomic
+   multi-artifact generations. Phase 3 adds the tested issuance registry,
+   targeted SPC recovery, separate NHC advisory/GTWO scopes, current-season-only
+   archive refresh, product-specific WPC cadence, and publication-aware
+   immutable USDM keys. The first Phase 3 browser smoke also corrected SPC
+   empty-watch/Fire selection behavior, WPC empty and direct-load wiring,
+   Drought selected-date styling, and retired standard NHC cone URLs. Phase 4
+   MRMS/RTMA is next.
 3. Radar render pipeline latency optimization — execution-grade plan prepared
    in `docs/radar-render-optimization-plan.md`; Phase 0 benchmark/golden capture
    is next. Backend-only and may interleave with Track 1.
@@ -60,16 +71,50 @@ post-split structure, not the monolith.
 ## Current State
 
 - Active repo: `F:\Python\dashboard_2026`.
-- Worker-free Phase 0 measurement is complete: the shared credential-safe JSONL
+- Worker-free Phase 0 is complete: the shared credential-safe JSONL
   request ledger covers application-owned HTTP and NODD S3 paths, and the six
   required isolated cold renders are recorded in
   `docs/perf/2026-07-23-worker-free-phase0/`. Alerts no longer reads or writes
   the 322 MB enriched-geometry disk cache; its bounded process-local LRU reduced
-  warm enrichment to 0.024 seconds and peak RSS to 1.022 GB. The full warm pass
-  remains 5.306 seconds (4.992 seconds after the NWS response), dominated by
-  full-set simplification and full-cache serialization. The near-one-second
-  changed-alert gate therefore failed and Phase 1 is not authorized. No browser
-  proof was performed.
+  warm enrichment to 0.024 seconds and peak RSS to 1.022 GB. A bounded
+  processed-feature LRU now reuses enriched and simplified per-alert
+  serialization while retrying unresolved geometry. The remediation warm pass
+  reused 471/471 alerts, took 0.504 seconds total and 0.082 seconds after the
+  NWS response, and passed the unchanged near-one-second continuation gate.
+  That authorized the now-complete Phase 1. No browser proof was performed.
+- Worker-free Phase 1 is complete: `app_core/refresh_coordinator.py` owns a
+  bounded executor/queue, actual-key deduplication, provider concurrency and
+  minimum intervals, 90-second request leases, exponential backoff, status
+  snapshots, periodic pruning, and graceful shutdown through FastAPI lifespan.
+  Surface cold/stale observations and stale WPC refreshes use it instead of
+  daemon threads. One region-level Surface job fetches observations once and
+  publishes every product JSON through the shared atomic writer; its client
+  retries cold warming. Presence-only records report `idle`. Coordinator-owned
+  cache cleanup runs every six hours without page presence.
+  `/api/health/coordinator` reports safe state.
+  The supported configuration is one application process until persistent
+  leases exist; legacy direct-write tasks are not compatible. The focused Phase
+  1 gate and the full 135-test plus 42-subtest suite pass. Browser inspection
+  found and drove the Surface-key and presence-state corrections, and browser
+  re-verification confirmed both. Browser re-smoke also confirmed masked
+  gradients for every Surface product; the roughly five-second first Altimeter
+  load was accepted as cosmetic. Compact evidence is in
+  `docs/perf/2026-07-23-worker-free-phase1/`.
+- Worker-free Phase 2 is complete: Alerts uses its bounded processed-feature
+  LRU as the new/changed-ID boundary, marks geometry provenance, preserves all
+  native NWS polygons, and simplifies only zone/SAME-derived geometry below
+  zoom 8. Low zoom reads one national low-detail payload; zoom 8+ uses
+  bbox-filtered full geometry. Stale reads submit one coordinator job under a
+  35-second `nws-alerts` floor, cold missing cache reports warming/backoff, and
+  full/low/compatibility artifacts publish behind one atomic generation
+  manifest. The full suite passes 145 tests plus 42 subtests. A live 489-alert
+  generation kept 36 native geometries byte-equivalent and simplified all 453
+  derived geometries for a 94.54% vertex reduction; a forced network-failure
+  run preserved the prior generation. The operator then disabled the scheduled
+  workers and restarted port 8000. API verification returned 489 fresh
+  national low-detail features and 25 fresh bbox-filtered full features from
+  the same generation. Browser proof remains pending. Evidence is in
+  `docs/perf/2026-07-23-worker-free-phase2/`.
 - The worker-free plan now treats optional Windows task workers as a supported
   cache-warming mode, but only after migration to the same persistent
   cross-process leases, provider budgets, deduplication keys, freshness state,
@@ -145,7 +190,9 @@ post-split structure, not the monolith.
   notice and sound. This awaits user browser re-smoke.
 - Product follow-ups from that smoke are implemented: Surface uses stale-while-
   refresh live data, station-name popup headings, and a values-only 15-minute
-  archive scrubber up to 24 hours; Alerts has separate legends, cached viewport
+  archive scrubber up to 24 hours. Its cached gradient PNG and embedded land
+  mask now render even when marker rows are temporarily unavailable; Alerts has
+  separate legends, cached viewport
   payload reuse, bounded tooltips, a clear detail-panel offset, Zoom to Alert,
   zoom level 9, and an active-at-time archive scrubber with exact 5-minute steps
   up to 6 hours; Radar removes `(Live Cache)`, labels Site Tools, and shares the
@@ -227,8 +274,12 @@ post-split structure, not the monolith.
 - Startup controls now reflect intentional always/default-on context: state and
   country borders are checked by default but remain user-selectable; Surface
   networks start all-on with no selected surface product; Radar Sites start on;
-  WPC group pills are navigation only and clear any previous WPC overlay until
-  the user selects a day/product.
+  WPC group pills clear any previous WPC overlay and selection until the user
+  selects a day/product. River Flood and Surface are the two direct-product
+  exceptions and load as soon as their group pill is selected. WPC product
+  rows are mutually exclusive checkboxes: selecting one replaces its peer, and
+  unchecking the active row removes the overlay. The direct-product exceptions
+  expose a checked row after loading so they can also be turned off.
 - Surface and RTMA support true empty product states. Unchecking the selected
   Surface product or the selected RTMA stream/field clears stale values and
   invalidates in-flight layer responses instead of forcing a fallback product.
@@ -244,6 +295,20 @@ post-split structure, not the monolith.
   layer when selected, while Significant toggles remain unavailable on their
   own. Drought selects the latest release week on startup and turns on all five
   drought categories; selecting another week resets all five categories on.
+- Phase 3 browser remediation passed a focused local re-smoke on 2026-07-23:
+  empty SPC Watches shows no Unix-epoch timestamp and a watch-specific empty
+  message; Fire Days 3-8 expose only valid categorical/probabilistic products;
+  WPC grouped products remain empty until explicitly selected while River Flood
+  and Surface load directly; and Drought uses the shared amber selected style.
+- The user's follow-up smoke passed the rest of the affected pages. WPC's
+  follow-up adds uncheck-to-clear behavior for every product and makes SigWx
+  empty issuance explicit. The attached current Day 1 SigWx ZIP contained
+  zero-byte SHP/SHX/DBF members, matching WPC's current KML declaration that no
+  significant-weather areas are expected. The same parser produced five
+  polygons from a non-empty official archived KML, so the missing map area was
+  upstream empty data rather than a parser failure. SigWx responses now include
+  issued/valid text and the no-areas marker; the frontend has a SigWx-specific
+  legend and click-detail content for non-empty polygons.
 - User browser smoke passed on 2026-07-04 for the startup/default-control
   changes above.
 - Shared categorical legends now wrap whole swatch/label items using

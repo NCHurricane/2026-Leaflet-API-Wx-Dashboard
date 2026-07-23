@@ -132,6 +132,36 @@ function escapeHtml(value) {
     }[character]));
 }
 
+// --- Dev tool: viewport extents logger (opt-in, global across every map page) --
+// Enable from the browser console with mapViewportLog(true); turn off with (false).
+// The flag lives in localStorage, so it survives page navigation and reloads. While
+// on, panning or zooming any map prints the current view as a REGION_BOUNDS-ready
+// [W, E, S, N] array plus center and zoom — for dialing in the default extents.
+const VIEWPORT_LOG_KEY = 'nch:mapViewportLog';
+const viewportLoggers = new Set();
+
+function viewportLoggingEnabled() {
+    try {
+        return window.localStorage.getItem(VIEWPORT_LOG_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+if (typeof window !== 'undefined' && typeof window.mapViewportLog !== 'function') {
+    window.mapViewportLog = (on = true) => {
+        const enabled = Boolean(on);
+        try {
+            window.localStorage.setItem(VIEWPORT_LOG_KEY, enabled ? '1' : '0');
+        } catch {
+            // localStorage blocked — logging still works for this page's session.
+        }
+        console.log(`[viewport] logging ${enabled ? 'ON — pan or zoom to capture a view' : 'OFF'}`);
+        if (enabled) viewportLoggers.forEach((log) => log());
+        return enabled;
+    };
+}
+
 export function createMapCore(element, options = {}) {
     const leaflet = window.L;
     if (!leaflet) throw new Error('Leaflet failed to load.');
@@ -197,6 +227,25 @@ export function createMapCore(element, options = {}) {
         zoomIndicator.title = `Zoom ${zoom.toFixed(2)}`;
     };
     map.on('zoom zoomend resize', updateZoomIndicator);
+
+    // Prints the current view in REGION_BOUNDS order ([W, E, S, N]) so the numbers can
+    // be pasted straight into that table, plus center/zoom for setView-style defaults.
+    function logViewport() {
+        const bounds = map.getBounds();
+        const round = (value) => Number(value.toFixed(2));
+        const center = map.getCenter();
+        console.log(
+            `%c[viewport]%c ${activeRegion}  [W, E, S, N] = `
+            + `[${round(bounds.getWest())}, ${round(bounds.getEast())}, `
+            + `${round(bounds.getSouth())}, ${round(bounds.getNorth())}]`
+            + `  center [${round(center.lat)}, ${round(center.lng)}]  zoom ${round(map.getZoom())}`,
+            'color:#38bdf8;font-weight:700',
+            'color:inherit',
+        );
+    }
+    const logViewportIfEnabled = () => { if (viewportLoggingEnabled()) logViewport(); };
+    map.on('moveend', logViewportIfEnabled);
+    viewportLoggers.add(logViewport);
 
     function setBasemap(name) {
         const selected = BASEMAPS[name] ? name : 'Dark (No Labels)';
@@ -379,7 +428,9 @@ export function createMapCore(element, options = {}) {
         setOverlayVisible,
         destroy() {
             map.off('moveend', rebuildCityLayer);
+            map.off('moveend', logViewportIfEnabled);
             map.off('zoom zoomend resize', updateZoomIndicator);
+            viewportLoggers.delete(logViewport);
             map.remove();
         },
     });
