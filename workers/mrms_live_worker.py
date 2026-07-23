@@ -63,6 +63,25 @@ def _discover_timestamped_gribs(product: str, max_hours: int = 1):
     return gribs
 
 
+def _discover_upstream_gribs(product: str, max_hours: int = 1):
+    """List upstream MRMS objects in the requested window, newest first."""
+    from mrms.mrms_nodd_utils import list_mrms_files
+
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(hours=max(1, int(max_hours)))
+    frames = list_mrms_files(product, start_time, end_time)
+    normalized = []
+    for source_key, file_dt in frames:
+        dt_utc = (
+            file_dt.astimezone(timezone.utc)
+            if file_dt.tzinfo is not None
+            else file_dt.replace(tzinfo=timezone.utc)
+        )
+        normalized.append((source_key, dt_utc))
+    normalized.sort(key=lambda item: item[1], reverse=True)
+    return normalized
+
+
 def _render_mrms_frame_to_overlay(
     grib_path: str, product: str, file_dt: datetime, cache_root: str
 ) -> bool:
@@ -157,28 +176,81 @@ def run_mrms_live_product(
     if not force and is_cache_fresh("mrms_live", _FRESH_WINDOW_SEC):
         return 0
 
-    # Discover available timestamped GRIBs
-    gribs = _discover_timestamped_gribs(product, max_hours=max_hours)
-    if not gribs:
-        print(f"[mrms_live] No timestamped GRIBs found for {product}")
+    product_cache_dir = os.path.join(_MRMS_CACHE, product)
+    os.makedirs(product_cache_dir, exist_ok=True)
+
+    # A local-only scan cannot repair gaps after server downtime. Prefer the
+    # authoritative selected-product listing and fall back to local timestamped
+    # GRIBs only when upstream discovery is unavailable.
+    try:
+        upstream = _discover_upstream_gribs(product, max_hours=max_hours)
+    except Exception as exc:
+        print(f"[mrms_live] Upstream history discovery failed for {product}: {exc}")
+        upstream = []
+
+    if upstream:
+        candidates = [(None, file_dt, source_key) for source_key, file_dt in upstream]
+    else:
+        candidates = [
+            (grib_path, file_dt, None)
+            for grib_path, file_dt in _discover_timestamped_gribs(
+                product, max_hours=max_hours
+            )
+        ]
+    if not candidates:
+        print(f"[mrms_live] No GRIBs found for {product}")
         return 0
 
     # Optionally limit to latest only or max count
     if latest_only:
-        gribs = gribs[:1]
+        candidates = candidates[:1]
     elif max_render_frames:
-        gribs = gribs[:max_render_frames]
+        candidates = candidates[:max_render_frames]
 
     # Render frames
+    from cache.overlay_cache_utils import (
+        flat_overlay_image_path,
+        flat_overlay_read_processed_keys,
+        frame_key_from_datetime,
+    )
+    from mrms.mrms_nodd_utils import download_mrms_file
+
+    path_parts = ("CONUS", "default", product)
+    processed_keys = flat_overlay_read_processed_keys(
+        _CACHE_ROOT, "mrms", path_parts
+    )
     cached = 0
     t0 = _time.perf_counter()
-    for grib_path, file_dt in gribs:
+    attempted = 0
+    for grib_path, file_dt, source_key in candidates:
+        attempted += 1
+        frame_key = frame_key_from_datetime(file_dt)
+        processed_key = f"mrms:{product}:{frame_key}"
+        image_path = flat_overlay_image_path(
+            _CACHE_ROOT, "mrms", path_parts, frame_key
+        )
+        if (
+            processed_key in processed_keys
+            and os.path.exists(image_path)
+            and os.path.getsize(image_path) > 0
+        ):
+            cached += 1
+            continue
+        if source_key:
+            try:
+                grib_path = download_mrms_file(source_key, product_cache_dir)
+            except Exception as exc:
+                print(
+                    f"[mrms_live] Failed to download {product} "
+                    f"{file_dt.isoformat()}: {exc}"
+                )
+                continue
         if _render_mrms_frame_to_overlay(grib_path, product, file_dt, _CACHE_ROOT):
             cached += 1
 
     elapsed = _time.perf_counter() - t0
     print(
-        f"[mrms_live] {product} rendered {cached}/{len(gribs)} frames in {elapsed:.1f}s"
+        f"[mrms_live] {product} rendered {cached}/{attempted} frames in {elapsed:.1f}s"
     )
 
     if cached > 0:

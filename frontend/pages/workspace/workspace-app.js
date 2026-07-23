@@ -30,13 +30,6 @@ const PROJECTED_ARRIVAL_EVENTS = new Set([
     'Special Weather Statement',
 ]);
 
-const WORKSPACE_REGION_BOUNDS = Object.freeze({
-    CONUS: [[24.0, -125.0], [50.0, -66.5]],
-    AK: [[50.8, -179.5], [71.8, -129.6]],
-    HI: [[18.5, -161.0], [22.5, -154.5]],
-    PR: [[17.7, -67.5], [18.7, -65.1]],
-});
-
 const LSR_FILTER_CATEGORIES = Object.freeze({
     all: Object.keys(LSR_CATEGORIES),
     tornado: ['tornado'], hail: ['hail'], wind: ['wind'], flood: ['flood'], rain: ['rain'],
@@ -196,10 +189,8 @@ async function initialize() {
         basemap: 'Dark (No Labels)',
         onResetView: () => resetWorkspaceState(),
     });
-    const fitWorkspaceRegion = (region, fitOptions = {}) => {
-        const code = WORKSPACE_REGION_BOUNDS[region] ? region : 'CONUS';
-        mapCore.map.fitBounds(WORKSPACE_REGION_BOUNDS[code], { animate: fitOptions.animate === true, padding: [20, 20] });
-    };
+    // Delegate to the core region table so CONUS/AK/HI/PR share one source of truth.
+    const fitWorkspaceRegion = (region, fitOptions = {}) => mapCore.fitRegion(region, fitOptions);
     fitWorkspaceRegion('CONUS');
     const status = createStatusReporter({
         globalTimestamp: byId('global-timestamp'), message: byId('workspace-message'),

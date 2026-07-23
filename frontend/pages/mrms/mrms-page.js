@@ -11,6 +11,7 @@ import { createMrmsEngine, formatValidTimeLabel, timestampMs } from './mrms-engi
 const byId = (id) => document.getElementById(id);
 const SELECT_PRODUCT_MESSAGE = 'Pick an MRMS product to load frames from the rolling cache.';
 const AUTO_UPDATE_INTERVAL_MS = 90_000; // matches the shell's MRMS auto-refresh cadence
+const HISTORY_POLL_INTERVAL_MS = 5_000;
 const FRAME_CAP = 400;
 
 const SUBTAB_BY_PRODUCT = Object.freeze({
@@ -143,6 +144,7 @@ async function initialize() {
     // ── Frame scrubber ──────────────────────────────────────────────────────
     let frames = [];
     let loadToken = 0;
+    let historyPollTimer = null;
 
     function frameLabel(frame) {
         return formatValidTimeLabel(timestampMs(frame.timestamp));
@@ -165,6 +167,8 @@ async function initialize() {
     async function reloadFrames() {
         const product = composeProductKey();
         const token = ++loadToken;
+        clearTimeout(historyPollTimer);
+        historyPollTimer = null;
         if (!product) {
             scrubber.setFrames([], { silent: true });
             showScrubber(false);
@@ -176,8 +180,9 @@ async function initialize() {
         const hours = lookbackHours();
         status.setMessage(`Loading MRMS ${product} frames…`);
         try {
-            const loaded = await engine.loadFrames(product, hours);
-            if (token !== loadToken || loaded === null) return;
+            const batch = await engine.loadFrames(product, hours);
+            if (token !== loadToken || batch === null) return;
+            const loaded = batch.frames;
 
             if (!loaded.length) {
                 frames = [];
@@ -191,13 +196,20 @@ async function initialize() {
                     `${latest.data.full_name || product} valid ${formatValidTimeLabel(latest.tsMs)}.${staleNote}`,
                     staleNote ? 'error' : 'success',
                 );
+                if (batch.refreshing) scheduleHistoryPoll(token);
                 return;
             }
 
             frames = loaded.map((frame) => ({ ...frame, label: frameLabel(frame) }));
             showScrubber(true);
             scrubber.setFrames(frames);
-            status.setMessage(`${frames.length} MRMS frames from cache (${hours}h window).`, 'success');
+            status.setMessage(
+                batch.refreshing
+                    ? `${frames.length} MRMS frames available; filling the ${hours}h window…`
+                    : `${frames.length} MRMS frames from cache (${hours}h window).`,
+                batch.refreshing ? '' : 'success',
+            );
+            if (batch.refreshing) scheduleHistoryPoll(token);
         } catch (err) {
             if (token !== loadToken) return;
             console.error('[mrms] frame load failed', err);
@@ -209,19 +221,53 @@ async function initialize() {
     // ── Auto-update: append newly cached frames without restarting playback ──
     let autoUpdateTimer = null;
 
-    async function autoUpdateTick() {
-        if (!byId('mrms-auto-update')?.checked) return;
+    async function autoUpdateTick({ force = false, token = loadToken } = {}) {
+        if (!force && !byId('mrms-auto-update')?.checked) return false;
+        if (token !== loadToken) return false;
         const product = composeProductKey();
-        if (!product || !frames.length || frames[0].product !== product) return;
+        if (!product || (frames.length && frames[0].product !== product)) return false;
         try {
-            const fresh = await engine.fetchNewFrames(product, lookbackHours(), frames);
-            if (!fresh.length || !frames.length) return;
-            const combined = [...frames, ...fresh.map((frame) => ({ ...frame, label: frameLabel(frame) }))];
+            const batch = await engine.fetchNewFrames(product, lookbackHours(), frames);
+            if (token !== loadToken) return false;
+            const fresh = batch.frames;
+            if (!fresh.length) return batch.refreshing;
+            const currentTimestamp = frames[scrubber.getIndex()]?.timestamp;
+            const byTimestamp = new Map(
+                [...frames, ...fresh.map((frame) => ({ ...frame, label: frameLabel(frame) }))]
+                    .map((frame) => [frame.timestamp, frame]),
+            );
+            const combined = [...byTimestamp.values()].sort(
+                (left, right) => timestampMs(left.timestamp) - timestampMs(right.timestamp),
+            );
             const dropped = Math.max(0, combined.length - FRAME_CAP);
             frames = combined.slice(dropped);
-            const index = Math.max(0, scrubber.getIndex() - dropped);
+            const preservedIndex = currentTimestamp
+                ? frames.findIndex((frame) => frame.timestamp === currentTimestamp)
+                : -1;
+            const index = preservedIndex >= 0 ? preservedIndex : frames.length - 1;
+            showScrubber(true);
             scrubber.setFrames(frames, { index, silent: true, keepPlaying: true });
-        } catch (_) { /* transient; next tick retries */ }
+            if (force) {
+                status.setMessage(
+                    batch.refreshing
+                        ? `${frames.length} MRMS frames available; filling history…`
+                        : `${frames.length} MRMS frames loaded for the requested window.`,
+                    batch.refreshing ? '' : 'success',
+                );
+            }
+            return batch.refreshing;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function scheduleHistoryPoll(token) {
+        clearTimeout(historyPollTimer);
+        historyPollTimer = setTimeout(async () => {
+            historyPollTimer = null;
+            const refreshing = await autoUpdateTick({ force: true, token });
+            if (refreshing && token === loadToken) scheduleHistoryPoll(token);
+        }, HISTORY_POLL_INTERVAL_MS);
     }
 
     autoUpdateTimer = setInterval(() => { void autoUpdateTick(); }, AUTO_UPDATE_INTERVAL_MS);
@@ -374,6 +420,7 @@ async function initialize() {
 
     window.addEventListener('beforeunload', () => {
         clearInterval(autoUpdateTimer);
+        clearTimeout(historyPollTimer);
         sidebarTabs.destroy();
         legend.destroy();
         scrubber.destroy();

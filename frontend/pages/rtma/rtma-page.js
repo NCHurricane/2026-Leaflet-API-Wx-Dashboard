@@ -18,6 +18,7 @@ import {
 const byId = (id) => document.getElementById(id);
 const SELECT_MESSAGE = 'Pick a data stream and a product to load the latest analysis and frames.';
 const AUTO_UPDATE_INTERVAL_MS = 90_000;
+const HISTORY_POLL_INTERVAL_MS = 5_000;
 const FRAME_CAP = 150;
 const POINTS_MOVE_DEBOUNCE_MS = 180;
 
@@ -125,6 +126,7 @@ async function initialize() {
     // ── Frame scrubber ──────────────────────────────────────────────────────
     let frames = [];
     let loadToken = 0;
+    let historyPollTimer = null;
     const frameErrors = new Set();
 
     function frameLabel(frame) {
@@ -160,6 +162,8 @@ async function initialize() {
     async function loadUnified() {
         const sel = selection();
         const token = ++loadToken;
+        clearTimeout(historyPollTimer);
+        historyPollTimer = null;
         if (!sel.stream || !sel.product) {
             clearAll();
             return;
@@ -181,12 +185,14 @@ async function initialize() {
 
         const hours = lookbackHours(sel.stream);
         try {
-            const loaded = await engine.loadFrames(sel, hours);
-            if (token !== loadToken || loaded === null) return;
+            const batch = await engine.loadFrames(sel, hours);
+            if (token !== loadToken || batch === null) return;
+            const loaded = batch.frames;
             if (!loaded.length) {
                 frames = [];
                 scrubber.setFrames([], { silent: true });
                 showScrubber(false);
+                if (batch.refreshing) scheduleHistoryPoll(token);
                 return;
             }
             frames = loaded.map((frame) => ({ ...frame, label: frameLabel(frame) }));
@@ -194,6 +200,10 @@ async function initialize() {
             // Latest analysis is already on the map; park the scrubber on the
             // newest frame without re-rendering it.
             scrubber.setFrames(frames, { index: frames.length - 1, silent: true });
+            if (batch.refreshing) {
+                status.setMessage(`${frames.length} RTMA frames available; filling the ${hours}h window…`);
+                scheduleHistoryPoll(token);
+            }
         } catch (err) {
             if (token !== loadToken) return;
             console.error('[rtma] frame load failed', err);
@@ -203,6 +213,8 @@ async function initialize() {
 
     function clearAll() {
         loadToken += 1;
+        clearTimeout(historyPollTimer);
+        historyPollTimer = null;
         frames = [];
         frameErrors.clear();
         scrubber.setFrames([], { silent: true });
@@ -212,20 +224,60 @@ async function initialize() {
     }
 
     // ── Auto-update: append newly cached frames ─────────────────────────────
-    async function autoUpdateTick() {
-        if (!byId('rtma-auto-update')?.checked) return;
+    async function autoUpdateTick({ force = false, token = loadToken } = {}) {
+        if (!force && !byId('rtma-auto-update')?.checked) return false;
+        if (token !== loadToken) return false;
         const sel = selection();
-        if (!sel.stream || !sel.product || !frames.length) return;
-        if (frames[0].stream !== sel.stream || frames[0].product !== sel.product) return;
+        if (!sel.stream || !sel.product) return false;
+        if (
+            frames.length
+            && (frames[0].stream !== sel.stream || frames[0].product !== sel.product)
+        ) return false;
         try {
-            const fresh = await engine.fetchNewFrames(sel, lookbackHours(sel.stream), frames);
-            if (!fresh.length || !frames.length) return;
-            const combined = [...frames, ...fresh.map((frame) => ({ ...frame, label: frameLabel(frame) }))];
+            const batch = await engine.fetchNewFrames(sel, lookbackHours(sel.stream), frames);
+            if (token !== loadToken) return false;
+            const fresh = batch.frames;
+            if (!fresh.length) return batch.refreshing;
+            const identity = (frame) => `${frame.source_data_key || frame.frame_key || ''}|${frame.timestamp || ''}`;
+            const currentIdentity = frames[scrubber.getIndex()]
+                ? identity(frames[scrubber.getIndex()])
+                : null;
+            const byIdentity = new Map(
+                [...frames, ...fresh.map((frame) => ({ ...frame, label: frameLabel(frame) }))]
+                    .map((frame) => [identity(frame), frame]),
+            );
+            const combined = [...byIdentity.values()].sort(
+                (left, right) => timestampMs(left.timestamp) - timestampMs(right.timestamp),
+            );
             const dropped = Math.max(0, combined.length - FRAME_CAP);
             frames = combined.slice(dropped);
-            const index = Math.max(0, scrubber.getIndex() - dropped);
+            const preservedIndex = currentIdentity
+                ? frames.findIndex((frame) => identity(frame) === currentIdentity)
+                : -1;
+            const index = preservedIndex >= 0 ? preservedIndex : frames.length - 1;
+            showScrubber(true);
             scrubber.setFrames(frames, { index, silent: true, keepPlaying: true });
-        } catch (_) { /* transient; next tick retries */ }
+            if (force) {
+                status.setMessage(
+                    batch.refreshing
+                        ? `${frames.length} RTMA frames available; filling history…`
+                        : `${frames.length} RTMA frames loaded for the requested window.`,
+                    batch.refreshing ? '' : 'success',
+                );
+            }
+            return batch.refreshing;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function scheduleHistoryPoll(token) {
+        clearTimeout(historyPollTimer);
+        historyPollTimer = setTimeout(async () => {
+            historyPollTimer = null;
+            const refreshing = await autoUpdateTick({ force: true, token });
+            if (refreshing && token === loadToken) scheduleHistoryPoll(token);
+        }, HISTORY_POLL_INTERVAL_MS);
     }
 
     const autoUpdateTimer = setInterval(() => { void autoUpdateTick(); }, AUTO_UPDATE_INTERVAL_MS);
@@ -421,6 +473,7 @@ async function initialize() {
 
     window.addEventListener('beforeunload', () => {
         clearInterval(autoUpdateTimer);
+        clearTimeout(historyPollTimer);
         sidebarTabs.destroy();
         legend.destroy();
         scrubber.destroy();

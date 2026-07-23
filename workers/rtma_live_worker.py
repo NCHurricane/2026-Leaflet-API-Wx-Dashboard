@@ -11,7 +11,6 @@ on-demand when user requests animation.
 import os
 import sys
 import time as _time
-from datetime import timezone
 
 # Add project root to path for both module and direct execution
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,7 +36,7 @@ def _render_rtma_frame_to_overlay(
 ) -> bool:
     """Render a single RTMA source frame to PNG overlay cache.
 
-    Returns True on success, False on failure.
+    Returns True when the frame is available, False on failure.
     """
     from cache.overlay_cache_utils import (
         flat_overlay_image_path,
@@ -57,7 +56,7 @@ def _render_rtma_frame_to_overlay(
     if source.data_key in processed_keys:
         img_path = flat_overlay_image_path(cache_root, "rtma", path_parts, frame_key)
         if os.path.exists(img_path) and os.path.getsize(img_path) > 0:
-            return False  # already fresh, no update needed
+            return True  # already fresh; this is a successful no-op
 
     bounds = STATE_BOUNDS.get(region, [-125, -70, 21, 52])
     crop_extent = [float(b) for b in bounds]
@@ -183,9 +182,9 @@ def run_rtma_live_product(
 
     # Optionally limit to latest only or max count
     if latest_only:
-        sources = sources[-1:]
+        sources = sources[:1]
     elif max_render_frames:
-        sources = sources[-max_render_frames:]
+        sources = sources[:max_render_frames]
 
     # Render frames
     cached = 0
@@ -202,7 +201,8 @@ def run_rtma_live_product(
 
     elapsed = _time.perf_counter() - t0
     print(
-        f"[rtma_live] {region}/{stream}/{product} rendered {cached}/{len(sources)} frames in {elapsed:.1f}s"
+        f"[rtma_live] {region}/{stream}/{product} made "
+        f"{cached}/{len(sources)} frames available in {elapsed:.1f}s"
     )
 
     if cached > 0:

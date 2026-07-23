@@ -10,10 +10,12 @@ Only ONE product is refreshed at a time (active product pivots on user request).
 import json
 import os
 import shutil
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import defaultdict
 from datetime import timezone
 
+from app_core.atomic_io import atomic_write_json
 from workers._freshness import is_cache_fresh, mark_run_complete
 
 _CACHE_ROOT = os.path.join(
@@ -21,19 +23,9 @@ _CACHE_ROOT = os.path.join(
 )
 _MRMS_CACHE = os.path.join(_CACHE_ROOT, "mrms")
 
-# User-selected high-value products to keep hot in cache.
-_PREWARM_PRODUCTS = [
-    "Refl_BaseQC",  # Base Reflectivity (QC) - Primary radar overlay
-    "Refl_HSR",  # Reflectivity - Hybrid Scan
-    "PrecipFlag",  # Surface Precip Type
-    "QPE_MS2_01H",  # QPE Multisensor Pass2 1-hour
-    "RotationTrack_LL_60min",  # Rotation Tracks low-level 60 min
-    "MESH_Max_60min",  # MESH/Hail max 60 min
-    "Lightning_30min",  # Lightning probability next 30 min
-]
-
 # Module-level active product state (also mirrored in app.state for API access)
 _active_product: str = "Refl_BaseQC"
+_PRODUCT_REFRESH_LOCKS: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 
 # Skip if a successful refresh happened within the last ~11 min
 # (75% of the 15 min Task Scheduler interval).
@@ -100,10 +92,11 @@ def _prune_old_frames(product_cache_dir: str, max_age_hours: int = 12) -> None:
 
 def _fetch_latest_product_grib(
     product: str, get_latest_mrms_file
-) -> tuple[str, object, int] | None:
+) -> tuple[str, object, int, bool, str] | None:
     """Fetch latest GRIB for a product, with adaptive lookback and atomic replace.
 
-    Returns (grib_path, file_dt, successful_lookback_minutes) on success, None on failure.
+    Returns (grib_path, file_dt, successful_lookback_minutes, advanced,
+    source_key) on success, or None on failure.
     """
     product_cache_dir = os.path.join(_MRMS_CACHE, product)
     os.makedirs(product_cache_dir, exist_ok=True)
@@ -114,7 +107,7 @@ def _fetch_latest_product_grib(
         result = get_latest_mrms_file(
             product,
             lookback_minutes=lookback_minutes,
-            local_dir=product_cache_dir,
+            local_dir=None,
         )
         if result is not None:
             successful_lookback = lookback_minutes
@@ -128,13 +121,33 @@ def _fetch_latest_product_grib(
     if result is None:
         return None
 
-    local_path, file_dt = result
+    source_key, file_dt = result
 
     # Store as both latest (conus.grib2.gz) and timestamped (for scrubber frames).
     dest_latest = os.path.join(product_cache_dir, "conus.grib2.gz")
     dest_timestamped = os.path.join(
         product_cache_dir, file_dt.strftime("%Y-%m-%d_%H-%M-%S.grib2.gz")
     )
+    source_state_path = os.path.join(product_cache_dir, "latest_source.json")
+    source_timestamp = file_dt.astimezone(timezone.utc).isoformat()
+    try:
+        with open(source_state_path, "r", encoding="utf-8") as handle:
+            source_state = json.load(handle)
+    except Exception:
+        source_state = {}
+    if (
+        (
+            source_state.get("source_key") == source_key
+            or source_state.get("source_timestamp") == source_timestamp
+        )
+        and os.path.exists(dest_latest)
+        and os.path.getsize(dest_latest) > 0
+    ):
+        return dest_latest, file_dt, successful_lookback, False, source_key
+
+    from mrms.mrms_nodd_utils import download_mrms_file
+
+    local_path = download_mrms_file(source_key, product_cache_dir)
 
     # Write latest version
     if local_path != dest_latest:
@@ -161,95 +174,97 @@ def _fetch_latest_product_grib(
 
     # Prune old timestamped files (keep max 12 hours).
     _prune_old_frames(product_cache_dir, max_age_hours=12)
+    atomic_write_json(
+        source_state_path,
+        {
+            "product": product,
+            "source_key": source_key,
+            "source_timestamp": source_timestamp,
+        },
+    )
 
-    return dest_latest, file_dt, successful_lookback
-
-
-def _prewarm_single_product(product: str, get_latest_mrms_file) -> None:
-    """Helper to prewarm a single product. Runs in parallel via ThreadPoolExecutor."""
-    sentinel_name = f"mrms_{product}"
-    if is_cache_fresh(sentinel_name, _FRESH_WINDOW_SEC):
-        return
-
-    try:
-        fetched = _fetch_latest_product_grib(product, get_latest_mrms_file)
-        if fetched is None:
-            print(f"[mrms_worker] No files found for prewarm product {product}")
-            return
-
-        grib_path, file_dt, lookback_minutes = fetched
-        product_cache_dir = os.path.join(_MRMS_CACHE, product)
-        print(
-            f"[mrms_worker] {product} cached at "
-            f"{file_dt.strftime('%Y-%m-%d %H:%M UTC')} (prewarm set)"
-        )
-        mark_run_complete(sentinel_name)
-        _prewarm_conus_png(product, grib_path, product_cache_dir, file_dt=file_dt)
-    except Exception as exc:
-        print(f"[mrms_worker] Prewarm set fetch/render failed for {product}: {exc}")
+    return dest_latest, file_dt, successful_lookback, True, source_key
 
 
-def _run_prewarm_product_set(skip_product: str, get_latest_mrms_file) -> None:
-    """Fetch and prewarm the configured MRMS products in parallel."""
-    products_to_warm = [p for p in _PREWARM_PRODUCTS if p != skip_product]
-    if not products_to_warm:
-        return
-
-    # Use ThreadPoolExecutor to fetch/render multiple products in parallel (4 workers).
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {
-            executor.submit(_prewarm_single_product, product, get_latest_mrms_file): product
-            for product in products_to_warm
-        }
-        for future in as_completed(futures):
-            product = futures[future]
-            try:
-                future.result()
-            except Exception as exc:
-                print(f"[mrms_worker] Prewarm product {product} thread failed: {exc}")
-
-
-def run_mrms_worker(force: bool = False) -> None:
+def _run_mrms_worker_unlocked(
+    force: bool = False,
+    product: str | None = None,
+) -> dict:
     """Download the latest GRIB2 for the active MRMS product."""
-    global _active_product
-    product = _active_product
+    from config.mrms_config import MRMS_PRODUCTS
+
+    selected_product = str(product or _active_product).strip()
+    if selected_product not in MRMS_PRODUCTS:
+        raise ValueError(f"Unknown MRMS product: {selected_product}")
 
     # Gate per-product so a product switch always triggers a fresh download.
-    sentinel_name = f"mrms_{product}"
+    sentinel_name = f"mrms_{selected_product}"
     if not force and is_cache_fresh(sentinel_name, _FRESH_WINDOW_SEC):
-        print(f"[mrms_worker] {product} cache fresh — skipping run")
-        return
+        print(f"[mrms_worker] {selected_product} cache fresh — skipping run")
+        return {"status": "current", "product": selected_product}
 
     try:
         from mrms.mrms_nodd_utils import get_latest_mrms_file
     except Exception as exc:
         print(f"[mrms_worker] Import error: {exc}")
-        return
+        raise
 
     try:
-        fetched = _fetch_latest_product_grib(product, get_latest_mrms_file)
+        fetched = _fetch_latest_product_grib(
+            selected_product,
+            get_latest_mrms_file,
+        )
         if fetched is None:
-            print(f"[mrms_worker] No files found for {product}")
-            return
+            raise FileNotFoundError(
+                f"No MRMS files found for {selected_product}"
+            )
 
-        dest, file_dt, lookback_minutes = fetched
-        product_cache_dir = os.path.join(_MRMS_CACHE, product)
+        dest, file_dt, _lookback_minutes, advanced, source_key = fetched
+        product_cache_dir = os.path.join(_MRMS_CACHE, selected_product)
 
         print(
-            f"[mrms_worker] {product} cached at {file_dt.strftime('%Y-%m-%d %H:%M UTC')}"
+            f"[mrms_worker] {selected_product} cached at "
+            f"{file_dt.strftime('%Y-%m-%d %H:%M UTC')}"
         )
         mark_run_complete(sentinel_name)
+        source_timestamp = file_dt.astimezone(timezone.utc).isoformat()
+        if not advanced:
+            return {
+                "status": "current",
+                "product": selected_product,
+                "source_key": source_key,
+                "source_timestamp": source_timestamp,
+            }
 
         # Pre-render the default CONUS PNG so the first API request is a cache
         # hit (~50ms) rather than triggering a 5-10s blocking render.
-        _prewarm_conus_png(product, dest, product_cache_dir, file_dt=file_dt)
-
-        # Keep selected high-traffic products hot to reduce first-switch delay.
-        _run_prewarm_product_set(
-            skip_product=product, get_latest_mrms_file=get_latest_mrms_file
+        _prewarm_conus_png(
+            selected_product,
+            dest,
+            product_cache_dir,
+            file_dt=file_dt,
         )
+        return {
+            "status": "refreshed",
+            "product": selected_product,
+            "source_key": source_key,
+            "source_timestamp": source_timestamp,
+        }
     except Exception as exc:
-        print(f"[mrms_worker] Error fetching {product}: {exc}")
+        print(f"[mrms_worker] Error fetching {selected_product}: {exc}")
+        raise
+
+
+def run_mrms_worker(
+    force: bool = False,
+    product: str | None = None,
+) -> dict:
+    selected_product = str(product or _active_product).strip()
+    with _PRODUCT_REFRESH_LOCKS[selected_product]:
+        return _run_mrms_worker_unlocked(
+            force=force,
+            product=selected_product,
+        )
 
 
 # CONUS bounds must match the defaults in get_data_mrms() exactly so the
@@ -393,7 +408,7 @@ def _write_mrms_overlay_cache(
     print(f"[mrms_worker] Overlay cache updated: {product} @ {frame_key}")
 
 
-def _render_mrms_png_standalone(
+def _render_mrms_png_standalone_unbounded(
     grib_path: str,
     product: str,
     crop_extent: list,
@@ -467,6 +482,23 @@ def _render_mrms_png_standalone(
         json.dump(build_mrms_overlay_meta(product, data), f)
 
 
+def _render_mrms_png_standalone(
+    grib_path: str,
+    product: str,
+    crop_extent: list,
+    out_path: str,
+) -> None:
+    from app_core.render_budget import heavy_render_slot
+
+    with heavy_render_slot():
+        _render_mrms_png_standalone_unbounded(
+            grib_path,
+            product,
+            crop_extent,
+            out_path,
+        )
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -487,6 +519,4 @@ if __name__ == "__main__":
         from workers._freshness import redirect_stdio_to_log
 
         redirect_stdio_to_log("mrms")
-    if args.product:
-        set_active_product(args.product)
-    run_mrms_worker(force=args.force)
+    run_mrms_worker(force=args.force, product=args.product)

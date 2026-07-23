@@ -513,6 +513,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
     async function fetchFramesList(selection, hours, signal) {
         const { region, stream, product } = selection;
         let frames = [];
+        let refreshing = false;
         try {
             const params = new URLSearchParams({
                 family: 'rtma', region, stream, product, hours: String(hours),
@@ -520,6 +521,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
             const data = await api.fetchJson(`/api/overlay/frames?${params}`, {
                 cache: 'no-store', signal,
             });
+            refreshing = Boolean(data.refreshing);
             frames = (Array.isArray(data.frames) ? data.frames : [])
                 .map((raw) => normalizeFrame(raw, selection));
         } catch (err) {
@@ -537,16 +539,16 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
             frames = (Array.isArray(data.frames) ? data.frames : [])
                 .map((raw) => normalizeFrame(raw, selection));
         }
-        return frames;
+        return { frames, refreshing };
     }
 
     async function loadFrames(selection, hours) {
         const request = gate.begin();
         frameCache.clear();
         try {
-            const frames = await fetchFramesList(selection, hours, request.signal);
+            const batch = await fetchFramesList(selection, hours, request.signal);
             if (!gate.isCurrent(request.sequence)) return null;
-            return frames;
+            return batch;
         } catch (err) {
             if (err.name === 'AbortError') return null;
             throw err;
@@ -557,8 +559,11 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
     async function fetchNewFrames(selection, hours, existingFrames) {
         const identity = (f) => `${f.source_data_key || f.frame_key || ''}|${f.timestamp || ''}`;
         const existing = new Set(existingFrames.map(identity));
-        const frames = await fetchFramesList(selection, hours);
-        return frames.filter((frame) => !existing.has(identity(frame)));
+        const batch = await fetchFramesList(selection, hours);
+        return {
+            frames: batch.frames.filter((frame) => !existing.has(identity(frame))),
+            refreshing: batch.refreshing,
+        };
     }
 
     // Pre-rendered overlay + points in parallel; points-only when the frame's

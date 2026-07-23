@@ -57,6 +57,13 @@ _IN_FLIGHT_TILE_RENDERS: dict[Path, Future] = {}
 _IN_FLIGHT_TILE_RENDERS_LOCK = threading.RLock()
 
 
+def _render_tile_with_budget(**render_kwargs: Any):
+    from app_core.render_budget import heavy_render_slot
+
+    with heavy_render_slot():
+        return render_frame_tile(**render_kwargs)
+
+
 def _submit_tile_render(target: Path, **render_kwargs: Any) -> tuple[Future, bool]:
     key = target.resolve()
     with _IN_FLIGHT_TILE_RENDERS_LOCK:
@@ -64,7 +71,9 @@ def _submit_tile_render(target: Path, **render_kwargs: Any) -> tuple[Future, boo
         if existing is not None:
             return existing, False
         future = _ON_DEMAND_TILE_RENDER_POOL.submit(
-            render_frame_tile, render_supertile=False, **render_kwargs
+            _render_tile_with_budget,
+            render_supertile=False,
+            **render_kwargs,
         )
         _IN_FLIGHT_TILE_RENDERS[key] = future
 

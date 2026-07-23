@@ -16,8 +16,14 @@ export const REGION_LABELS = Object.freeze({
     WY: 'Wyoming', PR: 'Puerto Rico',
 });
 
+// Each region is either a geographic box [W, E, S, N] framed with fitBounds, or a
+// curated { center: [lat, lng], zoom } view applied with setView. Boxes suit whole
+// states/basins (fitBounds adapts them to the viewport's aspect ratio); the curated
+// form pins an exact default framing where a fitted box would drift off after the
+// integer zoom-snap — CONUS uses it so its default matches a hand-picked view.
 const REGION_BOUNDS = Object.freeze({
-    WORLD: [-179.9, 179.9, -85.0, 85.0], CONUS: [-140, -65, 21, 52],
+    WORLD: [-179.9, 179.9, -85.0, 85.0],
+    CONUS: { center: [37.58, -96.42], zoom: 5 },
     AL: [-89.0, -84.4, 29.8, 35.7], AK: [-179.5, -129.6, 50.8, 71.8],
     AZ: [-115.8, -107.7, 29.7, 38.3], AR: [-95.0, -89.3, 32.7, 36.9],
     CA: [-124.9, -113.8, 32.2, 42.4], CO: [-109.4, -101.7, 36.6, 41.4],
@@ -260,11 +266,15 @@ export function createMapCore(element, options = {}) {
     function fitRegion(code, fitOptions = {}) {
         activeRegion = REGION_BOUNDS[String(code || '').toUpperCase()]
             ? String(code).toUpperCase() : 'CONUS';
-        const bounds = REGION_BOUNDS[activeRegion];
-        map.fitBounds([[bounds[2], bounds[0]], [bounds[3], bounds[1]]], {
-            animate: fitOptions.animate === true,
-            padding: fitOptions.padding || [16, 16],
-        });
+        const extent = REGION_BOUNDS[activeRegion];
+        if (Array.isArray(extent)) {
+            map.fitBounds([[extent[2], extent[0]], [extent[3], extent[1]]], {
+                animate: fitOptions.animate === true,
+                padding: fitOptions.padding || [16, 16],
+            });
+        } else {
+            map.setView(extent.center, extent.zoom, { animate: fitOptions.animate === true });
+        }
     }
 
     async function ensureUsBoundaryLayer(name) {

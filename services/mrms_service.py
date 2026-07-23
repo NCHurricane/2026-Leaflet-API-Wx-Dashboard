@@ -7,8 +7,42 @@ import os
 from fastapi import HTTPException
 
 from app_core.paths import CACHE_ROOT
+from app_core.refresh_coordinator import Submission, get_refresh_coordinator
 
 _active_mrms_product: str = "Refl_BaseQC"
+_MRMS_REFRESH_INTERVAL_SECONDS = 2 * 60
+
+
+def _mrms_refresh_key(product: str) -> tuple[str, ...]:
+    return ("mrms", "latest", product)
+
+
+def _refresh_mrms_product(product: str) -> dict:
+    from workers.mrms_worker import run_mrms_worker
+
+    return run_mrms_worker(force=True, product=product)
+
+
+def _start_mrms_product_refresh(product: str) -> Submission:
+    from config.mrms_config import MRMS_PRODUCTS
+
+    if product not in MRMS_PRODUCTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown MRMS product '{product}'.",
+        )
+    coordinator = get_refresh_coordinator()
+    key = _mrms_refresh_key(product)
+    coordinator.record_presence(
+        key=key,
+        provider="noaa-mrms",
+    )
+    return coordinator.submit(
+        key=key,
+        provider="noaa-mrms",
+        function=lambda: _refresh_mrms_product(product),
+        min_success_interval_seconds=_MRMS_REFRESH_INTERVAL_SECONDS,
+    )
 
 
 def _load_mrms_render_meta(meta_sidecar: str) -> dict:
@@ -88,7 +122,13 @@ def set_mrms_product(product: str) -> dict:
         set_active_product(product)
     except Exception:
         pass
-    return {"active_product": product}
+    refresh = _start_mrms_product_refresh(product)
+    return {
+        "active_product": product,
+        "refreshing": refresh.status in {"queued", "running"},
+        "refresh_status": refresh.status,
+        "retry_after_seconds": refresh.retry_after_seconds,
+    }
 
 
 def get_mrms_data(
@@ -106,6 +146,8 @@ def get_mrms_data(
             status_code=400,
             detail=f"Unknown MRMS product '{product}'.",
         )
+
+    refresh = _start_mrms_product_refresh(product)
 
     if product != _active_mrms_product:
         _active_mrms_product = product
@@ -125,7 +167,7 @@ def get_mrms_data(
             from workers.mrms_worker import run_mrms_worker, set_active_product
 
             set_active_product(product)
-            run_mrms_worker(force=True)
+            run_mrms_worker(force=True, product=product)
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -146,7 +188,7 @@ def get_mrms_data(
             from workers.mrms_worker import run_mrms_worker, set_active_product
 
             set_active_product(product)
-            run_mrms_worker(force=True)
+            run_mrms_worker(force=True, product=product)
         except Exception:
             pass
 
@@ -192,7 +234,7 @@ def get_mrms_data(
                 from workers.mrms_worker import run_mrms_worker, set_active_product
 
                 set_active_product(product)
-                run_mrms_worker(force=True)
+                run_mrms_worker(force=True, product=product)
             except Exception:
                 pass
 
@@ -264,10 +306,13 @@ def get_mrms_data(
         "vmax": prod_info.get("vmax", 100),
         "legend": render_meta.get("legend"),
         "timestamp": timestamp,
+        "refreshing": refresh.status in {"queued", "running"},
+        "refresh_status": refresh.status,
+        "retry_after_seconds": refresh.retry_after_seconds,
     }
 
 
-def render_mrms_png(
+def _render_mrms_png_unbounded(
     grib_path: str,
     product: str,
     crop_extent: list,
@@ -349,3 +394,20 @@ def render_mrms_png(
     _write_mrms_render_meta(out_path.replace(".png", "_meta.json"), render_meta)
 
     return out_path, actual_bounds, render_meta
+
+
+def render_mrms_png(
+    grib_path: str,
+    product: str,
+    crop_extent: list,
+    out_path: str,
+) -> tuple:
+    from app_core.render_budget import heavy_render_slot
+
+    with heavy_render_slot():
+        return _render_mrms_png_unbounded(
+            grib_path,
+            product,
+            crop_extent,
+            out_path,
+        )

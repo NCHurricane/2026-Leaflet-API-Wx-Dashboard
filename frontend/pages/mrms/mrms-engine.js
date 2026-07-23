@@ -144,22 +144,28 @@ export function createMrmsEngine({ api, mapCore, legend, status }) {
         const params = new URLSearchParams({ family: 'mrms', product, hours: String(hours) });
         const data = await api.fetchJson(`/api/overlay/frames?${params}`, { cache: 'no-store', signal });
         const rawFrames = Array.isArray(data.frames) ? data.frames : [];
-        return rawFrames.map((raw) => normalizeFrame(raw, product));
+        return {
+            frames: rawFrames.map((raw) => normalizeFrame(raw, product)),
+            refreshing: Boolean(data.refreshing),
+        };
     }
 
     async function loadFrames(product, hours) {
         const request = gate.begin();
         await setWorkerProduct(product);
-        const frames = await fetchFrames(product, hours, { signal: request.signal });
+        const batch = await fetchFrames(product, hours, { signal: request.signal });
         if (!gate.isCurrent(request.sequence)) return null;
-        return frames;
+        return batch;
     }
 
     // Frames beyond the ones already shown (auto-update append path).
     async function fetchNewFrames(product, hours, existingFrames) {
         const existing = new Set(existingFrames.map(frameIdentity));
-        const frames = await fetchFrames(product, hours);
-        return frames.filter((frame) => !existing.has(frameIdentity(frame)));
+        const batch = await fetchFrames(product, hours);
+        return {
+            frames: batch.frames.filter((frame) => !existing.has(frameIdentity(frame))),
+            refreshing: batch.refreshing,
+        };
     }
 
     function applyFrameStatus(frame) {

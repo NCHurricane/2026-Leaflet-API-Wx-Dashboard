@@ -231,6 +231,7 @@ class RefreshCoordinator:
         provider: str,
         function: Callable[[], object],
         lease_seconds: float = 90.0,
+        min_success_interval_seconds: float = 0.0,
     ) -> Submission:
         normalized_key = self._normalize_key(key)
         provider_key = provider.strip().lower()
@@ -243,6 +244,18 @@ class RefreshCoordinator:
                 return Submission(False, "stopped")
             if current is not None and current.status in {"queued", "running"}:
                 return Submission(False, current.status)
+            if (
+                current is not None
+                and current.last_success_at is not None
+                and min_success_interval_seconds > 0
+            ):
+                retry_after = (
+                    current.last_success_at
+                    + min_success_interval_seconds
+                    - now
+                )
+                if retry_after > 0:
+                    return Submission(False, "current", retry_after)
             if (
                 current is not None
                 and current.status == "backoff"
@@ -622,6 +635,22 @@ for _policy_entry in (
     RefreshPolicy(
         provider="usdm",
         min_request_interval=1.0,
+        max_concurrency=1,
+        base_backoff_seconds=30.0,
+        max_backoff_seconds=600.0,
+        presence_required=True,
+    ),
+    RefreshPolicy(
+        provider="noaa-mrms",
+        min_request_interval=0.0,
+        max_concurrency=1,
+        base_backoff_seconds=30.0,
+        max_backoff_seconds=300.0,
+        presence_required=True,
+    ),
+    RefreshPolicy(
+        provider="noaa-rtma",
+        min_request_interval=0.0,
         max_concurrency=1,
         base_backoff_seconds=30.0,
         max_backoff_seconds=600.0,

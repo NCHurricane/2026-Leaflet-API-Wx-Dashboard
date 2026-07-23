@@ -1348,7 +1348,7 @@ def _render_site_product(
     return cached
 
 
-def run_radar_live_worker(force: bool = False) -> None:
+def _run_radar_live_worker_unbounded(force: bool = False) -> None:
     """Render configured site/product live radar overlays into cache.
 
     L2 products (chunks): run every invocation — the task fires every minute
@@ -1405,7 +1405,14 @@ def run_radar_live_worker(force: bool = False) -> None:
             mark_run_complete("radar_live_l3")
 
 
-def run_radar_live_site_product(
+def run_radar_live_worker(force: bool = False) -> None:
+    from app_core.render_budget import heavy_render_slot
+
+    with heavy_render_slot():
+        _run_radar_live_worker_unbounded(force=force)
+
+
+def _run_radar_live_site_product_unbounded(
     site: str,
     product_key: str,
     force: bool = True,
@@ -1460,6 +1467,33 @@ def run_radar_live_site_product(
     if cached > 0:
         mark_run_complete("radar_live")
     return int(cached)
+
+
+def run_radar_live_site_product(
+    site: str,
+    product_key: str,
+    force: bool = True,
+    latest_only: bool = False,
+    newest_first: bool = False,
+    max_render_frames: int | None = None,
+    elevation: str = "auto",
+    storm_motion: dict | None = None,
+    lookback_hours: float | None = None,
+) -> int:
+    from app_core.render_budget import heavy_render_slot
+
+    with heavy_render_slot():
+        return _run_radar_live_site_product_unbounded(
+            site,
+            product_key,
+            force=force,
+            latest_only=latest_only,
+            newest_first=newest_first,
+            max_render_frames=max_render_frames,
+            elevation=elevation,
+            storm_motion=storm_motion,
+            lookback_hours=lookback_hours,
+        )
 
 
 if __name__ == "__main__":

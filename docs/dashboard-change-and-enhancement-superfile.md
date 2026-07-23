@@ -1,8 +1,8 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-23 (Task-scheduler-free rendering Phases 0-3 are
-complete. Issuance-aware SPC/Tropical/WPC/Drought schedules passed their
-automated gate; Phase 4 MRMS/RTMA is next.)
+Last updated: 2026-07-23 (Task-scheduler-free rendering Phase 4 is complete.
+The corrected MRMS/RTMA scrubber browser re-smoke passed with no other issues;
+Phase 5 Water is next.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -39,7 +39,7 @@ post-split structure, not the monolith.
    Its later detail-panel, Region, legend, and sidebar-style follow-ups are
    implemented and statically validated but still need browser re-smoke;
    optional Water enhancements remain deferred.
-2. Task-scheduler-free refresh/rendering — Phases 0-3 are complete under
+2. Task-scheduler-free refresh/rendering — Phases 0-4 are complete under
    `docs/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
    recorded, and the remediated live-NWS warm pass reused 471/471 alerts. It
@@ -56,7 +56,12 @@ post-split structure, not the monolith.
    immutable USDM keys. The first Phase 3 browser smoke also corrected SPC
    empty-watch/Fire selection behavior, WPC empty and direct-load wiring,
    Drought selected-date styling, and retired standard NHC cone URLs. Phase 4
-   MRMS/RTMA is next.
+   carries selected MRMS products through one two-minute coordinator key,
+   no-ops unchanged source keys, keeps hourly RTMA on an hourly success cadence,
+   and serializes heavyweight MRMS/RTMA/Radar/Satellite rendering. Its first
+   browser smoke exposed partial-history and empty-response polling defects.
+   The correction passes focused tests and the user's restart/hard-refresh
+   re-smoke for MRMS, RTMA Hourly, and RTMA-RU. Phase 5 Water is next.
 3. Radar render pipeline latency optimization — execution-grade plan prepared
    in `docs/radar-render-optimization-plan.md`; Phase 0 benchmark/golden capture
    is next. Backend-only and may interleave with Track 1.
@@ -115,6 +120,27 @@ post-split structure, not the monolith.
   national low-detail features and 25 fresh bbox-filtered full features from
   the same generation. Browser proof remains pending. Evidence is in
   `docs/perf/2026-07-23-worker-free-phase2/`.
+- Worker-free Phase 4 is complete: selected MRMS products use explicit
+  coordinator/discovery/download/render/catalog keys with a two-minute
+  success interval, unchanged source keys skip object download and rendering,
+  and request paths no longer prewarm unrelated products. RTMA uses an hourly
+  success interval with a two-hour latest-source discovery window while
+  preserving its direct latest and progressive-history paths. MRMS, RTMA,
+  live Radar, and on-demand Satellite tile rendering share one process-wide
+  heavy-render slot by default. The corrected Phase 4/coordinator suite passes
+  19/19. Isolated runtime
+  validation rendered only selected `PrecipRate` plus one 17Z RTMA hourly
+  frame; immediate repeats returned `current` with about 107 and 3,590 seconds
+  remaining. The first user browser smoke found partial MRMS/RTMA lookbacks and
+  an RTMA-RU page that stopped polling after the empty first response. History
+  fills are now horizon-specific, MRMS fills missing NODD objects, RTMA selects
+  the newest end of discovery, RTMA-RU uses a 15-minute cadence, and both pages
+  poll/merge progressive frames chronologically. The complete suite reaches
+  176 passing tests plus 42 subtests; the one failure is an unrelated stale
+  Workspace assertion against concurrent user-owned `fitRegion` edits. The
+  corrected browser re-smoke passed for MRMS, RTMA Hourly, and RTMA-RU with no
+  other issues found, closing Phase 4. Evidence is in
+  `docs/perf/2026-07-23-worker-free-phase4/`.
 - The worker-free plan now treats optional Windows task workers as a supported
   cache-warming mode, but only after migration to the same persistent
   cross-process leases, provider budgets, deduplication keys, freshness state,

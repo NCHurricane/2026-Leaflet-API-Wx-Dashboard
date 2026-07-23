@@ -339,6 +339,44 @@ not performed.
 
 ### Phase 4 - MRMS and RTMA
 
+Implementation status (2026-07-23): complete. MRMS request paths now carry the
+selected product through coordinator keys, discovery, download, conversion,
+rendering, and overlay-catalog publication. The request worker no longer
+prewarms an unrelated product set. A persisted latest-source key makes the
+two-minute selected-product check a download/render no-op when the source has
+not advanced. RTMA latest checks use an hourly success interval, retain a
+two-hour discovery window for publication delay, and leave the existing
+on-demand latest and progressive history paths intact. Overlay history fill now
+uses the bounded coordinator instead of a raw daemon thread.
+
+`app_core/render_budget.py` supplies one process-wide heavy-render slot by
+default (`WX_HEAVY_RENDER_SLOTS` is the explicit override). MRMS, RTMA, live
+Radar, and on-demand Satellite tile renders all acquire it, preventing those
+families from materializing large render inputs concurrently.
+
+Automated/API gate result: passed. The original focused Phase 4/coordinator
+tests passed 14/14,
+including selected-product keys, 120/3600-second success intervals, unchanged
+MRMS source download/render no-op behavior, and cross-family render
+serialization. Live isolated-port validation queued only `PrecipRate`, rendered
+that MRMS source and one 17Z RTMA hourly frame, and then returned `current` with
+about 107 and 3,590 seconds remaining on immediate repeats. The log contained
+no unrelated MRMS product discovery. The complete suite reached 176 passing
+tests plus 42 subtests; one unrelated Workspace assertion was
+concurrently stale against user-owned `fitRegion` changes.
+
+The first user browser smoke found incomplete scrubber horizons: partial MRMS
+and RTMA caches suppressed history fill, and an initially empty RTMA-RU frame
+response was never polled after six frames rendered in the background. The
+correction keys history by requested hours, fills missing MRMS objects from
+NODD, uses the newest end of newest-first RTMA discovery, gives RTMA-RU a
+15-minute cadence, and polls/merges progressive frames chronologically. The
+corrected Phase 4/coordinator suite passes 19/19 and Node syntax checks pass.
+The corrected user browser re-smoke passed for MRMS, RTMA Hourly, and RTMA-RU
+after a server restart/hard refresh, with no other issues found. Phase 4 is
+closed and Phase 5 Water is authorized next. Evidence is in
+`docs/perf/2026-07-23-worker-free-phase4/`.
+
 - Treat the MRMS accumulation window as product meaning, not update cadence. NOAA's AWS registry states that MRMS data follows a two-minute update cycle, including accumulation products.
 - Pass the selected MRMS product explicitly through discovery, download, conversion, rendering, and frame-catalog update.
 - Remove request-path prewarming of unrelated MRMS products.

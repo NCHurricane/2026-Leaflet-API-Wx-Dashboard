@@ -6,10 +6,33 @@ import os
 
 from fastapi import HTTPException
 
-from app_core.background_render import spawn_live_render_thread
 from app_core.http import parse_utc_datetime
 from app_core.paths import CACHE_ROOT
+from app_core.refresh_coordinator import Submission, get_refresh_coordinator
 from config.geo_config import STATE_BOUNDS
+
+
+def _start_selected_refresh(
+    family: str,
+    region: str,
+    stream: str,
+    product: str,
+) -> Submission:
+    if family == "mrms":
+        from services.mrms_service import _start_mrms_product_refresh
+
+        return _start_mrms_product_refresh(product)
+    from services.rtma_service import start_rtma_product_refresh
+
+    return start_rtma_product_refresh(region, stream, product)
+
+
+def _refresh_fields(refresh: Submission) -> dict:
+    return {
+        "refreshing": refresh.status in {"queued", "running"},
+        "refresh_status": refresh.status,
+        "retry_after_seconds": refresh.retry_after_seconds,
+    }
 
 
 def get_overlay_latest(
@@ -54,6 +77,13 @@ def get_overlay_latest(
         path_parts = (region_key, stream, product)
     else:
         path_parts = ("CONUS", "default", product)
+
+    refresh = _start_selected_refresh(
+        family,
+        region_key,
+        stream,
+        product,
+    )
 
     if frame_key:
         img_path = flat_overlay_image_path(CACHE_ROOT, family, path_parts, frame_key)
@@ -137,7 +167,7 @@ def get_overlay_latest(
                 detail="Pre-rendered overlay image has been pruned; worker re-render pending.",
             )
 
-    return meta
+    return {**meta, **_refresh_fields(refresh)}
 
 
 def get_overlay_frames(
@@ -167,6 +197,12 @@ def get_overlay_frames(
         (region_key, stream, product)
         if family == "rtma"
         else ("CONUS", "default", product)
+    )
+    refresh = _start_selected_refresh(
+        family,
+        region_key,
+        stream,
+        product,
     )
 
     def _filter_by_lookback(frame_list, grace_minutes=0):
@@ -216,11 +252,25 @@ def get_overlay_frames(
             return 0
 
     def _kick_background_render():
-        return spawn_live_render_thread(
-            ("overlay", family, region_key, stream, product),
-            f"{family}-{region_key}-{stream}-{product}",
-            _render_on_demand,
+        refresh_interval_seconds = (
+            2 * 60
+            if family == "mrms"
+            else (15 * 60 if stream == "rtma_rapid_update" else 60 * 60)
         )
+        submission = get_refresh_coordinator().submit(
+            key=(
+                "overlay-history",
+                family,
+                region_key,
+                stream,
+                product,
+                str(hours_back),
+            ),
+            provider="noaa-mrms" if family == "mrms" else "noaa-rtma",
+            function=_render_on_demand,
+            min_success_interval_seconds=refresh_interval_seconds,
+        )
+        return submission.status in {"queued", "running"}
 
     stale_window_min = OVERLAY_STALE_SERVE_WINDOW_MIN.get(
         "mrms" if family == "mrms" else stream, 30
@@ -234,13 +284,17 @@ def get_overlay_frames(
         stale_frames = _filter_by_lookback(raw_frames, grace_minutes=stale_window_min)
         if stale_frames:
             frames = stale_frames
-            refreshing = _kick_background_render()
 
     if not frames:
         if _render_on_demand(max_render_frames=OVERLAY_EMPTY_CACHE_SYNC_FRAMES) > 0:
             raw_frames = flat_overlay_list_frames(CACHE_ROOT, family, path_parts)
             frames = _filter_by_lookback(raw_frames)
-            refreshing = _kick_background_render()
+
+    # A partial cache is not proof that the requested horizon is complete.
+    # Always ask the coordinator to fill the selected product/lookback in the
+    # background; the horizon-specific key and cadence gate make this cheap
+    # after a successful fill.
+    refreshing = _kick_background_render()
 
     return {
         "family": family,
@@ -248,6 +302,10 @@ def get_overlay_frames(
         "stream": stream,
         "product": product,
         "frame_count": len(frames),
-        "refreshing": refreshing,
+        "refreshing": (
+            refreshing or refresh.status in {"queued", "running"}
+        ),
+        "refresh_status": refresh.status,
+        "retry_after_seconds": refresh.retry_after_seconds,
         "frames": frames,
     }

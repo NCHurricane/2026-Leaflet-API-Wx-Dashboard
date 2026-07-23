@@ -80,11 +80,13 @@ const NAMED_VIEW_PRESETS = {
     },
     'goes-west-full-disk': { bounds: [[-55, -220], [60, -55]], platforms: new Set(['goes18']) },
     'goes-east-full-disk': { bounds: [[-55, -155], [60, -15]], platforms: new Set(['goes19']) },
-    'west-pacific': { bounds: [[-55, 80], [60, 200]], platforms: new Set(['himawari9']) },
-    'europe-africa': { bounds: [[-38, -35], [62, 48]], platforms: new Set(['meteosat12']) },
-    'indian-ocean': { bounds: [[-55, -15], [55, 105]], platforms: new Set(['meteosat9']) },
-    'europe-rss': { bounds: [[25, -15], [65, 35]], platforms: new Set(['meteosat11']) },
-    'himawari-japan': { bounds: [[18, 100], [55, 157]], platforms: new Set(['himawari9']) },
+    // Curated center/zoom framings (see setActiveViewPreset): container-independent,
+    // so these platforms open to the same view on every screen. Captured hand-picked.
+    'west-pacific': { center: [14.82, 163.95], zoom: 4, platforms: new Set(['himawari9']) },
+    'europe-africa': { center: [22.8, 18.22], zoom: 4, platforms: new Set(['meteosat12']) },
+    'indian-ocean': { center: [7.25, 101.71], zoom: 5, platforms: new Set(['meteosat9']) },
+    'europe-rss': { center: [50.76, 31.42], zoom: 4, platforms: new Set(['meteosat11']) },
+    'himawari-japan': { center: [38.47, 141.18], zoom: 6, platforms: new Set(['himawari9']) },
     'himawari-target-current': { bounds: null, platforms: new Set(['himawari9']), dynamic: true },
 };
 
@@ -552,11 +554,11 @@ async function initialize() {
         const safeKey = String(presetKey || '').trim();
         if (select) select.value = safeKey;
         const entry = NAMED_VIEW_PRESETS[safeKey];
-        if (fit && entry?.dynamic) {
-            void fitDynamicViewPreset(safeKey);
-            return;
-        }
-        if (fit && entry?.bounds) fitPresetBounds(entry.bounds);
+        if (!fit || !entry) return;
+        if (entry.dynamic) { void fitDynamicViewPreset(safeKey); return; }
+        // Curated presets pin an exact framing (container-independent); the rest fit a box.
+        if (entry.center) { mapCore.map.setView(entry.center, entry.zoom, { animate: false }); return; }
+        if (entry.bounds) fitPresetBounds(entry.bounds);
     }
 
     function setAutoViewPresetForSelection(satId, sector) {

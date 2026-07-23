@@ -9,16 +9,16 @@ Continue dashboard enhancement work in F:\Python\dashboard_2026.
 
 Read first:
 - docs/dashboard-change-and-enhancement-superfile.md
-- docs/worker-free-render-plan.md, Phase 4 only
+- docs/worker-free-render-plan.md, Phase 5 only
 - docs/phases-25-27-manual-smoke-checklist.md only when checking the older gate
 - docs/architecture.md or docs/patterns.md only when the next change crosses
   those boundaries
 
 Mandatory session-start directive:
-- Start worker-free Phase 4 only: selected-product MRMS refresh and bounded
-  hourly RTMA behavior.
+- Start worker-free Phase 5 only: Water station-index stale-while-refresh,
+  shared rebuilds, and bounded station-detail caching.
 - Do not start, investigate, benchmark, or implement Radar optimization Phase 0
-  in this session. Radar remains deferred until worker-free Phase 4 passes its
+  in this session. Radar remains deferred until worker-free Phase 5 passes its
   documented gate or the user explicitly changes the priority.
 - Do not read `docs/radar-render-optimization-plan.md` or
   `docs/satellite-radar-render-pipeline-files.md` at startup unless the user
@@ -80,6 +80,29 @@ Current checkpoint:
   empty (zero-byte SHP/SHX/DBF), while the parser produced five polygons from a
   non-empty official archived KML. The coordinator log was healthy; no
   issuance-boundary live-upstream proof was performed.
+- Task-scheduler-free Phase 4 is complete. Its first browser smoke drove one
+  focused scrubber correction, and the corrected re-smoke passed. MRMS
+  selected-product coordinator keys enforce a two-minute success interval and
+  pass the product explicitly
+  through discovery, download, conversion, rendering, and catalog publication.
+  Unchanged source keys skip object download/render work, and request paths no
+  longer prewarm unrelated products. RTMA uses an hourly success interval and
+  a two-hour latest discovery window while retaining direct latest rendering
+  and progressive history. A process-wide heavy-render slot serializes MRMS,
+  RTMA, live Radar, and on-demand Satellite tile rendering. The original
+  focused tests passed 14/14. Isolated runtime validation rendered only selected `PrecipRate` and
+  one 17Z RTMA hourly frame; immediate repeats returned `current` with about
+  107 and 3,590 seconds remaining. The first browser smoke then found that
+  partial MRMS/RTMA caches suppressed full-horizon fills and that RTMA-RU did
+  not poll after an initially empty response even though six frames rendered
+  server-side. The correction keys history by requested hours, backfills MRMS
+  history from NODD, selects newest-first RTMA slices correctly, uses a
+  15-minute RTMA-RU cadence, and polls/merges progressive frames every five
+  seconds. The corrected Phase 4/coordinator suite passes 19/19 plus Node syntax
+  checks. The corrected user browser re-smoke passed after a server restart and
+  hard refresh for MRMS, RTMA Hourly, and RTMA-RU, with no other issues found.
+  Phase 4 is closed. Evidence is in
+  `docs/perf/2026-07-23-worker-free-phase4/`.
 - Phase 1 supports one application process only. `WEB_CONCURRENCY` and
   `UVICORN_WORKERS` above 1 are rejected; do not use CLI multi-worker settings
   or legacy direct-write Windows tasks until persistent cross-process leases
@@ -201,6 +224,15 @@ Current checkpoint:
   convert all controls to one visual type.
 
 Validation at handoff:
+- The corrected worker-free Phase 4/coordinator suite passes 19/19. The isolated updated API
+  registered `noaa-mrms`/`noaa-rtma`, rendered only selected `PrecipRate` and
+  one 17Z RTMA hourly frame, and returned `current` on immediate repeats with
+  about 107/3,590 seconds remaining. Focused Ruff, changed-Python compilation,
+  and `git diff --check` pass. The complete suite reaches 176
+  passing tests plus 42 subtests; one unrelated Workspace assertion is stale
+  against concurrent user-owned `fitRegion` edits. This is API/runtime and
+  automated-test evidence. The user browser re-smoke confirmed the corrected
+  MRMS, RTMA Hourly, and RTMA-RU history behavior with no other issues.
 - WPC follow-up tests pass 11/11. Browser proof on the running page confirms
   QPF and direct River Flood products load when checked and fully clear when
   unchecked; SigWx uses its product-specific legend. The isolated updated API
@@ -266,15 +298,14 @@ Validation at handoff:
   `.pytest_cache` write warning.
 
 Next step:
-1. Begin worker-free Phase 4 only: pass the selected MRMS product through
-   discovery/download/render/catalog work, check its source key no more than
-   every two minutes while present, and preserve RTMA's hourly on-demand and
-   progressive-history behavior. Keep Water, Surface gradients, and
+1. Begin worker-free Phase 5 only: enqueue one Water rebuild when the station
+   index is missing/stale, serve the prior complete index during refresh, make
+   the client honor `retry_after_seconds`, share bulk NWPS/CO-OPS/NDBC fetches,
+   and add bounded station-detail caching. Keep Surface gradients and
    Radar/Satellite lease work out of this slice.
 
 Radar optimization Phase 0 is not an alternative next step. It stays deferred
-until Phase 4 is complete and its gate has been reviewed. Track 1 browser
-re-smoke remains user-owned and may continue independently.
+until Phase 5 is complete and its gate has been reviewed.
 
 Guardrails:
 - Browser smoke is user-owned; report static versus browser proof honestly.

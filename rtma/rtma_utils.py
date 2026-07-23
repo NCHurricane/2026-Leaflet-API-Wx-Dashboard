@@ -1334,7 +1334,7 @@ def _warp_to_latlon_grid(
     return warped_masked, [west, east, south, north]
 
 
-def _render_rtma_png_standalone(
+def _render_rtma_png_standalone_unbounded(
     grib_path: str,
     product: str,
     crop_extent: list[float],
@@ -1459,3 +1459,32 @@ def _render_rtma_png_standalone(
         json.dump(meta, f)
 
     return out_path, actual_bounds, meta
+
+
+def _render_rtma_png_standalone(
+    grib_path: str,
+    product: str,
+    crop_extent: list[float],
+    out_path: str,
+    cache_root: str | None = None,
+    source: RtmaSource | None = None,
+    region: str | None = None,
+    stream: str | None = None,
+    lat_1d: np.ndarray | None = None,
+    lon_1d: np.ndarray | None = None,
+) -> tuple[str, list[float], dict]:
+    from app_core.render_budget import heavy_render_slot
+
+    with heavy_render_slot():
+        return _render_rtma_png_standalone_unbounded(
+            grib_path,
+            product,
+            crop_extent,
+            out_path,
+            cache_root=cache_root,
+            source=source,
+            region=region,
+            stream=stream,
+            lat_1d=lat_1d,
+            lon_1d=lon_1d,
+        )

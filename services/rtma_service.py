@@ -8,8 +8,89 @@ import os
 from fastapi import HTTPException
 
 from app_core.paths import BASE_DIR, CACHE_ROOT
+from app_core.refresh_coordinator import Submission, get_refresh_coordinator
 from config.geo_config import STATE_BOUNDS
 from config.rtma_config import RTMA_CITIES_FILE, RTMA_STREAM_MAX_HOURS, clamp_stream_hours
+
+def _rtma_refresh_interval_seconds(stream: str) -> int:
+    return 15 * 60 if stream == "rtma_rapid_update" else 60 * 60
+
+
+def _rtma_refresh_key(
+    region: str,
+    stream: str,
+    product: str,
+) -> tuple[str, ...]:
+    return ("rtma", "latest", region.upper(), stream, product)
+
+
+def _refresh_rtma_product(
+    region: str,
+    stream: str,
+    product: str,
+) -> dict:
+    from workers.rtma_live_worker import run_rtma_live_product
+
+    rendered = run_rtma_live_product(
+        region,
+        stream,
+        product,
+        force=True,
+        latest_only=True,
+        max_hours=2,
+    )
+    if rendered <= 0:
+        raise FileNotFoundError(
+            f"No current RTMA source found for {region}/{stream}/{product}"
+        )
+    return {
+        "region": region,
+        "stream": stream,
+        "product": product,
+        "rendered_frames": rendered,
+    }
+
+
+def start_rtma_product_refresh(
+    region: str,
+    stream: str,
+    product: str,
+) -> Submission:
+    from rtma.rtma_utils import get_product_config
+
+    region_key = region.upper()
+    if region_key not in STATE_BOUNDS:
+        raise HTTPException(status_code=400, detail=f"Unknown RTMA region '{region}'.")
+    if stream not in RTMA_STREAM_MAX_HOURS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported RTMA stream '{stream}'.",
+        )
+    try:
+        get_product_config(product)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    coordinator = get_refresh_coordinator()
+    key = _rtma_refresh_key(region_key, stream, product)
+    coordinator.record_presence(
+        key=key,
+        provider="noaa-rtma",
+    )
+    return coordinator.submit(
+        key=key,
+        provider="noaa-rtma",
+        function=lambda: _refresh_rtma_product(region_key, stream, product),
+        min_success_interval_seconds=_rtma_refresh_interval_seconds(stream),
+    )
+
+
+def _refresh_status_fields(refresh: Submission) -> dict:
+    return {
+        "refreshing": refresh.status in {"queued", "running"},
+        "refresh_status": refresh.status,
+        "retry_after_seconds": refresh.retry_after_seconds,
+    }
 
 
 def get_rtma_points(
@@ -41,6 +122,7 @@ def get_rtma_points(
             status_code=400,
             detail="RTMA 24-hour temperature change is only available on rtma_hourly.",
         )
+    refresh = None
 
     if south is not None and west is not None and north is not None and east is not None:
         bounds_values = (float(south), float(west), float(north), float(east))
@@ -115,6 +197,8 @@ def get_rtma_points(
     stale_cached_payload = None
     try:
         product_cfg = get_product_config(product)
+        if source_data_key is None:
+            refresh = start_rtma_product_refresh(region_key, stream, product)
         if source_data_key:
             token = "".join(
                 ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
@@ -154,7 +238,10 @@ def get_rtma_points(
                     (meta or {}).get("cities_file") == RTMA_CITIES_FILE
                     and (meta or {}).get("cities_size") == cities_size
                 ):
-                    return stale_cached_payload
+                    return {
+                        **stale_cached_payload,
+                        **(_refresh_status_fields(refresh) if refresh else {}),
+                    }
 
             source = resolve_rtma_source_by_data_key(
                 region_key,
@@ -169,7 +256,10 @@ def get_rtma_points(
         raise HTTPException(status_code=400, detail=str(exc))
     except FileNotFoundError as exc:
         if stale_cached_payload is not None:
-            return stale_cached_payload
+            return {
+                **stale_cached_payload,
+                **(_refresh_status_fields(refresh) if refresh else {}),
+            }
         raise HTTPException(status_code=503, detail=str(exc))
 
     geojson_path = None
@@ -245,6 +335,7 @@ def get_rtma_points(
         "region": region_key,
         "stream": stream,
         "product": product,
+        **(_refresh_status_fields(refresh) if refresh else {}),
     }
 
 
@@ -273,11 +364,14 @@ def get_rtma_grid(
             status_code=400,
             detail="RTMA 24-hour temperature change is only available on rtma_hourly.",
         )
+    refresh = None
 
     stride = max(1, min(stride, 64))
 
     try:
         product_cfg = get_product_config(product)
+        if source_data_key is None:
+            refresh = start_rtma_product_refresh(region_key, stream, product)
         if source_data_key:
             source = resolve_rtma_source_by_data_key(
                 region_key,
@@ -347,6 +441,7 @@ def get_rtma_grid(
         "stream": stream,
         "stride": stride,
         "points": data.get("points", []),
+        **(_refresh_status_fields(refresh) if refresh else {}),
     }
 
 
@@ -378,9 +473,12 @@ def get_rtma_data(
             status_code=400,
             detail="RTMA 24-hour temperature change is only available on rtma_hourly.",
         )
+    refresh = None
 
     try:
         product_cfg = get_product_config(product)
+        if source_data_key is None:
+            refresh = start_rtma_product_refresh(region_key, stream, product)
         if source_data_key:
             source = resolve_rtma_source_by_data_key(
                 region_key,
@@ -566,6 +664,7 @@ def get_rtma_data(
         "legend": render_meta.get("legend"),
         "timestamp": render_meta.get("timestamp") or source.valid_time.isoformat(),
         "source_data_key": source.data_key,
+        **(_refresh_status_fields(refresh) if refresh else {}),
     }
 
 
@@ -591,11 +690,11 @@ def get_rtma_frames(
             status_code=400,
             detail="RTMA 24-hour temperature change is only available on rtma_hourly.",
         )
-
     try:
         product_cfg = get_product_config(product)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    refresh = start_rtma_product_refresh(region_key, stream, product)
 
     hours_back = clamp_stream_hours(stream, max_hours)
     try:
@@ -631,4 +730,5 @@ def get_rtma_frames(
         "hours_back": hours_back,
         "frame_count": len(frames),
         "frames": frames,
+        **_refresh_status_fields(refresh),
     }

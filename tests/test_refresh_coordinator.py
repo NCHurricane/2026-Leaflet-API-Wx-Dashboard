@@ -171,6 +171,35 @@ def test_provider_policy_serializes_and_spaces_refresh_starts():
         coordinator.stop()
 
 
+def test_success_interval_returns_current_without_requeueing():
+    coordinator = _coordinator()
+    calls = []
+    coordinator.start()
+    try:
+        first = coordinator.submit(
+            key=("paced", "selected-product"),
+            provider="test",
+            function=lambda: calls.append("run"),
+            min_success_interval_seconds=60,
+        )
+        assert first.accepted
+        assert coordinator.wait_for_idle(timeout=1)
+
+        current = coordinator.submit(
+            key=("paced", "selected-product"),
+            provider="test",
+            function=lambda: calls.append("duplicate"),
+            min_success_interval_seconds=60,
+        )
+
+        assert not current.accepted
+        assert current.status == "current"
+        assert 0 < current.retry_after_seconds <= 60
+        assert calls == ["run"]
+    finally:
+        coordinator.stop()
+
+
 def test_periodic_job_runs_without_request_presence():
     coordinator = _coordinator(maintenance_interval_seconds=0.005)
     ran = threading.Event()
