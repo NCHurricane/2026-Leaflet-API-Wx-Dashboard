@@ -1,5 +1,9 @@
 # Satellite & Radar Render Pipeline — File Reference
 
+Active Radar companion to `docs/radar-render-optimization-plan.md`. The
+Satellite section is retained as the historical pipeline map for the completed
+Satellite optimization track.
+
 Prepared 2026-07-11 for a speed-focused pipeline review (click -> download ->
 render -> output). Files are ordered by pipeline stage, not alphabetically.
 Config files with the actual tunable knobs (worker counts, cache sizes,

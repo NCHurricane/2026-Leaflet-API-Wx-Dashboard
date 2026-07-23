@@ -2,7 +2,7 @@
 
 Phase 0 captured the unoptimized post-GeoColor/opacity renderer before any
 latency changes. The benchmark used the nine-row matrix from
-`docs/satellite-render-optimization-plan.md`, all three scenarios, five samples
+`docs/archive/satellite-render-optimization-plan.md`, all three scenarios, five samples
 per scenario, and one 3x3 live-supertile footprint per sample.
 
 - Results: `baseline-summary.md` plus the consolidated 135-record

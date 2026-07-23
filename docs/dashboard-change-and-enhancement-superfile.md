@@ -1,9 +1,9 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-22 (Satellite render optimization Phases 0–4 are
-committed. Phase 5 rapid-worker pool reuse is complete locally with 81
-byte-identical goldens and a 76.3% steady warm-path gain; Phase 5 commit
-pending.)
+Last updated: 2026-07-22 (Satellite render optimization Phases 0–5 are
+committed. The execution track is closed with 81 byte-identical goldens and a
+76.3% Phase 5 steady warm-path gain; optional Phase 6 is deferred. A dedicated
+measure-first Radar render optimization plan is now ready for Phase 0.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -18,11 +18,11 @@ Keep separate:
 - `docs/next-session-startup-prompt.md` for the short current handoff.
 - `docs/phases-25-27-manual-smoke-checklist.md` for the deferred consolidated
   browser gate after the no-intermediate-smoke Phase 25-27 execution.
-- `docs/satellite-render-optimization-plan.md` for the active satellite
-  latency execution plan (archive to `docs/archive/` when its phases
-  complete).
-- `docs/satellite-radar-render-pipeline-files.md` for the satellite/radar
-  render pipeline file reference (companion to the optimization plan).
+- `docs/archive/satellite-render-optimization-plan.md` for historical Satellite
+  optimization execution detail.
+- `docs/radar-render-optimization-plan.md` for the active Radar latency plan.
+- `docs/satellite-radar-render-pipeline-files.md` for the shared pipeline file
+  reference; its Radar section is active and its Satellite section is historical.
 
 ## Active Tracks (2026-07-20)
 
@@ -40,13 +40,13 @@ post-split structure, not the monolith.
    Its later detail-panel, Region, legend, and sidebar-style follow-ups are
    implemented and statically validated but still need browser re-smoke;
    optional Water enhancements remain deferred.
-2. Satellite render pipeline latency optimization — standalone execution
-   plan in `docs/satellite-render-optimization-plan.md`, registered in the
-   satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
-   may interleave with track 1; the two touch disjoint files. Phases 0–3 are
-   committed; Phase 5 is complete locally. Optional Phase 6 warp threading is
-   deferred unless later real-run profiling reopens it.
-3. GK2A + GMGSI new platforms. Adds `PLATFORM_*` entries to
+2. Radar render pipeline latency optimization — execution-grade plan prepared
+   in `docs/radar-render-optimization-plan.md`; Phase 0 benchmark/golden capture
+   is next. Backend-only and may interleave with Track 1.
+3. Satellite render pipeline latency optimization — complete through Phase 5
+   and archived. Optional Phase 6 warp threading is deferred unless later
+   real-run profiling and explicit approval reopen it.
+4. GK2A + GMGSI new platforms. Adds `PLATFORM_*` entries to
    `js/satellite-page.js`; if started mid-split those entries must be
    ported to `pages/satellite/`, so prefer starting it before the split
    reaches satellite or after that page migration completes.
@@ -54,6 +54,11 @@ post-split structure, not the monolith.
 ## Current State
 
 - Active repo: `F:\Python\dashboard_2026`.
+- Radar render optimization is planned but not implemented. Phase 0 will add a
+  safe scratch-only benchmark and eight-row golden matrix before any behavior
+  changes. The first measured candidate is newest-frame-first empty-cache
+  response; later gated candidates are process-pool reuse, Level II source/decode
+  deduplication, discovery/finalize I/O, and optional renderer internals.
 - Satellite optimization Phase 0 was committed at `a6f5f83`; Phase 1 was
   committed at `fc534ba`: NetCDF LRU correctness, cheap PNG hit validation, and a
   geometry-aware composite meshgrid gate. The full 81-tile golden comparison
@@ -73,11 +78,11 @@ post-split structure, not the monolith.
   Microphysics reused Channel13 without reparsing and reduced unique grid
   weight from 473.062 MB to 354.797 MB. Results live under
   `docs/perf/2026-07-22-phase4/`.
-- Phase 5 is complete locally: the rapid worker owns one process pool per run,
+- Phase 5 is committed at `168510f`: the rapid worker owns one process pool per run,
   and no-op jobs skip their trailing catalog rebuild. The pinned two-zoom MESO
   probe improved from 3514.710 ms to 832.513 ms steady p50 (76.3%); task-per-
   zoom parallelism remains. Results live under
-  `docs/perf/2026-07-22-phase5/`; commit pending.
+  `docs/perf/2026-07-22-phase5/`.
 - Phase 0 delivered env-gated
   timing hooks, safe benchmark CLI, nine-row/three-scenario baseline, manifests,
   summaries, and 81 byte-identical golden-tile checks. Baseline artifacts live
@@ -2283,14 +2288,13 @@ GeoColor opacity work).
 
 ### Satellite render pipeline latency optimization — registered 2026-07-16
 
-Active track 2 (see Active Tracks). Status: Phase 0 committed at `a6f5f83`,
-Phase 1 at `fc534ba`, Phase 2 at `8ee3a4b`, Phase 3 at `29b83b6`, Phase 4 at `39de302`, and Phase 5 complete locally with commit pending. The standalone
-execution plan is `docs/satellite-render-optimization-plan.md` (prepared
-2026-07-11), with the file-reference companion
-`docs/satellite-radar-render-pipeline-files.md`. Both stay standalone while
-the work is active (they carry execution-grade protocol: bench CLI, golden
-tiles, baseline matrix); archive them per the Archived Source Docs pattern
-when the phases complete.
+Completed track 3 (see Active Tracks). Status: Phase 0 committed at `a6f5f83`,
+Phase 1 at `fc534ba`, Phase 2 at `8ee3a4b`, Phase 3 at `29b83b6`, Phase 4 at `39de302`, and Phase 5 at `168510f`. The archived standalone
+execution plan is `docs/archive/satellite-render-optimization-plan.md` (prepared
+2026-07-11). The shared file reference is active again at
+`docs/satellite-radar-render-pipeline-files.md` for the new Radar track. The
+archived Satellite plan retains its benchmark CLI, golden matrix, and phase
+decisions; this superfile carries the durable final status.
 
 - Goal: minimize end-to-end tile latency at high zoom with **bit-identical**
   pixel output; no render-version bumps; protected knobs untouched.
@@ -2332,6 +2336,34 @@ when the phases complete.
   current rapid policy tops at z7 and the representative Phase 5 steady warm
   path is below one second. Reopen warp threading only after a real rapid-run
   profile and explicit approval for its new knob.
+
+### Radar render pipeline latency optimization — registered 2026-07-22
+
+Active track 2 (see Active Tracks). The execution plan is
+`docs/radar-render-optimization-plan.md`; the active pipeline map is
+`docs/satellite-radar-render-pipeline-files.md`. No Radar runtime behavior has
+changed yet.
+
+- Goal: reduce first usable newest-frame latency and background loop-fill time
+  while preserving byte-identical PNGs and exact bounds, timestamps, frame
+  order, elevations, sweep selection, palettes, masks, units, and cache keys.
+- Phase 0: add a scratch-only `radar.bench` harness, structured stage timings,
+  process working-set evidence, and an eight-row L2/L3 golden matrix.
+- Phase 1 candidate: on an empty frame cache, return one newest frame before the
+  remaining initial/history renders continue through the existing deduplicated
+  background path.
+- Phase 2 candidate: reuse one bounded render-process pool across scheduled or
+  backfill batches without changing `LIVE_RADAR_PARALLEL_WORKERS`.
+- Phase 3 candidate: prove and then remove duplicate Level II source storage and
+  Py-ART decodes across moments from the same site/volume. Dynamic SRV motion
+  variants remain separate render/cache products.
+- Phase 4 candidate: reuse unchanged discovery results and replace same-volume
+  temporary PNG copies with atomic moves, subject to crash-recovery tests.
+- Phase 5 is optional and measure-first: renderer-internal changes are attempted
+  only if plot/encode remains dominant and are rejected on the first output
+  mismatch.
+- `LIVE_RADAR_L2_USE_CHUNKS` remains `False`. The prior chunks experiment showed
+  no latency advantage for completed scans and is not part of this track.
 
 ### International radar
 
@@ -2446,6 +2478,7 @@ to `docs/archive/`:
 - `product-page-shell-plan.md`
 - `refactor-playbook.md`
 - `refactor-dossier.md`
+- `satellite-render-optimization-plan.md`
 
 Keep archived files for historical detail. Prefer this superfile for current
 planning and status.

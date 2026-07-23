@@ -2,7 +2,7 @@
 // Per-page instances only — no global modes. Pages own the container element
 // and the frame objects ({label, ...}); onFrame receives (frame, index).
 
-const SPEED_STEPS = [0.5, 1, 2, 4];
+const SPEED_STEPS = [0.5, 1, 2, 4, 6, 8];
 const BASE_INTERVAL_MS = 1000;
 const LOOP_HOLD_MULTIPLIER = 2;
 

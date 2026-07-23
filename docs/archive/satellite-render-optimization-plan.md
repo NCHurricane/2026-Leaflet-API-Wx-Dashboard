@@ -1,9 +1,11 @@
 # Satellite Render Pipeline — Latency Optimization Plan
 
-Prepared 2026-07-11; execution began 2026-07-22. Companion to
-`docs/satellite-radar-render-pipeline-files.md` (file reference). Scope is
-`satellite_v2` only; radar is explicitly out of scope for Phases 0–6 (the
-Phase 0 harness methodology is reusable there later).
+Prepared 2026-07-11; execution ran 2026-07-22 and completed through Phase 5.
+Phase 6 remains deferred unless later profiling and explicit approval reopen
+it. Companion to `docs/satellite-radar-render-pipeline-files.md` (the shared
+pipeline reference, now active for Radar). Scope is `satellite_v2` only; radar
+is explicitly out of scope for Phases 0–6 (the Phase 0 harness methodology is
+reused by the dedicated Radar plan).
 
 **Goal:** minimize end-to-end tile latency (click → download → parse →
 reproject → colorize → PNG → response) at high zoom, with pixel output
@@ -416,7 +418,7 @@ full suite passes 105 tests plus 42 subtests.
 
 ## Phase 5 — Warm-path pool efficiency (rapid_worker.py, tiler.py)
 
-**Status (2026-07-22): complete locally, checkpoint commit pending.** The rapid
+**Status (2026-07-22): committed at `168510f`.** The rapid
 worker now owns one process pool for its entire run and passes it through every
 frame/job. Fully warm jobs with zero renders and zero errors skip the redundant
 trailing catalog rebuild. On the isolated pinned MESO two-zoom workload,
@@ -459,8 +461,7 @@ tests pass 37/37 and the full suite passes 109 tests plus 42 subtests.
 
 `rio_reproject(num_threads=N)` chunks the destination internally; output is
 deterministic. Candidate **only** for big warm-path canvases, never the live
-per-tile path (would
-oversubscribe against the 10-thread live pool). Gate behind
+per-tile path (would oversubscribe against the 10-thread live pool). Gate behind
 `WX_SATELLITE_V2_WARP_THREADS` (new env-only flag, default 1 = today).
 Implement only if Phase 5's numbers show warp dominating warm runs.
 
@@ -486,8 +487,8 @@ approves the experiment.
    `docs/perf/2026-07-22-phase3/`.
 6. Phase 4 committed at `39de302`; results are under
    `docs/perf/2026-07-22-phase4/`.
-7. Phase 5 complete locally; commit the pool-reuse slice and results under
-   `docs/perf/2026-07-22-phase5/`. Each phase is gated on golden byte-identity,
+7. Phase 5 committed at `168510f`; results are under
+   `docs/perf/2026-07-22-phase5/`. Each phase was gated on golden byte-identity,
    its target metric moving, and a clean full-matrix run.
 8. After each phase: commit with the phase number in the message; update the
    `docs/perf/` summary table with before/after p50s.

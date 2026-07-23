@@ -5,10 +5,12 @@ Date prepared: 2026-07-22
 Start in `F:\Python\dashboard_2026`.
 
 ```text
-Continue Satellite render optimization in F:\Python\dashboard_2026.
+Continue dashboard enhancement work in F:\Python\dashboard_2026.
 
 Read first:
 - docs/dashboard-change-and-enhancement-superfile.md
+- docs/radar-render-optimization-plan.md when continuing Radar performance work
+- docs/satellite-radar-render-pipeline-files.md as the Radar pipeline map
 - docs/phases-25-27-manual-smoke-checklist.md only when checking the older gate
 - docs/architecture.md or docs/patterns.md only when the next change crosses
   those boundaries
@@ -46,13 +48,24 @@ Current checkpoint:
   identity: three unique grids occupy 354.797 MB instead of 473.062 MB without
   deduplication, saving 118.266 MB and one parse. Results are in
   `docs/perf/2026-07-22-phase4/`.
-- Phase 5 is complete locally and awaits its checkpoint commit. The rapid
+- Phase 5 is committed at `168510f`. The rapid
   worker reuses one process pool across all frames/jobs and skips the trailing
   catalog rebuild for jobs with zero renders and zero errors. A pinned MESO
   two-zoom probe improved from 3514.710 ms to 832.513 ms steady p50 (76.3%).
   Task-per-zoom parallelism remains because cached parsing was only 12.888 ms
   p50. The pool paths produced 40 byte-identical PNGs and matching negative
   markers; results are in `docs/perf/2026-07-22-phase5/`.
+- The Satellite render optimization track is closed through Phase 5. Its
+  execution plan is archived under `docs/archive/`; the shared pipeline file
+  reference is active again for Radar.
+  Optional Phase 6 warp threading remains deferred unless later profiling and
+  explicit approval reopen it.
+- Radar render optimization now has a dedicated measure-first plan. No Radar
+  behavior has changed. Phase 0 will add a scratch-only benchmark harness and
+  eight-row L2/L3 golden baseline. Later candidates—newest-frame-first response,
+  pool reuse, Level II source/decode deduplication, and discovery/finalize I/O—
+  remain gated on the baseline. The flat NODD path stays authoritative and
+  `LIVE_RADAR_L2_USE_CHUNKS` remains `False`.
 - The user completed the 2026-07-20 all-page manual smoke and clarified every
   finding. The correction set is implemented; page-by-page browser re-smoke is
   in progress and has not yet covered the full set.
@@ -145,10 +158,11 @@ Validation at handoff:
   `.pytest_cache` write warning.
 
 Next step:
-1. Review and commit the Phase 5 code, tests, docs, and compact results.
-2. Treat Phase 6 GDAL warp threading as deferred. Reopen it only after a real
-   rapid-run profile shows warp is still material and the user approves the new
-   tuning knob; otherwise close/archive the optimization execution plan.
+1. Commit this docs-only Satellite closeout and Radar planning correction.
+2. Begin Radar optimization Phase 0 only: benchmark harness, pinned baseline,
+   structured timings, and golden capture with no behavior changes.
+3. Review measurements before implementing Phase 1. Track 1 browser re-smoke
+   remains user-owned and can continue independently.
 
 Guardrails:
 - Browser smoke is user-owned; report static versus browser proof honestly.
