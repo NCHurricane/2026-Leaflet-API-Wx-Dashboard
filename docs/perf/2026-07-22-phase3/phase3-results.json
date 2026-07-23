@@ -1,0 +1,29 @@
+{
+  "metric": "requested_tile_total_ms_p50",
+  "samples_per_row": 5,
+  "rows": [
+    {
+      "target": "himawari9/FULLDISK/Channel13/z5",
+      "phase2_ms": 2392.322,
+      "phase3_ms": 1206.521,
+      "improvement_percent": 49.6,
+      "phase2_parse_ms": 2314.232,
+      "phase3_parse_ms": 1120.945
+    },
+    {
+      "target": "meteosat12/FULLDISK/NighttimeMicrophysics/z5",
+      "phase2_ms": 7462.566,
+      "phase3_ms": 4236.806,
+      "improvement_percent": 43.2,
+      "phase2_parse_ms": 7279.744,
+      "phase3_parse_ms": 4047.660
+    },
+    {
+      "target": "meteosat12/FULLDISK/Channel13/z5",
+      "phase0_ms": 2996.476,
+      "phase3_ms": 2656.927,
+      "role": "single-channel control"
+    }
+  ]
+}
+

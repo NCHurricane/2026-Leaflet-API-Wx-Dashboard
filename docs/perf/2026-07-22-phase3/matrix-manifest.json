@@ -1,0 +1,16 @@
+{
+  "comparison_date": "2026-07-22",
+  "full_matrix_golden_tiles": 81,
+  "headline_repeat_count": 5,
+  "headline_rows": [
+    "himawari9/FULLDISK/Channel13/z5",
+    "meteosat12/FULLDISK/Channel13/z5",
+    "meteosat12/FULLDISK/NighttimeMicrophysics/z5"
+  ],
+  "phase2_commit": "8ee3a4b",
+  "phase3_commit": "pending",
+  "raw_output_dir": "cache/satellite/.bench/phase3-final-raw",
+  "tiles_per_row": "3x3",
+  "worker_state_note": "No scheduled Satellite tasks were registered."
+}
+

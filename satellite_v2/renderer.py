@@ -10,6 +10,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -306,7 +307,28 @@ def _load_renderer_uncached(
     instrument: str | None,
 ) -> "SatelliteTileRenderer":
     rasters = {}
+    remaining = list(required)
+    fci_groups: dict[Path, list[str]] = {}
     for source_channel in required:
+        source_path = Path(source_files[source_channel])
+        if _is_fci_chunk_file(source_path):
+            fci_groups.setdefault(source_path.parent.resolve(), []).append(source_channel)
+
+    for channels in fci_groups.values():
+        if len(channels) < 2:
+            continue
+        parse_started = time.perf_counter() if bench_enabled() else 0.0
+        rasters.update(
+            _load_fci_source_rasters(Path(source_files[channels[0]]), channels)
+        )
+        if bench_enabled():
+            add_timing_ms(
+                "parse_ms{FCI-batch}",
+                (time.perf_counter() - parse_started) * 1000.0,
+            )
+        remaining = [channel for channel in remaining if channel not in channels]
+
+    for source_channel in remaining:
         parse_started = time.perf_counter() if bench_enabled() else 0.0
         rasters[source_channel] = _load_source_raster(
             source_files[source_channel], source_channel
@@ -760,6 +782,26 @@ def _load_source_raster(
         satellite_longitude=lon_origin,
         satellite_height_km=height / 1000.0,
     )
+
+
+def _load_fci_source_rasters(
+    primary_chunk: Path, source_channels: Sequence[str]
+) -> dict[str, SourceRaster]:
+    """Load multiple FCI channels in one pass over their shared chunks."""
+    from satellite_v2.fci_nc import load_fci_rasters
+
+    chunk_paths = sorted(
+        path for path in primary_chunk.parent.iterdir() if _is_fci_chunk_file(path)
+    )
+    rasters = load_fci_rasters(chunk_paths, source_channels)
+    return {
+        source_channel: SourceRaster(
+            cmi=raster.values,
+            src_transform=raster.src_transform,
+            src_crs=raster.src_crs,
+        )
+        for source_channel, raster in rasters.items()
+    }
 
 
 def _canvas_lon_lat_grid(

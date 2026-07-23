@@ -296,3 +296,34 @@ def test_submit_tile_render_deduplicates_in_flight_target(tmp_path, monkeypatch)
 
     first.set_result((target, {"cache_status": "miss"}))
     assert service._IN_FLIGHT_TILE_RENDERS == {}
+
+
+def test_renderer_batches_fci_channels_from_shared_chunk_directory(tmp_path, monkeypatch):
+    source_files = {
+        channel: tmp_path / f"FCI-1C-RRAD-FDHSI-CHK-BODY-{channel}.nc"
+        for channel in ("Channel07", "Channel13", "Channel15")
+    }
+    loaded = {channel: object() for channel in source_files}
+    calls = []
+
+    def fake_batch(primary, channels):
+        calls.append((primary, tuple(channels)))
+        return {channel: loaded[channel] for channel in channels}
+
+    monkeypatch.setattr(renderer, "_load_fci_source_rasters", fake_batch)
+    monkeypatch.setattr(
+        renderer,
+        "_load_source_raster",
+        lambda *_args, **_kwargs: pytest.fail("FCI channels should use one batch load"),
+    )
+
+    result = renderer._load_renderer_uncached(
+        renderer.SatelliteTileRenderer,
+        "NighttimeMicrophysics",
+        source_files,
+        tuple(source_files),
+        "FCI",
+    )
+
+    assert calls == [(source_files["Channel07"], tuple(source_files))]
+    assert result.source_rasters == loaded

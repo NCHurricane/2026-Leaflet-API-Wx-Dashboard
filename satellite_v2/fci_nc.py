@@ -9,7 +9,7 @@ SourceRaster-compatible geostationary grid used by the shared tile renderer
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
@@ -30,6 +30,20 @@ class FciRaster:
     src_transform: object
     src_crs: object
     channel_name: str
+
+
+@dataclass
+class _FciChannelState:
+    channel_name: str
+    strips: list[tuple[int, np.ndarray]] = field(default_factory=list)
+    x_attrs: dict | None = None
+    y_attrs: dict | None = None
+    projection_attrs: dict | None = None
+    full_cols: int = 0
+    full_rows: int = 0
+    stride: int = 1
+    offset: int = 0
+    out_cols: int = 0
 
 
 def _normalize_fci_channel(channel: str) -> str:
@@ -101,116 +115,144 @@ def _chunk_paths(paths: Sequence[str | Path]) -> list[Path]:
         raise ValueError("No FCI CHK-BODY NetCDF chunks were provided.")
     return result
 
+def load_fci_rasters(
+    chunk_files: Sequence[str | Path],
+    channels: Sequence[str],
+    max_grid: int = SATELLITE_V2_FCI_MAX_GRID,
+) -> dict[str, FciRaster]:
+    """Load multiple FCI channels while opening each body chunk only once."""
+    paths = _chunk_paths(chunk_files)
+    requested = [str(channel) for channel in channels]
+    if not requested:
+        raise ValueError("No FCI channels were requested.")
+    states = {
+        channel: _FciChannelState(_normalize_fci_channel(channel))
+        for channel in requested
+    }
+
+    for path in paths:
+        with netCDF4.Dataset(path) as ds:
+            data_group = ds.groups["data"]
+            projection = data_group.variables["mtg_geos_projection"]
+            projection_attrs = {
+                name: getattr(projection, name) for name in projection.ncattrs()
+            }
+            for state in states.values():
+                if state.channel_name not in data_group.groups:
+                    raise ValueError(
+                        f"FCI chunk is missing channel {state.channel_name}: {path}"
+                    )
+                measured = data_group.groups[state.channel_name].groups["measured"]
+                start_row = int(np.asarray(measured.variables["start_position_row"][:]))
+                end_row = int(np.asarray(measured.variables["end_position_row"][:]))
+                start_col = int(np.asarray(measured.variables["start_position_column"][:]))
+                end_col = int(np.asarray(measured.variables["end_position_column"][:]))
+                if start_col != 1:
+                    raise ValueError(f"FCI partial-width chunks are not supported: {path}")
+                if state.full_cols == 0:
+                    state.full_cols = end_col
+                    state.stride = max(1, end_col // max(1, int(max_grid)))
+                    state.offset = state.stride // 2
+                    state.out_cols = len(range(state.offset, state.full_cols, state.stride))
+                elif end_col != state.full_cols:
+                    raise ValueError(
+                        f"FCI chunk width mismatch ({end_col} vs {state.full_cols}): {path}"
+                    )
+                state.full_rows = max(state.full_rows, end_row)
+                state.projection_attrs = projection_attrs
+                if state.x_attrs is None:
+                    x_var = measured.variables["x"]
+                    y_var = measured.variables["y"]
+                    state.x_attrs = {
+                        name: getattr(x_var, name) for name in x_var.ncattrs()
+                    }
+                    state.y_attrs = {
+                        name: getattr(y_var, name) for name in y_var.ncattrs()
+                    }
+
+                first_sampled = (start_row - 1) + (
+                    (state.offset - (start_row - 1)) % state.stride
+                )
+                if first_sampled > end_row - 1:
+                    continue
+                radiance = np.ma.filled(
+                    measured.variables["effective_radiance"][:], np.nan
+                ).astype(np.float32)
+                if state.stride > 1:
+                    local_first = first_sampled - (start_row - 1)
+                    radiance = radiance[
+                        local_first::state.stride, state.offset::state.stride
+                    ]
+                calibrated = _calibrate_radiance(
+                    radiance, measured, state.channel_name
+                )
+                expected_rows = (
+                    (end_row - 1 - first_sampled) // state.stride + 1
+                )
+                if (
+                    calibrated.shape[0] != expected_rows
+                    or calibrated.shape[1] != state.out_cols
+                ):
+                    raise ValueError(
+                        f"FCI chunk shape mismatch for rows {start_row}-{end_row}: "
+                        f"{calibrated.shape}, expected ({expected_rows}, {state.out_cols})."
+                    )
+                state.strips.append(
+                    ((first_sampled - state.offset) // state.stride, calibrated)
+                )
+
+    results: dict[str, FciRaster] = {}
+    for channel, state in states.items():
+        if (
+            state.x_attrs is None
+            or state.y_attrs is None
+            or state.projection_attrs is None
+        ):
+            raise ValueError("FCI chunks did not expose projection metadata.")
+        out_rows = len(range(state.offset, state.full_rows, state.stride))
+        values_raw = np.full(
+            (out_rows, state.out_cols), np.nan, dtype=np.float32
+        )
+        for out_row0, strip in state.strips:
+            values_raw[out_row0 : out_row0 + strip.shape[0], :] = strip
+
+        values = values_raw[::-1, :]
+        projection_attrs = state.projection_attrs
+        height = float(projection_attrs["perspective_point_height"])
+        x_raw = _scaled_axis(state.x_attrs, state.full_cols)[state.offset::state.stride]
+        y_raw = _scaled_axis(state.y_attrs, state.full_rows)[state.offset::state.stride]
+        x_centers = -(x_raw * height)
+        y_centers = y_raw[::-1] * height
+        x_half = float(np.nanmedian(np.diff(x_centers))) / 2.0
+        y_half = abs(float(np.nanmedian(np.diff(y_centers)))) / 2.0
+        src_transform = rio_from_bounds(
+            float(x_centers[0] - x_half),
+            float(y_centers[-1] - y_half),
+            float(x_centers[-1] + x_half),
+            float(y_centers[0] + y_half),
+            state.out_cols,
+            out_rows,
+        )
+        proj4 = (
+            f"+proj=geos +h={height:.3f} "
+            f"+lon_0={float(projection_attrs['longitude_of_projection_origin'])} "
+            f"+sweep={projection_attrs.get('sweep_angle_axis', 'y')} "
+            f"+a={float(projection_attrs['semi_major_axis']):.3f} "
+            f"+b={float(projection_attrs['semi_minor_axis']):.3f} +units=m +no_defs"
+        )
+        results[channel] = FciRaster(
+            values=values,
+            src_transform=src_transform,
+            src_crs=RioCRS.from_proj4(proj4),
+            channel_name=state.channel_name,
+        )
+    return results
+
+
 def load_fci_raster(
     chunk_files: Sequence[str | Path],
     channel: str,
     max_grid: int = SATELLITE_V2_FCI_MAX_GRID,
 ) -> FciRaster:
-    """Load one FCI channel from a set of body chunk NetCDF files."""
-    paths = _chunk_paths(chunk_files)
-    channel_name = _normalize_fci_channel(channel)
-
-    strips: list[tuple[int, np.ndarray]] = []
-    x_attrs: dict | None = None
-    y_attrs: dict | None = None
-    projection_attrs: dict | None = None
-    full_cols = 0
-    full_rows = 0
-    stride = 1
-    offset = 0
-    out_cols = 0
-
-    for path in paths:
-        with netCDF4.Dataset(path) as ds:
-            data_group = ds.groups["data"]
-            if channel_name not in data_group.groups:
-                raise ValueError(f"FCI chunk is missing channel {channel_name}: {path}")
-            projection = data_group.variables["mtg_geos_projection"]
-            projection_attrs = {name: getattr(projection, name) for name in projection.ncattrs()}
-            measured = data_group.groups[channel_name].groups["measured"]
-            start_row = int(np.asarray(measured.variables["start_position_row"][:]))
-            end_row = int(np.asarray(measured.variables["end_position_row"][:]))
-            start_col = int(np.asarray(measured.variables["start_position_column"][:]))
-            end_col = int(np.asarray(measured.variables["end_position_column"][:]))
-            if start_col != 1:
-                raise ValueError(f"FCI partial-width chunks are not supported: {path}")
-            if full_cols == 0:
-                full_cols = end_col
-                stride = max(1, end_col // max(1, int(max_grid)))
-                offset = stride // 2
-                out_cols = len(range(offset, full_cols, stride))
-            elif end_col != full_cols:
-                raise ValueError(
-                    f"FCI chunk width mismatch ({end_col} vs {full_cols}): {path}"
-                )
-            full_rows = max(full_rows, end_row)
-            if x_attrs is None:
-                x_var = measured.variables["x"]
-                y_var = measured.variables["y"]
-                x_attrs = {name: getattr(x_var, name) for name in x_var.ncattrs()}
-                y_attrs = {name: getattr(y_var, name) for name in y_var.ncattrs()}
-
-            # First 0-based full-grid row in this strip that lands on the
-            # strided sample lattice (offset, offset+stride, ...).
-            first_sampled = (start_row - 1) + ((offset - (start_row - 1)) % stride)
-            if first_sampled > end_row - 1:
-                continue
-            radiance_var = measured.variables["effective_radiance"]
-            radiance = np.ma.filled(radiance_var[:], np.nan).astype(np.float32)
-            if stride > 1:
-                local_first = first_sampled - (start_row - 1)
-                radiance = radiance[local_first::stride, offset::stride]
-            calibrated = _calibrate_radiance(radiance, measured, channel_name)
-            expected_rows = (end_row - 1 - first_sampled) // stride + 1
-            if calibrated.shape[0] != expected_rows or calibrated.shape[1] != out_cols:
-                raise ValueError(
-                    f"FCI chunk shape mismatch for rows {start_row}-{end_row}: "
-                    f"{calibrated.shape}, expected ({expected_rows}, {out_cols})."
-                )
-            strips.append(((first_sampled - offset) // stride, calibrated))
-
-    if x_attrs is None or y_attrs is None or projection_attrs is None:
-        raise ValueError("FCI chunks did not expose projection metadata.")
-
-    out_rows = len(range(offset, full_rows, stride))
-    values_raw = np.full((out_rows, out_cols), np.nan, dtype=np.float32)
-    for out_row0, strip in strips:
-        values_raw[out_row0 : out_row0 + strip.shape[0], :] = strip
-
-    # FCI L1c rows are stored south→north (row 1 = south) and need the
-    # north-up flip; columns already run west→east. The x coordinate's
-    # positive fixed-grid scan angle points WEST of the sub-satellite point,
-    # opposite the PROJ geos +x=east convention, so the axis is negated
-    # rather than the data mirrored. Verified against Meteosat-9 SEVIRI and
-    # the solar terminator on 2026-07-03 (the earlier both-axis flip
-    # rendered the disk east-west mirrored).
-    values = values_raw[::-1, :]
-    height = float(projection_attrs["perspective_point_height"])
-    x_raw = _scaled_axis(x_attrs, full_cols)[offset::stride]
-    y_raw = _scaled_axis(y_attrs, full_rows)[offset::stride]
-    x_centers = -(x_raw * height)
-    y_centers = y_raw[::-1] * height
-    x_half = float(np.nanmedian(np.diff(x_centers))) / 2.0
-    y_half = abs(float(np.nanmedian(np.diff(y_centers)))) / 2.0
-    src_transform = rio_from_bounds(
-        float(x_centers[0] - x_half),
-        float(y_centers[-1] - y_half),
-        float(x_centers[-1] + x_half),
-        float(y_centers[0] + y_half),
-        out_cols,
-        out_rows,
-    )
-    proj4 = (
-        f"+proj=geos +h={height:.3f} "
-        f"+lon_0={float(projection_attrs['longitude_of_projection_origin'])} "
-        f"+sweep={projection_attrs.get('sweep_angle_axis', 'y')} "
-        f"+a={float(projection_attrs['semi_major_axis']):.3f} "
-        f"+b={float(projection_attrs['semi_minor_axis']):.3f} +units=m +no_defs"
-    )
-    src_crs = RioCRS.from_proj4(proj4)
-    return FciRaster(
-        values=values,
-        src_transform=src_transform,
-        src_crs=src_crs,
-        channel_name=channel_name,
-    )
+    """Load one FCI channel through the shared batch implementation."""
+    return load_fci_rasters(chunk_files, (channel,), max_grid=max_grid)[str(channel)]

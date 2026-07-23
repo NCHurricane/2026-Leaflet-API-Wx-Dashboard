@@ -276,7 +276,7 @@ magic sniff catches the common truncation case. Accepted.
 
 ## Phase 2 — Live cold path: supertile canvas + respond-first (tiler.py, service.py)
 
-**Status (2026-07-22): complete locally, checkpoint commit pending.** The
+**Status (2026-07-22): complete and committed at `8ee3a4b`.** The
 single-canvas candidate failed its first golden comparison and was reverted:
 all nine GOES Channel13 hashes changed, with real pixel differences. Per the
 documented fallback, individual byte-stable warps remain, but only the
@@ -322,6 +322,14 @@ identity remain reproducible.
 
 ## Phase 3 — Parse layer: multi-channel single pass + AHI threading (fci_nc.py, seviri_nat.py, ahi_hsd.py, renderer.py)
 
+**Status (2026-07-22): complete locally, checkpoint commit pending.** FCI now
+loads multiple requested channels in one chunk pass while retaining independent
+grid metadata. AHI uses four decode workers and stitches decimated calibrated
+strips instead of retaining all full segment buffers. The full matrix passed
+81/81 golden comparisons. AHI cold p50 improved 49.6% from Phase 2; FCI
+Nighttime Microphysics improved 43.2%. Compact results are under
+`docs/perf/2026-07-22-phase3/`.
+
 1. **FCI:** add `load_fci_rasters(chunk_files, channels: Sequence[str]) ->
    dict[str, FciRaster]` — one pass over the CHK-BODY files, extracting all
    requested channels per open. Keep `load_fci_raster` as a one-channel
@@ -348,6 +356,12 @@ identity remain reproducible.
 `cold-parse` rows 5/7/8: expect row 8 (`NighttimeMicrophysics` on FCI)
 `parse_ms` ≈ ⅓ of baseline, row 5 (AHI FULLDISK) parse improved and peak
 memory (log `tracemalloc`/working-set in bench) reduced.
+
+**Verified:** calibration output remained byte-identical across all 81 golden
+tiles. AHI parse p50 moved from 2314.232 to 1120.945 ms; FCI multi-channel
+parse p50 moved from 7279.744 to 4047.660 ms. The implementation structurally
+bounds AHI full segment buffers to four workers, but no numeric memory claim is
+made because Phase 2 did not capture a comparable working-set baseline.
 
 ---
 
@@ -431,9 +445,11 @@ Implement only if Phase 5's numbers show warp dominating warm runs.
    `docs/perf/2026-07-22-baseline/`.
 3. Phase 1 committed at `fc534ba`; results are under
    `docs/perf/2026-07-22-phase1/`.
-4. Phase 2 complete locally; commit the response-first slice and results under
+4. Phase 2 committed at `8ee3a4b`; results are under
    `docs/perf/2026-07-22-phase2/`.
-5. Next: phases 3 → 4 → 5 in order, each gated on: golden byte-identity, the
+5. Phase 3 complete locally; commit the parse-layer slice and results under
+   `docs/perf/2026-07-22-phase3/`.
+6. Next: Phase 4 after the byte-budget cache-knob decision, then Phase 5. Each is gated on: golden byte-identity, the
    phase's target metric moving, and a clean run of the full matrix.
 5. After each phase: commit with the phase number in the message; update the
    `docs/perf/` summary table with before/after p50s.

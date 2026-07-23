@@ -27,12 +27,18 @@ Current checkpoint:
   lon/lat geometry. All 81 final golden comparisons passed. Hit validation
   improved from 1.349–2.603 ms to 0.051–0.067 ms p50; compact results are in
   `docs/perf/2026-07-22-phase1/`.
-- Phase 2 is complete locally and awaits its checkpoint commit. A 3x3 rasterio
+- Phase 2 is committed at `8ee3a4b`. A 3x3 rasterio
   canvas changed pixels and was rejected by the golden gate. The accepted
   fallback returns the requested byte-stable 1x1 tile first, asynchronously
   warms eight neighbors, and deduplicates paths already in flight. The live
   matrix passed 81/81 goldens; headline cold p50 improved 11.9–14.9%. Compact
   results are in `docs/perf/2026-07-22-phase2/`.
+- Phase 3 is complete locally and awaits
+  its checkpoint commit. FCI multi-channel parsing now opens each chunk once;
+  AHI uses four segment decode workers and stitches decimated strips. The full
+  matrix passed 81/81 goldens. AHI cold p50 improved 49.6% from Phase 2 and FCI
+  Nighttime Microphysics improved 43.2%. Results are in
+  `docs/perf/2026-07-22-phase3/`.
 - The user completed the 2026-07-20 all-page manual smoke and clarified every
   finding. The correction set is implemented; page-by-page browser re-smoke is
   in progress and has not yet covered the full set.
@@ -90,6 +96,10 @@ Current checkpoint:
   one visual type.
 
 Validation at handoff:
+- Phase 3: full matrix 81/81 byte-identical; headline rows have five samples.
+- Phase 3 focused Satellite validation passes. The full run reached 101 tests
+  plus 40 subtests, with two unrelated Radar catalog subtests blocked by the
+  concurrently missing `RadarScopeBR.pal`; Phase 3 did not touch Radar files.
 - Phase 2: full asynchronous matrix 81/81 byte-identical; headline rows have
   five requested-tile samples and passed post-settle golden comparison.
 - Phase 2 focused tests pass (15/15); full pytest passes 100 tests plus 42
@@ -112,9 +122,10 @@ Validation at handoff:
   `.pytest_cache` write warning.
 
 Next step:
-1. Review and commit the Phase 2 code, tests, docs, and compact performance results.
-2. Begin Phase 3 with the FCI multi-channel parse path, preserving the golden
-   gate before moving to AHI threaded segment decompression.
+1. Review and commit the Phase 3 code, tests, docs, and compact performance results.
+2. Before Phase 4, decide whether to add the proposed env-overridable
+   `SATELLITE_V2_SOURCE_RASTER_CACHE_MB` byte-budget knob or use the documented
+   entry-count fallback.
 
 Guardrails:
 - Browser smoke is user-owned; report static versus browser proof honestly.

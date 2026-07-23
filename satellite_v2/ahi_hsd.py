@@ -21,6 +21,7 @@ from __future__ import annotations
 import bz2
 import math
 import struct
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -32,6 +33,7 @@ from rasterio.transform import from_bounds as rio_from_bounds
 from config.satellite_v2_config import SATELLITE_V2_AHI_MAX_GRID
 
 _VNIR_BANDS = frozenset(range(1, 7))
+_AHI_SEGMENT_WORKERS = 4
 
 
 @dataclass(frozen=True)
@@ -224,39 +226,63 @@ def load_ahi_raster(
     if not segment_files:
         raise ValueError("No AHI HSD segment files given.")
 
-    segments: list[tuple[AhiHeader, np.ndarray]] = []
-    for path in segment_files:
-        buf = read_hsd_bytes(path)
-        header = parse_ahi_header(buf)
-        segments.append((header, segment_counts(buf, header)))
+    paths = [Path(path) for path in segment_files]
+    first_buf = read_hsd_bytes(paths[0])
+    first_header = parse_ahi_header(first_buf)
+    stride = max(1, first_header.n_cols // max_grid)
 
-    segments.sort(key=lambda item: item[0].first_line)
-    ref = segments[0][0]
-    for header, _ in segments[1:]:
+    def _validate_header(header: AhiHeader) -> None:
         if (
-            header.band_number != ref.band_number
-            or header.n_cols != ref.n_cols
-            or header.total_segments != ref.total_segments
+            header.band_number != first_header.band_number
+            or header.n_cols != first_header.n_cols
+            or header.total_segments != first_header.total_segments
         ):
             raise ValueError(
                 "AHI HSD segments are from mismatched bands or grids."
             )
+        if (
+            header.n_cols % stride
+            or header.n_lines % stride
+            or (header.first_line - 1) % stride
+        ):
+            raise ValueError(
+                f"AHI HSD grid ({header.n_cols} cols) is not divisible by "
+                f"stride {stride}."
+            )
 
-    total_lines = max(h.first_line + h.n_lines - 1 for h, _ in segments)
-    stride = max(1, ref.n_cols // max_grid)
-    if ref.n_cols % stride or any(h.n_lines % stride for h, _ in segments) or any(
-        (h.first_line - 1) % stride for h, _ in segments
-    ):
-        raise ValueError(
-            f"AHI HSD grid ({ref.n_cols} cols) is not divisible by stride {stride}."
-        )
     offset = stride // 2
+
+    def _calibrated_segment(
+        header: AhiHeader, buf: bytes
+    ) -> tuple[AhiHeader, np.ndarray]:
+        _validate_header(header)
+        counts = segment_counts(buf, header)
+        values = calibrate(counts[offset::stride, offset::stride], header)
+        return header, values
+
+    segments = [_calibrated_segment(first_header, first_buf)]
+    del first_buf
+
+    def _load_segment(path: Path) -> tuple[AhiHeader, np.ndarray]:
+        buf = read_hsd_bytes(path)
+        header = parse_ahi_header(buf)
+        return _calibrated_segment(header, buf)
+
+    if len(paths) > 1:
+        worker_count = min(_AHI_SEGMENT_WORKERS, len(paths) - 1)
+        with ThreadPoolExecutor(max_workers=worker_count) as pool:
+            futures = [pool.submit(_load_segment, path) for path in paths[1:]]
+            for future in as_completed(futures):
+                segments.append(future.result())
+
+    segments.sort(key=lambda item: item[0].first_line)
+    ref = segments[0][0]
+    total_lines = max(h.first_line + h.n_lines - 1 for h, _ in segments)
 
     out_cols = ref.n_cols // stride
     out_rows = total_lines // stride
     values = np.full((out_rows, out_cols), np.nan, dtype=np.float32)
-    for header, counts in segments:
-        calibrated = calibrate(counts[offset::stride, offset::stride], header)
+    for header, calibrated in segments:
         row0 = (header.first_line - 1) // stride
         values[row0 : row0 + calibrated.shape[0], :] = calibrated
 

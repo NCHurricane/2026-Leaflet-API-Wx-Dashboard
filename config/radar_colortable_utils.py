@@ -19,7 +19,7 @@ _COLORTABLE_DIR = Path(__file__).parent / "radar_colortables"
 
 # Map product key → .pal filename (without the directory path)
 _PAL_FILENAMES: dict[str, str] = {
-    "BR": "BR.pal",
+    "BR": "RadarScope_BR.pal",
     "BV": "BV.pal",
     "SRV": "SRV.pal",
     "CC": "CC.pal",
