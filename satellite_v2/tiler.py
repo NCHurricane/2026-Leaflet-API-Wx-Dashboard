@@ -596,7 +596,15 @@ def render_frame_tile(
     y: int,
     overwrite: bool = False,
     bench_seed: dict[str, Any] | None = None,
+    render_supertile: bool = True,
+    record_timing: bool = True,
 ) -> tuple[Path, dict[str, int | str]]:
+    """Render one tile and optionally warm its configured neighbors inline.
+
+    The HTTP service passes ``render_supertile=False`` so the requested tile
+    can return before it submits neighbors to its shared background pool.
+    Direct callers retain the original synchronous supertile behavior.
+    """
     started = time.perf_counter()
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
@@ -606,7 +614,7 @@ def render_frame_tile(
         raise ValueError("Satellite v2 frame is missing frame_key.")
 
     timing_token = None
-    if bench_enabled():
+    if bench_enabled() and record_timing:
         timing_token = begin_timing(
             cache_root,
             {
@@ -663,10 +671,17 @@ def render_frame_tile(
         "supertile_skipped": 0,
         "supertile_invalid": 0,
         "supertile_errors": 0,
-        "supertile_radius": int(SATELLITE_V2_LIVE_SUPERTILE_RADIUS or 0),
+        "supertile_radius": (
+            int(SATELLITE_V2_LIVE_SUPERTILE_RADIUS or 0) if render_supertile else 0
+        ),
     }
     try:
-        for tile_x, tile_y in _live_supertile_coords(int(z), int(x), int(y)):
+        coords = (
+            _live_supertile_coords(int(z), int(x), int(y))
+            if render_supertile
+            else [(int(x), int(y))]
+        )
+        for tile_x, tile_y in coords:
             current_target = tile_path(
                 cache_root,
                 sat_key,

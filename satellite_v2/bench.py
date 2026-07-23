@@ -11,6 +11,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -342,6 +343,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--cache-root", type=Path)
     parser.add_argument("--worker-state-note")
+    parser.add_argument("--respond-first", action="store_true")
+    parser.add_argument("--settle-ms", type=int, default=0)
     parser.add_argument("--run-id", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--_child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--_iteration", type=int, default=1, help=argparse.SUPPRESS)
@@ -410,11 +413,48 @@ def _resolve_frame(cache_root: Path, args: argparse.Namespace) -> dict[str, Any]
     return dict(frames[-1])
 
 
-def _resolve_once(cache_root: Path, context: dict[str, Any], frame: dict[str, Any], purge: bool) -> None:
+def _resolve_once(
+    cache_root: Path,
+    context: dict[str, Any],
+    frame: dict[str, Any],
+    purge: bool,
+    *,
+    respond_first: bool = False,
+    settle_ms: int = 0,
+) -> None:
     if purge:
         _purge_target_frame(
             cache_root, context["sat_id"], context["sector"], context["product"], context["frame_key"]
         )
+    if respond_first:
+        from satellite_v2.service import resolve_tile
+        path, stats = resolve_tile(
+            str(cache_root), context["sat_id"], context["sector"], context["product"],
+            context["frame_key"], context["z"], context["x"], context["y"],
+            allow_render=True, frame_override=frame,
+        )
+        if settle_ms > 0:
+            from satellite_v2.cache import is_negative_tile_cached, tile_path
+            width, height = (int(value) for value in context["tiles"].split("x", 1))
+            coords = _tile_block_coords(
+                context["z"], context["x"], context["y"], (width, height)
+            )
+            deadline = time.monotonic() + (settle_ms / 1000.0)
+            while time.monotonic() < deadline:
+                settled = True
+                for tile_x, tile_y in coords:
+                    candidate = tile_path(
+                        cache_root, context["sat_id"], context["sector"],
+                        context["product"], context["frame_key"], context["z"],
+                        tile_x, tile_y,
+                    )
+                    if not candidate.exists() and not is_negative_tile_cached(candidate):
+                        settled = False
+                        break
+                if settled:
+                    break
+                time.sleep(0.025)
+    elif purge:
         from satellite_v2.tiler import render_frame_tile
         path, stats = render_frame_tile(
             str(cache_root), context["sat_id"], context["sector"], context["product"],
@@ -438,7 +478,7 @@ def _resolve_once(cache_root: Path, context: dict[str, Any], frame: dict[str, An
 
 
 def _cold_child_command(args: argparse.Namespace, frame_key: str, run_id: str, iteration: int, cache_root: Path) -> list[str]:
-    return [
+    command = [
         sys.executable, "-m", "satellite_v2.bench",
         "--sat", args.sat, "--sector", args.sector, "--product", args.product,
         "--frame", frame_key, "--z", str(args.z), "--tiles", f"{args.tiles[0]}x{args.tiles[1]}",
@@ -446,12 +486,19 @@ def _cold_child_command(args: argparse.Namespace, frame_key: str, run_id: str, i
         "--scenario", "cold-parse", "--repeat", "1", "--cache-root", str(cache_root),
         "--run-id", run_id, "--_child", "--_iteration", str(iteration),
     ]
+    if args.respond_first:
+        command.append("--respond-first")
+    if args.settle_ms:
+        command.extend(("--settle-ms", str(args.settle_ms)))
+    return command
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.repeat < 1:
         raise SystemExit("--repeat must be at least 1")
+    if args.settle_ms < 0:
+        raise SystemExit("--settle-ms cannot be negative")
     if args.golden and args.golden_dir is None:
         raise SystemExit("--golden-dir is required with --golden")
     if args.golden == "compare" and args.scenario == "hit":
@@ -481,13 +528,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         "product": product_key, "frame_key": frame_key, "z": args.z,
         "x": center_x, "y": center_y, "tiles": f"{args.tiles[0]}x{args.tiles[1]}",
         "scenario": args.scenario, "repeat": args.repeat,
+        "respond_first": bool(args.respond_first), "settle_ms": int(args.settle_ms),
         "worker_state_note": args.worker_state_note or "",
     }
     print(f"Pinned frame_key: {frame_key}", flush=True)
 
     if args._child:
         os.environ["WX_SATELLITE_V2_BENCH_ITERATION"] = str(args._iteration)
-        _resolve_once(cache_root, context, frame, purge=True)
+        _resolve_once(
+            cache_root, context, frame, purge=True,
+            respond_first=args.respond_first, settle_ms=args.settle_ms,
+        )
         return 0
 
     sink = cache_root / "satellite" / ".bench" / f"{run_id}.jsonl"
@@ -502,17 +553,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
     else:
         if args.scenario == "hit":
-            _resolve_once(cache_root, context, frame, purge=False)
+            _resolve_once(
+                cache_root, context, frame, purge=False,
+                respond_first=args.respond_first, settle_ms=args.settle_ms,
+            )
             sink.unlink(missing_ok=True)
         elif args.scenario == "warm-parse":
             # Populate the in-process renderer/source caches before recording.
             # Each measured repeat still purges tiles, isolating warp/colorize/
             # encode without allowing the first cold parse to pollute p95.
-            _resolve_once(cache_root, context, frame, purge=True)
+            _resolve_once(
+                cache_root, context, frame, purge=True,
+                respond_first=args.respond_first, settle_ms=args.settle_ms,
+            )
             sink.unlink(missing_ok=True)
         for iteration in range(1, args.repeat + 1):
             os.environ["WX_SATELLITE_V2_BENCH_ITERATION"] = str(iteration)
-            _resolve_once(cache_root, context, frame, purge=args.scenario == "warm-parse")
+            _resolve_once(
+                cache_root, context, frame, purge=args.scenario == "warm-parse",
+                respond_first=args.respond_first, settle_ms=args.settle_ms,
+            )
 
     if args.golden:
         _write_golden(args.golden, args.golden_dir.resolve(), cache_root, context, coords)

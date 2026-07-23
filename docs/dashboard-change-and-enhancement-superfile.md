@@ -1,8 +1,9 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-22 (Satellite render optimization Phase 0 is committed;
-Phase 1 is complete locally with a 22.4–45.8x cache-hit validation improvement
-and an 81-tile byte-identical golden gate. Phase 1 commit pending.)
+Last updated: 2026-07-22 (Satellite render optimization Phases 0–1 are
+committed. Phase 2 response-first rendering is complete locally with 81
+byte-identical goldens and an 11.9–14.9% headline cold-latency reduction;
+Phase 2 commit pending.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -43,7 +44,7 @@ post-split structure, not the monolith.
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
    may interleave with track 1; the two touch disjoint files. Phase 0 is
-   committed; Phase 1 is complete locally and Phase 2 is next after checkpoint.
+   committed through Phase 1; Phase 2 is complete locally and Phase 3 is next.
 3. GK2A + GMGSI new platforms. Adds `PLATFORM_*` entries to
    `js/satellite-page.js`; if started mid-split those entries must be
    ported to `pages/satellite/`, so prefer starting it before the split
@@ -52,11 +53,16 @@ post-split structure, not the monolith.
 ## Current State
 
 - Active repo: `F:\Python\dashboard_2026`.
-- Satellite optimization Phase 0 was committed at `a6f5f83`. Phase 1 completed
-  locally 2026-07-22: NetCDF LRU correctness, cheap PNG hit validation, and a
+- Satellite optimization Phase 0 was committed at `a6f5f83`; Phase 1 was
+  committed at `fc534ba`: NetCDF LRU correctness, cheap PNG hit validation, and a
   geometry-aware composite meshgrid gate. The full 81-tile golden comparison
   passed, while hit validation improved from 1.349–2.603 ms to 0.051–0.067 ms
-  p50. Results live under `docs/perf/2026-07-22-phase1/`; commit pending.
+  p50. Results live under `docs/perf/2026-07-22-phase1/`.
+- Phase 2 is complete locally: a proposed single canvas failed pixel identity
+  and was discarded; the safe fallback returns the requested tile before
+  asynchronously warming byte-stable neighbors with in-flight deduplication.
+  All 81 goldens passed and headline cold p50 improved 11.9–14.9%. Results live
+  under `docs/perf/2026-07-22-phase2/`; commit pending.
 - Phase 0 delivered env-gated
   timing hooks, safe benchmark CLI, nine-row/three-scenario baseline, manifests,
   summaries, and 81 byte-identical golden-tile checks. Baseline artifacts live
@@ -2262,8 +2268,8 @@ GeoColor opacity work).
 
 ### Satellite render pipeline latency optimization — registered 2026-07-16
 
-Active track 2 (see Active Tracks). Status: Phase 0 committed at `a6f5f83`;
-Phase 1 complete locally on 2026-07-22 with checkpoint commit pending. The standalone
+Active track 2 (see Active Tracks). Status: Phase 0 committed at `a6f5f83`,
+Phase 1 at `fc534ba`, and Phase 2 complete locally with commit pending. The standalone
 execution plan is `docs/satellite-render-optimization-plan.md` (prepared
 2026-07-11), with the file-reference companion
 `docs/satellite-radar-render-pipeline-files.md`. Both stay standalone while
@@ -2286,6 +2292,9 @@ when the phases complete.
   avoid full decode while retaining deep fallback; non-geographic composites
   skip lon/lat allocation. All 81 goldens remain byte-identical, hit validation
   is 22.4–45.8x faster, and the full suite passes 99 tests plus 42 subtests.
+- Phase 2 result: single-canvas rendering failed pixel identity and was
+  rejected. Respond-first per-tile rendering passed 81/81 goldens, settled
+  neighbors asynchronously, and reduced headline cold p50 by 11.9–14.9%.
 - Phases: 0 benchmark harness + committed baseline; 1 hit-path validation
   cheapening + `_NETCDF_CACHE` LRU bugfix; 2 supertile single-canvas +
   respond-first; 3 multi-channel single-pass parse + AHI threaded segment

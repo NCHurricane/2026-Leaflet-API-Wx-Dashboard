@@ -1,0 +1,18 @@
+{
+  "baseline_commit": "a6f5f83",
+  "comparison_date": "2026-07-22",
+  "golden_tiles_compared": 81,
+  "headline_repeat_count": 5,
+  "headline_rows": [
+    "goes19/CONUS/GeoColor/z7",
+    "himawari9/FULLDISK/Channel13/z5",
+    "meteosat12/FULLDISK/NighttimeMicrophysics/z5"
+  ],
+  "phase1_commit": "fc534ba",
+  "phase2_commit": "pending",
+  "raw_output_dir": "cache/satellite/.bench/phase2-final-raw",
+  "settle_timeout_ms": 5000,
+  "tiles_per_row": "3x3",
+  "worker_state_note": "No scheduled Satellite tasks were registered."
+}
+

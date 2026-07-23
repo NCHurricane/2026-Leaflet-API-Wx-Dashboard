@@ -1,0 +1,10 @@
+{
+  "metric": "requested_tile_total_ms_p50",
+  "samples_per_row": 5,
+  "rows": [
+    {"target": "goes19/CONUS/GeoColor/z7", "phase0_ms": 6494.148, "phase2_ms": 5721.277, "reduction_percent": 11.9},
+    {"target": "himawari9/FULLDISK/Channel13/z5", "phase0_ms": 2779.930, "phase2_ms": 2392.322, "reduction_percent": 13.9},
+    {"target": "meteosat12/FULLDISK/NighttimeMicrophysics/z5", "phase0_ms": 8771.128, "phase2_ms": 7462.566, "reduction_percent": 14.9}
+  ]
+}
+

@@ -2,6 +2,7 @@ import importlib
 import json
 import os
 from collections import OrderedDict
+from concurrent.futures import Future
 from pathlib import Path
 
 import pytest
@@ -259,3 +260,39 @@ def test_only_geometry_consuming_composites_allocate_lonlat_mesh():
     assert "GeoColorBlkMar" in COMPOSITES_REQUIRING_LONLAT
     assert "TrueColor" not in COMPOSITES_REQUIRING_LONLAT
     assert "NighttimeMicrophysics" not in COMPOSITES_REQUIRING_LONLAT
+
+
+def test_submit_tile_render_deduplicates_in_flight_target(tmp_path, monkeypatch):
+    submitted = []
+
+    class _FakePool:
+        def submit(self, function, **kwargs):
+            future = Future()
+            submitted.append((function, kwargs, future))
+            return future
+
+    monkeypatch.setattr(service, "_ON_DEMAND_TILE_RENDER_POOL", _FakePool())
+    monkeypatch.setattr(service, "_IN_FLIGHT_TILE_RENDERS", {})
+    target = tmp_path / "tile.png"
+    render_kwargs = {
+        "cache_root": tmp_path,
+        "sat_id": "goes19",
+        "sector": "CONUS",
+        "channel_key": "Channel13",
+        "frame": {"frame_key": "frame-a"},
+        "z": 7,
+        "x": 1,
+        "y": 2,
+    }
+
+    first, first_submitted = service._submit_tile_render(target, **render_kwargs)
+    second, second_submitted = service._submit_tile_render(target, **render_kwargs)
+
+    assert first is second
+    assert first_submitted is True
+    assert second_submitted is False
+    assert len(submitted) == 1
+    assert submitted[0][1]["render_supertile"] is False
+
+    first.set_result((target, {"cache_status": "miss"}))
+    assert service._IN_FLIGHT_TILE_RENDERS == {}

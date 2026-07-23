@@ -236,7 +236,7 @@ MESO render matched its golden block without writing timing data.
 
 ## Phase 1 — Hit-path + correctness (service.py, renderer.py)
 
-**Status (2026-07-22): complete locally, checkpoint commit pending.** The LRU
+**Status (2026-07-22): complete and committed at `fc534ba`.** The LRU
 fix, PNG signature hit path, and meshgrid gate are implemented. Four affected
 GOES rows passed the isolated LRU golden rerun, and the final full matrix passed
 81/81 byte-exact golden comparisons. Hit `validate_ms` p50 improved from
@@ -276,6 +276,15 @@ magic sniff catches the common truncation case. Accepted.
 
 ## Phase 2 — Live cold path: supertile canvas + respond-first (tiler.py, service.py)
 
+**Status (2026-07-22): complete locally, checkpoint commit pending.** The
+single-canvas candidate failed its first golden comparison and was reverted:
+all nine GOES Channel13 hashes changed, with real pixel differences. Per the
+documented fallback, individual byte-stable warps remain, but only the
+requested tile blocks the response. Eight neighbors run asynchronously through
+the existing pool with per-path in-flight deduplication. The full live matrix
+matched 81/81 goldens; headline cold p50 improved 11.9–14.9%. Results are under
+`docs/perf/2026-07-22-phase2/`.
+
 1. **Supertile as one canvas.** In `render_frame_tile`, replace the per-tile
    loop over `_live_supertile_coords` (9 × 1×1 canvases) with **one**
    `render_zoom_canvas` covering the supertile bounding box, then crop/save
@@ -303,6 +312,11 @@ warp; confirm neighbors appear as hits within ~1 s after (bench gets a
 
 **Sequencing note:** step 1 and step 2 are independently landable commits;
 step 1 alone already cuts N-channel warps 9× per supertile.
+
+**Outcome:** step 1 was rejected by the golden gate and is not present. Step 2
+landed using the explicit per-tile fallback. `bench.py` now supports
+`--respond-first --settle-ms` so requested latency and eventual neighbor
+identity remain reproducible.
 
 ---
 
@@ -415,9 +429,11 @@ Implement only if Phase 5's numbers show warp dominating warm runs.
    whether Phase 6 stays in scope at all.
 2. Phase 0 complete and committed at `a6f5f83`; baseline is under
    `docs/perf/2026-07-22-baseline/`.
-3. Phase 1 complete locally; commit the green slice and compact results under
+3. Phase 1 committed at `fc534ba`; results are under
    `docs/perf/2026-07-22-phase1/`.
-4. Next: Phase 2, then phases 3 → 4 → 5 in order, each gated on: golden byte-identity, the
+4. Phase 2 complete locally; commit the response-first slice and results under
+   `docs/perf/2026-07-22-phase2/`.
+5. Next: phases 3 → 4 → 5 in order, each gated on: golden byte-identity, the
    phase's target metric moving, and a clean run of the full matrix.
 5. After each phase: commit with the phase number in the message; update the
    `docs/perf/` summary table with before/after p50s.
