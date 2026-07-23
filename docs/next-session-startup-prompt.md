@@ -17,16 +17,27 @@ Read first:
   those boundaries
 
 Current checkpoint:
-- Task-scheduler-free rendering Phase 0 is in progress. `app_core/upstream_ledger.py`
-  covers application-owned Requests, urllib, and NODD S3 calls without logging
-  query values or credentials. Alerts now records the required geometry/cache
-  stages and supports `python -m workers.alerts_worker --measure-twice`.
-  The valid low-overhead live-NWS run measured 17.739 seconds cold and 13.530
-  seconds warm; the warm pass spent 2.939 seconds parsing and 5.838 seconds rewriting the
-  322 MB enriched cache with no zone unions. The changed-alert-proportional,
-  near-one-second gate failed, so do not start Phase 1. Results are under
-  `docs/perf/2026-07-23-worker-free-phase0/`. Surface/Radar/GOES/Himawari/
-  EUMETSAT cold-render measurements and browser proof remain pending.
+- Task-scheduler-free rendering Phase 0 measurement and request-ledger work is
+  complete. `app_core/upstream_ledger.py` covers application-owned Requests,
+  urllib, and NODD S3 calls without logging query values or credentials. Alerts
+  records the required stages and supports
+  `python -m workers.alerts_worker --measure-twice`.
+- The post-decision live-NWS run measured 12.472 seconds cold and 5.306 seconds
+  warm, with a 4.992-second warm path after the NWS response. Replacing the
+  322 MB enriched-geometry disk-cache path with a bounded process-local LRU
+  reduced warm enrichment to 0.024 seconds and sampled peak RSS to 1.022 GB.
+  Full-set simplification and serialization remain dominant, so the
+  changed-alert-proportional near-one-second gate failed and Phase 1 remains
+  blocked.
+- All six required isolated Surface/Radar/GOES/Himawari/EUMETSAT cold-render
+  measurements are complete under
+  `docs/perf/2026-07-23-worker-free-phase0/`. Runtime/worker evidence is
+  recorded separately from browser proof; no browser proof was performed.
+- The user explicitly chose to keep the near-one-second Phase 0 requirement
+  unchanged for now. If later measurements indicate it is realistically
+  unachievable, resuggest relaxing the interim latency threshold without
+  weakening correctness or the eventual changed-alert-proportional
+  requirement; do not change the gate without approval.
 - The cross-page correction set was committed at `aa05b7d`.
 - Satellite render optimization Phase 0 is committed at `a6f5f83`.
   `satellite_v2/bench.py` provides pinned cold-parse,
@@ -174,13 +185,17 @@ Validation at handoff:
   `.pytest_cache` write warning.
 
 Next step:
-1. Do not begin worker-free Phase 1: the Phase 0 Alerts gate failed. Review the
-   recorded 4.992-second post-response warm path and explicitly decide whether
-   to revise the phase ordering so changed-alert simplification/publishing can
-   be addressed before the coordinator foundation.
-2. Begin Radar optimization Phase 0 only: benchmark harness, pinned baseline,
+1. Continue worker-free Phase 0 gate remediation only; do not begin Phase 1.
+   Address the remaining full-set Alerts simplification/serialization cost in
+   the smallest bounded changed-alert slice, then rerun the documented
+   two-pass gate. Do not pull unrelated Alerts SWR, cadence, or frontend work
+   forward.
+2. If repeated measurements show the near-one-second target is impractical,
+   raise the previously discussed interim-gate alternative for approval; do
+   not change the requirement automatically.
+3. Begin Radar optimization Phase 0 only: benchmark harness, pinned baseline,
    structured timings, and golden capture with no behavior changes.
-3. Review measurements before implementing Phase 1. Track 1 browser re-smoke
+4. Review measurements before implementing Phase 1. Track 1 browser re-smoke
    remains user-owned and can continue independently.
 
 Guardrails:
