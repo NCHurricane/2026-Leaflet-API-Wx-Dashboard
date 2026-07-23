@@ -322,7 +322,7 @@ identity remain reproducible.
 
 ## Phase 3 — Parse layer: multi-channel single pass + AHI threading (fci_nc.py, seviri_nat.py, ahi_hsd.py, renderer.py)
 
-**Status (2026-07-22): complete locally, checkpoint commit pending.** FCI now
+**Status (2026-07-22): committed at `29b83b6`.** FCI now
 loads multiple requested channels in one chunk pass while retaining independent
 grid metadata. AHI uses four decode workers and stitches decimated calibrated
 strips instead of retaining all full segment buffers. The full matrix passed
@@ -367,6 +367,16 @@ made because Phase 2 did not capture a comparable working-set baseline.
 
 ## Phase 4 — Shared source-raster cache (renderer.py)
 
+**Status (2026-07-22): complete locally, checkpoint commit pending.** The
+approved byte-budgeted LRU is implemented with a 4096 MB default and
+`WX_SATELLITE_V2_SOURCE_RASTER_CACHE_MB` override. Source eviction also removes
+dependent renderer entries, so inactive renderer references cannot bypass the
+byte ceiling. The full matrix passed 81/81 golden comparisons. On the pinned
+Meteosat-12 frame, Channel13 followed by NighttimeMicrophysics reused Channel13
+by identity and held 354.797 MB across three unique rasters instead of 473.062
+MB across four independent references, saving 118.266 MB and one parse.
+Compact results are under `docs/perf/2026-07-22-phase4/`.
+
 Today, products sharing a channel (GeoColor/TrueColor share C01–C03;
 Channel13 scalar / NighttimeMicrophysics share C13) each hold their own copy
 of the same channel grid inside separate `_RENDERER_CACHE` entries, and
@@ -382,12 +392,9 @@ re-parse it on renderer-cache miss.
    FULLDISK vis). Sizing so worst-case total ≤ what today's 8 renderer
    entries could hold ⇒ memory strictly not-worse, dedup makes typical usage
    better.
-3. **OPEN DECISION (needs sign-off before implementing):** the byte budget
-   is a **new** config knob (`SATELLITE_V2_SOURCE_RASTER_CACHE_MB`,
-   env-overridable like its siblings). Constraint only forbids modifying
-   existing knobs; adding one still gets explicit approval first. If
-   declined: entry-count LRU sized = `SATELLITE_V2_RENDERER_CACHE_SIZE × max
-   channels per product`, with the byte math documented.
+3. **Decision resolved:** the user approved the new byte-budget config knob.
+   `SATELLITE_V2_SOURCE_RASTER_CACHE_MB` defaults to 4096 MB and is overridden
+   with `WX_SATELLITE_V2_SOURCE_RASTER_CACHE_MB`; `0` disables source caching.
 
 **Memory accounting (for the review):** `_NETCDF_CACHE` holds lazy handles
 (MB-scale, unaffected). The byte weight lives here: GOES FULLDISK C02
@@ -397,6 +404,13 @@ today in one entry. Phase 4 stores each channel once.
 **Verify:** golden compare; `warm-parse` scenario after browsing
 Channel13 → NighttimeMicrophysics on the same frame shows zero re-parse;
 working-set comparison in the bench summary.
+
+**Verified:** all 81 golden tiles are byte-identical. The pinned FCI sequence
+made one scalar Channel13 batch call, then loaded only Channel07/Channel15 for
+NighttimeMicrophysics. Four renderer references resolve to three unique
+rasters; measured grid weight fell from 473.062 MB without deduplication to
+354.797 MB with the shared cache. Focused Satellite tests pass 33/33 and the
+full suite passes 105 tests plus 42 subtests.
 
 ---
 
@@ -439,17 +453,18 @@ Implement only if Phase 5's numbers show warp dominating warm runs.
 
 ## Execution order & session checklist
 
-1. Confirm the two open decisions: Phase 4 byte-budget knob (yes/no) and
-   whether Phase 6 stays in scope at all.
+1. Phase 4 byte-budget knob approved; decide whether Phase 6 stays in scope
+   only after Phase 5 measurements.
 2. Phase 0 complete and committed at `a6f5f83`; baseline is under
    `docs/perf/2026-07-22-baseline/`.
 3. Phase 1 committed at `fc534ba`; results are under
    `docs/perf/2026-07-22-phase1/`.
 4. Phase 2 committed at `8ee3a4b`; results are under
    `docs/perf/2026-07-22-phase2/`.
-5. Phase 3 complete locally; commit the parse-layer slice and results under
+5. Phase 3 committed at `29b83b6`; results are under
    `docs/perf/2026-07-22-phase3/`.
-6. Next: Phase 4 after the byte-budget cache-knob decision, then Phase 5. Each is gated on: golden byte-identity, the
+6. Phase 4 complete locally; commit the shared raster-cache slice and results
+   under `docs/perf/2026-07-22-phase4/`, then begin Phase 5. Each is gated on: golden byte-identity, the
    phase's target metric moving, and a clean run of the full matrix.
 5. After each phase: commit with the phase number in the message; update the
    `docs/perf/` summary table with before/after p50s.

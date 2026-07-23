@@ -1,8 +1,8 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-22 (Satellite render optimization Phases 0–2 are
-committed. Phase 3 parse optimization is complete locally with 81
-byte-identical goldens and 43.2–49.6% gains on its headline rows; Phase 3
+Last updated: 2026-07-22 (Satellite render optimization Phases 0–3 are
+committed. Phase 4 shared source-raster caching is complete locally with 81
+byte-identical goldens and measured cross-product raster deduplication; Phase 4
 commit pending.)
 
 This file is the canonical planning and status file for dashboard changes,
@@ -43,9 +43,8 @@ post-split structure, not the monolith.
 2. Satellite render pipeline latency optimization — standalone execution
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
-   may interleave with track 1; the two touch disjoint files. Phase 0 is
-   committed through Phase 2; Phase 3 is complete locally and Phase 4 is next
-   after its cache-budget decision.
+   may interleave with track 1; the two touch disjoint files. Phases 0–3 are
+   committed; Phase 4 is complete locally and Phase 5 is next.
 3. GK2A + GMGSI new platforms. Adds `PLATFORM_*` entries to
    `js/satellite-page.js`; if started mid-split those entries must be
    ported to `pages/satellite/`, so prefer starting it before the split
@@ -64,10 +63,15 @@ post-split structure, not the monolith.
   asynchronously warming byte-stable neighbors with in-flight deduplication.
   All 81 goldens passed and headline cold p50 improved 11.9–14.9%. Results live
   under `docs/perf/2026-07-22-phase2/`; committed at `8ee3a4b`.
-- Phase 3 is complete locally: FCI multi-channel chunk parsing and four-worker
+- Phase 3 is committed at `29b83b6`: FCI multi-channel chunk parsing and four-worker
   AHI segment decoding passed the full 81-tile golden matrix. AHI improved
   49.6% from Phase 2 and FCI Nighttime Microphysics improved 43.2%. Results
-  live under `docs/perf/2026-07-22-phase3/`; commit pending.
+  live under `docs/perf/2026-07-22-phase3/`.
+- Phase 4 is complete locally: the approved 4096 MB byte-budgeted shared
+  `SourceRaster` LRU passed all 81 goldens. Channel13 followed by FCI Nighttime
+  Microphysics reused Channel13 without reparsing and reduced unique grid
+  weight from 473.062 MB to 354.797 MB. Results live under
+  `docs/perf/2026-07-22-phase4/`; commit pending.
 - Phase 0 delivered env-gated
   timing hooks, safe benchmark CLI, nine-row/three-scenario baseline, manifests,
   summaries, and 81 byte-identical golden-tile checks. Baseline artifacts live
@@ -2274,7 +2278,7 @@ GeoColor opacity work).
 ### Satellite render pipeline latency optimization — registered 2026-07-16
 
 Active track 2 (see Active Tracks). Status: Phase 0 committed at `a6f5f83`,
-Phase 1 at `fc534ba`, Phase 2 at `8ee3a4b`, and Phase 3 complete locally with commit pending. The standalone
+Phase 1 at `fc534ba`, Phase 2 at `8ee3a4b`, Phase 3 at `29b83b6`, and Phase 4 complete locally with commit pending. The standalone
 execution plan is `docs/satellite-render-optimization-plan.md` (prepared
 2026-07-11), with the file-reference companion
 `docs/satellite-radar-render-pipeline-files.md`. Both stay standalone while
@@ -2303,6 +2307,10 @@ when the phases complete.
 - Phase 3 result: FCI chunks are opened once for multi-channel products and AHI
   segment decode is threaded with bounded full-buffer residency. The full
   matrix remains byte-identical; headline p50 improved 43.2–49.6%.
+- Phase 4 result: a byte-budgeted per-process source-raster LRU shares grids
+  across renderer entries and evicts dependent renderers with each source. The
+  full matrix remains byte-identical; the pinned FCI cross-product sequence
+  saved one 118.266 MB Channel13 grid and one parse.
 - Phases: 0 benchmark harness + committed baseline; 1 hit-path validation
   cheapening + `_NETCDF_CACHE` LRU bugfix; 2 supertile single-canvas +
   respond-first; 3 multi-channel single-pass parse + AHI threaded segment
@@ -2310,9 +2318,8 @@ when the phases complete.
   6 (optional, measure-first) GDAL warp threads.
 - The pre-identified `_NETCDF_CACHE` plain-dict eviction bug is fixed in the
   locally complete Phase 1 slice.
-- Open decisions before implementation reaches them: the Phase 4
-  byte-budget cache knob (new config knob yes/no) and whether Phase 6
-  stays in scope.
+- The Phase 4 byte-budget knob was approved. Whether Phase 6 stays in scope is
+  deferred until Phase 5 measurements show whether warp still dominates.
 
 ### International radar
 

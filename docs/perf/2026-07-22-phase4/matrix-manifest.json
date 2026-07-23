@@ -1,0 +1,10 @@
+{
+  "comparison_date": "2026-07-22",
+  "full_matrix_golden_tiles": 81,
+  "phase3_commit": "29b83b6",
+  "phase4_commit": "pending",
+  "raw_output_dir": "cache/satellite/.bench/phase4-matrix-check",
+  "source_raster_cache_default_mb": 4096,
+  "tiles_per_row": "3x3",
+  "worker_state_note": "No scheduled Satellite tasks were registered."
+}

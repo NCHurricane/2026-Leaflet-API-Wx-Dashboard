@@ -933,6 +933,9 @@ SATELLITE_V2_NETCDF_CACHE_SIZE = _env_int(
 SATELLITE_V2_RENDERER_CACHE_SIZE = _env_int(
     "WX_SATELLITE_V2_RENDERER_CACHE_SIZE", 8, 0, 64
 )
+SATELLITE_V2_SOURCE_RASTER_CACHE_MB = _env_int(
+    "WX_SATELLITE_V2_SOURCE_RASTER_CACHE_MB", 4096, 0, 131072
+)
 
 # Full-disk source grids are capped before reprojection to keep high-resolution
 # channels usable on live tile requests. Raise provider caps independently.

@@ -1,0 +1,26 @@
+{
+  "budget_mb": 4096,
+  "full_matrix_golden_tiles": 81,
+  "fci_cross_product_sequence": {
+    "target": "meteosat12/FULLDISK/20260721T034500Z",
+    "products": [
+      "Channel13",
+      "NighttimeMicrophysics"
+    ],
+    "shared_channel13_identity": true,
+    "held_raster_references": 4,
+    "unique_rasters": 3,
+    "unique_raster_mb": 354.797,
+    "without_dedup_mb": 473.062,
+    "saved_mb": 118.266,
+    "incremental_composite_batch_channels": [
+      "Channel07",
+      "Channel15"
+    ]
+  },
+  "tests": {
+    "focused_satellite": 33,
+    "full_pytest": 105,
+    "full_pytest_subtests": 42
+  }
+}

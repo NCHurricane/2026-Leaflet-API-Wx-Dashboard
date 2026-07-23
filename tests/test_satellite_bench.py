@@ -5,6 +5,7 @@ from collections import OrderedDict
 from concurrent.futures import Future
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from satellite_v2 import bench
@@ -311,6 +312,7 @@ def test_renderer_batches_fci_channels_from_shared_chunk_directory(tmp_path, mon
         return {channel: loaded[channel] for channel in channels}
 
     monkeypatch.setattr(renderer, "_load_fci_source_rasters", fake_batch)
+    monkeypatch.setattr(renderer, "_SOURCE_RASTER_CACHE_MAX_BYTES", 0)
     monkeypatch.setattr(
         renderer,
         "_load_source_raster",
@@ -327,3 +329,133 @@ def test_renderer_batches_fci_channels_from_shared_chunk_directory(tmp_path, mon
 
     assert calls == [(source_files["Channel07"], tuple(source_files))]
     assert result.source_rasters == loaded
+
+
+def _reset_source_raster_cache(monkeypatch, max_bytes):
+    monkeypatch.setattr(renderer, "_SOURCE_RASTER_CACHE", OrderedDict())
+    monkeypatch.setattr(renderer, "_SOURCE_RASTER_CACHE_BYTES", 0)
+    monkeypatch.setattr(renderer, "_SOURCE_RASTER_KEY_LOCKS", {})
+    monkeypatch.setattr(renderer, "_SOURCE_RASTER_CACHE_MAX_BYTES", max_bytes)
+    monkeypatch.setattr(renderer, "_RENDERER_CACHE", OrderedDict())
+    monkeypatch.setattr(renderer, "_RENDERER_KEY_LOCKS", {})
+
+
+def test_source_raster_cache_reuses_same_file_channel(tmp_path, monkeypatch):
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"source")
+    _reset_source_raster_cache(monkeypatch, 1024)
+    calls = []
+
+    def fake_load(path, channel):
+        calls.append((path, channel))
+        return renderer.SourceRaster(
+            cmi=np.zeros((2, 2), dtype=np.float32),
+            src_transform=object(),
+            src_crs=object(),
+        )
+
+    monkeypatch.setattr(renderer, "_load_source_raster", fake_load)
+
+    first, first_parsed = renderer._load_source_raster_cached(source, "Channel13")
+    second, second_parsed = renderer._load_source_raster_cached(source, "Channel13")
+
+    assert first is second
+    assert first_parsed is True
+    assert second_parsed is False
+    assert calls == [(source, "Channel13")]
+    assert renderer._SOURCE_RASTER_CACHE_BYTES == first.cmi.nbytes
+
+
+def test_renderers_for_different_products_share_cached_source(tmp_path, monkeypatch):
+    source = tmp_path / "source.nc"
+    source.write_bytes(b"source")
+    _reset_source_raster_cache(monkeypatch, 1024)
+    monkeypatch.setattr(renderer, "_RENDERER_CACHE_MAX", 8)
+    calls = []
+
+    def fake_load(path, channel):
+        calls.append((path, channel))
+        return renderer.SourceRaster(
+            cmi=np.zeros((2, 2), dtype=np.float32),
+            src_transform=object(),
+            src_crs=object(),
+        )
+
+    monkeypatch.setattr(renderer, "_load_source_raster", fake_load)
+    monkeypatch.setattr(
+        renderer,
+        "source_channels_for_product",
+        lambda _product: ("Channel13",),
+    )
+
+    first = renderer.SatelliteTileRenderer.from_sources(
+        "Channel13", {"Channel13": source}
+    )
+    second = renderer.SatelliteTileRenderer.from_sources(
+        "NighttimeMicrophysics", {"Channel13": source}
+    )
+
+    assert first is not second
+    assert first.source_rasters["Channel13"] is second.source_rasters["Channel13"]
+    assert calls == [(source, "Channel13")]
+    assert len(renderer._RENDERER_CACHE) == 2
+
+
+def test_oversized_source_does_not_leave_lock_or_cached_renderer(tmp_path, monkeypatch):
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"source")
+    _reset_source_raster_cache(monkeypatch, 8)
+    monkeypatch.setattr(renderer, "_RENDERER_CACHE_MAX", 8)
+    monkeypatch.setattr(
+        renderer,
+        "_load_source_raster",
+        lambda *_args: renderer.SourceRaster(
+            cmi=np.zeros((2, 2), dtype=np.float32),
+            src_transform=object(),
+            src_crs=object(),
+        ),
+    )
+    monkeypatch.setattr(
+        renderer,
+        "source_channels_for_product",
+        lambda _product: ("Channel13",),
+    )
+
+    result = renderer.SatelliteTileRenderer.from_sources(
+        "Channel13", {"Channel13": source}
+    )
+
+    assert result.source_rasters["Channel13"].cmi.nbytes == 16
+    assert renderer._SOURCE_RASTER_CACHE == {}
+    assert renderer._SOURCE_RASTER_KEY_LOCKS == {}
+    assert renderer._RENDERER_CACHE == {}
+
+
+def test_source_raster_eviction_removes_dependent_renderer(tmp_path, monkeypatch):
+    first_path = tmp_path / "first.bin"
+    second_path = tmp_path / "second.bin"
+    first_path.write_bytes(b"first")
+    second_path.write_bytes(b"second")
+    _reset_source_raster_cache(monkeypatch, 16)
+
+    monkeypatch.setattr(
+        renderer,
+        "_load_source_raster",
+        lambda *_args: renderer.SourceRaster(
+            cmi=np.zeros((2, 2), dtype=np.float32),
+            src_transform=object(),
+            src_crs=object(),
+        ),
+    )
+
+    first, _ = renderer._load_source_raster_cached(first_path, "Channel13")
+    renderer._RENDERER_CACHE[("first",)] = renderer.SatelliteTileRenderer(
+        product_key="Channel13",
+        source_rasters={"Channel13": first},
+    )
+    second, _ = renderer._load_source_raster_cached(second_path, "Channel13")
+
+    assert first is not second
+    assert list(renderer._SOURCE_RASTER_CACHE.values()) == [second]
+    assert renderer._SOURCE_RASTER_CACHE_BYTES == 16
+    assert renderer._RENDERER_CACHE == {}

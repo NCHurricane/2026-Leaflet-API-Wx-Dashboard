@@ -7,6 +7,7 @@ import re
 import threading
 import time
 from collections import OrderedDict
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,9 +27,12 @@ from config.satellite_platforms import SATELLITE_PLATFORMS
 from config.satellite_v2_config import (
     ABI_CHANNELS,
     RGB_COMPOSITE_KEYS,
+    SATELLITE_V2_AHI_MAX_GRID,
+    SATELLITE_V2_FCI_MAX_GRID,
     SATELLITE_V2_GOES_FULLDISK_MAX_GRID,
     SATELLITE_V2_NETCDF_CACHE_SIZE,
     SATELLITE_V2_RENDERER_CACHE_SIZE,
+    SATELLITE_V2_SOURCE_RASTER_CACHE_MB,
     SATELLITE_V2_TILE_SIZE,
     normalize_channel,
     source_channels_for_product,
@@ -78,6 +82,13 @@ _RENDERER_CACHE: OrderedDict[tuple[object, ...], "SatelliteTileRenderer"] = (
     OrderedDict()
 )
 _RENDERER_KEY_LOCKS: dict[tuple[object, ...], threading.Lock] = {}
+
+
+_SOURCE_RASTER_CACHE_MAX_BYTES = SATELLITE_V2_SOURCE_RASTER_CACHE_MB * 1024 * 1024
+_SOURCE_RASTER_CACHE_LOCK = threading.RLock()
+_SOURCE_RASTER_CACHE: OrderedDict[tuple[object, ...], "SourceRaster"] = OrderedDict()
+_SOURCE_RASTER_CACHE_BYTES = 0
+_SOURCE_RASTER_KEY_LOCKS: dict[tuple[object, ...], threading.Lock] = {}
 
 
 @dataclass
@@ -283,6 +294,177 @@ def _source_file_signature(source_file: str | Path) -> tuple[str, int, int]:
     return str(path), int(stat.st_mtime_ns), int(stat.st_size)
 
 
+def _source_raster_grid_cap(path: Path, source_channel: str) -> int:
+    if _is_ahi_hsd_file(path):
+        return SATELLITE_V2_AHI_MAX_GRID
+    if _is_fci_chunk_file(path):
+        return SATELLITE_V2_FCI_MAX_GRID
+    if path.suffix.lower() == ".nc" and source_channel not in {"ADP", "AOD", "FRP"}:
+        return SATELLITE_V2_GOES_FULLDISK_MAX_GRID
+    return 0
+
+
+def _source_raster_cache_key(
+    source_file: str | Path, source_channel: str
+) -> tuple[object, ...]:
+    path = Path(source_file)
+    return (
+        *_source_file_signature(path),
+        source_channel,
+        _source_raster_grid_cap(path, source_channel),
+    )
+
+
+def _source_raster_bytes(raster: SourceRaster) -> int:
+    return int(getattr(raster.cmi, "nbytes", 0) or 0)
+
+
+def _evict_renderers_holding(raster: SourceRaster) -> None:
+    with _RENDERER_CACHE_LOCK:
+        stale_keys = [
+            key
+            for key, candidate in _RENDERER_CACHE.items()
+            if any(value is raster for value in candidate.source_rasters.values())
+        ]
+        for key in stale_keys:
+            _RENDERER_CACHE.pop(key, None)
+
+
+def _cache_source_raster(
+    key: tuple[object, ...], raster: SourceRaster
+) -> None:
+    global _SOURCE_RASTER_CACHE_BYTES
+    weight = _source_raster_bytes(raster)
+    if _SOURCE_RASTER_CACHE_MAX_BYTES <= 0 or weight > _SOURCE_RASTER_CACHE_MAX_BYTES:
+        return
+    evicted: list[SourceRaster] = []
+    with _SOURCE_RASTER_CACHE_LOCK:
+        replaced = _SOURCE_RASTER_CACHE.pop(key, None)
+        if replaced is not None:
+            _SOURCE_RASTER_CACHE_BYTES -= _source_raster_bytes(replaced)
+        _SOURCE_RASTER_CACHE[key] = raster
+        _SOURCE_RASTER_CACHE_BYTES += weight
+        while (
+            _SOURCE_RASTER_CACHE
+            and _SOURCE_RASTER_CACHE_BYTES > _SOURCE_RASTER_CACHE_MAX_BYTES
+        ):
+            old_key, old_raster = _SOURCE_RASTER_CACHE.popitem(last=False)
+            _SOURCE_RASTER_CACHE_BYTES -= _source_raster_bytes(old_raster)
+            old_lock = _SOURCE_RASTER_KEY_LOCKS.get(old_key)
+            if old_lock is not None and not old_lock.locked():
+                _SOURCE_RASTER_KEY_LOCKS.pop(old_key, None)
+            evicted.append(old_raster)
+    for old_raster in evicted:
+        _evict_renderers_holding(old_raster)
+
+
+def _cached_source_raster(key: tuple[object, ...]) -> SourceRaster | None:
+    with _SOURCE_RASTER_CACHE_LOCK:
+        raster = _SOURCE_RASTER_CACHE.get(key)
+        if raster is not None:
+            _SOURCE_RASTER_CACHE.move_to_end(key)
+        return raster
+
+
+def _source_raster_key_lock(key: tuple[object, ...]) -> threading.Lock:
+    with _SOURCE_RASTER_CACHE_LOCK:
+        lock = _SOURCE_RASTER_KEY_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _SOURCE_RASTER_KEY_LOCKS[key] = lock
+        return lock
+
+
+def _load_source_raster_cached(
+    source_file: str | Path, source_channel: str
+) -> tuple[SourceRaster, bool]:
+    if _SOURCE_RASTER_CACHE_MAX_BYTES <= 0:
+        return _load_source_raster(source_file, source_channel), True
+    key = _source_raster_cache_key(source_file, source_channel)
+    cached = _cached_source_raster(key)
+    if cached is not None:
+        return cached, False
+    key_lock = _source_raster_key_lock(key)
+    with key_lock:
+        cached = _cached_source_raster(key)
+        if cached is not None:
+            return cached, False
+        raster = _load_source_raster(source_file, source_channel)
+        _cache_source_raster(key, raster)
+    with _SOURCE_RASTER_CACHE_LOCK:
+        if (
+            key not in _SOURCE_RASTER_CACHE
+            and _SOURCE_RASTER_KEY_LOCKS.get(key) is key_lock
+        ):
+            _SOURCE_RASTER_KEY_LOCKS.pop(key, None)
+    return raster, True
+
+
+def _load_fci_source_rasters_cached(
+    primary_chunk: Path, source_channels: Sequence[str]
+) -> tuple[dict[str, SourceRaster], set[str]]:
+    if _SOURCE_RASTER_CACHE_MAX_BYTES <= 0:
+        return _load_fci_source_rasters(primary_chunk, source_channels), set(source_channels)
+    keys = {
+        channel: _source_raster_cache_key(primary_chunk, channel)
+        for channel in source_channels
+    }
+    results = {
+        channel: raster
+        for channel, key in keys.items()
+        if (raster := _cached_source_raster(key)) is not None
+    }
+    missing = [channel for channel in source_channels if channel not in results]
+    if not missing:
+        return results, set()
+    parsed_channels: set[str] = set()
+    keyed_locks = sorted(
+        ((keys[channel], _source_raster_key_lock(keys[channel])) for channel in missing),
+        key=lambda item: repr(item[0]),
+    )
+    with ExitStack() as stack:
+        for _, lock in keyed_locks:
+            stack.enter_context(lock)
+        missing = []
+        for channel in source_channels:
+            if channel in results:
+                continue
+            cached = _cached_source_raster(keys[channel])
+            if cached is not None:
+                results[channel] = cached
+            else:
+                missing.append(channel)
+        if missing:
+            loaded = _load_fci_source_rasters(primary_chunk, missing)
+            parsed_channels.update(loaded)
+            for channel, raster in loaded.items():
+                _cache_source_raster(keys[channel], raster)
+                results[channel] = raster
+    with _SOURCE_RASTER_CACHE_LOCK:
+        for key, lock in keyed_locks:
+            if (
+                key not in _SOURCE_RASTER_CACHE
+                and _SOURCE_RASTER_KEY_LOCKS.get(key) is lock
+            ):
+                _SOURCE_RASTER_KEY_LOCKS.pop(key, None)
+    return results, parsed_channels
+
+
+def _touch_renderer_source_rasters(renderer: SatelliteTileRenderer) -> None:
+    raster_ids = {id(raster) for raster in renderer.source_rasters.values()}
+    with _SOURCE_RASTER_CACHE_LOCK:
+        for key, raster in list(_SOURCE_RASTER_CACHE.items()):
+            if id(raster) in raster_ids:
+                _SOURCE_RASTER_CACHE.move_to_end(key)
+
+
+def _renderer_sources_are_cached(renderer: SatelliteTileRenderer) -> bool:
+    if _SOURCE_RASTER_CACHE_MAX_BYTES <= 0:
+        return True
+    cached_ids = {id(raster) for raster in _SOURCE_RASTER_CACHE.values()}
+    return all(id(raster) in cached_ids for raster in renderer.source_rasters.values())
+
+
 def _renderer_cache_key(
     product_key: str,
     source_files: dict[str, str | Path],
@@ -318,10 +500,11 @@ def _load_renderer_uncached(
         if len(channels) < 2:
             continue
         parse_started = time.perf_counter() if bench_enabled() else 0.0
-        rasters.update(
-            _load_fci_source_rasters(Path(source_files[channels[0]]), channels)
+        loaded_rasters, parsed_channels = _load_fci_source_rasters_cached(
+            Path(source_files[channels[0]]), channels
         )
-        if bench_enabled():
+        rasters.update(loaded_rasters)
+        if bench_enabled() and parsed_channels:
             add_timing_ms(
                 "parse_ms{FCI-batch}",
                 (time.perf_counter() - parse_started) * 1000.0,
@@ -330,10 +513,11 @@ def _load_renderer_uncached(
 
     for source_channel in remaining:
         parse_started = time.perf_counter() if bench_enabled() else 0.0
-        rasters[source_channel] = _load_source_raster(
+        raster, parsed = _load_source_raster_cached(
             source_files[source_channel], source_channel
         )
-        if bench_enabled():
+        rasters[source_channel] = raster
+        if bench_enabled() and parsed:
             add_timing_ms(
                 f"parse_ms{{{source_channel}}}",
                 (time.perf_counter() - parse_started) * 1000.0,
@@ -366,30 +550,41 @@ def _get_cached_renderer(
         cached = _RENDERER_CACHE.get(key)
         if cached is not None:
             _RENDERER_CACHE.move_to_end(key)
-            return cached
-        key_lock = _RENDERER_KEY_LOCKS.get(key)
-        if key_lock is None:
-            key_lock = threading.Lock()
-            _RENDERER_KEY_LOCKS[key] = key_lock
+        else:
+            key_lock = _RENDERER_KEY_LOCKS.get(key)
+            if key_lock is None:
+                key_lock = threading.Lock()
+                _RENDERER_KEY_LOCKS[key] = key_lock
+    if cached is not None:
+        _touch_renderer_source_rasters(cached)
+        return cached
 
     with key_lock:
         with _RENDERER_CACHE_LOCK:
             cached = _RENDERER_CACHE.get(key)
             if cached is not None:
                 _RENDERER_CACHE.move_to_end(key)
-                return cached
+        if cached is not None:
+            _touch_renderer_source_rasters(cached)
+            return cached
 
         renderer = _load_renderer_uncached(
             renderer_cls, product_key, source_files, required, instrument
         )
 
-        with _RENDERER_CACHE_LOCK:
-            _RENDERER_CACHE[key] = renderer
-            _RENDERER_CACHE.move_to_end(key)
-            while len(_RENDERER_CACHE) > _RENDERER_CACHE_MAX:
-                old_key, _ = _RENDERER_CACHE.popitem(last=False)
-                _RENDERER_KEY_LOCKS.pop(old_key, None)
-            _RENDERER_KEY_LOCKS.pop(key, None)
+        # Keep source membership stable through renderer insertion. Otherwise a
+        # concurrent source eviction could miss this renderer and leave its
+        # strong raster reference outside the byte-accounted cache.
+        with _SOURCE_RASTER_CACHE_LOCK:
+            cache_renderer = _renderer_sources_are_cached(renderer)
+            with _RENDERER_CACHE_LOCK:
+                if cache_renderer:
+                    _RENDERER_CACHE[key] = renderer
+                    _RENDERER_CACHE.move_to_end(key)
+                    while len(_RENDERER_CACHE) > _RENDERER_CACHE_MAX:
+                        old_key, _ = _RENDERER_CACHE.popitem(last=False)
+                        _RENDERER_KEY_LOCKS.pop(old_key, None)
+                _RENDERER_KEY_LOCKS.pop(key, None)
         return renderer
 
 
