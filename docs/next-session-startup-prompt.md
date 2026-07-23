@@ -38,7 +38,7 @@ Current checkpoint:
   matrix passed 81/81 goldens. AHI cold p50 improved 49.6% from Phase 2 and FCI
   Nighttime Microphysics improved 43.2%. Results are in
   `docs/perf/2026-07-22-phase3/`.
-- Phase 4 is complete locally and awaits its checkpoint commit. The approved
+- Phase 4 is committed at `39de302`. The approved
   shared `SourceRaster` LRU uses a 4096 MB default byte budget, is overridden by
   `WX_SATELLITE_V2_SOURCE_RASTER_CACHE_MB`, and evicts dependent renderer
   entries with each source. The full matrix passed 81/81 goldens. On the pinned
@@ -46,6 +46,13 @@ Current checkpoint:
   identity: three unique grids occupy 354.797 MB instead of 473.062 MB without
   deduplication, saving 118.266 MB and one parse. Results are in
   `docs/perf/2026-07-22-phase4/`.
+- Phase 5 is complete locally and awaits its checkpoint commit. The rapid
+  worker reuses one process pool across all frames/jobs and skips the trailing
+  catalog rebuild for jobs with zero renders and zero errors. A pinned MESO
+  two-zoom probe improved from 3514.710 ms to 832.513 ms steady p50 (76.3%).
+  Task-per-zoom parallelism remains because cached parsing was only 12.888 ms
+  p50. The pool paths produced 40 byte-identical PNGs and matching negative
+  markers; results are in `docs/perf/2026-07-22-phase5/`.
 - The user completed the 2026-07-20 all-page manual smoke and clarified every
   finding. The correction set is implemented; page-by-page browser re-smoke is
   in progress and has not yet covered the full set.
@@ -103,6 +110,10 @@ Current checkpoint:
   one visual type.
 
 Validation at handoff:
+- Phase 5: full matrix 81/81 byte-identical; reusable and owned pool paths
+  produced 40 identical PNGs plus the same 75 negative-marker paths.
+- Phase 5 focused Satellite tests pass 37/37; full pytest passes 109 tests plus
+  42 subtests. Changed Python compiles and `git diff --check` passes.
 - Phase 4: full matrix 81/81 byte-identical; the FCI cross-product probe reused
   Channel13 without reparsing and the byte-accounted cache matched unique-grid
   weight exactly.
@@ -134,9 +145,10 @@ Validation at handoff:
   `.pytest_cache` write warning.
 
 Next step:
-1. Review and commit the Phase 4 code, tests, docs, and compact results.
-2. Begin Phase 5 warm-path pool reuse and measure task granularity before
-   deciding whether to combine a frame's zoom work.
+1. Review and commit the Phase 5 code, tests, docs, and compact results.
+2. Treat Phase 6 GDAL warp threading as deferred. Reopen it only after a real
+   rapid-run profile shows warp is still material and the user approves the new
+   tuning knob; otherwise close/archive the optimization execution plan.
 
 Guardrails:
 - Browser smoke is user-owned; report static versus browser proof honestly.

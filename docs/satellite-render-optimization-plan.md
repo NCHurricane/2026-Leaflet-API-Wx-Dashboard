@@ -91,7 +91,7 @@ routes/satellite_v2.py
                  ├─ _load_source_raster → { GOES xr | ahi_hsd | seviri_nat | fci_nc }
                  └─ render_zoom_canvas → rio_reproject per channel → composites/colorize
 rapid_worker → catalog.build_catalog + tiler.warm_frame_tiles_from_canvas
-               → ProcessPoolExecutor (created PER FRAME today)                 [Phase 5]
+               → ProcessPoolExecutor (reused for the full rapid-worker run)    [Phase 5]
 meteosat_prefetch_worker → providers download only (no render; no changes)
 ```
 
@@ -367,7 +367,7 @@ made because Phase 2 did not capture a comparable working-set baseline.
 
 ## Phase 4 — Shared source-raster cache (renderer.py)
 
-**Status (2026-07-22): complete locally, checkpoint commit pending.** The
+**Status (2026-07-22): committed at `39de302`.** The
 approved byte-budgeted LRU is implemented with a 4096 MB default and
 `WX_SATELLITE_V2_SOURCE_RASTER_CACHE_MB` override. Source eviction also removes
 dependent renderer entries, so inactive renderer references cannot bypass the
@@ -416,6 +416,14 @@ full suite passes 105 tests plus 42 subtests.
 
 ## Phase 5 — Warm-path pool efficiency (rapid_worker.py, tiler.py)
 
+**Status (2026-07-22): complete locally, checkpoint commit pending.** The rapid
+worker now owns one process pool for its entire run and passes it through every
+frame/job. Fully warm jobs with zero renders and zero errors skip the redundant
+trailing catalog rebuild. On the isolated pinned MESO two-zoom workload,
+steady warm p50 fell from 3514.710 ms to 832.513 ms (76.3%); the first pooled
+sample remained comparable because it still pays one-time Windows process
+startup. Results are under `docs/perf/2026-07-22-phase5/`.
+
 1. **Pool reuse:** add an optional `pool` parameter to
    `warm_frame_tiles_from_canvas` (default `None` = current per-call pool,
    so other callers are untouched). `rapid_worker` creates **one**
@@ -438,23 +446,36 @@ full suite passes 105 tests plus 42 subtests.
 elapsed) before/after on the same warmed-cache state; tiles byte-identical
 (golden on a MESO/JAPAN frame); `.lock`/sentinel behavior unchanged.
 
+**Verified:** the reusable-pool and per-call-pool paths produced 40
+SHA-256-identical PNGs and the same 75 negative-marker paths. The complete
+nine-row matrix also passed 81/81 golden comparisons. Source parse was only
+12.888 ms p50 once cached, while the two zoom canvases still benefit from two
+parallel workers, so task-per-zoom granularity is retained. Focused Satellite
+tests pass 37/37 and the full suite passes 109 tests plus 42 subtests.
+
 ---
 
 ## Phase 6 (optional, measure-first) — GDAL warp threads
 
 `rio_reproject(num_threads=N)` chunks the destination internally; output is
-deterministic. Candidate **only** for the big warm-path canvases (rapid
-worker: ~7000×5600 px for JAPAN z8), never the live per-tile path (would
+deterministic. Candidate **only** for big warm-path canvases, never the live
+per-tile path (would
 oversubscribe against the 10-thread live pool). Gate behind
 `WX_SATELLITE_V2_WARP_THREADS` (new env-only flag, default 1 = today).
 Implement only if Phase 5's numbers show warp dominating warm runs.
+
+**Current decision:** defer. The current rapid policy tops out at z7 and Phase
+5 reduced the representative two-zoom steady warm p50 below one second without
+changing warp behavior. Do not add the new knob unless a later real rapid-run
+profile identifies warp as the remaining material bottleneck and the user
+approves the experiment.
 
 ---
 
 ## Execution order & session checklist
 
-1. Phase 4 byte-budget knob approved; decide whether Phase 6 stays in scope
-   only after Phase 5 measurements.
+1. Phase 4 byte-budget knob approved; Phase 6 is deferred by Phase 5
+   measurements unless a later real rapid-run profile reopens it.
 2. Phase 0 complete and committed at `a6f5f83`; baseline is under
    `docs/perf/2026-07-22-baseline/`.
 3. Phase 1 committed at `fc534ba`; results are under
@@ -463,10 +484,12 @@ Implement only if Phase 5's numbers show warp dominating warm runs.
    `docs/perf/2026-07-22-phase2/`.
 5. Phase 3 committed at `29b83b6`; results are under
    `docs/perf/2026-07-22-phase3/`.
-6. Phase 4 complete locally; commit the shared raster-cache slice and results
-   under `docs/perf/2026-07-22-phase4/`, then begin Phase 5. Each is gated on: golden byte-identity, the
-   phase's target metric moving, and a clean run of the full matrix.
-5. After each phase: commit with the phase number in the message; update the
+6. Phase 4 committed at `39de302`; results are under
+   `docs/perf/2026-07-22-phase4/`.
+7. Phase 5 complete locally; commit the pool-reuse slice and results under
+   `docs/perf/2026-07-22-phase5/`. Each phase is gated on golden byte-identity,
+   its target metric moving, and a clean full-matrix run.
+8. After each phase: commit with the phase number in the message; update the
    `docs/perf/` summary table with before/after p50s.
 
 Rollback: every phase is a small commit on top of a green baseline —

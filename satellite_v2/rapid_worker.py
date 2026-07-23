@@ -8,6 +8,7 @@ Full Disk and CONUS stay live-rendered/cache-assisted by default.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import os
@@ -137,6 +138,7 @@ def _warm_one_job(
     max_frames: int,
     tile_workers: int,
     tile_buffer: int,
+    pool: ProcessPoolExecutor,
 ) -> dict[str, int]:
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
@@ -182,6 +184,7 @@ def _warm_one_job(
             render_workers=tile_workers,
             tile_bounds=tile_bounds,
             tile_buffer=tile_buffer,
+            pool=pool,
         )
         totals["frames"] += 1
         totals["rendered"] += int(stats.get("rendered") or 0)
@@ -194,15 +197,17 @@ def _warm_one_job(
             f"errors={stats.get('errors')} elapsed={_format_elapsed(time.perf_counter() - frame_start)}"
         )
 
-    # Refresh catalog so the UI sees the newly warmed tile counts immediately.
-    build_catalog(
-        cache_root=_CACHE_ROOT,
-        sat_id=sat_key,
-        sector=sector_key,
-        channel_key=channel_key,
-        hours=hours,
-        max_frames=max_frames,
-    )
+    # Refresh only when valid tiles changed. A fully warm/no-op job leaves the
+    # pre-warm catalog accurate, so a second provider/catalog scan is wasted.
+    if totals["rendered"] > 0 or totals["errors"] > 0:
+        build_catalog(
+            cache_root=_CACHE_ROOT,
+            sat_id=sat_key,
+            sector=sector_key,
+            channel_key=channel_key,
+            hours=hours,
+            max_frames=max_frames,
+        )
     print(
         f"[{worker_name}] {sat_key}/{sector_key}/{channel_key}: "
         f"done elapsed={_format_elapsed(time.perf_counter() - job_start)}"
@@ -242,24 +247,26 @@ def run_satellite_v2_rapid_worker(
         if not acquired:
             return totals
         run_start = time.perf_counter()
-        for sat_id, sector in selected_jobs:
-            for channel in selected_products:
-                stats = _warm_one_job(
-                    worker_name,
-                    sat_id,
-                    sector,
-                    channel,
-                    frame_count,
-                    hours_value,
-                    max_frames_value,
-                    workers_value,
-                    buffer_value,
-                )
-                totals["jobs"] += 1
-                totals["frames"] += int(stats.get("frames") or 0)
-                totals["rendered"] += int(stats.get("rendered") or 0)
-                totals["skipped"] += int(stats.get("skipped") or 0)
-                totals["errors"] += int(stats.get("errors") or 0)
+        with ProcessPoolExecutor(max_workers=workers_value) as tile_pool:
+            for sat_id, sector in selected_jobs:
+                for channel in selected_products:
+                    stats = _warm_one_job(
+                        worker_name,
+                        sat_id,
+                        sector,
+                        channel,
+                        frame_count,
+                        hours_value,
+                        max_frames_value,
+                        workers_value,
+                        buffer_value,
+                        tile_pool,
+                    )
+                    totals["jobs"] += 1
+                    totals["frames"] += int(stats.get("frames") or 0)
+                    totals["rendered"] += int(stats.get("rendered") or 0)
+                    totals["skipped"] += int(stats.get("skipped") or 0)
+                    totals["errors"] += int(stats.get("errors") or 0)
         mark_run_complete(worker_name)
         print(
             f"[{worker_name}] complete jobs={totals['jobs']} frames={totals['frames']} "

@@ -1,0 +1,35 @@
+{
+  "metric": "two_zoom_canvas_warm_wall_ms",
+  "target": "goes19/MESO1/Channel02/20260722T220525Z/z7-z8",
+  "repeat_count": 5,
+  "before_samples_ms": [
+    3472.895,
+    3514.710,
+    3606.231,
+    3498.564,
+    3655.025
+  ],
+  "before_p50_ms": 3514.710,
+  "after_samples_ms": [
+    3413.370,
+    690.777,
+    832.513,
+    869.517,
+    825.456
+  ],
+  "after_p50_ms": 832.513,
+  "improvement_percent": 76.3,
+  "cached_source_parse_p50_ms": 12.888,
+  "output_comparison": {
+    "png_files": 40,
+    "png_hash_differences": 0,
+    "negative_markers": 75,
+    "negative_marker_path_differences": 0
+  },
+  "full_matrix_golden_tiles": 81,
+  "tests": {
+    "focused_satellite": 37,
+    "full_pytest": 109,
+    "full_pytest_subtests": 42
+  }
+}

@@ -1,9 +1,9 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-22 (Satellite render optimization Phases 0–3 are
-committed. Phase 4 shared source-raster caching is complete locally with 81
-byte-identical goldens and measured cross-product raster deduplication; Phase 4
-commit pending.)
+Last updated: 2026-07-22 (Satellite render optimization Phases 0–4 are
+committed. Phase 5 rapid-worker pool reuse is complete locally with 81
+byte-identical goldens and a 76.3% steady warm-path gain; Phase 5 commit
+pending.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -44,7 +44,8 @@ post-split structure, not the monolith.
    plan in `docs/satellite-render-optimization-plan.md`, registered in the
    satellite roadmap section below. Backend-only (`satellite_v2/*`), so it
    may interleave with track 1; the two touch disjoint files. Phases 0–3 are
-   committed; Phase 4 is complete locally and Phase 5 is next.
+   committed; Phase 5 is complete locally. Optional Phase 6 warp threading is
+   deferred unless later real-run profiling reopens it.
 3. GK2A + GMGSI new platforms. Adds `PLATFORM_*` entries to
    `js/satellite-page.js`; if started mid-split those entries must be
    ported to `pages/satellite/`, so prefer starting it before the split
@@ -67,11 +68,16 @@ post-split structure, not the monolith.
   AHI segment decoding passed the full 81-tile golden matrix. AHI improved
   49.6% from Phase 2 and FCI Nighttime Microphysics improved 43.2%. Results
   live under `docs/perf/2026-07-22-phase3/`.
-- Phase 4 is complete locally: the approved 4096 MB byte-budgeted shared
+- Phase 4 is committed at `39de302`: the approved 4096 MB byte-budgeted shared
   `SourceRaster` LRU passed all 81 goldens. Channel13 followed by FCI Nighttime
   Microphysics reused Channel13 without reparsing and reduced unique grid
   weight from 473.062 MB to 354.797 MB. Results live under
-  `docs/perf/2026-07-22-phase4/`; commit pending.
+  `docs/perf/2026-07-22-phase4/`.
+- Phase 5 is complete locally: the rapid worker owns one process pool per run,
+  and no-op jobs skip their trailing catalog rebuild. The pinned two-zoom MESO
+  probe improved from 3514.710 ms to 832.513 ms steady p50 (76.3%); task-per-
+  zoom parallelism remains. Results live under
+  `docs/perf/2026-07-22-phase5/`; commit pending.
 - Phase 0 delivered env-gated
   timing hooks, safe benchmark CLI, nine-row/three-scenario baseline, manifests,
   summaries, and 81 byte-identical golden-tile checks. Baseline artifacts live
@@ -2278,7 +2284,7 @@ GeoColor opacity work).
 ### Satellite render pipeline latency optimization — registered 2026-07-16
 
 Active track 2 (see Active Tracks). Status: Phase 0 committed at `a6f5f83`,
-Phase 1 at `fc534ba`, Phase 2 at `8ee3a4b`, Phase 3 at `29b83b6`, and Phase 4 complete locally with commit pending. The standalone
+Phase 1 at `fc534ba`, Phase 2 at `8ee3a4b`, Phase 3 at `29b83b6`, Phase 4 at `39de302`, and Phase 5 complete locally with commit pending. The standalone
 execution plan is `docs/satellite-render-optimization-plan.md` (prepared
 2026-07-11), with the file-reference companion
 `docs/satellite-radar-render-pipeline-files.md`. Both stay standalone while
@@ -2311,6 +2317,10 @@ when the phases complete.
   across renderer entries and evicts dependent renderers with each source. The
   full matrix remains byte-identical; the pinned FCI cross-product sequence
   saved one 118.266 MB Channel13 grid and one parse.
+- Phase 5 result: the rapid worker reuses one process pool across all
+  frames/jobs and avoids the trailing catalog rebuild after no-op jobs. A
+  pinned MESO two-zoom workload improved 76.3% at steady warm p50; reusable and
+  per-call pool outputs were byte-identical.
 - Phases: 0 benchmark harness + committed baseline; 1 hit-path validation
   cheapening + `_NETCDF_CACHE` LRU bugfix; 2 supertile single-canvas +
   respond-first; 3 multi-channel single-pass parse + AHI threaded segment
@@ -2318,8 +2328,10 @@ when the phases complete.
   6 (optional, measure-first) GDAL warp threads.
 - The pre-identified `_NETCDF_CACHE` plain-dict eviction bug is fixed in the
   locally complete Phase 1 slice.
-- The Phase 4 byte-budget knob was approved. Whether Phase 6 stays in scope is
-  deferred until Phase 5 measurements show whether warp still dominates.
+- The Phase 4 byte-budget knob was approved. Phase 6 is now deferred: the
+  current rapid policy tops at z7 and the representative Phase 5 steady warm
+  path is below one second. Reopen warp threading only after a real rapid-run
+  profile and explicit approval for its new knob.
 
 ### International radar
 

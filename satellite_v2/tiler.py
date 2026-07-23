@@ -501,6 +501,7 @@ def warm_frame_tiles_from_canvas(
     render_workers: int = 1,
     tile_bounds: Mapping[str, float] | Sequence[float] | None = None,
     tile_buffer: int = 0,
+    pool: ProcessPoolExecutor | None = None,
 ) -> dict[str, int]:
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
@@ -570,18 +571,24 @@ def warm_frame_tiles_from_canvas(
     ]
 
     worker_count = max(1, min(int(render_workers or 1), len(tasks)))
-    if worker_count <= 1:
+    if pool is None and worker_count <= 1:
         for task in tasks:
             _merge_tile_stats(stats, _render_warm_zoom_canvas_task(task))
         return stats
 
-    with ProcessPoolExecutor(max_workers=worker_count) as pool:
-        futures = [pool.submit(_render_warm_zoom_canvas_task, task) for task in tasks]
+    def collect(executor: ProcessPoolExecutor) -> None:
+        futures = [executor.submit(_render_warm_zoom_canvas_task, task) for task in tasks]
         for future in as_completed(futures):
             try:
                 _merge_tile_stats(stats, future.result())
             except Exception:
                 stats["errors"] += 1
+
+    if pool is not None:
+        collect(pool)
+    else:
+        with ProcessPoolExecutor(max_workers=worker_count) as owned_pool:
+            collect(owned_pool)
     return stats
 
 
