@@ -2,7 +2,7 @@ from config.geo_config import STATES_FULL, STATE_BOUNDS
 from metpy.units import units
 from metpy.calc import wind_components
 from datetime import datetime, timezone, timedelta
-from io import StringIO
+from io import BytesIO, StringIO
 from urllib.parse import urlencode
 import cartopy.crs as ccrs
 import matplotlib.patheffects as PathEffects
@@ -16,7 +16,7 @@ import json
 import gzip
 import time
 import re
-import requests
+from app_core.upstream_ledger import requests
 import pandas as pd
 import numpy as np
 import matplotlib
@@ -389,7 +389,9 @@ def _fetch_world_current_observations():
     """Fetch current global METAR observations from Aviation Weather cache feed."""
     url = "https://aviationweather.gov/data/cache/metars.cache.csv.gz"
     try:
-        df = pd.read_csv(url, compression="gzip")
+        response = requests.get(url, timeout=60)
+        response.raise_for_status()
+        df = pd.read_csv(BytesIO(response.content), compression="gzip")
     except Exception as e:
         print(f"[WARN] WORLD METAR fetch failed: {e}")
         return pd.DataFrame()

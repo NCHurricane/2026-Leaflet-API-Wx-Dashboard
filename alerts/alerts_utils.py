@@ -31,7 +31,7 @@ import os
 import json
 import hashlib
 import time
-import requests
+from app_core.upstream_ledger import measure_stage, requests
 import numpy as np
 import matplotlib
 import concurrent.futures
@@ -90,27 +90,35 @@ _ZONE_DISK_CACHE_PATH = os.path.join(
 
 def _load_zone_disk_cache() -> None:
     """Load persisted zone geometries from disk into the in-memory cache."""
+    cache_size = 0
     try:
-        if not os.path.exists(_ZONE_DISK_CACHE_PATH):
-            return
-        with open(_ZONE_DISK_CACHE_PATH, "r", encoding="utf-8") as fh:
-            raw = json.load(fh)
-        now = time.time()
-        loaded = 0
-        with _ZONE_GEOM_LOCK:
-            for zone_id, entry in raw.items():
-                expire_ts = entry.get("expire_ts", 0)
-                if expire_ts <= now:
-                    continue  # skip expired entries
-                geom_raw = entry.get("geometry")
-                geom = shape(geom_raw) if geom_raw else None
-                _ZONE_GEOM_CACHE[zone_id] = (geom, expire_ts)
-                loaded += 1
-        if loaded:
-            print(
-                f"[zone-geom] Loaded {loaded} zone geometries from disk cache")
-    except Exception as exc:
-        print(f"[zone-geom] Disk cache load skipped: {exc}")
+        cache_size = os.path.getsize(_ZONE_DISK_CACHE_PATH)
+    except OSError:
+        pass
+    with measure_stage(
+        "alerts.zone_geometry_cache.parse", cache_bytes=cache_size
+    ):
+        try:
+            if not os.path.exists(_ZONE_DISK_CACHE_PATH):
+                return
+            with open(_ZONE_DISK_CACHE_PATH, "r", encoding="utf-8") as fh:
+                raw = json.load(fh)
+            now = time.time()
+            loaded = 0
+            with _ZONE_GEOM_LOCK:
+                for zone_id, entry in raw.items():
+                    expire_ts = entry.get("expire_ts", 0)
+                    if expire_ts <= now:
+                        continue  # skip expired entries
+                    geom_raw = entry.get("geometry")
+                    geom = shape(geom_raw) if geom_raw else None
+                    _ZONE_GEOM_CACHE[zone_id] = (geom, expire_ts)
+                    loaded += 1
+            if loaded:
+                print(
+                    f"[zone-geom] Loaded {loaded} zone geometries from disk cache")
+        except Exception as exc:
+            print(f"[zone-geom] Disk cache load skipped: {exc}")
 
 
 def _save_zone_disk_cache() -> None:

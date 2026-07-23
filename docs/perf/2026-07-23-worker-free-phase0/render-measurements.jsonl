@@ -1,0 +1,6 @@
+{"downloaded_bytes": 603295, "duration_ms": 15565.653, "peak_rss_bytes": 5717012480, "return_code": 0, "scenario": "surface-gradient-world", "timestamp": "2026-07-23T03:28:11.893309+00:00", "upstream_request_count": 2}
+{"downloaded_bytes": 7394494, "duration_ms": 24588.466, "peak_rss_bytes": 8833486848, "return_code": 0, "scenario": "surface-gradient-conus", "timestamp": "2026-07-23T03:29:00.443793+00:00", "upstream_request_count": 130}
+{"downloaded_bytes": 5488886, "duration_ms": 22631.114, "peak_rss_bytes": 3596124160, "return_code": 0, "scenario": "radar-history", "timestamp": "2026-07-23T03:29:35.039632+00:00", "upstream_request_count": 33}
+{"downloaded_bytes": 5255883, "duration_ms": 4402.24, "peak_rss_bytes": 298078208, "return_code": 0, "scenario": "goes-tile", "timestamp": "2026-07-23T03:29:51.484242+00:00", "upstream_request_count": 27}
+{"downloaded_bytes": 30944550, "duration_ms": 10007.886, "peak_rss_bytes": 854224896, "return_code": 0, "scenario": "himawari-tile", "timestamp": "2026-07-23T03:30:11.076146+00:00", "upstream_request_count": 36}
+{"downloaded_bytes": 675721065, "duration_ms": 40995.584, "peak_rss_bytes": 427606016, "return_code": 0, "scenario": "eumetsat-frame", "timestamp": "2026-07-23T03:31:05.859454+00:00", "upstream_request_count": 43}

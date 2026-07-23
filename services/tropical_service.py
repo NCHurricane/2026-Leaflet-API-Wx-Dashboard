@@ -90,7 +90,9 @@ def _fetch_json_url(url: str, timeout_seconds: int = 12) -> dict[str, Any]:
             "Accept": "application/json,text/xml;q=0.9,*/*;q=0.8",
         },
     )
-    with ur.urlopen(req, timeout=timeout_seconds) as resp:
+    from app_core.upstream_ledger import urlopen
+
+    with urlopen(req, timeout=timeout_seconds) as resp:
         raw = resp.read()
     decoded = json.loads(raw.decode("utf-8"))
     if not isinstance(decoded, dict):
@@ -108,7 +110,9 @@ def _fetch_text_url(url: str, timeout_seconds: int = 12) -> str:
             "Accept": "application/xml,text/xml,text/plain;q=0.9,*/*;q=0.8",
         },
     )
-    with ur.urlopen(req, timeout=timeout_seconds) as resp:
+    from app_core.upstream_ledger import urlopen
+
+    with urlopen(req, timeout=timeout_seconds) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
 

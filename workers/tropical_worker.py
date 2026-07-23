@@ -29,7 +29,8 @@ project_root = str(Path(__file__).resolve().parent.parent)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from workers._freshness import is_cache_fresh, mark_run_complete
+from app_core.upstream_ledger import urlopen  # noqa: E402
+from workers._freshness import is_cache_fresh, mark_run_complete  # noqa: E402
 
 try:
     import shapefile
@@ -173,7 +174,7 @@ def _request_url(
 
     req = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+        with urlopen(req, timeout=timeout_seconds) as resp:
             body = resp.read()
             meta = {
                 "url": url,

@@ -21,12 +21,12 @@ Feature contract returned to the frontend (unchanged from the prior pipeline):
 
 from __future__ import annotations
 
-import importlib
 import math
 from datetime import datetime, timezone
 from typing import Any
 
 from lib.listing_cache import cached_call
+from app_core.upstream_ledger import requests
 from services.radar_service import normalize_radar_site_id
 
 _IEM_URL = "https://mesonet.agron.iastate.edu/geojson/nexrad_attr.geojson"
@@ -206,7 +206,6 @@ def _build_cells(geojson: dict, site_id: str) -> dict[str, Any]:
 
 
 def _fetch_iem(valid: str | None) -> dict:
-    requests = importlib.import_module("requests")
     params = {"valid": valid} if valid else {}
     resp = requests.get(
         _IEM_URL,

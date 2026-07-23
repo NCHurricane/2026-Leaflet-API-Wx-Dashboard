@@ -8,14 +8,16 @@ import os
 import time
 import urllib.parse
 import urllib.request
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from threading import Lock
 from typing import Any, Optional
 
 from fastapi import HTTPException
 from shapely.geometry import mapping, shape
+
+from app_core.upstream_ledger import record_measurement, urlopen
 
 from app_core.paths import CACHE_ROOT
 from config.alerts_config import (
@@ -34,6 +36,29 @@ _LSR_CACHE_TTL_SECONDS = 5 * 60
 _LSR_CACHE_MAX_ENTRIES = 24
 _LSR_CACHE: dict[tuple, tuple[float, dict]] = {}
 _LSR_CACHE_LOCK = Lock()
+_ENRICHED_GEOMETRY_CACHE_MAX_ENTRIES = 1024
+_ENRICHED_GEOMETRY_CACHE: OrderedDict[str, dict] = OrderedDict()
+_ENRICHED_GEOMETRY_CACHE_LOCK = Lock()
+
+
+def _get_enriched_geometry(cache_key: str) -> Optional[dict]:
+    if not cache_key:
+        return None
+    with _ENRICHED_GEOMETRY_CACHE_LOCK:
+        geometry = _ENRICHED_GEOMETRY_CACHE.get(cache_key)
+        if geometry is not None:
+            _ENRICHED_GEOMETRY_CACHE.move_to_end(cache_key)
+        return geometry
+
+
+def _put_enriched_geometry(cache_key: str, geometry: dict) -> None:
+    if not cache_key or not geometry:
+        return
+    with _ENRICHED_GEOMETRY_CACHE_LOCK:
+        _ENRICHED_GEOMETRY_CACHE[cache_key] = geometry
+        _ENRICHED_GEOMETRY_CACHE.move_to_end(cache_key)
+        while len(_ENRICHED_GEOMETRY_CACHE) > _ENRICHED_GEOMETRY_CACHE_MAX_ENTRIES:
+            _ENRICHED_GEOMETRY_CACHE.popitem(last=False)
 
 
 def _lsr_iso_time(value) -> Optional[str]:
@@ -137,7 +162,7 @@ def get_local_storm_reports(
             headers={"User-Agent": "NCHurricane Dashboard/2026 (+https://nchurricane.com)"},
         )
         try:
-            with urllib.request.urlopen(req, timeout=20) as response:
+            with urlopen(req, timeout=20) as response:
                 page = json.load(response)
         except Exception as exc:
             if cached:
@@ -181,22 +206,16 @@ def get_local_storm_reports(
     return payload
 
 
-def enrich_alert_features_geometry(features: list[dict]) -> None:
-    """Fill missing alert geometries using parallel enrichment with geometry caching."""
+def enrich_alert_features_geometry(
+    features: list[dict], *, measurement_fields: Optional[dict[str, Any]] = None
+) -> None:
+    """Fill missing alert geometries using a bounded process-local cache."""
     try:
         from alerts.alerts_utils import (
             CensusCounties,
             _prefetch_zone_geometries,
             _resolve_zone_geometry,
         )
-
-        geom_cache = {}
-        try:
-            cache_path = Path(CACHE_ROOT) / "alerts" / "enriched_geom_cache.json"
-            if cache_path.exists():
-                geom_cache = json.load(cache_path.open())
-        except Exception:
-            pass
 
         def _feature_cache_key(feat: dict) -> str:
             if not isinstance(feat, dict):
@@ -209,7 +228,7 @@ def enrich_alert_features_geometry(features: list[dict]) -> None:
                 },
                 sort_keys=True,
             )
-            return hashlib.md5(key_data.encode()).hexdigest()
+            return hashlib.sha256(key_data.encode()).hexdigest()
 
         _prefetch_zone_geometries(features)
 
@@ -222,16 +241,20 @@ def enrich_alert_features_geometry(features: list[dict]) -> None:
         if needs_counties:
             CensusCounties.load()
 
+        union_metrics = {"seconds": 0.0, "alerts": 0, "cache_hits": 0, "cache_misses": 0}
+        union_metrics_lock = Lock()
+
         def _enrich_single_feature(feat: dict) -> tuple[dict, Any, str]:
             if not isinstance(feat, dict):
                 return feat, None, ""
 
             cache_key = _feature_cache_key(feat)
 
-            if cache_key and cache_key in geom_cache:
-                cached_geom = geom_cache[cache_key]
-                if cached_geom:
-                    return feat, cached_geom, cache_key
+            cached_geom = _get_enriched_geometry(cache_key)
+            if cached_geom:
+                with union_metrics_lock:
+                    union_metrics["cache_hits"] += 1
+                return feat, cached_geom, cache_key
 
             raw_geom = feat.get("geometry")
             has_valid_geom = False
@@ -246,10 +269,17 @@ def enrich_alert_features_geometry(features: list[dict]) -> None:
 
             props = feat.get("properties") or {}
             final_geom = None
+            if cache_key:
+                with union_metrics_lock:
+                    union_metrics["cache_misses"] += 1
 
             zone_urls = props.get("affectedZones") or []
             if zone_urls:
+                union_started = time.perf_counter()
                 final_geom = _resolve_zone_geometry(zone_urls)
+                with union_metrics_lock:
+                    union_metrics["seconds"] += time.perf_counter() - union_started
+                    union_metrics["alerts"] += 1
 
             if (final_geom is None or final_geom.is_empty) and needs_counties:
                 same_codes = (props.get("geocode") or {}).get("SAME") or []
@@ -265,6 +295,14 @@ def enrich_alert_features_geometry(features: list[dict]) -> None:
         with ThreadPoolExecutor(max_workers=4) as executor:
             results = list(executor.map(_enrich_single_feature, features))
 
+        record_measurement(
+            stage="alerts.per_alert_zone_union",
+            duration_seconds=union_metrics["seconds"],
+            fields={
+                "alert_count": union_metrics["alerts"],
+                **(measurement_fields or {}),
+            },
+        )
         for feat, final_geom, cache_key in results:
             if final_geom is not None:
                 try:
@@ -274,16 +312,20 @@ def enrich_alert_features_geometry(features: list[dict]) -> None:
                         geom_dict = mapping(final_geom)
                         feat["geometry"] = geom_dict
                         if cache_key:
-                            geom_cache[cache_key] = geom_dict
+                            _put_enriched_geometry(cache_key, geom_dict)
                 except Exception:
                     pass
-
-        try:
-            cache_path = Path(CACHE_ROOT) / "alerts" / "enriched_geom_cache.json"
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(json.dumps(geom_cache), encoding="utf-8")
-        except Exception:
-            pass
+        record_measurement(
+            stage="alerts.enriched_geometry.memory_cache",
+            duration_seconds=0.0,
+            fields={
+                "cache_hits": union_metrics["cache_hits"],
+                "cache_misses": union_metrics["cache_misses"],
+                "cache_entries": len(_ENRICHED_GEOMETRY_CACHE),
+                "cache_max_entries": _ENRICHED_GEOMETRY_CACHE_MAX_ENTRIES,
+                **(measurement_fields or {}),
+            },
+        )
 
     except Exception as exc:
         print(f"[WARN] Alert geometry enrichment skipped: {exc}")

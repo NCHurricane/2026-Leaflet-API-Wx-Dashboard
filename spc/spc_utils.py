@@ -16,7 +16,7 @@ import cartopy.feature as cfeature
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import numpy as np
-import requests
+from app_core.upstream_ledger import requests
 from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from matplotlib.patches import Rectangle
 from matplotlib.colors import to_rgba

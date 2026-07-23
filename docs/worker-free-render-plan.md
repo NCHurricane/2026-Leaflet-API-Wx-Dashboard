@@ -6,6 +6,13 @@ This plan defines the path to a dashboard that requires **zero Windows Task Sche
 
 "Task-scheduler-free" does not mean that expensive data and rendering work disappears. It means that the FastAPI application owns that work through request-driven rendering and a bounded in-process refresh coordinator. Windows tasks may remain available as optional cache warmers, but correctness, freshness, history filling, archive updates, and cache cleanup must not depend on them.
 
+Optional Windows tasks are a supported operating mode, not an independent
+second refresh system. A task worker must participate in the same persistent
+leases, freshness policies, provider budgets, deduplication keys, and atomic
+publication path as request-driven work. Unmigrated legacy tasks that bypass
+that contract are not safe to run concurrently and must not be described as
+compatible.
+
 The full-product contract is:
 
 > Every product exposed by the dashboard can be discovered, fetched, rendered, and progressively filled on demand without an OS-level scheduler. Products do not all need to be pre-rendered. Restricted provider content still requires the credentials or license required by that provider.
@@ -77,9 +84,46 @@ Requirements:
 - Give active product/page keys a short lease, initially **90 seconds**, renewed by ordinary client polling. Heavy history/prefetch work continues only while the lease is active.
 - Allow small cold paths to remain synchronous only when their measured worst-case latency is acceptable; large downloads, geometry work, gradients, and history fills stay background-only.
 - Run cache cleanup and coordinator-state cleanup from application lifecycle schedules even when no page is open.
-- If multiple Uvicorn processes are supported, use a small SQLite/file lease under `cache/` so dedupe and provider floors cross process boundaries. Document single-process mode if this is deferred.
+- Use a small SQLite/file lease and persisted provider-budget state under
+  `cache/` whenever multiple Uvicorn processes or optional Windows task workers
+  are enabled. Cross-process coordination may be deferred only for a documented
+  single-process, task-free configuration.
 
 `app_core/background_render.py` may remain as a low-level render helper during migration, but its process-local in-flight set and raw daemon threads are not the system-wide coordinator. Reuse the existing APScheduler dependency for coordinator ticks/lifecycle jobs if helpful; do not enable the current broad fixed worker schedule as the new default.
+
+### Optional Windows task compatibility contract
+
+Keep task workers available for operators who prefer scheduled prewarming, with
+these requirements:
+
+1. Prefer a thin task entry point that submits a targeted warm request through
+   the running application's coordinator. If a standalone CLI must work while
+   the application is stopped, it must call the same shared coordination,
+   freshness, rendering, and publication modules rather than maintaining a
+   separate worker implementation.
+2. Before discovery, download, or rendering, both the application and task
+   process must acquire the same persistent lease keyed by provider, resource,
+   product, region, and render variant. A process-local lock or freshness check
+   alone is insufficient.
+3. Provider minimum intervals, backoff, retry state, and last-source keys must
+   be shared across task and application processes. A task launch must not
+   reset those budgets.
+4. A task finding a fresh key or a lease already owned by another producer must
+   exit successfully as `current` or `already_running`; it must not start a
+   duplicate fallback fetch.
+5. Every producer must write a unique temporary artifact and use the common
+   atomic publisher. Tasks must never write directly over a cache file or frame
+   catalog that the application may be reading or publishing.
+6. Optional warmers must use bounded, explicit product sets. Retain broad
+   prewarming only as an operator-selected profile whose aggregate provider,
+   memory, and disk budgets have been validated.
+7. Task sentinels must not suppress request-driven recovery. Coordinator
+   source/cache state is authoritative; task history is diagnostic only.
+8. Cache cleanup must respect active leases and temporary-artifact ownership so
+   it cannot remove an application or task render in progress.
+9. The optional-task installer, status output, and documentation must
+   distinguish migrated coordinator-compatible warmers from incompatible
+   legacy task definitions.
 
 ### Shared freshness policy
 
@@ -124,6 +168,21 @@ Clients continue displaying the last complete cache while clearly showing stale,
 ## Implementation phases
 
 ### Phase 0 - Measurement and request ledger
+
+Implementation status (2026-07-23): Phase 0 measurements complete; gate failed.
+The credential-safe JSONL
+request ledger now covers application-owned `requests`, `urllib`, and NODD S3
+transports, and Alerts emits structured timings for every stage listed below.
+A valid post-decision two-pass live-NWS run and all required isolated cold
+renders are recorded under `docs/perf/2026-07-23-worker-free-phase0/`.
+`enriched_geom_cache.json` is no longer read or written; a bounded 1,024-entry
+process-local geometry LRU reduced warm enrichment to 0.024 seconds and sampled
+peak RSS from 3.291 GB to 1.022 GB. The complete warm path still took 5.306
+seconds, or 4.992 seconds after the NWS response, including 3.853 seconds of
+full-set low-detail simplification and 0.997 seconds serializing/writing the
+full cache. The path is therefore not yet changed-alert proportional and the
+near-one-second gate is not met. Phase 1 remains blocked. No browser proof has
+been performed.
 
 Do this before changing cadence.
 
@@ -236,11 +295,14 @@ Do not implement the prior approximately 20-second NWS refresh proposal; it conf
 ### Phase 8 - Zero-task cutover, health, and documentation
 
 1. Change `workers/scheduler.py` from "OS tasks are the source of truth" to application-owned coordination and lifecycle maintenance.
-2. Make `tools/install_tasks.ps1` explicitly optional. Its default behavior must not be required by startup documentation or health checks. Prefer a separate clearly named optional-warmer installer if tasks are retained for advanced operators.
+2. Make `tools/install_tasks.ps1` explicitly optional. Its default behavior must not be required by startup documentation or health checks. Refactor retained tasks into clearly named optional-warmer profiles that satisfy the compatibility contract above; do not install or advertise legacy direct writers.
 3. Remove task-sentinel freshness as the application health model. Report source/cache/coordinator health instead.
 4. Ensure current-season Tropical refresh and cache cleanup are covered before retiring their scheduled paths.
 5. Update `README.md`, `docs/architecture.md`, `docs/dashboard-change-and-enhancement-superfile.md`, and `docs/next-session-startup-prompt.md` in the cutover slice.
 6. Provide a preview/list step before unregistering existing OS tasks. Actual unregistration is an operator-authorized migration action, not an incidental application startup side effect.
+7. Expose optional-warmer outcomes (`warmed`, `current`, `already_running`,
+   `backoff`, and `failed`) without treating task presence as an application
+   health requirement.
 
 ## Verification and acceptance gates
 
@@ -253,7 +315,14 @@ Do not implement the prior approximately 20-second NWS refresh proposal; it conf
 - Assert MRMS checks only the active product and no more frequently than every two minutes.
 - Assert retryable failures use increasing backoff with jitter and continue serving stale cache.
 - Assert ten concurrent callers and, if supported, two server processes produce one refresh for a key.
+- Assert one optional task worker plus ten application callers for the same cold
+  key produce exactly one upstream fetch/render and one published generation.
+- Assert two simultaneous task launches for the same key dedupe through the
+  persistent lease and share provider-floor/backoff state with the application.
 - Kill the application during a write and confirm the previous cache remains complete/readable.
+- Kill a task worker during a write and confirm the previous cache remains
+  readable, the abandoned lease expires safely, and a later application request
+  can recover the key.
 
 ### Isolated cold-cache tests
 
@@ -280,18 +349,48 @@ Use a temporary `CACHE_ROOT`; do not delete the operator's real cache as part of
 7. Confirm disk-retention policies bound Alerts geometry, radar/satellite frames, temporary downloads, and coordinator state.
 8. Perform user-owned browser smoke after static/API validation; do not describe curl, unit tests, or syntax checks as browser proof.
 
+### Optional-warmer acceptance
+
+1. Install only the migrated optional-warmer profile and confirm the dashboard
+   remains fully functional when every task is disabled.
+2. Enable the warmers and overlap a scheduled launch with cold browser/API
+   requests for the same products. Confirm the request ledger shows one
+   discovery/download/render per deduplication key and provider budgets remain
+   global across processes.
+3. Confirm task and application processes never publish mixed-generation JSON,
+   imagery, metadata, or frame catalogs.
+4. Confirm `current` and `already_running` task exits are successful no-ops, not
+   warnings that trigger a second worker.
+5. Exercise task/application crashes and cleanup overlap; confirm the prior
+   complete cache survives and abandoned work is safely recoverable.
+6. Run the full product and user-owned browser-smoke matrix with warmers both
+   disabled and enabled.
+
 ## Risks and mitigations
 
 - **Cold-start latency:** Radar history, Surface gradients, and large satellite products may take seconds or minutes. Return newest/last-complete data first, expose progress, and fill history progressively.
 - **Memory contention:** Satellite source-grid materialization, radar decoding, and gradients can overlap. Use a shared weighted concurrency budget and measure peak memory before raising limits.
-- **Multiple processes or instances:** An in-memory set is insufficient across processes; use a persistent lease or document single-process support. Separate installations still generate separate provider traffic.
+- **Multiple processes or task workers:** An in-memory set is insufficient
+  across processes. Use the persistent lease and shared provider-budget state
+  before enabling optional tasks or multi-process serving. Separate
+  installations still generate separate provider traffic.
 - **Daemon shutdown:** Raw daemon threads can vanish mid-write. Use graceful coordinator shutdown and atomic publication so interruption loses only unfinished work.
 - **Provider outage/throttling:** Serve stale cache, honor `Retry-After`, and use jittered backoff. Never retry on every frontend poll.
 - **IEM aggregate load:** Keep it secondary and heavily cached. Reassess or contact IEM before operating a high-volume public deployment.
 - **EUMETSAT access:** Credentials, licensing, download size, and memory can limit a user's available catalog. Make capability state explicit rather than treating access failure as a renderer bug.
 - **No open page means no live refresh:** This is intentional for data products. If future requirements include alarms while the UI is closed, that is a separate always-on monitoring feature, not part of this task-scheduler-free rendering plan.
-- **Task migration uncertainty:** Current registered-task state could not be read during planning. Inventory and removal require an operator-visible verification step.
+- **Task migration uncertainty:** Current registered-task state could not be
+  read during planning. Inventory and removal require an operator-visible
+  verification step. Treat existing direct-write task definitions as
+  incompatible until each is mapped to the shared coordination contract.
 
 ## Implementation completion definition
 
-The plan is complete only when a fresh installation can run the dashboard with no Task Scheduler setup, reach every supported product through on-demand/progressive rendering, remain within the provider budgets above, survive concurrent tabs and application restarts without corrupting caches, and clearly distinguish temporary failure from credentials/license limitations.
+The plan is complete only when a fresh installation can run the dashboard with
+no Task Scheduler setup, reach every supported product through
+on-demand/progressive rendering, remain within the provider budgets above,
+survive concurrent tabs and application restarts without corrupting caches, and
+clearly distinguish temporary failure from credentials/license limitations. If
+optional Windows warmers are shipped, completion also requires that they pass
+the mixed task/application acceptance tests and can be enabled or disabled
+without changing correctness or application health.

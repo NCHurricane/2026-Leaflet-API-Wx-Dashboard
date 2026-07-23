@@ -29,9 +29,10 @@ from pathlib import Path
 project_root = str(Path(__file__).resolve().parent.parent)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-from typing import Any
+from typing import Any  # noqa: E402
 
-from workers._freshness import mark_run_complete
+from app_core.upstream_ledger import urlopen  # noqa: E402
+from workers._freshness import mark_run_complete  # noqa: E402
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "tropical"
 ARCHIVE_DIR = CACHE_DIR / "archive"
@@ -152,7 +153,7 @@ _CLASS_LABELS = {
 # ── Networking & I/O ────────────────────────────────────────────────────────
 def _request_text(url: str) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
-    with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 (trusted NHC host)
+    with urlopen(req, timeout=60) as resp:  # noqa: S310 (trusted NHC host)
         return resp.read().decode("utf-8", errors="replace")
 
 
@@ -566,7 +567,7 @@ def _download_zip(url: str, dest: Path) -> bool:
     """Download a binary zip to *dest*. Returns False on 404/HTTP error."""
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 (trusted NHC)
+        with urlopen(req, timeout=60) as resp:  # noqa: S310 (trusted NHC)
             data = resp.read()
     except urllib.error.HTTPError:
         return False
@@ -757,7 +758,7 @@ def _fetch_archive_text(url: str) -> str | None:
 
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
-        with urllib.request.urlopen(req, timeout=40) as resp:  # noqa: S310 (trusted NHC)
+        with urlopen(req, timeout=40) as resp:  # noqa: S310 (trusted NHC)
             raw = resp.read().decode("utf-8", errors="replace")
     except (urllib.error.URLError, OSError):
         return None
@@ -770,7 +771,7 @@ def _fetch_url_text(url: str) -> str | None:
     """Fetch a URL's raw text (e.g. a KML), or None on 404/error."""
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
-        with urllib.request.urlopen(req, timeout=40) as resp:  # noqa: S310 (trusted NHC)
+        with urlopen(req, timeout=40) as resp:  # noqa: S310 (trusted NHC)
             return resp.read().decode("utf-8", errors="replace")
     except (urllib.error.URLError, OSError):
         return None

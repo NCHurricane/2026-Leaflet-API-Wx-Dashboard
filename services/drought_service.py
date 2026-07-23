@@ -8,6 +8,8 @@ import re
 import urllib.parse as _up
 import urllib.request as _ur
 
+from app_core.upstream_ledger import urlopen
+
 from fastapi import HTTPException
 from fastapi.responses import Response
 
@@ -97,7 +99,7 @@ async def get_drought_geojson(date: str = "latest") -> Response:
     url = f"https://droughtmonitor.unl.edu/data/json/usdm_{date_compact}.json"
     try:
         req = _ur.Request(url, headers={"User-Agent": "NCHurricane-Dashboard/1.0"})
-        with _ur.urlopen(req, timeout=30) as resp:
+        with urlopen(req, timeout=30) as resp:
             if resp.status == 404:
                 raise HTTPException(status_code=404, detail=f"No USDM data for {date}")
             raw = resp.read()
@@ -165,11 +167,11 @@ async def get_drought_state_stats(date: str = "latest", state: str = "NC") -> di
             "Accept": "application/json",
         }
         area_req = _ur.Request(area_url, headers=headers)
-        with _ur.urlopen(area_req, timeout=30) as resp:
+        with urlopen(area_req, timeout=30) as resp:
             area_rows = json.loads(resp.read().decode("utf-8"))
 
         dsci_req = _ur.Request(dsci_url, headers=headers)
-        with _ur.urlopen(dsci_req, timeout=30) as resp:
+        with urlopen(dsci_req, timeout=30) as resp:
             dsci_rows = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:
         raise HTTPException(

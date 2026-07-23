@@ -379,7 +379,7 @@ def _fetch_iem_alerts_range(
     import io
     import tempfile
     import zipfile
-    import requests as _requests
+    from app_core.upstream_ledger import requests as _requests
     from alerts.alerts_iem_utils import IEM_WATCHWARN_URL, _event_name_from_attrs
 
     utc_from = dt_from.astimezone(timezone.utc)
@@ -611,8 +611,6 @@ def get_archive_spc(day: int = 1, hazard: str = "cat", date: str = "") -> dict:
     issue_times = ["1200", "1300", "1630", "2000", "0100"]
     geojson = None
     tried_urls: list = []
-    import urllib.request as _ur
-
     for hhmm in issue_times:
         url_candidates = [
             f"{spc_base}/products/outlook/archive/{year}/day{day}otlk_{date_str}_{hhmm}_{hazard}.lyr.geojson",
@@ -621,7 +619,9 @@ def get_archive_spc(day: int = 1, hazard: str = "cat", date: str = "") -> dict:
         for url in url_candidates:
             tried_urls.append(url)
             try:
-                with _ur.urlopen(url, timeout=15) as response:
+                from app_core.upstream_ledger import urlopen
+
+                with urlopen(url, timeout=15) as response:
                     geojson = json.loads(
                         response.read().decode("utf-8", errors="replace")
                     )

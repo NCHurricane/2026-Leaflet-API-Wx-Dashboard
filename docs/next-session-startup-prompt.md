@@ -9,6 +9,7 @@ Continue dashboard enhancement work in F:\Python\dashboard_2026.
 
 Read first:
 - docs/dashboard-change-and-enhancement-superfile.md
+- docs/worker-free-render-plan.md when continuing task-scheduler-free work
 - docs/radar-render-optimization-plan.md when continuing Radar performance work
 - docs/satellite-radar-render-pipeline-files.md as the Radar pipeline map
 - docs/phases-25-27-manual-smoke-checklist.md only when checking the older gate
@@ -16,6 +17,16 @@ Read first:
   those boundaries
 
 Current checkpoint:
+- Task-scheduler-free rendering Phase 0 is in progress. `app_core/upstream_ledger.py`
+  covers application-owned Requests, urllib, and NODD S3 calls without logging
+  query values or credentials. Alerts now records the required geometry/cache
+  stages and supports `python -m workers.alerts_worker --measure-twice`.
+  The valid low-overhead live-NWS run measured 17.739 seconds cold and 13.530
+  seconds warm; the warm pass spent 2.939 seconds parsing and 5.838 seconds rewriting the
+  322 MB enriched cache with no zone unions. The changed-alert-proportional,
+  near-one-second gate failed, so do not start Phase 1. Results are under
+  `docs/perf/2026-07-23-worker-free-phase0/`. Surface/Radar/GOES/Himawari/
+  EUMETSAT cold-render measurements and browser proof remain pending.
 - The cross-page correction set was committed at `aa05b7d`.
 - Satellite render optimization Phase 0 is committed at `a6f5f83`.
   `satellite_v2/bench.py` provides pinned cold-parse,
@@ -123,6 +134,11 @@ Current checkpoint:
   one visual type.
 
 Validation at handoff:
+- Worker-free Phase 0 measurement is complete. Focused geometry-cache and
+  ledger tests pass 8/8; full pytest passes 117 tests plus 42 subtests. Changed
+  Python compiles, focused Ruff checks pass, measurement JSON parses, and `git
+  diff --check` passes. The live Alerts and isolated render measurements are
+  runtime/worker evidence, not browser proof.
 - Phase 5: full matrix 81/81 byte-identical; reusable and owned pool paths
   produced 40 identical PNGs plus the same 75 negative-marker paths.
 - Phase 5 focused Satellite tests pass 37/37; full pytest passes 109 tests plus
@@ -158,7 +174,10 @@ Validation at handoff:
   `.pytest_cache` write warning.
 
 Next step:
-1. Commit this docs-only Satellite closeout and Radar planning correction.
+1. Do not begin worker-free Phase 1: the Phase 0 Alerts gate failed. Review the
+   recorded 4.992-second post-response warm path and explicitly decide whether
+   to revise the phase ordering so changed-alert simplification/publishing can
+   be addressed before the coordinator foundation.
 2. Begin Radar optimization Phase 0 only: benchmark harness, pinned baseline,
    structured timings, and golden capture with no behavior changes.
 3. Review measurements before implementing Phase 1. Track 1 browser re-smoke
@@ -166,6 +185,11 @@ Next step:
 
 Guardrails:
 - Browser smoke is user-owned; report static versus browser proof honestly.
+- Preserve optional Windows task warming, but do not run or advertise legacy
+  task definitions concurrently with the future coordinator. Task support
+  requires the same persistent cross-process leases, provider budgets,
+  deduplication keys, freshness state, and atomic publisher as request-driven
+  work, plus mixed task/browser acceptance testing.
 - Preserve product-specific controls and wiring; use the smallest coherent fix.
 - Keep route logic in routes, response/cache behavior in services, and upstream
   refresh behavior in workers.

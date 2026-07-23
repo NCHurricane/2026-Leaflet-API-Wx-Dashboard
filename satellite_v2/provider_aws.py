@@ -14,6 +14,8 @@ import boto3
 from botocore import UNSIGNED
 from botocore.config import Config
 
+from lib.s3_utils import track_s3_client
+
 from config.satellite_v2_config import (
     aws_product_prefix_for_sector,
     normalize_channel,
@@ -43,14 +45,16 @@ def _s3_client():
     if _S3_CLIENT is None:
         with _S3_CLIENT_LOCK:
             if _S3_CLIENT is None:
-                _S3_CLIENT = boto3.client(
-                    "s3",
-                    config=Config(
-                        signature_version=UNSIGNED,
-                        connect_timeout=10,
-                        read_timeout=45,
-                        retries={"max_attempts": 3, "mode": "standard"},
-                    ),
+                _S3_CLIENT = track_s3_client(
+                    boto3.client(
+                        "s3",
+                        config=Config(
+                            signature_version=UNSIGNED,
+                            connect_timeout=10,
+                            read_timeout=45,
+                            retries={"max_attempts": 3, "mode": "standard"},
+                        ),
+                    )
                 )
     return _S3_CLIENT
 

@@ -1,6 +1,5 @@
 from lib.font_utils import register_montserrat_fonts
 from datetime import datetime, timedelta, timezone
-import importlib
 import os
 import re
 import traceback
@@ -9,6 +8,7 @@ from urllib.parse import quote
 
 import time as _time
 from lib.listing_cache import cached_call
+from app_core.upstream_ledger import requests
 
 try:
     from . import radar_utils as thredds_radar_utils
@@ -146,8 +146,6 @@ def _list_objects_for_prefix(
 
 
 def _list_gcs_keys_for_prefix(bucket, prefix, start_offset=None, max_results=None):
-    requests = importlib.import_module("requests")
-
     def _fetch():
         keys = []
         page_token = None
@@ -194,8 +192,6 @@ def _list_gcs_keys_for_prefix(bucket, prefix, start_offset=None, max_results=Non
 
 
 def _list_gcs_keys_for_prefix_public(bucket, prefix):
-    requests = importlib.import_module("requests")
-
     def _fetch():
         keys = []
         continuation_token = None
@@ -637,12 +633,10 @@ def download_radar_data(
             if level_path == "level2"
             else [NEXRAD_LEVEL3_GCP_BUCKET]
         )
-        requests = importlib.import_module("requests")
     else:
         buckets = [
             NEXRAD_LEVEL2_BUCKET if level_path == "level2" else NEXRAD_LEVEL3_BUCKET
         ]
-        requests = None
 
     downloaded = 0
 

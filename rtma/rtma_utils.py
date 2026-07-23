@@ -10,7 +10,7 @@ from functools import lru_cache
 
 import cfgrib
 import numpy as np
-import requests
+from app_core.upstream_ledger import requests
 from config.geo_config import STATE_BOUNDS
 from config.surface_config import TEMPERATURE_GRADIENT_ANCHORS
 from surface.surface_utils import (

@@ -7,7 +7,7 @@ import time
 import zipfile
 from datetime import datetime, timedelta, timezone
 
-import requests
+from app_core.upstream_ledger import requests
 from shapely.geometry import box, mapping, MultiPolygon
 from shapely.validation import make_valid
 from shapely.ops import unary_union

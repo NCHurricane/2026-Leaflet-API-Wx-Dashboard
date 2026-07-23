@@ -11,6 +11,8 @@ from urllib.parse import urlencode
 import urllib.error
 import urllib.request
 
+from app_core.upstream_ledger import urlopen
+
 from fastapi import HTTPException
 
 NWPS_GAUGE_URL = "https://api.water.noaa.gov/nwps/v1/gauges/{identifier}"
@@ -27,7 +29,7 @@ _NWPS_MISSING_VALUE = {-999, -9999}
 def _read_json_request(req: urllib.request.Request, timeout: int = 20, retries: int = 1) -> dict:
     for attempt in range(retries + 1):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode("utf-8", errors="replace"))
         except urllib.error.HTTPError as exc:
             if exc.code == 429 and attempt < retries:

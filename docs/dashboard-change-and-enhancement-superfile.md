@@ -1,9 +1,9 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-22 (Satellite render optimization Phases 0–5 are
-committed. The execution track is closed with 81 byte-identical goldens and a
-76.3% Phase 5 steady warm-path gain; optional Phase 6 is deferred. A dedicated
-measure-first Radar render optimization plan is now ready for Phase 0.)
+Last updated: 2026-07-23 (Task-scheduler-free rendering Phase 0 instrumentation
+and the upstream-request ledger are implemented. The valid two-pass Alerts
+measurement failed its continuation gate, so Phase 1 is blocked while the
+remaining cold-render measurements stay pending.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -24,7 +24,7 @@ Keep separate:
 - `docs/satellite-radar-render-pipeline-files.md` for the shared pipeline file
   reference; its Radar section is active and its Satellite section is historical.
 
-## Active Tracks (2026-07-20)
+## Active Tracks (2026-07-23)
 
 Priority order for upcoming work. Track 1 goes first because it may alter
 the plan for some future items; re-evaluate later tracks against the
@@ -40,13 +40,19 @@ post-split structure, not the monolith.
    Its later detail-panel, Region, legend, and sidebar-style follow-ups are
    implemented and statically validated but still need browser re-smoke;
    optional Water enhancements remain deferred.
-2. Radar render pipeline latency optimization — execution-grade plan prepared
+2. Task-scheduler-free refresh/rendering — Phase 0 is active under
+   `docs/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
+   now emit a credential-safe ledger, and the required live-NWS two-pass Alerts
+   run is recorded. Its 13.530-second warm path is not changed-alert-proportional,
+   so do not begin Phase 1. Surface/Radar/GOES/Himawari/EUMETSAT cold-render
+   measurements remain pending and must use isolated cache/output roots.
+3. Radar render pipeline latency optimization — execution-grade plan prepared
    in `docs/radar-render-optimization-plan.md`; Phase 0 benchmark/golden capture
    is next. Backend-only and may interleave with Track 1.
-3. Satellite render pipeline latency optimization — complete through Phase 5
+4. Satellite render pipeline latency optimization — complete through Phase 5
    and archived. Optional Phase 6 warp threading is deferred unless later
    real-run profiling and explicit approval reopen it.
-4. GK2A + GMGSI new platforms. Adds `PLATFORM_*` entries to
+5. GK2A + GMGSI new platforms. Adds `PLATFORM_*` entries to
    `js/satellite-page.js`; if started mid-split those entries must be
    ported to `pages/satellite/`, so prefer starting it before the split
    reaches satellite or after that page migration completes.
@@ -54,6 +60,23 @@ post-split structure, not the monolith.
 ## Current State
 
 - Active repo: `F:\Python\dashboard_2026`.
+- Worker-free Phase 0 measurement is complete: the shared credential-safe JSONL
+  request ledger covers application-owned HTTP and NODD S3 paths, and the six
+  required isolated cold renders are recorded in
+  `docs/perf/2026-07-23-worker-free-phase0/`. Alerts no longer reads or writes
+  the 322 MB enriched-geometry disk cache; its bounded process-local LRU reduced
+  warm enrichment to 0.024 seconds and peak RSS to 1.022 GB. The full warm pass
+  remains 5.306 seconds (4.992 seconds after the NWS response), dominated by
+  full-set simplification and full-cache serialization. The near-one-second
+  changed-alert gate therefore failed and Phase 1 is not authorized. No browser
+  proof was performed.
+- The worker-free plan now treats optional Windows task workers as a supported
+  cache-warming mode, but only after migration to the same persistent
+  cross-process leases, provider budgets, deduplication keys, freshness state,
+  and atomic publisher used by application requests. Existing direct-write
+  legacy tasks remain incompatible until migrated. Mixed task/browser
+  contention, crash recovery, and warmer-enabled/disabled browser smoke are
+  explicit acceptance gates.
 - Radar render optimization is planned but not implemented. Phase 0 will add a
   safe scratch-only benchmark and eight-row golden matrix before any behavior
   changes. The first measured candidate is newest-frame-first empty-cache

@@ -275,7 +275,9 @@ def _fetch_nws_radar_status() -> dict:
                 "Accept": "application/geo+json",
             },
         )
-        with _ur.urlopen(req, timeout=15) as resp:
+        from app_core.upstream_ledger import urlopen
+
+        with urlopen(req, timeout=15) as resp:
             raw = json.loads(resp.read().decode("utf-8", errors="replace"))
     except Exception as exc:
         print(f"[radar status] NWS fetch failed: {exc}")
@@ -618,7 +620,9 @@ def get_radar_alert_tile(z: str, x: str, y: str, frame: int = 4) -> Response:
             f"{layer}/{z}/{x}/{y}.png"
         )
         req = ur.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with ur.urlopen(req, timeout=10) as resp:
+        from app_core.upstream_ledger import urlopen
+
+        with urlopen(req, timeout=10) as resp:
             data = resp.read()
             return Response(
                 content=data,
@@ -645,7 +649,9 @@ def get_radar_tiles_freshness_data() -> dict:
             "nexrad-n0q/4/4/6.png"
         )
         req = ur.Request(url, headers={"User-Agent": "Mozilla/5.0"}, method="HEAD")
-        with ur.urlopen(req, timeout=8) as resp:
+        from app_core.upstream_ledger import urlopen
+
+        with urlopen(req, timeout=8) as resp:
             return {"last_modified": resp.headers.get("Last-Modified", "")}
     except Exception as exc:
         print(f"[radar tiles] Freshness check error: {exc}")

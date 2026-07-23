@@ -24,7 +24,7 @@ import re
 import math
 import time as _time
 import matplotlib
-import requests
+from app_core.upstream_ledger import requests
 from shapely.geometry import shape
 from matplotlib.lines import Line2D
 from typing import Any, cast

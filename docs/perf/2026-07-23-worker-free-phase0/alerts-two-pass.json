@@ -1,0 +1,63 @@
+{
+  "measured_at_utc": "2026-07-23T03:35:14Z",
+  "run_id": "09874c4e0e714f638a8da0eac93eeb2b",
+  "source_result": "live NWS response",
+  "browser_proof": false,
+  "gate_result": "fail",
+  "gate_reason": "The bounded process-local geometry cache made warm enrichment changed-key proportional, but the complete warm refresh remained 4.992 seconds after the NWS response. Full-set low-detail simplification and full-cache serialization are not changed-alert proportional, so the near-one-second gate remains unmet.",
+  "geometry_cache_decision": {
+    "disk_cache": "removed from the read/write path",
+    "replacement": "bounded process-local LRU keyed by affectedZones and SAME codes",
+    "max_entries": 1024,
+    "obsolete_disk_artifact_deleted": false
+  },
+  "cold_process": {
+    "features": 514,
+    "total_ms": 12471.671,
+    "fetch_ms": 252.032,
+    "downloaded_bytes": 2647321,
+    "zone_cache_parse_ms": 3724.754,
+    "enrichment_wall_ms": 3599.593,
+    "per_alert_zone_union_accumulated_ms": 4885.545,
+    "geometry_cache_hits": 0,
+    "geometry_cache_misses": 453,
+    "geometry_cache_entries": 274,
+    "full_cache_serialize_write_ms": 955.689,
+    "low_detail_simplification_ms": 3143.036,
+    "low_detail_cache_serialize_write_ms": 67.933,
+    "legacy_cache_write_ms": 69.558,
+    "peak_rss_bytes": 1037451264
+  },
+  "warm_process": {
+    "features": 514,
+    "total_ms": 5305.934,
+    "fetch_ms": 314.057,
+    "post_response_ms": 4991.877,
+    "downloaded_bytes": 2647321,
+    "enrichment_wall_ms": 23.511,
+    "per_alert_zone_union_accumulated_ms": 0.0,
+    "geometry_cache_hits": 453,
+    "geometry_cache_misses": 0,
+    "geometry_cache_entries": 274,
+    "full_cache_serialize_write_ms": 996.686,
+    "low_detail_simplification_ms": 3852.832,
+    "low_detail_cache_serialize_write_ms": 74.404,
+    "legacy_cache_write_ms": 42.101,
+    "peak_rss_bytes": 1021956096
+  },
+  "previous_disk_cache_baseline": {
+    "run_id": "fa8a674076ab4b8baaf282297647b8f0",
+    "warm_total_ms": 13530.036,
+    "warm_peak_rss_bytes": 3291258880,
+    "enriched_cache_parse_ms": 2938.712,
+    "enriched_cache_serialize_write_ms": 5837.582,
+    "enriched_cache_bytes": 322483475
+  },
+  "notes": [
+    "peak_rss_bytes is the sampled process resident set",
+    "per-alert zone union duration is accumulated across four worker threads and is not wall time",
+    "the pre-existing enriched_geom_cache.json was not deleted; it is now an unused operator artifact",
+    "runtime worker evidence is separate from browser proof",
+    "earlier network-blocked and tracemalloc-inflated trials were excluded from gate evidence"
+  ]
+}

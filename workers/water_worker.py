@@ -14,6 +14,8 @@ from pathlib import Path
 import time
 import urllib.request
 
+from app_core.upstream_ledger import urlopen
+
 from services.water_service import _fetch_json
 from workers._freshness import is_cache_fresh, mark_run_complete
 
@@ -95,7 +97,7 @@ def _fetch_text_url(url: str, timeout: int = 30) -> str:
             "Accept": "text/plain",
         },
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urlopen(req, timeout=timeout) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
 

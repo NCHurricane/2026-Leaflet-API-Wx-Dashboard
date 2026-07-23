@@ -29,7 +29,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
-import requests
+from app_core.upstream_ledger import requests
 from dotenv import load_dotenv
 
 from config.satellite_v2_config import (

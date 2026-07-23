@@ -13,7 +13,7 @@ import zipfile
 import warnings
 import logging
 
-import requests
+from app_core.upstream_ledger import requests
 import cartopy.io.shapereader as shpreader
 import cartopy.crs as ccrs
 from cartopy.feature import ShapelyFeature
