@@ -124,14 +124,6 @@ export const SAT_SOURCES = Object.freeze({
     meteosat11: 'EUMETSAT',
 });
 
-export function frameTileCount(frame) {
-    const counts = frame?.tile_counts || {};
-    return Object.values(counts).reduce((sum, value) => {
-        const parsed = Number(value);
-        return sum + (Number.isFinite(parsed) ? parsed : 0);
-    }, 0);
-}
-
 export function frameIndexForReload(frames, preferredFrameKey = '') {
     if (!Array.isArray(frames) || !frames.length) return 0;
     const preferredKey = String(preferredFrameKey || '');
@@ -154,7 +146,7 @@ export function formatFrameLabel(frame) {
     }
 }
 
-export function createSatelliteEngine({ api }) {
+export function createSatelliteEngine({ api, clientId = '' }) {
     const legendCache = new Map();
 
     async function fetchFrameSet(selection, { hours, maxFrames, signal, refresh = false, minFrames = 1 }) {
@@ -168,6 +160,7 @@ export function createSatelliteEngine({ api }) {
             max_frames: String(maxFrames),
             refresh: refresh ? 'true' : 'false',
         });
+        if (clientId) params.set('client_id', clientId);
         const resp = await fetch(api.apiUrl(`/api/satellite-v2/catalog?${params.toString()}`), { cache: 'no-store', signal });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok || (data.status !== 'success' && data.status !== 'stale')) {

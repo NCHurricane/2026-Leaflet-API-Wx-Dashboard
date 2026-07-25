@@ -69,7 +69,7 @@ def test_rapid_worker_reuses_one_pool_for_all_jobs(monkeypatch):
         yield True
 
     def fake_warm(*args):
-        seen_pools.append(args[-1])
+        seen_pools.append(args[-2])
         return {"frames": 1, "rendered": 1, "skipped": 0, "errors": 0}
 
     monkeypatch.setattr(rapid_worker, "ProcessPoolExecutor", make_pool)
@@ -90,6 +90,72 @@ def test_rapid_worker_reuses_one_pool_for_all_jobs(monkeypatch):
     assert pools[0].max_workers == 2
     assert seen_pools == [pools[0], pools[0]]
     assert totals["jobs"] == 2
+
+
+def test_single_worker_runs_without_process_pool(monkeypatch):
+    @contextmanager
+    def acquired_lock(_worker_name):
+        yield True
+
+    seen_pools = []
+    monkeypatch.setattr(rapid_worker, "_worker_lock", acquired_lock)
+    monkeypatch.setattr(
+        rapid_worker,
+        "ProcessPoolExecutor",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("single-worker accelerator should not spawn a process")
+        ),
+    )
+    monkeypatch.setattr(
+        rapid_worker,
+        "_warm_one_job",
+        lambda *args: seen_pools.append(args[-2])
+        or {"frames": 1, "rendered": 1, "skipped": 0, "errors": 0},
+    )
+    monkeypatch.setattr(rapid_worker, "mark_run_complete", lambda _name: None)
+
+    rapid_worker.run_satellite_v2_rapid_worker(
+        force=True,
+        jobs=(("meteosat11", "RSS"),),
+        products=("Channel13",),
+        frames=1,
+        tile_workers=1,
+        worker_name="test-rapid-single",
+    )
+
+    assert seen_pools == [None]
+
+
+def test_warm_job_stops_before_next_frame_when_selection_changes(monkeypatch):
+    frames = [{"frame_key": "older"}, {"frame_key": "newer"}]
+    warmed = []
+    active = iter((True, False))
+    monkeypatch.setattr(
+        rapid_worker, "build_catalog", lambda **_kwargs: {"frames": frames}
+    )
+    monkeypatch.setattr(
+        rapid_worker,
+        "warm_frame_tiles_from_canvas",
+        lambda **kwargs: warmed.append(kwargs["frame"]["frame_key"])
+        or {"rendered": 1, "skipped": 0, "errors": 0, "invalid": 0},
+    )
+
+    stats = rapid_worker._warm_one_job(
+        "test-rapid",
+        "meteosat11",
+        "RSS",
+        "Channel13",
+        2,
+        2,
+        10,
+        1,
+        0,
+        None,
+        lambda: next(active),
+    )
+
+    assert warmed == ["newer"]
+    assert stats["frames"] == 1
 
 
 def test_noop_warm_job_skips_trailing_catalog_rebuild(monkeypatch):

@@ -4,7 +4,7 @@ import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js';
+import { createStatusReporter } from '../../core/status.js?v=20260725e';
 
 const byId = (id) => document.getElementById(id);
 const L = window.L;

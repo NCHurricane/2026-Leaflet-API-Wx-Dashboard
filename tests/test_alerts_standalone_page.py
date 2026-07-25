@@ -55,3 +55,19 @@ def test_shared_alert_detail_supports_local_storm_reports():
     assert "onLsrDetail: (feature) => detail.openLsr(feature)" in page_app
     assert "onLsrDetail(feature)" in engine
     assert "alerts-hover-tip alerts-lsr-hover-tip" in engine
+
+
+def test_alerts_cache_rejects_generations_older_than_latest_seen():
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+
+    assert "let latestAlertGeneration = '';" in engine
+    assert "version.generation === latestAlertGeneration" in engine
+    assert "version.updatedMs > latestAlertUpdatedMs" in engine
+    assert (
+        "isCurrentAlertPayload(cachedMemoryPayloads) ? cachedMemoryPayloads : null"
+        in engine
+    )
+    assert "isCurrentAlertPayload(persisted)" in engine
+    assert "if (!isCurrentAlertPayload(freshPayloads)) return;" in engine

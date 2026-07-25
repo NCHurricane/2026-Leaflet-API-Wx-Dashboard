@@ -240,6 +240,41 @@ button:hover { border-color: var(--core-accent); }
     white-space: nowrap;
     pointer-events: none;
 }
+.core-global-timestamp-time,
+.core-global-timestamp-state {
+    display: block;
+    text-align: center;
+}
+.core-global-timestamp-state {
+    margin-top: 2px;
+    font-size: 0.72em;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    line-height: 1.15;
+}
+.core-global-timestamp[data-state-tone="loading"] .core-global-timestamp-state::before {
+    content: "";
+    display: inline-block;
+    width: 0.62em;
+    height: 0.62em;
+    margin-right: 0.45em;
+    border-radius: 50%;
+    background: currentColor;
+    animation: core-status-pulse 1s ease-in-out infinite;
+}
+.core-global-timestamp[data-state-tone="stale"] .core-global-timestamp-state,
+.core-global-timestamp[data-state-tone="error"] .core-global-timestamp-state {
+    color: #7a1720;
+}
+@keyframes core-status-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.82); }
+    50% { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .core-global-timestamp[data-state-tone="loading"] .core-global-timestamp-state::before {
+        animation: none;
+    }
+}
 
 .core-map-panel {
     position: relative;

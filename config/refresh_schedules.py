@@ -61,8 +61,6 @@ class IssuanceSchedule:
     ) -> bool:
         now_utc = _aware_utc(now)
         boundary = self.latest_boundary(now_utc)
-        if now_utc > boundary + timedelta(seconds=self.grace_seconds):
-            return False
         if source_issued_at is not None and _aware_utc(source_issued_at) >= boundary:
             return False
         if (
@@ -71,7 +69,12 @@ class IssuanceSchedule:
             < timedelta(seconds=self.retry_seconds)
         ):
             return False
-        return True
+        if now_utc <= boundary + timedelta(seconds=self.grace_seconds):
+            return True
+        return (
+            last_checked_at is None
+            or _aware_utc(last_checked_at) < boundary
+        )
 
 
 def _aware_utc(value: datetime) -> datetime:

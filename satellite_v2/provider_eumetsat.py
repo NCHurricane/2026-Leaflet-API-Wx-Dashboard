@@ -80,10 +80,14 @@ _NON_FULLDISK_SECTOR = {
 _HTTP_TIMEOUT = 60
 _DOWNLOAD_TIMEOUT = 600
 
-# An FCI full-disk frame is ~40 chunk files (~800 MB total). A few parallel
-# connections cut the cold-frame download time several-fold while staying
-# well inside EUMETSAT fair-use connection limits.
-_FCI_DOWNLOAD_WORKERS = 4
+# Full-disk source downloads are deliberately conservative because each FCI
+# frame is roughly 800 MB and can overlap on-demand tile work.
+try:
+    _FCI_DOWNLOAD_WORKERS = max(
+        1, min(2, int(os.environ.get("WX_EUMETSAT_DOWNLOAD_WORKERS", "2")))
+    )
+except ValueError:
+    _FCI_DOWNLOAD_WORKERS = 2
 # Written into the frame's FCI source dir after all chunks are verified on
 # disk; its presence lets later loads skip the product re-search API call.
 _FCI_MANIFEST_NAME = "manifest.json"

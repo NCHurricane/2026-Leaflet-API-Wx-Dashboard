@@ -26,6 +26,7 @@ from rasterio.features import rasterize as _rasterize
 from rasterio.transform import from_bounds as _from_bounds
 from shapely.ops import transform as _shapely_transform
 
+from app_core.render_budget import surface_gradient_render_slot
 from config.geo_config import STATE_BOUNDS
 from lib.geo_utils import build_conus_geometry as _build_conus_geometry
 from lib.geo_utils import build_world_land_geometry as _build_world_land_geometry
@@ -452,7 +453,7 @@ def _write_gradient_cache(
     station_count: int,
     unit: str,
     region: str = "CONUS",
-) -> None:
+) -> dict:
     gradient_root = _gradient_root(region)
     os.makedirs(gradient_root, exist_ok=True)
     png_path = os.path.join(gradient_root, f"{product}.png")
@@ -480,23 +481,30 @@ def _write_gradient_cache(
         "unit": unit,
     }
     _write_json_atomic(meta_path, meta)
+    return meta
 
 
-def _build_surface_gradients(df, selected_products: set[str] | None = None, region: str = "CONUS") -> None:
+def _build_surface_gradients(
+    df,
+    selected_products: set[str] | None = None,
+    region: str = "CONUS",
+    timestamp_iso: str | None = None,
+) -> dict[str, dict]:
     if df is None or df.empty:
         print(f"[surface_worker] gradient [{region}]: no source data")
-        return
+        return {}
 
     _cleanup_stale_gradient_temp_files(region)
+    rendered: dict[str, dict] = {}
 
     df_work = df.copy()
     for col in ("longitude", "latitude"):
         if col not in df_work.columns:
             print(f"[surface_worker] gradient: missing column {col}")
-            return
+            return {}
         df_work[col] = np.asarray(df_work[col], dtype=np.float64)
 
-    valid_ts = datetime.now(timezone.utc)
+    valid_ts = timestamp_iso or datetime.now(timezone.utc).isoformat()
 
     for product, cfg in _SURFACE_GRADIENT_PRODUCTS.items():
         if selected_products is not None and product not in selected_products:
@@ -549,11 +557,11 @@ def _build_surface_gradients(df, selected_products: set[str] | None = None, regi
             if land_mask is not None:
                 rgba[:, :, 3] = np.where(land_mask == 1, 255, 0)
 
-            _write_gradient_cache(
+            rendered[product] = _write_gradient_cache(
                 product=product,
                 rgba=rgba,
                 bounds=bounds,
-                timestamp_iso=valid_ts.isoformat(),
+                timestamp_iso=valid_ts,
                 station_count=int(vals.size),
                 unit=str(cfg["unit"]),
                 region=region,
@@ -564,6 +572,38 @@ def _build_surface_gradients(df, selected_products: set[str] | None = None, regi
             )
         except Exception as exc:
             print(f"[surface_worker] gradient {product} error: {exc}")
+    return rendered
+
+
+def render_surface_gradient(
+    df,
+    *,
+    region: str,
+    product: str,
+    timestamp_iso: str | None = None,
+) -> dict:
+    """Render exactly one requested Surface gradient from a shared snapshot."""
+    region_upper = str(region or "").upper().strip()
+    if region_upper not in {"CONUS", "WORLD"}:
+        raise ValueError("Surface gradient region must be CONUS or WORLD")
+    selected = _normalize_product_selection([product])
+    if not selected:
+        raise ValueError("Surface gradient product is required")
+    product_lower = next(iter(selected))
+    with surface_gradient_render_slot():
+        rendered = _build_surface_gradients(
+            df,
+            selected_products={product_lower},
+            region=region_upper,
+            timestamp_iso=timestamp_iso,
+        )
+    meta = rendered.get(product_lower)
+    if meta is None:
+        raise RuntimeError(
+            f"Surface gradient render produced no artifact for "
+            f"{region_upper}/{product_lower}"
+        )
+    return meta
 
 
 def run_surface_worker(force: bool = False, products: list[str] | None = None) -> None:
@@ -605,8 +645,12 @@ def run_surface_worker(force: bool = False, products: list[str] | None = None) -
     for reg in ("CONUS", "WORLD"):
         df = region_dfs.get(reg)
         if df is not None and not df.empty:
-            _build_surface_gradients(
-                df, selected_products=selected_products, region=reg)
+            with surface_gradient_render_slot():
+                _build_surface_gradients(
+                    df,
+                    selected_products=selected_products,
+                    region=reg,
+                )
         else:
             print(f"[surface_worker] gradient [{reg}]: skipped (no dataframe)")
 

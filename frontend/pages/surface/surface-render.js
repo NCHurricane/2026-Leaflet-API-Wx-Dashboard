@@ -533,7 +533,7 @@ export function createSurfaceRenderer(mapCore) {
 
     // stations: network-filtered marker stations.
     // view: { product, region, density, valueOpacity, gradientEnabled,
-    //         gradientOpacity, gradientMeta, gradientStations }
+    //         gradientOpacity, gradientMeta, gradientPending, gradientStations }
     function render(stations, view) {
         clear();
         if (!view.product) return;
@@ -549,7 +549,7 @@ export function createSurfaceRenderer(mapCore) {
                     opacity: view.gradientOpacity,
                     className: 'surface-gradient-overlay',
                 });
-            } else {
+            } else if (!view.gradientPending) {
                 const source = view.gradientStations?.length ? view.gradientStations : stations;
                 gradientLayer = renderGradientCanvas(source, view);
             }

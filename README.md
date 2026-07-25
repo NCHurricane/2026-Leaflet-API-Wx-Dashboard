@@ -152,7 +152,7 @@ the current dependency stack.
 python main.py
 ```
 
-### 4. Run Profiles (Worker Modes)
+### 4. Application-Owned Refresh and Optional Warmers
 
 The default local startup path is:
 
@@ -160,37 +160,31 @@ The default local startup path is:
 python main.py
 ```
 
-The app-owned refresh coordinator always starts with the API. It currently owns
-bounded request-driven Surface/WPC/Alerts refresh work and six-hour cache cleanup;
-the older broad APScheduler profile remains opt-in through
-`WX_INPROC_WORKERS`. Phase 1 supports exactly one application process. Do not
-launch Uvicorn with multiple workers or set `WEB_CONCURRENCY` /
-`UVICORN_WORKERS` above 1 until persistent cross-process leases are available.
+The app-owned refresh coordinator always starts with the API. Requests own
+refresh, rendering, history filling, and current-season Tropical archive
+updates; application lifecycle owns six-hour cache cleanup. `WX_INPROC_WORKERS`
+no longer enables a broad fixed worker schedule. Phase 8 supports exactly one
+application process. Do not launch Uvicorn with multiple workers or set
+`WEB_CONCURRENCY` / `UVICORN_WORKERS` above 1 until persistent cross-process
+leases are available.
 
-- Coordinator mode (default; no legacy broad APScheduler profile):
-
-```powershell
-Remove `WX_INPROC_WORKERS` from the current shell, then run `python main.py`.
-```
-
-- In-process mode (enable `WX_INPROC_WORKERS=1`):
+Windows scheduled tasks are optional. Preview existing tasks and the bounded
+localhost warmer profiles without changing anything:
 
 ```powershell
-$env:WX_INPROC_WORKERS = "1"
-python main.py
+pwsh -File tools\install_tasks.ps1
 ```
 
-- Legacy fallback mode:
+Register the optional API-delegating profiles in a disabled state:
 
 ```powershell
-$env:WX_INPROC_WORKERS = "1"
-python main.py
+pwsh -File tools\install_tasks.ps1 -InstallOptionalWarmers
 ```
 
-Existing direct-write Windows task definitions are not coordinator-compatible
-and must not run concurrently with migrated application refreshes. Optional
-warmers require the shared persistent lease/provider-budget protocol planned
-for later phases.
+Add `-EnableOptionalWarmers` only when scheduled prewarming is wanted. Legacy
+direct-writer removal requires the separate explicit
+`-UnregisterLegacyTasks` switch. The application remains fully functional when
+all tasks are absent or disabled.
 
 Server starts on:
 
@@ -206,6 +200,7 @@ Open in browser:
 ### Health and status
 
 - `GET /api/status`
+- `GET /health`
 - `GET /api/health/coordinator`
 
 ### Surface

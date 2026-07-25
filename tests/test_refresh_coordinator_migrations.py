@@ -191,3 +191,31 @@ def test_stale_wpc_refresh_uses_shared_coordinator(tmp_path, monkeypatch):
     assert result["refreshing"] is True
     assert coordinator.calls[0]["key"] == ("wpc", "product", "ero_day1")
     assert coordinator.calls[0]["provider"] == "wpc"
+
+
+def test_failed_wpc_check_does_not_close_missed_boundary(tmp_path, monkeypatch):
+    cache_file = tmp_path / "ero.json"
+    cache_file.write_text(
+        json.dumps({"updated": "2026-07-23T00:00:00+00:00"}),
+        encoding="utf-8",
+    )
+    seen = {}
+
+    class _Schedule:
+        def refresh_due(self, **kwargs):
+            seen.update(kwargs)
+            return True
+
+    monkeypatch.setattr(wpc_service, "wpc_schedule_for", lambda _product: _Schedule())
+
+    _, stale = wpc_service._cache_state(
+        str(cache_file),
+        {"id": "ero_day1", "group": "ero"},
+        {
+            "status": "error",
+            "checked_at": "2026-07-24T20:00:00+00:00",
+        },
+    )
+
+    assert stale is True
+    assert seen["last_checked_at"] is None

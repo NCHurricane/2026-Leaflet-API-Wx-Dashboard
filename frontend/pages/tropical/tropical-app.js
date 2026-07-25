@@ -4,7 +4,7 @@ import { createMapCore } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
 import { loadDefaultSettings } from '../../core/settings.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
-import { createStatusReporter } from '../../core/status.js';
+import { createStatusReporter } from '../../core/status.js?v=20260725e';
 
 const byId = (id) => document.getElementById(id);
 const L = window.L;
@@ -1429,6 +1429,7 @@ function configureProductModules() {
         setActiveStorm: (data) => { _activeTropicalStorm = data; }, setArchiveCatalog: (catalog) => { _tropicalArchiveCatalog = catalog; },
         setArchiveStatus: _setTropicalArchiveStatus, setHubMode: _setTropicalHubMode, setStatus: _setTropicalStatus,
         setStorms: (storms) => { _tropicalStorms = storms; }, selectStorm: _selectTropicalStormCard,
+        setTimeoutFn: (callback, delay) => setTimeout(callback, delay),
         syncLayerPills: (keys, toggles) => keys.forEach((key) => { const input = byId('wx-tropical-inspector-layers')?.querySelector(`[data-tc-layer="${key}"]`); if (input) input.checked = !!toggles[key]; }),
         updateLiveStormMetadata: (data) => { const updated = data.updated || Date.now(); _setReliability('tropical', 'Tropical Cyclones', 'NOAA NHC', updated); _setTimestampSource('tropical', 'NHC Public Advisory', updated); },
         updateArchiveAdvisoryMetadata: (advisory, step, atcfId) => { const label = `Advisory ${advisory.advisoryStep || step}`; const updated = advisory.updated || Date.now(); _setReliability('tropical', `${label} — NHC Archive`, 'NOAA NHC', updated); _setTimestampSource('tropical', `${label} — NHC Archive`, updated); _setTropicalArchiveStatus(`${_tropicalArchiveStormName || atcfId} — ${label}`); },

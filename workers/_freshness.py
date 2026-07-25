@@ -5,12 +5,10 @@ in its mtime) after a successful run. Subsequent invocations check that
 sentinel before doing any work. If the sentinel was updated within the
 freshness window, the run is skipped.
 
-This lets the same worker function be called by both:
-  * The in-process APScheduler tick (default fallback)
-  * An external OS scheduler (Task Scheduler / launchd / cron)
-
-Whichever fires first refreshes the cache; the other notices the fresh
-sentinel and exits immediately. No double fetches, no extra network load.
+These sentinels remain a local cadence guard for one-off legacy worker CLIs.
+They are not the application health model and do not coordinate optional
+warmers. Application health and refresh ownership live in
+``app_core.refresh_coordinator``.
 """
 
 from __future__ import annotations
@@ -85,74 +83,3 @@ def redirect_stdio_to_log(log_name: str) -> None:
                 )
         except Exception:
             pass
-
-
-# Expected sentinels and their max acceptable age (seconds). Used by the
-# server's startup health check to flag missing or stale OS-task output.
-# A sentinel older than its threshold suggests the corresponding
-# Wx-Dashboard-* scheduled task is broken / disabled / not yet installed.
-_HEALTH_THRESHOLDS = {
-    "alerts": 5 * 60,  # task fires every 1 min
-    "spc": 60 * 60,  # task fires every 30 min
-    "wpc": 60 * 60,  # task fires every 30 min
-    "tropical": 75 * 60,  # task fires every 30 min
-    "surface": 60 * 60,  # task fires every 30 min
-    "water_riv_gauges": 60 * 60,  # task fires every 30 min
-    "rtma_hourly": 2 * 60 * 60,  # task fires hourly at :05
-    "rtma_rapid_update": 30 * 60,  # task fires every 15 min starting :20
-    "satellite_v2_rapid": 12 * 60,  # task fires every 5 min
-    # Task fires every 10 min; a cold backfill run can legitimately take ~15+
-    # min of downloading, so the threshold is generous.
-    "satellite_v2_meteosat_prefetch": 45 * 60,
-    "radar_live": 3 * 60,             # task fires every 1 min (L2 chunks cadence)
-    "radar_live_l3": 15 * 60,         # L3 gate; expect to fire every ~5 min
-    # MRMS sentinels are per-product; we check whichever exists. See below.
-}
-_MRMS_THRESHOLD = 30 * 60  # task fires every 15 min
-
-
-def check_cache_freshness() -> list[str]:
-    """Return a list of human-readable warnings about stale or missing sentinels.
-
-    Intended to be called once during server startup so the operator gets a
-    visible heads-up when the OS Task Scheduler isn't keeping the caches
-    warm. Returns an empty list when everything looks healthy.
-    """
-    warnings: list[str] = []
-    now = time.time()
-
-    for name, max_age in _HEALTH_THRESHOLDS.items():
-        sentinel = _sentinel_path(name)
-        if not sentinel.exists():
-            warnings.append(
-                f"No sentinel for '{name}' \u2014 is the Wx-Dashboard-{name.capitalize()} "
-                "task installed and has it run at least once?"
-            )
-            continue
-        age = now - sentinel.stat().st_mtime
-        if age > max_age:
-            warnings.append(
-                f"Cache '{name}' is {int(age / 60)} min stale "
-                f"(threshold {max_age // 60} min) \u2014 check Task Scheduler."
-            )
-
-    # MRMS: check the newest of any mrms_* sentinel, since only one product is
-    # active at a time and the active product changes by user toggle.
-    mrms_sentinels = (
-        list(_SENTINEL_DIR.glob("mrms_*.last_run")) if _SENTINEL_DIR.exists() else []
-    )
-    if not mrms_sentinels:
-        warnings.append(
-            "No MRMS sentinel found \u2014 is the Wx-Dashboard-MRMS task installed "
-            "and has it run at least once?"
-        )
-    else:
-        newest = max(s.stat().st_mtime for s in mrms_sentinels)
-        age = now - newest
-        if age > _MRMS_THRESHOLD:
-            warnings.append(
-                f"MRMS cache is {int(age / 60)} min stale "
-                f"(threshold {_MRMS_THRESHOLD // 60} min) \u2014 check Task Scheduler."
-            )
-
-    return warnings

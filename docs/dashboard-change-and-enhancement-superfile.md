@@ -1,8 +1,8 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-23 (Task-scheduler-free rendering Phase 5 Water is
-complete. The corrected user browser re-smoke passed; Phase 6 Surface gradients
-is next.)
+Last updated: 2026-07-24 (Task-scheduler-free rendering Phase 7 Radar and
+Satellite without required warmers is closed after its automated gate and
+corrected user-owned browser/live-provider re-smokes passed. Phase 8 is next.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -39,7 +39,7 @@ post-split structure, not the monolith.
    Its later detail-panel, Region, legend, and sidebar-style follow-ups are
    implemented and statically validated but still need browser re-smoke;
    optional Water enhancements remain deferred.
-2. Task-scheduler-free refresh/rendering — Phases 0-5 are complete under
+2. Task-scheduler-free refresh/rendering — Phases 0-7 are complete under
    `docs/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
    recorded, and the remediated live-NWS warm pass reused 471/471 alerts. It
@@ -70,7 +70,28 @@ post-split structure, not the monolith.
    river stations. Required-network validation now prevents partial publication,
    the request path automatically rebuilds even a fresh incomplete index, and a
    corrected live rebuild restored 12,761 river stations. The corrected user
-   browser re-smoke passed, closing Phase 5; Phase 6 Surface gradients is next.
+   browser re-smoke passed, closing Phase 5. Phase 6 Surface gradients is
+   implemented: requests warm one shared region/minute observation snapshot,
+   retain the last complete image, and render only the requested
+   `(WORLD|CONUS, product)` under an independent one-slot budget. Daily
+   AviationWeather station metadata and coordinator-budgeted IEM fallbacks
+   bound provider traffic. Its automated gate passes. The first user-owned
+   browser smoke found similar per-product render times (a representative
+   2,246-point CONUS render took 4.2 seconds) and no other issues, but exposed
+   the unmasked client fallback before the baked-mask PNG arrived. Warming now
+   uses the prior masked PNG or observations alone. The corrected user-owned
+   CONUS/WORLD all-product re-smoke passed on 2026-07-24, closing Phase 6.
+   Phase 7 adds lease-bound coordinator activity for selected Radar/Satellite
+   work, progressive Radar history state, selected application-owned Satellite
+   acceleration, source deduplication, bounded EUMETSAT concurrency, and
+   explicit provider capability responses. Its automated gate passes. Corrected
+   user-owned Radar and representative GOES/Himawari/EUMETSAT re-smokes passed,
+   including Satellite first-view priority and stopping an abandoned
+   Meteosat-11 RSS accelerator between frames. Phase 7 is closed. Phase 8
+   implements the zero-task cutover: broad scheduling is retired, health is
+   application/source/cache based, current-season Tropical and cleanup remain
+   application-owned, and optional task profiles delegate through localhost.
+   Its focused automated gate passes; whole-system/browser closure remains.
 3. Radar render pipeline latency optimization — execution-grade plan prepared
    in `docs/radar-render-optimization-plan.md`; Phase 0 benchmark/golden capture
    is next. Backend-only and may interleave with Track 1.
@@ -168,13 +189,96 @@ post-split structure, not the monolith.
   re-smoke passed on 2026-07-23, closing Phase 5 and authorizing Phase 6.
   Evidence is in
   `docs/perf/2026-07-23-worker-free-phase5/`.
-- The worker-free plan now treats optional Windows task workers as a supported
-  cache-warming mode, but only after migration to the same persistent
-  cross-process leases, provider budgets, deduplication keys, freshness state,
-  and atomic publisher used by application requests. Existing direct-write
-  legacy tasks remain incompatible until migrated. Mixed task/browser
-  contention, crash recovery, and warmer-enabled/disabled browser smoke are
-  explicit acceptance gates.
+- Worker-free Phase 6 is complete: the Surface-gradient endpoint now returns
+  explicit fresh/stale/warming state, preserves the prior complete image during
+  work, and submits only the requested region/product key. Observations share
+  one process snapshot per region/minute; station metadata is cached daily and
+  IEM fallback traffic uses the shared provider budget. Gradient work uses its
+  own bounded render slot and the client polls until the requested image is
+  ready. The Phase 6 suite passes 24/24, including all 18 product/region paths
+  on isolated reduced scratch grids; broader Surface/coordinator tests pass
+  37/37. The first user-owned browser smoke found no product failures and
+  recorded a representative 4.2-second, 2,246-point CONUS render. It exposed
+  the unmasked client-canvas fallback while the baked-mask PNG was pending.
+  That fallback is now suppressed during warming: stale-while-refresh adopts
+  the prior masked PNG immediately, while a truly cold request shows
+  observations alone. Correction-focused validation passes 46/46. Full pytest
+  reaches 214 passing tests plus 42 subtests; only the pre-existing Workspace
+  assertion against concurrently removed `WORKSPACE_REGION_BOUNDS` fails.
+  The corrected user-owned browser re-smoke passed for every CONUS and WORLD
+  product on 2026-07-24. Phase 6 is closed and Phase 7 is authorized next.
+  Evidence is in `docs/perf/2026-07-23-worker-free-phase6/`.
+- Worker-free Phase 7 is closed after corrected user-owned browser/live-provider
+  re-smokes. The coordinator can retain a recurring selected-product
+  job only while its 90-second presence lease is active. Radar keys include
+  site, level, product, elevation, and storm-motion variant; newest-first
+  fallback remains synchronous, history fills progressively, responses expose
+  `history_filling`, and Level 2 chunk-prefix discovery is cached for 30
+  seconds. Satellite retains on-demand tiles as the first-view path and delays
+  selected rapid-sector/Meteosat acceleration by five seconds. Source downloads
+  deduplicate per platform/sector/frame; EUMETSAT FCI downloads are limited to
+  one or two; missing credentials and licence access report explicit capability
+  states. The focused gate passes 53 tests plus 42 subtests; full pytest passes
+  222 tests plus 42 subtests and retains only the pre-existing Workspace
+  assertion against the concurrently removed `WORKSPACE_REGION_BOUNDS`. Evidence is in
+  `docs/perf/2026-07-24-worker-free-phase7/`.
+- Worker-free Phase 8 is implemented and awaiting whole-system/browser closure.
+  `workers/scheduler.py` registers no broad jobs, startup health no longer reads
+  scheduled-task sentinels, and `/api/health/coordinator` reports
+  application-owned source/cache/coordinator plus maintenance state. Tropical
+  current-season archive refresh remains request-driven and six-hour cleanup
+  remains lifecycle-owned. `tools/install_tasks.ps1` defaults to a non-mutating
+  preview; its bounded optional `core` and `surface` profiles call the running
+  localhost API and expose standardized warmer outcomes. The real preview found
+  13 legacy tasks, all disabled, and changed none. Phase 8 focused tests pass
+  6/6; combined cutover/lifecycle/schedule tests pass 18/18. Full pytest reaches
+  240 passing tests plus 42 subtests and retains only the pre-existing Workspace
+  assertion against the concurrently removed `WORKSPACE_REGION_BOUNDS`.
+  A temporary port-8011 runtime probe returned healthy application-owned state,
+  a running single-process coordinator, registered cleanup, and no task-health
+  field. The first user-owned zero-task/browser smoke found three follow-up
+  defects. WPC now versions unchanged image paths with the payload update token
+  so a new timestamp cannot retain yesterday's browser-cached chart. MRMS opens
+  at the newest frame and follows the newest frame while progressive history
+  fills. Satellite explicitly orders catalogs oldest-to-newest, displays the
+  final/newest frame before neighbor priming, and replaces the aggregate
+  cached-tile count with a clear visible-tile cache-or-render-on-demand message.
+  A separate second global-timestamp line now reports Loading, Fresh, Stale, or
+  Ready state while preserving every existing page message element. The
+  correction suite passed 39/39 plus syntax/compile/lint/diff checks. A local
+  in-app browser re-smoke confirmed WPC's versioned image URL, MRMS at 28/28
+  with its scrubber at maximum, and Meteosat-12 Channel 13 requesting the
+  02:00Z newest frame before 01:45Z. The next user-owned re-smoke passed WPC
+  chart/timestamp parity and newest-first MRMS/Satellite behavior, with no other
+  product errors. It exposed Channel 14 being present in the UI but absent from
+  the backend product registry and timestamp state appearing only on the three
+  corrected pages. Channel 14 is now registered for all supported provider
+  mappings. Every standalone page receives the shared Loading/Ready state, and
+  SPC/Surface also publish their computed stale state. Satellite Ready is now
+  driven only by a successful tile-load event for the active frame. The
+  expanded correction suite passes 42/42 plus 16 Node syntax checks and Python
+  compilation. Browser proof held Loading at 0/40 rendered Satellite tiles,
+  changed to Ready at 23/40, and showed Ready on Drought. A fresh temporary
+  server accepted Channel 14 legend/catalog validation before the sandbox's
+  unavailable outbound NOAA S3 access stopped discovery. The continuing
+  user-owned re-smoke now passes Surface, Satellite, Alerts, MRMS, Drought, WPC,
+  and Water. RTMA passes the `Stale` to `Ready` state transition; its observed
+  cold fresh-data load took about 60-75 seconds, consistent with source
+  download/render and possible shared heavy-render-slot queueing. Repeated RTMA
+  testing exposed the latest refresh and request render concurrently downloading
+  the same GRIB through one fixed `.part` path. GRIB acquisition is now
+  serialized per destination and rechecks the completed cache after waiting;
+  the focused Phase 4 suite passes 11/11 plus Ruff and compilation. The
+  corrected RTMA user re-smoke passed without the collision recurring, and
+  Radar also passes. Leaving MRMS stopped page polling while the
+  already-submitted bounded selected-product history batch finished, which is
+  expected; it must not launch new batches after departure. SPC also passes.
+  Workspace also passes. Tropical initial refresh exposed a missing
+  `setTimeoutFn` dependency in the engine context; the dependency is now wired
+  and the focused Tropical/browser gate passes 23/23 plus Node syntax and Ruff.
+  The corrected Tropical user re-smoke passes, completing the user-owned
+  whole-system browser smoke. Warmer-enabled/disabled acceptance remains
+  pending.
 - Radar render optimization is planned but not implemented. Phase 0 will add a
   safe scratch-only benchmark and eight-row golden matrix before any behavior
   changes. The first measured candidate is newest-frame-first empty-cache

@@ -52,11 +52,12 @@ Active root pages and their JS in this checkout:
   `/fonts` static mount and applies the family through `:root`, allowing product
   pages and controls to inherit the original dashboard type treatment.
 
-Planned product-page migration:
+Product-page architecture (migration completed in Phase 27):
 
-- Product-specific pages are the intended post-refactor direction:
-  `/alerts`, `/radar`, `/satellite`, `/spc`, `/surface`, `/mrms`, `/rtma`,
-  `/drought`, `/tropical`, `/wpc`, and `/water`.
+- All product routes are live and canonical (extensionless), served by
+  `routes/pages.py`: `/alerts`, `/radar`, `/satellite`, `/spc`, `/surface`,
+  `/mrms`, `/rtma`, `/drought`, `/tropical`, `/wpc`, `/water`, and `/workspace`.
+  `/weather.html` 307-redirects to `/workspace`.
 - The Stage 2 frontend interface contract is recorded in
   `docs/frontend-stage2-core-api-inventory.md`. It prohibits a replacement
   global context: pages import narrow `core/*` capabilities, engines own
@@ -77,8 +78,9 @@ Planned product-page migration:
   workspace.
 - `/radar` serves `frontend/pages/radar/radar.html`, which owns live site/product
   selection, current and cached-frame playback, NST overlays, legends, and the
-  value inspector without loading `js/weather.js`. `/radar.html` remains a
-  compatibility route and is separate from the canonical extensionless page.
+  value inspector. (A legacy `/radar.html` route is still declared in
+  `routes/pages.py` but its root file no longer exists, so it 404s — `/radar` is
+  canonical.)
 - `/tropical` serves `frontend/pages/tropical/tropical.html`, which composes its
   page-local engine/controller/application modules with `frontend/core/` and
   does not load `js/weather.js` or the removed root `js/tropical-*` modules.
@@ -103,6 +105,12 @@ through application lifespan. It provides a bounded executor/queue,
 actual-resource-key deduplication, provider concurrency and minimum intervals,
 90-second request-presence leases, exponential backoff, state pruning, and
 credential-safe reporting at `/api/health/coordinator`.
+Phase 7 adds dynamic presence jobs: a selected product can repeat at its
+source-appropriate interval while its lease is active, then the coordinator
+removes the job after expiry.
+Phase 8 makes this the only required refresh lifecycle. Health reports
+coordinator, provider/source, resource/cache, current-season Tropical, and
+cleanup-maintenance state rather than scheduled-task sentinel ages.
 
 Surface observation cold/stale refresh, WPC, SPC outlook, and Tropical
 advisory/GTWO refreshes are migrated request paths. Surface JSON uses the
@@ -110,21 +118,29 @@ unique-temp atomic publisher in
 `app_core/atomic_io.py`. Its coordinator key identifies the regional upstream
 observation set, so one fetch publishes every Surface product cache. A cold
 response reports `refreshing` and the standalone Surface engine polls local
-state until the cache is ready. Presence-only states report `idle`. Six-hour
+state until the cache is ready. Surface gradients use a separate
+`(WORLD|CONUS, product)` coordinator key, keep the prior complete artifact
+visible while rendering, and share the regional observation snapshot for one
+minute. Their process-local render semaphore is independent of the shared
+Radar/Satellite heavy-render slot. Daily AviationWeather station metadata
+avoids per-request discovery; the rare IEM fallback acquires the coordinator's
+shared provider budget directly. While a server PNG is pending, the Surface
+engine displays the prior masked PNG or observations alone; its unmasked
+client-canvas interpolation is reserved for a completed server path that
+produced no usable image. Presence-only states report `idle`. Six-hour
 cache cleanup is coordinator-owned and does not require an open page.
 
-Phase 1 supports one application process. `WEB_CONCURRENCY` and
+The current coordinator supports one application process. `WEB_CONCURRENCY` and
 `UVICORN_WORKERS` above 1 are rejected, and CLI multi-worker launches are
 unsupported until persistent cross-process leases/provider state exist.
 Existing direct-write OS tasks are not safe to overlap with migrated paths.
-The older broad APScheduler profile remains fallback-only behind
-`WX_INPROC_WORKERS=1`.
+`workers/scheduler.py` is now a compatibility lifecycle hook and registers no
+broad fixed jobs; `WX_INPROC_WORKERS` no longer restores that legacy schedule.
 
 The post-refactor deployability target is cross-platform:
 
-- Default: app-managed Python worker supervisor that runs on Windows, macOS, and
-  Linux.
-- Optional: OS scheduler integration for advanced/headless installs.
+- Default: the API and application-owned coordinator on Windows, macOS, and Linux.
+- Optional: bounded OS-scheduler warmers that call the running localhost API.
 - Manual: one-off worker module commands for backfill, troubleshooting, and
   cache priming.
 
@@ -132,24 +148,24 @@ This lets non-technical local users run the dashboard without configuring
 Windows Task Scheduler or macOS `launchd`, while preserving OS schedulers for
 operator-managed deployments.
 
-Current in-process fallback intervals in `workers/scheduler.py`:
+Optional Windows profiles in `workers/optional_warmer.py`:
 
-| Worker         | Interval | Notes                                             |
-| -------------- | -------- | ------------------------------------------------- |
-| alerts_worker  | 1 min    | First run immediate when fallback mode is enabled |
-| spc_worker     | 30 min   | First run immediate                               |
-| rtma_worker    | 15 min   | First run immediate                               |
-| mrms_worker    | 15 min   | First run delayed by 30s                          |
-| surface_worker | 30 min   | First run immediate                               |
+| Profile   | Interval | Scope                                      |
+| --------- | -------- | ------------------------------------------ |
+| `core`    | 5 min    | Alerts, SPC, WPC, Tropical, and Water index |
+| `surface` | 30 min   | CONUS temperature points and gradient       |
+
+The profiles expose `warmed`, `current`, `already_running`, `backoff`, or
+`failed`. They call the FastAPI routes instead of importing direct writers, so
+all work stays inside the application's coordinator/provider/render budgets.
 
 Manual RTMA backfill/preload:
 
 - `workers/rtma_preload.py` primes the full lookback cache (hourly + rapid update)
 - Intended for one-time rebuilds and cold-start priming
 
-Current default runtime behavior (no env var): the coordinator and its cleanup
-schedule run, while the older broad APScheduler worker profile is not
-registered. Unmigrated products retain their existing paths until later phases.
+Current default runtime behavior: the coordinator and its cleanup schedule run;
+there is no required or opt-in broad APScheduler worker profile.
 
 ### Local Dev Run Profiles
 
@@ -159,16 +175,10 @@ The default local startup path is currently:
 python main.py
 ```
 
-`WX_INPROC_WORKERS=1` enables the legacy broad in-process schedule for fallback
-testing. Do not combine migrated application refreshes with existing
-direct-write task definitions; optional warmers require the later shared
-persistent coordination protocol.
-
-Future launcher expectation:
-
-- A cross-platform app startup path should start the API, start the app-managed
-  worker supervisor by default, and open the browser.
-- API-only mode should remain available for development and debugging.
+`tools/install_tasks.ps1` defaults to a read-only preview. It can explicitly
+install disabled optional API warmers and separately unregister known legacy
+direct-writer tasks. Actual unregistration is operator-authorized and never an
+application-startup side effect.
 
 ## Data Endpoints
 
@@ -225,6 +235,10 @@ Weather radar live endpoints:
    beyond current cache coverage starts bounded newest-to-oldest background
    fill and retains the expanded live history; the scheduled worker keeps its
    one-hour default. This is not an archive-render workflow.
+6. Phase 7 history and discovery work runs through a lease-bound coordinator
+   key containing site, level, product, elevation, and storm-motion variant.
+   Level 2 chunk-prefix listings are cached for 30 seconds when that optional
+   source path is enabled.
 
 Satellite v2 tile endpoints:
 
@@ -235,37 +249,42 @@ Satellite v2 tile endpoints:
 3. Filled satellite images own the basemap inside valid coverage (PNG alpha
    255); invalid/off-disk pixels remain transparent. ADP, AOD, and FRP retain
    product-specific sparse-overlay alpha.
+4. Selected rapid sectors and Meteosat source prefetch are delayed optional
+   accelerators owned by the application while request presence remains active;
+   they do not replace the live on-demand tile path.
+5. Source downloads deduplicate by platform/sector/frame. EUMETSAT FCI uses
+   one or two download connections and reports `credentials_required` or
+   `license_required` instead of hanging or presenting a generic provider
+   failure.
 
 Cache served as static files via `/cache` mount (StaticFiles).
 
 ## Frontend Architecture
 
-Standalone product pages use ES modules under `frontend/core/` and
-`frontend/pages/{product}/`. The legacy combined workspace described below is
-transitional and is not the owner of canonical standalone product routes.
+Every page is a standalone ES-module app under `frontend/pages/{product}/` composed
+with shared `frontend/core/` modules. The combined `js/weather.js` monolith,
+`js/shared.js`, and `css/dashboard.css` were retired in Phase 27; the `js/` directory
+is empty. Pages import only `core/`, vendored `frontend/lib/`, and their own directory.
+`/workspace` may import sibling engine modules but never sibling page controllers.
 
-`js/weather.js` — transitional combined-workspace IIFE, no framework, ES6+,
-async/await.
+Shared `frontend/core/` modules:
 
-Responsibilities:
+- `api.js` — `apiUrl()`, `fetchCachedJson()`, and versioned browser Cache Storage.
+- `map-core.js` — Leaflet map factory: basemaps, logo, `REGION_BOUNDS` + `fitRegion`,
+  the reset-view (⌂, returns to the page's home region) and numeric-zoom controls,
+  lat/lon/state/county/country overlays, cached US/World city-label layers with bounded
+  density filtering, and the `mapViewportLog()` dev tool.
+- `nav.js` — icon-bearing product navigation.
+- `sidebar-tabs.js` — shared standalone sidebar controller (mounted panels, roving focus).
+- `legend.js` — legend host lifecycle (alignment, collapse), confined to `.core-map-panel`.
+- `status.js` — timestamp/status/reliability surface.
+- `scrubber.js` — shared timeline/scrubber controller.
+- `settings.js` — persisted per-page settings via `loadPageSettings()`.
 
-- Leaflet map init with CartoDB Dark/Light basemap toggle
-- `loadAlerts(category)` — fetches `/api/data/alerts`, renders `L.geoJSON`, builds legend
-- `loadSpc(day, hazard)` — fetches `/api/data/spc`, renders `L.geoJSON`, builds legend
-- `loadRtma()` — fetches `/api/overlay/latest` first, applies `L.imageOverlay`, then fetches frame-locked points
-- `loadRtmaScrubberFrames()` — fetches `/api/overlay/frames` for instant frame list
-- Radar live site/product selection with multi-site map overlays
-- Radar time-mode playback from `/api/radar/live/frames` with context invalidation when selection changes
-- Radar clear control that clears loaded radar overlays and exits animate mode back to current without resetting map view
-- Satellite tile layers render at Leaflet opacity 1.0; transparency is encoded
-  per pixel by the backend rather than applied as a second layer-wide dimming
-  pass.
-- Region → `fitBounds` mapping (all 50 states + CONUS)
-- Layer visibility and opacity sliders (no page reload)
-- SPC three-way dropdown: convective / fire / other (tracks `_spcLastTouched`)
-- Alert category filter applied client-side against `properties.event`
-
-`js/shared.js` — exports `window.apiUrl`, `window.initNav`, and progress/output helpers (progress helpers are no-ops for the weather page since weather no longer uses the render pipeline).
+Rich pages (Tropical, Radar, Satellite, Alerts) split into an engine (data/layers) and
+controller/app (DOM) alongside their entry module; simpler pages use a single entry.
+Product colors and other backend-mirrored constants are embedded as JS constants, not
+fetched at runtime.
 
 Standalone Alerts interaction model:
 
@@ -372,7 +391,7 @@ cache/
 | `radar/radar_nodd_utils.py`    | NODD radar key listing + downloads with race-tolerant retries                 |
 | `rtma_utils.py`                | RTMA source resolution, grid extraction, pre-render generation, point caching |
 | `cache/overlay_cache_utils.py` | Overlay frame paths/index/meta helpers                                        |
-| `config/geo_config.py`         | `STATE_BOUNDS` dict (used in weather.js)                                      |
+| `config/geo_config.py`         | `STATE_BOUNDS` dict (backend region bounds; frontend uses `REGION_BOUNDS` in `map-core.js`) |
 | `config/alerts_config.py`      | `ALERT_COLORS` dict                                                           |
 
 ## Satellite v2 GeoColor and display-alpha contract (2026-07-16)
@@ -410,26 +429,25 @@ default/GOES path, `products-ahi3` for Himawari-9, and `products-fci3` for
 Meteosat-12. Any pixel-output optimization must establish golden tiles from
 these namespaces before changing the render pipeline.
 
-## Radar / Satellite Product Pages (Planned / Needs Revalidation)
+## Radar / Satellite Product Pages (Current State)
 
-The intended product-page split includes independent `radar.html` and
-`satellite.html` pages. Those pages may retain or reintroduce:
+Both standalone pages are live and on cache-first contracts:
 
-- Synchronous render pipeline
-- Lambert conformal conic projection
-- Layered PNG scrubber
-- `/api/radar`, `/api/satellite` endpoints
-- `active_tasks` progress tracking
+- `/radar` (`frontend/pages/radar/radar.html`) uses the cache-first live overlay
+  contract via `/api/radar/live/*` — no synchronous render pipeline for live view.
+- `/satellite` (`frontend/pages/satellite/satellite.html`) uses the satellite-v2
+  contract via `/api/satellite-v2/*` — cache-first source/channel resolution plus
+  on-demand Web Mercator tiles.
 
-Those root HTML files are not present in this checkout yet. Treat this section
-as a planned migration target until the pages and endpoints are revalidated.
-The standalone Radar page is on the cache-first live overlay contract via
-`/api/radar/live/*`.
+The older root `radar.html`/`satellite.html` split (synchronous Lambert render
+pipeline, layered PNG scrubber, `active_tasks` progress) was not carried forward for
+the live paths. Archive/export render workflows keep the synchronous Lambert pipeline
+where render time is non-trivial.
 
-Planned direction:
+Direction:
 
-- Continue migrating relevant tabs (Surface, MRMS, archive Radar, Satellite) toward the cache-first pre-render contract.
-- Alerts remain on the existing vector GeoJSON workflow.
+- Continue migrating any remaining tabs toward the cache-first pre-render/tile contract.
+- Alerts remain on the vector GeoJSON workflow.
 
 ## Weather Radar Live Notes (2026-05-05)
 
@@ -440,7 +458,9 @@ Planned direction:
 
 ## MRMS Overlay Cache — Rollout Status (2026-05-01)
 
-Backend infrastructure complete; frontend scrubber not yet built.
+Superseded: the standalone `/mrms` page (`frontend/pages/mrms/`) now implements the
+frontend scrubber. The `js/weather.js` references below are historical (pre-Phase-27);
+the backend cache/retention design and the variable-depth tuning notes still apply.
 
 **Completed:**
 

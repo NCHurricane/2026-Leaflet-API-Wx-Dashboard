@@ -224,10 +224,33 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
         });
     }
 
+    function applyCacheState(geojson) {
+        if (geojson?.source_available === false) {
+            status.setDataState('Cached only — source unavailable', 'stale');
+        } else if (geojson?.cache_state === 'stale_refreshing') {
+            status.setDataState('Refreshing stale data…', 'loading');
+        } else if (geojson?.stale || geojson?.cache_state === 'backoff') {
+            status.setDataState('Stale data', 'stale');
+        } else {
+            status.setDataState('Fresh data', 'fresh');
+        }
+    }
+
+    function versionedImageUrl(imageUrl, updated) {
+        const raw = String(imageUrl || '');
+        if (!raw || !updated) return api.apiUrl(raw);
+        const separator = raw.includes('?') ? '&' : '?';
+        return api.apiUrl(`${raw}${separator}v=${encodeURIComponent(updated)}`);
+    }
+
     async function load(selection, { refreshAttempt = 0 } = {}) {
         const { group, day, product } = selection;
         const request = gate.begin();
         status.setMessage('Loading WPC…');
+        status.setDataState(
+            refreshAttempt ? 'Refreshing stale data…' : 'Loading data…',
+            'loading',
+        );
         onEmptyMessage?.(null);
 
         try {
@@ -256,6 +279,7 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
                     const emptyMessage = `${geojson.product_label || 'WPC surface product'} is temporarily unavailable from WPC.`;
                     onEmptyMessage?.(emptyMessage);
                     status.setMessage(emptyMessage, 'error');
+                    status.setDataState('Unavailable', 'error');
                     return;
                 }
                 const leafletBounds = [
@@ -263,13 +287,14 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
                     [Number(bounds.north), Number(bounds.east)],
                 ];
                 layer = leaflet.imageOverlay(
-                    api.apiUrl(geojson.image_url),
+                    versionedImageUrl(geojson.image_url, geojson._updated),
                     leafletBounds,
                     { opacity, interactive: false, pane: 'overlayPane' },
                 ).addTo(map);
                 legend.clear();
                 onEmptyMessage?.(null);
                 applyTimestamps(geojson);
+                applyCacheState(geojson);
                 const cacheNote = geojson.source_available === false
                     ? ' — showing cached data; WPC source is temporarily unavailable.'
                     : (geojson.stale ? ' — cached data may be stale.' : '');
@@ -298,6 +323,7 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
                     : '';
                 status.setMessage(emptyMessage + cacheNote);
                 applyTimestamps(geojson);
+                applyCacheState(geojson);
                 pollForFreshCache();
                 return;
             }
@@ -348,6 +374,7 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
 
             legend.setHtml(wpcLegendHtml({ group, day, label: geojson.product_label, features }));
             applyTimestamps(geojson);
+            applyCacheState(geojson);
             const cacheNote = geojson.source_available === false
                 ? ' — showing cached data; WPC source is temporarily unavailable.'
                 : (geojson.stale ? ' — cached data may be stale.' : '');
@@ -363,6 +390,7 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
             console.error('[wpc] load failed', err);
             onEmptyMessage?.(null);
             status.setMessage(`WPC load failed: ${err.message}`, 'error');
+            status.setDataState('Load failed', 'error');
         }
     }
 

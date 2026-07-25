@@ -5,7 +5,7 @@ import { renderProductNav } from '../../core/nav.js';
 import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js';
+import { createStatusReporter } from '../../core/status.js?v=20260725e';
 import { createRadarEngine } from './radar-engine.js?v=20260719b';
 
 const byId = (id) => document.getElementById(id);

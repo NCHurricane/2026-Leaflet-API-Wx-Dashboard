@@ -10,9 +10,11 @@ from config.refresh_schedules import (
     wpc_schedule_for,
 )
 from config.wpc_config import WPC_PRODUCTS
+from app_core.refresh_coordinator import Submission
 from workers import spc_worker
 from workers import tropical_worker
 import services.drought_service as drought_service
+import services.tropical_service as tropical_service
 
 
 UTC = timezone.utc
@@ -50,6 +52,22 @@ def test_spc_grace_retries_until_source_advances() -> None:
     )
 
 
+def test_missed_issuance_window_gets_one_catch_up_check() -> None:
+    schedule = SPC_OUTLOOK_SCHEDULES["1_cat"]
+    now = datetime(2026, 7, 23, 15, 0, tzinfo=UTC)
+
+    assert schedule.refresh_due(
+        now=now,
+        source_issued_at=datetime(2026, 7, 23, 6, 0, tzinfo=UTC),
+        last_checked_at=datetime(2026, 7, 23, 12, 0, tzinfo=UTC),
+    )
+    assert not schedule.refresh_due(
+        now=now,
+        source_issued_at=datetime(2026, 7, 23, 6, 0, tzinfo=UTC),
+        last_checked_at=datetime(2026, 7, 23, 13, 30, tzinfo=UTC),
+    )
+
+
 def test_tropical_and_gtwo_boundaries_are_separate() -> None:
     now = datetime(2026, 7, 23, 12, 5, tzinfo=UTC)
 
@@ -62,6 +80,21 @@ def test_tropical_and_gtwo_boundaries_are_separate() -> None:
     assert GTWO_SCHEDULE.latest_boundary(now) == datetime(
         2026, 7, 23, 12, 0, tzinfo=UTC
     )
+
+
+def test_tropical_refresh_metadata_exposes_background_retry() -> None:
+    metadata = tropical_service._tropical_refresh_metadata(
+        {
+            "advisories": Submission(True, "running"),
+            "gtwo": Submission(False, "current"),
+        }
+    )
+
+    assert metadata == {
+        "cache_state": "refreshing",
+        "refreshing": True,
+        "retry_after_seconds": 2.0,
+    }
 
 
 def test_wpc_products_do_not_share_one_universal_stale_window() -> None:

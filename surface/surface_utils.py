@@ -16,6 +16,7 @@ import json
 import gzip
 import time
 import re
+from app_core.atomic_io import atomic_write_json
 from app_core.upstream_ledger import requests
 import pandas as pd
 import numpy as np
@@ -46,7 +47,8 @@ _MASK_PATH_CACHE = {}
 SURFACE_NETWORK_TYPES = ("ASOS", "COOP", "DCP", "RWIS")
 _WORLD_STATION_NAME_CACHE = {}
 _WORLD_STATION_NAME_CACHE_TS = 0.0
-_WORLD_STATION_NAME_CACHE_TTL_SECONDS = 12 * 3600
+_STATION_METADATA_TTL_SECONDS = 24 * 3600
+_WORLD_STATION_NAME_CACHE_TTL_SECONDS = _STATION_METADATA_TTL_SECONDS
 
 
 def _add_geometry_patch(
@@ -233,8 +235,15 @@ def is_cache_valid(file_path, minutes=30):
     return False
 
 
-@lru_cache(maxsize=256)
 def _get_station_names(network_id):
+    return _get_station_names_for_day(
+        network_id,
+        int(time.time() // _STATION_METADATA_TTL_SECONDS),
+    )
+
+
+@lru_cache(maxsize=512)
+def _get_station_names_for_day(network_id, _day_bucket):
     """
     Fetch station metadata from IEM to get station names.
     Returns a dict mapping station_id -> name.
@@ -255,6 +264,9 @@ def _get_station_names(network_id):
         return station_names
     except Exception:
         return {}
+
+
+_get_station_names.cache_clear = _get_station_names_for_day.cache_clear
 
 
 def _fetch_single_network(state_code, network_type):
@@ -338,7 +350,7 @@ def _to_float_mi(value):
 
 
 def _get_world_station_name_map(force_refresh=False):
-    """Return cached WORLD station-id -> placename mapping from Aviation Weather."""
+    """Return a daily station-id/name snapshot from Aviation Weather."""
     global _WORLD_STATION_NAME_CACHE, _WORLD_STATION_NAME_CACHE_TS
 
     now = time.time()
@@ -348,6 +360,25 @@ def _get_world_station_name_map(force_refresh=False):
         and (now - _WORLD_STATION_NAME_CACHE_TS) < _WORLD_STATION_NAME_CACHE_TTL_SECONDS
     ):
         return _WORLD_STATION_NAME_CACHE
+
+    metadata_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "cache",
+        "surface",
+        "metadata",
+        "aviationweather_station_names.json",
+    )
+    try:
+        with open(metadata_path, "r", encoding="utf-8") as fh:
+            disk_mapping = json.load(fh)
+        disk_mtime = os.path.getmtime(metadata_path)
+        if isinstance(disk_mapping, dict) and disk_mapping:
+            _WORLD_STATION_NAME_CACHE = disk_mapping
+            _WORLD_STATION_NAME_CACHE_TS = disk_mtime
+            if not force_refresh and (now - disk_mtime) < _STATION_METADATA_TTL_SECONDS:
+                return _WORLD_STATION_NAME_CACHE
+    except (OSError, ValueError, TypeError):
+        pass
 
     url = "https://aviationweather.gov/data/cache/stations.cache.json.gz"
     try:
@@ -381,6 +412,7 @@ def _get_world_station_name_map(force_refresh=False):
     if mapping:
         _WORLD_STATION_NAME_CACHE = mapping
         _WORLD_STATION_NAME_CACHE_TS = now
+        atomic_write_json(metadata_path, mapping)
 
     return _WORLD_STATION_NAME_CACHE
 
@@ -701,24 +733,30 @@ def fetch_metar_data(state_code, use_nws_first=False):
                 f"[surface] AWC CONUS fetch failed, falling back to IEM: {e}")
 
         # Fallback: per-state IEM (may be rate-limited)
-        all_dfs = []
-        states = [
-            state for state in STATES_FULL.keys() if state not in ["AK", "HI", "CONUS"]
-        ]
+        from app_core.refresh_coordinator import get_refresh_coordinator
 
-        max_workers = min(12, max(4, len(states)))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_state = {
-                executor.submit(fetch_metar_data, state): state for state in states
-            }
-            for future in as_completed(future_to_state):
-                state = future_to_state[future]
-                try:
-                    df_state = future.result()
-                    if not df_state.empty:
-                        all_dfs.append(df_state)
-                except Exception as e:
-                    print(f"API Error {state}: {e}")
+        with get_refresh_coordinator().provider_budget("iem"):
+            all_dfs = []
+            states = [
+                state
+                for state in STATES_FULL.keys()
+                if state not in ["AK", "HI", "CONUS"]
+            ]
+
+            max_workers = min(12, max(4, len(states)))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_state = {
+                    executor.submit(fetch_metar_data, state): state
+                    for state in states
+                }
+                for future in as_completed(future_to_state):
+                    state = future_to_state[future]
+                    try:
+                        df_state = future.result()
+                        if not df_state.empty:
+                            all_dfs.append(df_state)
+                    except Exception as e:
+                        print(f"API Error {state}: {e}")
 
         if not all_dfs:
             return pd.DataFrame()
@@ -901,16 +939,27 @@ _AWC_BATCH_SIZE = 30  # stay under 400-record limit per request
 _AWC_MAX_WORKERS = 6
 _AWC_STATION_CACHE: set[str] = set()
 _AWC_STATION_CACHE_TS: float = 0.0
-_AWC_STATION_CACHE_TTL: float = 3600.0  # 1 hour
+_AWC_STATION_CACHE_TTL: float = _STATION_METADATA_TTL_SECONDS
 
 
 def _get_conus_icao_ids() -> set[str]:
-    """Return all US ASOS ICAO station IDs via IEM currents.json (not rate-limited)."""
+    """Return US ASOS ICAO IDs from daily AWC metadata, with a budgeted IEM fallback."""
     global _AWC_STATION_CACHE, _AWC_STATION_CACHE_TS
 
     now = time.time()
     if _AWC_STATION_CACHE and (now - _AWC_STATION_CACHE_TS) < _AWC_STATION_CACHE_TTL:
         return _AWC_STATION_CACHE
+
+    station_names = _get_world_station_name_map()
+    awc_ids = {
+        station_id
+        for station_id in station_names
+        if len(station_id) == 4 and station_id.startswith("K")
+    }
+    if len(awc_ids) >= 100:
+        _AWC_STATION_CACHE = awc_ids
+        _AWC_STATION_CACHE_TS = now
+        return awc_ids
 
     all_ids: set[str] = set()
     states = [s for s in STATES_FULL.keys() if s not in ("AK", "HI", "CONUS")]
@@ -936,10 +985,13 @@ def _get_conus_icao_ids() -> set[str]:
         except Exception:
             return set()
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        futs = {pool.submit(_ids_for_state, st): st for st in states}
-        for f in as_completed(futs):
-            all_ids.update(f.result())
+    from app_core.refresh_coordinator import get_refresh_coordinator
+
+    with get_refresh_coordinator().provider_budget("iem"):
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futs = {pool.submit(_ids_for_state, st): st for st in states}
+            for f in as_completed(futs):
+                all_ids.update(f.result())
 
     if all_ids:
         _AWC_STATION_CACHE = all_ids
@@ -1011,6 +1063,7 @@ def _awc_records_to_iem_df(records: list[dict]) -> pd.DataFrame:
         return pd.DataFrame()
 
     rows: list[dict] = []
+    station_names = _get_world_station_name_map()
     for r in records:
         obs_time = r.get("obsTime")
         if obs_time is None:
@@ -1044,6 +1097,11 @@ def _awc_records_to_iem_df(records: list[dict]) -> pd.DataFrame:
         rows.append(
             {
                 "station": station,
+                "name": (
+                    station_names.get(str(icao).upper())
+                    or station_names.get(str(station).upper())
+                    or station
+                ),
                 "valid": valid_str,
                 "lat": r.get("lat"),
                 "lon": r.get("lon"),

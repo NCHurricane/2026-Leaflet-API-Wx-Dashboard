@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -28,6 +29,8 @@ NODD_RTMA_ROOT = "https://noaa-rtma-pds.s3.amazonaws.com"
 NOMADS_RTMA_ROOT = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/rtma/prod"
 REQUEST_TIMEOUT = 30
 _RTMA_CITY_CACHE_SCHEMA = 2
+_GRIB_DOWNLOAD_LOCKS: dict[str, threading.Lock] = {}
+_GRIB_DOWNLOAD_LOCKS_GUARD = threading.Lock()
 
 REGION_PREFIXES = {
     "CONUS": "rtma2p5",
@@ -639,6 +642,16 @@ def _sanitize_cache_token(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in value)
 
 
+def _grib_download_lock(local_path: str) -> threading.Lock:
+    key = os.path.abspath(local_path)
+    with _GRIB_DOWNLOAD_LOCKS_GUARD:
+        lock = _GRIB_DOWNLOAD_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _GRIB_DOWNLOAD_LOCKS[key] = lock
+        return lock
+
+
 def ensure_rtma_grib(
     cache_root: str,
     source: RtmaSource,
@@ -653,33 +666,36 @@ def ensure_rtma_grib(
         local_path = os.path.join(cache_dir, f"{digest}_{unique}_{file_name}")
     else:
         local_path = os.path.join(cache_dir, f"{digest}_{file_name}")
-    if (
-        not force_refresh
-        and os.path.exists(local_path)
-        and os.path.getsize(local_path) > 0
-    ):
-        if _looks_like_grib(local_path):
+    with _grib_download_lock(local_path):
+        # Another request may have completed this exact source while this
+        # caller waited for the per-file acquisition lock.
+        if (
+            not force_refresh
+            and os.path.exists(local_path)
+            and os.path.getsize(local_path) > 0
+            and _looks_like_grib(local_path)
+        ):
             return local_path
 
-    tmp_path = f"{local_path}.part"
+        tmp_path = f"{local_path}.part"
 
-    with requests.get(source.url, timeout=120, stream=True) as response:
-        response.raise_for_status()
-        with open(tmp_path, "wb") as handle:
-            for chunk in response.iter_content(chunk_size=1024 * 1024):
-                if chunk:
-                    handle.write(chunk)
-    os.replace(tmp_path, local_path)
-    if not _looks_like_grib(local_path):
-        try:
-            os.remove(local_path)
-        except OSError:
-            pass
-        raise ValueError(
-            "Downloaded payload is not a valid GRIB file: "
-            f"{os.path.basename(local_path)} from {source.url}"
-        )
-    return local_path
+        with requests.get(source.url, timeout=120, stream=True) as response:
+            response.raise_for_status()
+            with open(tmp_path, "wb") as handle:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        handle.write(chunk)
+        os.replace(tmp_path, local_path)
+        if not _looks_like_grib(local_path):
+            try:
+                os.remove(local_path)
+            except OSError:
+                pass
+            raise ValueError(
+                "Downloaded payload is not a valid GRIB file: "
+                f"{os.path.basename(local_path)} from {source.url}"
+            )
+        return local_path
 
 
 @lru_cache(maxsize=8)

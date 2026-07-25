@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -9,6 +10,7 @@ from types import SimpleNamespace
 
 from app_core.refresh_coordinator import Submission
 from app_core.render_budget import heavy_render_slot
+import rtma.rtma_utils as rtma_utils
 import services.mrms_service as mrms_service
 import services.overlay_service as overlay_service
 import services.rtma_service as rtma_service
@@ -248,6 +250,61 @@ def test_rtma_cached_frame_is_a_successful_noop(monkeypatch, tmp_path):
         "rtma_hourly",
         "temperature",
     )
+
+
+def test_rtma_grib_download_is_deduplicated_per_source(monkeypatch, tmp_path):
+    source = SimpleNamespace(url="https://example.invalid/rtma.grb2")
+    entered = threading.Event()
+    release = threading.Event()
+    request_count = 0
+    active = 0
+    maximum = 0
+    guard = threading.Lock()
+
+    class _Response:
+        def __enter__(self):
+            nonlocal request_count, active, maximum
+            with guard:
+                request_count += 1
+                active += 1
+                maximum = max(maximum, active)
+            return self
+
+        def __exit__(self, *_args):
+            nonlocal active
+            with guard:
+                active -= 1
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def iter_content(chunk_size):
+            assert chunk_size == 1024 * 1024
+            entered.set()
+            assert release.wait(timeout=1)
+            yield b"GRIB test payload"
+
+    monkeypatch.setattr(
+        rtma_utils.requests,
+        "get",
+        lambda *_args, **_kwargs: _Response(),
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(rtma_utils.ensure_rtma_grib, str(tmp_path), source)
+        assert entered.wait(timeout=1)
+        second = executor.submit(rtma_utils.ensure_rtma_grib, str(tmp_path), source)
+        time.sleep(0.03)
+        release.set()
+        paths = [first.result(timeout=1), second.result(timeout=1)]
+
+    assert paths[0] == paths[1]
+    assert request_count == 1
+    assert maximum == 1
+    assert open(paths[0], "rb").read() == b"GRIB test payload"
+    assert not os.path.exists(f"{paths[0]}.part")
 
 
 def test_unchanged_mrms_source_skips_conversion(monkeypatch, tmp_path):

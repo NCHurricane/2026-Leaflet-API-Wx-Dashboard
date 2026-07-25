@@ -26,6 +26,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import threading
 import time as _time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -51,6 +52,9 @@ _CHUNK_RE = re.compile(
 # S3 on later polls -- only the handful of in-progress folders at the front do.
 _COMPLETE_VCP_CACHE: dict[str, set[str]] = {}
 _VCP_SCAN_TIME_CACHE: dict[str, dict[str, str]] = {}
+_PREFIX_CACHE_TTL_SECONDS = 30.0
+_PREFIX_CACHE: dict[str, tuple[float, list[str]]] = {}
+_PREFIX_CACHE_LOCK = threading.Lock()
 
 
 def _log(msg: str) -> None:
@@ -107,6 +111,12 @@ def _list_site_prefixes(s3_client, site: str) -> list[str]:
     Uses a Delimiter listing so only folder names come back (no object bodies),
     which stays cheap even when a site has thousands of historical VCP folders.
     """
+    now = _time.monotonic()
+    with _PREFIX_CACHE_LOCK:
+        cached = _PREFIX_CACHE.get(site)
+        if cached is not None and now - cached[0] <= _PREFIX_CACHE_TTL_SECONDS:
+            return list(cached[1])
+
     prefix = f"{site}/"
     prefixes: list[str] = []
     try:
@@ -121,6 +131,9 @@ def _list_site_prefixes(s3_client, site: str) -> list[str]:
     except Exception as exc:
         _log(f"[chunks] prefix list failed for {site}: {type(exc).__name__}: {exc}")
     prefixes.sort(key=int)
+    if prefixes:
+        with _PREFIX_CACHE_LOCK:
+            _PREFIX_CACHE[site] = (now, list(prefixes))
     return prefixes
 
 

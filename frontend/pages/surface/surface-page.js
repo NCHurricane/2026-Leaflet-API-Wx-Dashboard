@@ -5,8 +5,8 @@ import { renderProductNav } from '../../core/nav.js';
 import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js';
-import { createSurfaceEngine } from './surface-engine.js?v=20260723a';
+import { createStatusReporter } from '../../core/status.js?v=20260725e';
+import { createSurfaceEngine } from './surface-engine.js?v=20260725e';
 import { baseDistKm, createSurfaceRenderer } from './surface-render.js';
 
 const byId = (id) => document.getElementById(id);

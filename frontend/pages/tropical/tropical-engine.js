@@ -420,7 +420,7 @@
             }
         }
 
-        async function loadStorms(force = false) {
+        async function loadStorms(force = false, refreshAttempt = 0) {
             if (!context.isTypeEnabled('tropical')) return;
 
             const requestSeq = context.nextRequestSeq();
@@ -448,6 +448,22 @@
                 context.renderStormList(storms);
                 context.renderActiveStorms?.(storms);
                 context.loadBasinFeeds();
+                if (data.refreshing && refreshAttempt < 30) {
+                    const retryAfterSeconds = Number(data.retry_after_seconds);
+                    const retryMs = Math.max(
+                        500,
+                        1000 * (
+                            Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+                                ? retryAfterSeconds
+                                : 1
+                        ),
+                    );
+                    context.setTimeoutFn(() => {
+                        if (context.isCurrentRequest(requestSeq)) {
+                            loadStorms(false, refreshAttempt + 1);
+                        }
+                    }, retryMs);
+                }
 
                 const hasSelectedStorm = storms.some((storm) => (
                     String(storm?.id || '').toUpperCase() === selectedStormId

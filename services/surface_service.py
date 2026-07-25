@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 import json
 import os
+import threading
 import time as _time
 
 from fastapi import HTTPException
@@ -72,6 +73,10 @@ SURFACE_PRODUCTS = {
 }
 
 _SURFACE_CACHE_TTL_SECONDS = 300
+_SURFACE_GRADIENT_TTL_SECONDS = 30 * 60
+_SURFACE_SNAPSHOT_TTL_SECONDS = 60
+_SURFACE_SNAPSHOT_LOCK = threading.Lock()
+_SURFACE_SNAPSHOTS: dict[str, tuple[float, object]] = {}
 
 
 def _surface_refresh_key(region_upper: str) -> tuple[str, ...]:
@@ -80,6 +85,43 @@ def _surface_refresh_key(region_upper: str) -> tuple[str, ...]:
 
 def _surface_refresh_provider(region_upper: str) -> str:
     return "aviationweather" if region_upper in {"CONUS", "WORLD"} else "iem"
+
+
+def _surface_gradient_key(
+    region_upper: str,
+    product_lower: str,
+) -> tuple[str, ...]:
+    return ("surface", "gradient", region_upper, product_lower)
+
+
+def _get_cached_surface_snapshot(region_upper: str):
+    with _SURFACE_SNAPSHOT_LOCK:
+        cached = _SURFACE_SNAPSHOTS.get(region_upper)
+        if (
+            cached is not None
+            and (_time.monotonic() - cached[0]) < _SURFACE_SNAPSHOT_TTL_SECONDS
+        ):
+            return cached[1]
+    return None
+
+
+def _get_surface_observation_snapshot(region_upper: str):
+    """Fetch at most one observation dataframe per region inside one minute."""
+    with _SURFACE_SNAPSHOT_LOCK:
+        cached = _SURFACE_SNAPSHOTS.get(region_upper)
+        now = _time.monotonic()
+        if (
+            cached is not None
+            and (now - cached[0]) < _SURFACE_SNAPSHOT_TTL_SECONDS
+        ):
+            return cached[1]
+        dataframe = surface_utils.fetch_metar_data(region_upper)
+        if dataframe is None or bool(getattr(dataframe, "empty", False)):
+            raise RuntimeError(
+                f"No Surface observations available for {region_upper}"
+            )
+        _SURFACE_SNAPSHOTS[region_upper] = (_time.monotonic(), dataframe)
+        return dataframe
 
 
 def _interpolate_color(anchors: list, value: float) -> str:
@@ -216,7 +258,7 @@ def _refresh_surface_region(
     surface_cache_dir: str,
 ) -> dict:
     """Fetch one regional observation set and publish every product cache."""
-    df = surface_utils.fetch_metar_data(region_upper)
+    df = _get_surface_observation_snapshot(region_upper)
     source_ts = _surface_source_timestamp_iso(df)
     published_products = []
     for product, product_config in SURFACE_PRODUCTS.items():
@@ -339,7 +381,7 @@ def get_surface_data(
 
 
 def get_surface_gradient(region: str = "CONUS", product: str = "temperature") -> dict:
-    """Return cached worker-generated surface gradient metadata."""
+    """Serve the last complete gradient and target stale/missing work on demand."""
     region_upper = str(region or "CONUS").upper().strip()
     product_lower = str(product or "temperature").lower().strip()
 
@@ -362,41 +404,142 @@ def get_surface_gradient(region: str = "CONUS", product: str = "temperature") ->
         source_region,
     )
     meta_path = os.path.join(gradient_dir, f"{product_lower}.json")
+    meta = _read_surface_gradient_meta(meta_path)
+    if meta is not None:
+        image_disk = _surface_gradient_image_path(meta)
+        if image_disk is not None:
+            oldest_mtime = min(
+                os.path.getmtime(meta_path),
+                os.path.getmtime(image_disk),
+            )
+            if (_time.time() - oldest_mtime) < _SURFACE_GRADIENT_TTL_SECONDS:
+                return _surface_gradient_response(
+                    meta,
+                    source_region,
+                    product_lower,
+                    cache_state="fresh",
+                    refreshing=False,
+                )
 
-    if not os.path.exists(meta_path):
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"No cached surface gradient for region={source_region}, "
-                f"product={product_lower}. Worker may not have run yet."
-            ),
+    snapshot = _get_cached_surface_snapshot(source_region)
+    if snapshot is None:
+        surface_cache_dir = os.path.join(CACHE_ROOT, "surface")
+        os.makedirs(surface_cache_dir, exist_ok=True)
+        submission = _kickoff_surface_refresh_if_needed(
+            source_region,
+            surface_cache_dir,
+        )
+        return _surface_gradient_response_for_submission(
+            meta,
+            source_region,
+            product_lower,
+            submission,
+            refresh_stage="observations",
         )
 
+    submission = get_refresh_coordinator().submit(
+        key=_surface_gradient_key(source_region, product_lower),
+        provider="surface-gradient",
+        function=lambda: _render_surface_gradient(
+            snapshot,
+            source_region,
+            product_lower,
+        ),
+    )
+    return _surface_gradient_response_for_submission(
+        meta,
+        source_region,
+        product_lower,
+        submission,
+        refresh_stage="gradient",
+    )
+
+
+def _read_surface_gradient_meta(meta_path: str) -> dict | None:
+    if not os.path.exists(meta_path):
+        return None
     try:
         with open(meta_path, "r", encoding="utf-8") as fh:
             meta = json.load(fh)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to read gradient meta: {exc}"
-        )
+    except Exception:
+        return None
+    if not isinstance(meta, dict) or _surface_gradient_image_path(meta) is None:
+        return None
+    return meta
 
+
+def _surface_gradient_image_path(meta: dict) -> str | None:
     image_url = str(meta.get("image_url") or "")
     if not image_url:
-        raise HTTPException(
-            status_code=500, detail="Gradient metadata is missing image_url."
-        )
-
+        return None
     rel = image_url.lstrip("/")
     if rel.startswith("cache/"):
         rel = rel[len("cache/") :]
     image_disk = os.path.join(CACHE_ROOT, rel)
-    if not os.path.exists(image_disk):
-        raise HTTPException(
-            status_code=404,
-            detail="Cached gradient image is missing on disk. Worker refresh pending.",
-        )
+    return image_disk if os.path.exists(image_disk) else None
 
-    return meta
+
+def _render_surface_gradient(
+    snapshot,
+    region_upper: str,
+    product_lower: str,
+) -> dict:
+    from workers.surface_worker import render_surface_gradient
+
+    return render_surface_gradient(
+        snapshot,
+        region=region_upper,
+        product=product_lower,
+        timestamp_iso=_surface_source_timestamp_iso(snapshot),
+    )
+
+
+def _surface_gradient_response(
+    meta: dict | None,
+    region_upper: str,
+    product_lower: str,
+    *,
+    cache_state: str,
+    refreshing: bool,
+    retry_after_seconds: float | None = None,
+    refresh_stage: str | None = None,
+) -> dict:
+    return {
+        **(meta or {}),
+        "region": region_upper,
+        "product": product_lower,
+        "cache_state": cache_state,
+        "refreshing": refreshing,
+        "retry_after_seconds": retry_after_seconds,
+        "refresh_stage": refresh_stage,
+        "capability": "available",
+    }
+
+
+def _surface_gradient_response_for_submission(
+    meta: dict | None,
+    region_upper: str,
+    product_lower: str,
+    submission: Submission,
+    *,
+    refresh_stage: str,
+) -> dict:
+    refreshing = submission.status in {"queued", "running"}
+    if submission.status == "backoff":
+        cache_state = "backoff"
+    elif refreshing:
+        cache_state = "stale_refreshing" if meta is not None else "refreshing"
+    else:
+        cache_state = "stale" if meta is not None else "missing"
+    return _surface_gradient_response(
+        meta,
+        region_upper,
+        product_lower,
+        cache_state=cache_state,
+        refreshing=refreshing,
+        retry_after_seconds=submission.retry_after_seconds,
+        refresh_stage=refresh_stage,
+    )
 
 
 def get_colormap_data(product: str = "temperature") -> dict:

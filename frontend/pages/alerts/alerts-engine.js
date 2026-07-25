@@ -123,6 +123,8 @@ export function createAlertsEngine(options) {
     let railAlertBaseFeatures = [];
     let alertCacheReady = false;
     const alertPayloadCache = new Map();
+    let latestAlertGeneration = '';
+    let latestAlertUpdatedMs = 0;
     const lsrPayloadCache = new Map();
     let lsrBaseFeatures = [];
     let railLsrBaseFeatures = [];
@@ -271,6 +273,33 @@ export function createAlertsEngine(options) {
         return params;
     }
 
+    function alertPayloadVersion(payloads) {
+        const payload = payloads?.[0];
+        return {
+            generation: String(payload?._generation || ''),
+            updatedMs: timestampMs(payload?._updated),
+        };
+    }
+
+    function isCurrentAlertPayload(payloads) {
+        const version = alertPayloadVersion(payloads);
+        if (!latestAlertGeneration) return true;
+        if (version.generation === latestAlertGeneration) return true;
+        return version.updatedMs > latestAlertUpdatedMs;
+    }
+
+    function observeAlertPayload(payloads) {
+        const version = alertPayloadVersion(payloads);
+        if (
+            !latestAlertGeneration
+            || version.generation === latestAlertGeneration
+            || version.updatedMs > latestAlertUpdatedMs
+        ) {
+            latestAlertGeneration = version.generation;
+            latestAlertUpdatedMs = version.updatedMs;
+        }
+    }
+
     async function loadLive(nextSelection, region, loadOptions = {}) {
         selection = { ...nextSelection };
         const seq = ++liveSequence;
@@ -308,8 +337,10 @@ export function createAlertsEngine(options) {
                 return true;
             };
 
-            const memoryPayloads = alertPayloadCache.get(cacheKey);
+            const cachedMemoryPayloads = alertPayloadCache.get(cacheKey);
+            const memoryPayloads = isCurrentAlertPayload(cachedMemoryPayloads) ? cachedMemoryPayloads : null;
             if (memoryPayloads) {
+                observeAlertPayload(memoryPayloads);
                 renderedCache = applyPayloads(memoryPayloads, { ...loadOptions, notifyNewAlerts: false });
                 if (!loadOptions.refresh) return;
             }
@@ -317,7 +348,8 @@ export function createAlertsEngine(options) {
             const freshPromise = Promise.all(paths.map((path) => api.fetchJson(path, { cache: 'no-store' })));
             if (!memoryPayloads) {
                 const persisted = await readLiveAlertCache(api, paths);
-                if (persisted && seq === liveSequence) {
+                if (persisted && seq === liveSequence && isCurrentAlertPayload(persisted)) {
+                    observeAlertPayload(persisted);
                     alertPayloadCache.set(cacheKey, persisted);
                     renderedCache = applyPayloads(persisted, { ...loadOptions, notifyNewAlerts: false });
                 }
@@ -325,6 +357,8 @@ export function createAlertsEngine(options) {
 
             const freshPayloads = await freshPromise;
             if (seq !== liveSequence) return;
+            if (!isCurrentAlertPayload(freshPayloads)) return;
+            observeAlertPayload(freshPayloads);
             alertPayloadCache.set(cacheKey, freshPayloads);
             if (alertPayloadCache.size > 16) alertPayloadCache.delete(alertPayloadCache.keys().next().value);
             void writeLiveAlertCache(api, paths, freshPayloads);

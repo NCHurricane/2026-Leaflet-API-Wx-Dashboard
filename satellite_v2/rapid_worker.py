@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ProcessPoolExecutor
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 import os
 from pathlib import Path
 import time
-from typing import Iterable
+from typing import Callable, Iterable
 
 from config.satellite_v2_config import (
     SATELLITE_V2_RAPID_WORKER_BOUNDS,
@@ -138,7 +138,8 @@ def _warm_one_job(
     max_frames: int,
     tile_workers: int,
     tile_buffer: int,
-    pool: ProcessPoolExecutor,
+    pool: ProcessPoolExecutor | None,
+    should_continue: Callable[[], bool] | None = None,
 ) -> dict[str, int]:
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
@@ -173,6 +174,12 @@ def _warm_one_job(
         f"tile_workers={tile_workers} bounds={'frame/default' if tile_bounds is None else tile_bounds}"
     )
     for frame in newest:
+        if should_continue is not None and not should_continue():
+            print(
+                f"[{worker_name}] {sat_key}/{sector_key}/{channel_key}: "
+                "stopped after selection changed"
+            )
+            break
         frame_start = time.perf_counter()
         stats = warm_frame_tiles_from_canvas(
             cache_root=_CACHE_ROOT,
@@ -226,6 +233,7 @@ def run_satellite_v2_rapid_worker(
     tile_workers: int | None = None,
     tile_buffer: int | None = None,
     worker_name: str = _WORKER_NAME,
+    should_continue: Callable[[], bool] | None = None,
 ) -> dict[str, int]:
     fresh_window = int(SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS)
     if not force and is_cache_fresh(worker_name, fresh_window):
@@ -247,9 +255,16 @@ def run_satellite_v2_rapid_worker(
         if not acquired:
             return totals
         run_start = time.perf_counter()
-        with ProcessPoolExecutor(max_workers=workers_value) as tile_pool:
+        pool_context = (
+            nullcontext(None)
+            if workers_value <= 1
+            else ProcessPoolExecutor(max_workers=workers_value)
+        )
+        with pool_context as tile_pool:
             for sat_id, sector in selected_jobs:
                 for channel in selected_products:
+                    if should_continue is not None and not should_continue():
+                        break
                     stats = _warm_one_job(
                         worker_name,
                         sat_id,
@@ -261,12 +276,15 @@ def run_satellite_v2_rapid_worker(
                         workers_value,
                         buffer_value,
                         tile_pool,
+                        should_continue,
                     )
                     totals["jobs"] += 1
                     totals["frames"] += int(stats.get("frames") or 0)
                     totals["rendered"] += int(stats.get("rendered") or 0)
                     totals["skipped"] += int(stats.get("skipped") or 0)
                     totals["errors"] += int(stats.get("errors") or 0)
+                if should_continue is not None and not should_continue():
+                    break
         mark_run_complete(worker_name)
         print(
             f"[{worker_name}] complete jobs={totals['jobs']} frames={totals['frames']} "

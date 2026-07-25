@@ -131,7 +131,7 @@ class RadarProductCatalogTests(unittest.TestCase):
         self.assertTrue(data["refreshing"])
         self.assertEqual(data["lookback_hours"], 6.0)
         render_background.assert_called_once_with(
-            "KMHX", "L2_REF", "0.5", None, 6.0
+            "KMHX", "L2_REF", "0.5", None, 6.0, urgent=True
         )
 
     def test_supported_live_products_have_required_metadata(self):

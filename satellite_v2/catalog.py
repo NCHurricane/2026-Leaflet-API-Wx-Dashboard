@@ -198,6 +198,12 @@ def build_catalog(
         frame_payload["sample_tiles"] = sample_tiles
         catalog_frames.append(frame_payload)
 
+    catalog_frames.sort(
+        key=lambda frame: str(
+            frame.get("timestamp_utc") or frame.get("frame_key") or ""
+        )
+    )
+    catalog_frames = catalog_frames[-max_frames_value:]
     payload["frames"] = catalog_frames
     payload["frame_count"] = len(catalog_frames)
     payload["configured_zooms"] = list(zooms)

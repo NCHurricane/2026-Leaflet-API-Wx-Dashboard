@@ -69,10 +69,15 @@ def _cache_state(
     if product.get("group") == "mpd":
         return age_seconds, age_seconds >= 90.0
     payload = payload or _read_json_file(cache_file)
+    last_checked_at = (
+        _parse_iso(status.get("checked_at"))
+        if status.get("status") != "error"
+        else None
+    )
     stale = wpc_schedule_for(product).refresh_due(
         now=datetime.now(timezone.utc),
         source_issued_at=_parse_iso(payload.get("updated")),
-        last_checked_at=_parse_iso(status.get("checked_at")),
+        last_checked_at=last_checked_at,
     )
     return age_seconds, stale
 

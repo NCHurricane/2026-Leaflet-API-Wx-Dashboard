@@ -7,13 +7,13 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import matplotlib.colors as mcolors
 import numpy as np
 from pyproj import Transformer
 
-from config.satellite_platforms import platform_descriptor
+from config.satellite_platforms import PROVIDER_EUMETSAT, platform_descriptor
 from config.satellite_v2_config import (
     ABI_CHANNELS,
     SATELLITE_V2_INTERPRETIVE_LEGENDS,
@@ -21,9 +21,14 @@ from config.satellite_v2_config import (
     SATELLITE_V2_LEGEND_TICK_COUNT,
     SATELLITE_V2_LIVE_SUPERTILE_RADIUS,
     SATELLITE_V2_LIVE_TILE_RENDER_WORKERS,
+    SATELLITE_V2_METEOSAT_PREFETCH_FRESH_WINDOW_SECONDS,
+    SATELLITE_V2_METEOSAT_PREFETCH_JOBS,
     SATELLITE_V2_ON_DEMAND_CATALOG_HOURS,
     SATELLITE_V2_ON_DEMAND_CATALOG_MAX_FRAMES,
     SATELLITE_V2_PRODUCTS,
+    SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS,
+    SATELLITE_V2_RAPID_WORKER_JOBS,
+    SATELLITE_V2_RAPID_WORKER_PRODUCTS,
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
@@ -38,6 +43,7 @@ from satellite_v2.cache import (
     read_json,
     tile_path,
 )
+from satellite_v2 import providers
 from satellite_v2.providers import download_product_source_frames, list_recent_frames
 from satellite_v2.renderer import _load_source_raster
 from satellite_v2.tiler import _live_supertile_coords, render_frame_tile
@@ -55,6 +61,66 @@ _ON_DEMAND_TILE_RENDER_POOL = ThreadPoolExecutor(
 )
 _IN_FLIGHT_TILE_RENDERS: dict[Path, Future] = {}
 _IN_FLIGHT_TILE_RENDERS_LOCK = threading.RLock()
+_SATELLITE_SELECTIONS: dict[str, tuple[tuple[str, str, str], float]] = {}
+_SATELLITE_SELECTIONS_LOCK = threading.RLock()
+_SATELLITE_SELECTION_TTL_SECONDS = 10 * 60.0
+
+
+def _record_satellite_selection(
+    client_id: str | None, selection: tuple[str, str, str]
+) -> None:
+    normalized_client_id = str(client_id or "").strip()[:128]
+    if not normalized_client_id:
+        return
+    now = time.monotonic()
+    with _SATELLITE_SELECTIONS_LOCK:
+        expired = [
+            key
+            for key, (_, expires_at) in _SATELLITE_SELECTIONS.items()
+            if expires_at <= now
+        ]
+        for key in expired:
+            _SATELLITE_SELECTIONS.pop(key, None)
+        _SATELLITE_SELECTIONS[normalized_client_id] = (
+            selection,
+            now + _SATELLITE_SELECTION_TTL_SECONDS,
+        )
+
+
+def _satellite_selection_is_active(selection: tuple[str, str, str]) -> bool:
+    now = time.monotonic()
+    with _SATELLITE_SELECTIONS_LOCK:
+        expired = [
+            key
+            for key, (_, expires_at) in _SATELLITE_SELECTIONS.items()
+            if expires_at <= now
+        ]
+        for key in expired:
+            _SATELLITE_SELECTIONS.pop(key, None)
+        return any(
+            active_selection == selection
+            for active_selection, _ in _SATELLITE_SELECTIONS.values()
+        )
+
+
+def _wait_for_live_tile_idle(
+    timeout_seconds: float = 120.0,
+    should_continue: Callable[[], bool] | None = None,
+) -> bool:
+    """Let current viewport tiles finish before a selected-page accelerator."""
+    deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+    while True:
+        if should_continue is not None and not should_continue():
+            return False
+        with _IN_FLIGHT_TILE_RENDERS_LOCK:
+            active = any(
+                not future.done() for future in _IN_FLIGHT_TILE_RENDERS.values()
+            )
+        if not active:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
 
 
 def _render_tile_with_budget(**render_kwargs: Any):
@@ -96,6 +162,103 @@ def _provider_name_for_sat(sat_id: str) -> str:
         return str(platform_descriptor(sat_id).get("provider") or "unknown")
     except ValueError:
         return "unknown"
+
+
+def _run_selected_satellite_accelerator(
+    sat_id: str,
+    sector: str,
+    channel: str,
+    accelerator: str,
+    should_continue: Callable[[], bool] | None = None,
+) -> dict[str, int]:
+    if not _wait_for_live_tile_idle(should_continue=should_continue):
+        return {"cancelled": 1}
+    if accelerator == "meteosat-source":
+        from satellite_v2.meteosat_prefetch_worker import (
+            run_satellite_v2_meteosat_prefetch_worker,
+        )
+
+        return run_satellite_v2_meteosat_prefetch_worker(
+            force=True,
+            jobs=((sat_id, sector),),
+            worker_name=f"app-meteosat-{sat_id}-{sector}".lower(),
+            should_continue=should_continue,
+        )
+
+    from app_core.render_budget import heavy_render_slot
+    from satellite_v2.rapid_worker import run_satellite_v2_rapid_worker
+
+    with heavy_render_slot():
+        return run_satellite_v2_rapid_worker(
+            force=True,
+            jobs=((sat_id, sector),),
+            products=(channel,),
+            tile_workers=1,
+            worker_name=f"app-rapid-{sat_id}-{sector}-{channel}".lower(),
+            should_continue=should_continue,
+        )
+
+
+def _activate_satellite_accelerator(
+    sat_id: str,
+    sector: str,
+    channel: str,
+    client_id: str | None = None,
+) -> dict[str, Any]:
+    from app_core.refresh_coordinator import get_refresh_coordinator
+
+    sat_key = normalize_sat_id(sat_id)
+    sector_key = normalize_sector(sector)
+    channel_key = normalize_channel(channel)
+    selection = (sat_key, sector_key, channel_key)
+    has_client_id = bool(str(client_id or "").strip())
+    descriptor = platform_descriptor(sat_key)
+    provider = (
+        "eumetsat"
+        if descriptor.get("provider") == PROVIDER_EUMETSAT
+        else "satellite-aws"
+    )
+    if (sat_key, sector_key) in SATELLITE_V2_METEOSAT_PREFETCH_JOBS:
+        accelerator = "meteosat-source"
+        interval_seconds = float(
+            SATELLITE_V2_METEOSAT_PREFETCH_FRESH_WINDOW_SECONDS
+        )
+        key = ("satellite", "source-prefetch", sat_key, sector_key)
+    elif (
+        (sat_key, sector_key) in SATELLITE_V2_RAPID_WORKER_JOBS
+        and channel_key in SATELLITE_V2_RAPID_WORKER_PRODUCTS
+    ):
+        accelerator = "rapid-tiles"
+        interval_seconds = float(SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS)
+        key = ("satellite", "rapid-tiles", sat_key, sector_key, channel_key)
+    else:
+        return {"accelerator": "live-on-demand", "accelerator_status": "not_needed"}
+
+    interval_seconds = max(30.0, interval_seconds)
+    submission = get_refresh_coordinator().activate_presence_job(
+        key=key,
+        provider=provider,
+        interval_seconds=interval_seconds,
+        min_success_interval_seconds=interval_seconds,
+        run_immediately=False,
+        initial_delay_seconds=5.0,
+        function=lambda: _run_selected_satellite_accelerator(
+            sat_key,
+            sector_key,
+            channel_key,
+            accelerator,
+            (
+                (lambda: _satellite_selection_is_active(selection))
+                if has_client_id
+                else None
+            ),
+        ),
+    )
+    return {
+        "accelerator": accelerator,
+        "accelerator_status": submission.status,
+        "accelerator_retry_after_seconds": submission.retry_after_seconds,
+    }
 
 
 def shutdown_live_tile_pool() -> None:
@@ -261,17 +424,88 @@ def get_catalog_payload(
     hours: int,
     max_frames: int,
     refresh: bool,
+    client_id: str | None = None,
 ) -> dict[str, Any]:
-    return catalog.get_catalog(
-        cache_root=cache_root,
-        sat_id=sat_id,
-        sector=sector,
-        channel_key=channel,
-        hours=hours,
-        max_frames=max_frames,
-        refresh=refresh,
-        list_frames_fn=None,
+    sat_key = normalize_sat_id(sat_id)
+    sector_key = normalize_sector(sector)
+    channel_key = normalize_channel(channel)
+    _record_satellite_selection(client_id, (sat_key, sector_key, channel_key))
+    capability = providers.provider_capability(sat_key)
+    if capability["status"] != "available":
+        cached = read_json(catalog_path(cache_root, sat_key, sector_key, channel_key))
+        if cached:
+            payload = catalog.get_catalog(
+                cache_root=cache_root,
+                sat_id=sat_key,
+                sector=sector_key,
+                channel_key=channel_key,
+                hours=hours,
+                max_frames=max_frames,
+                refresh=False,
+                list_frames_fn=None,
+            )
+            payload["capability_status"] = capability["status"]
+            payload["capability_message"] = capability["message"]
+            payload["accelerator"] = "unavailable"
+            payload["accelerator_status"] = capability["status"]
+            return payload
+        return {
+            "status": capability["status"],
+            "capability_status": capability["status"],
+            "provider": capability["provider"],
+            "message": capability["message"],
+            "sat_id": sat_key,
+            "sector": sector_key,
+            "channel": channel_key,
+            "frames": [],
+            "frame_count": 0,
+        }
+    try:
+        payload = catalog.get_catalog(
+            cache_root=cache_root,
+            sat_id=sat_key,
+            sector=sector_key,
+            channel_key=channel_key,
+            hours=hours,
+            max_frames=max_frames,
+            refresh=refresh,
+            list_frames_fn=None,
+        )
+    except Exception as exc:
+        capability_error = providers.classify_provider_error(sat_key, exc)
+        if capability_error is None:
+            raise
+        return {
+            "status": capability_error["status"],
+            "capability_status": capability_error["status"],
+            "provider": capability_error["provider"],
+            "message": capability_error["message"],
+            "sat_id": sat_key,
+            "sector": sector_key,
+            "channel": channel_key,
+            "frames": [],
+            "frame_count": 0,
+        }
+    if payload.get("provider_error"):
+        capability_error = providers.classify_provider_error(
+            sat_key, RuntimeError(str(payload["provider_error"]))
+        )
+        if capability_error is not None:
+            payload["capability_status"] = capability_error["status"]
+            payload["capability_message"] = capability_error["message"]
+            payload["accelerator"] = "unavailable"
+            payload["accelerator_status"] = capability_error["status"]
+            return payload
+    payload["capability_status"] = "available"
+    payload.update(
+        _activate_satellite_accelerator(
+            sat_key,
+            sector_key,
+            channel_key,
+            client_id=client_id,
+        )
     )
+    return payload
 
 
 def get_status_payload(cache_root: str) -> dict[str, Any]:

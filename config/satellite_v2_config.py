@@ -466,6 +466,7 @@ SATELLITE_V2_DASHBOARD_PRODUCTS = (
     "Channel08RAMSDIS",
     "Channel09RAMSDIS",
     "Channel13",
+    "Channel14",
     "AerosolDetection",
     "AerosolOpticalDepth",
     "FireRadiativePower",
@@ -879,8 +880,8 @@ SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS = _env_int(
     "WX_SATELLITE_V2_RAPID_FRESH_WINDOW_SECONDS", 225, 0, 3600
 )
 SATELLITE_V2_RAPID_WORKER_ZOOMS = {
-    "MESO1": (7, 8),
-    "MESO2": (7, 8),
+    "MESO1": (5, 6),
+    "MESO2": (5, 6),
     "JAPAN": (6, 7),
     "RSS": (6, 7),
 }

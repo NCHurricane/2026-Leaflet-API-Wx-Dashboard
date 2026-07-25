@@ -5,16 +5,15 @@ import { renderProductNav } from '../../core/nav.js';
 import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js';
+import { createStatusReporter } from '../../core/status.js?v=20260725e';
 import {
     SAT_DISPLAY_NAMES,
     SAT_SOURCES,
     createSatelliteEngine,
     formatFrameLabel,
     frameIndexForReload,
-    frameTileCount,
-} from './satellite-engine.js';
-import { createSatelliteAnimator } from './satellite-anim.js';
+} from './satellite-engine.js?v=20260725c';
+import { createSatelliteAnimator } from './satellite-anim.js?v=20260725e';
 
 const byId = (id) => document.getElementById(id);
 const SELECT_CHAIN_MESSAGE = 'Pick a satellite, sector, and product to load imagery.';
@@ -23,6 +22,8 @@ const FRAME_REQUEST_MAX = 360;
 const LOOKBACK_RELOAD_DEBOUNCE_MS = 250;
 const AUTO_UPDATE_INTERVAL_MS = 5 * 60 * 1000; // matches the shell's satellite cadence
 const INITIAL_TILE_READY_TIMEOUT_MS = 45000;
+const SATELLITE_CLIENT_ID = globalThis.crypto?.randomUUID?.()
+    || `satellite-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 // ── Platform capability tables (ported unchanged from the shell) ────────────
 const PLATFORM_SECTORS = {
@@ -57,12 +58,12 @@ const IMPLEMENTED_SATELLITES = new Set(['goes18', 'goes19', 'himawari9', 'meteos
 const AUTO_VIEW_PRESETS = {
     'goes18:FullDisk': 'goes-west-full-disk',
     'goes18:CONUS': 'conus',
-    'goes18:Meso1': 'conus',
-    'goes18:Meso2': 'conus',
+    'goes18:Meso1': 'goes-meso-current',
+    'goes18:Meso2': 'goes-meso-current',
     'goes19:FullDisk': 'goes-east-full-disk',
     'goes19:CONUS': 'conus',
-    'goes19:Meso1': 'conus',
-    'goes19:Meso2': 'conus',
+    'goes19:Meso1': 'goes-meso-current',
+    'goes19:Meso2': 'goes-meso-current',
     'himawari9:FullDisk': 'west-pacific',
     'himawari9:Japan': 'himawari-japan',
     'himawari9:Target': 'west-pacific',
@@ -88,6 +89,12 @@ const NAMED_VIEW_PRESETS = {
     'europe-rss': { center: [50.76, 31.42], zoom: 4, platforms: new Set(['meteosat11']) },
     'himawari-japan': { center: [38.47, 141.18], zoom: 6, platforms: new Set(['himawari9']) },
     'himawari-target-current': { bounds: null, platforms: new Set(['himawari9']), dynamic: true },
+    'goes-meso-current': {
+        bounds: null,
+        platforms: new Set(['goes18', 'goes19']),
+        sectors: new Set(['Meso1', 'Meso2']),
+        dynamic: true,
+    },
 };
 
 function activeSatId() {
@@ -288,7 +295,7 @@ async function initialize() {
         provider: byId('satellite-provider'),
         source: byId('satellite-source'),
     });
-    const engine = createSatelliteEngine({ api });
+    const engine = createSatelliteEngine({ api, clientId: SATELLITE_CLIENT_ID });
 
     let catalog = null;
     const animator = createSatelliteAnimator({
@@ -296,6 +303,9 @@ async function initialize() {
         apiUrl: api.apiUrl,
         getSelection: activeSelection,
         getCatalog: () => catalog,
+        onFrameVisible() {
+            status.setDataState('Ready', 'fresh');
+        },
     });
 
     let frames = [];
@@ -323,12 +333,14 @@ async function initialize() {
             timestamp: frame?.timestamp_utc || null,
             provider: `${SAT_DISPLAY_NAMES[satId] || satId} — ${channel}`,
             source: SAT_SOURCES[satId] || 'NOAA',
+            updateState: false,
         });
     }
 
     async function showFrame(index, options = {}) {
         const frame = frames[index];
         if (!frame) return false;
+        status.setDataState('Loading visible tiles…', 'loading');
         const shown = await animator.showFrame(index, options);
         if (shown) reportFrameInfo(frame);
         return shown;
@@ -400,6 +412,7 @@ async function initialize() {
         void updateLegend();
         const requestWindow = currentFrameRequestWindow();
         status.setMessage(`Loading satellite frames (${requestWindow.hours}h window)…`);
+        status.setDataState('Loading newest frame…', 'loading');
 
         try {
             const frameSet = await engine.fetchFrameSet(activeSelection(), {
@@ -418,6 +431,7 @@ async function initialize() {
                 scrubber.setFrames([], { silent: true });
                 showScrubber(false);
                 status.setMessage('No animation frames available for this selection.', 'error');
+                status.setDataState('Unavailable', 'error');
                 return;
             }
 
@@ -426,7 +440,6 @@ async function initialize() {
             const nextIndex = frameIndexForReload(frames, preserveFrameKey);
             showScrubber(true);
             scrubber.setFrames(frames, { index: nextIndex, silent: true });
-            animator.primeLayers(nextIndex);
             let displayed = await showFrame(nextIndex, {
                 waitForTiles: false,
                 tileTimeoutMs: INITIAL_TILE_READY_TIMEOUT_MS,
@@ -436,7 +449,6 @@ async function initialize() {
                 const fallbackIndex = frameIndexForReload(frames);
                 if (fallbackIndex !== nextIndex) {
                     scrubber.setFrames(frames, { index: fallbackIndex, silent: true });
-                    animator.primeLayers(fallbackIndex);
                     displayed = await showFrame(fallbackIndex, {
                         waitForTiles: false,
                         tileTimeoutMs: INITIAL_TILE_READY_TIMEOUT_MS,
@@ -444,11 +456,20 @@ async function initialize() {
                     if (token !== loadToken) return;
                 }
             }
-            const cachedTiles = frames.reduce((sum, frame) => sum + frameTileCount(frame), 0);
-            status.setMessage(
-                `${frames.length} frames loaded (${requestWindow.hours}h window, ${cachedTiles} cached tiles); tiles fill as they render.`,
-                'success',
-            );
+            const capabilityMessage = String(catalog?.capability_message || '').trim();
+            if (catalog?.capability_status && catalog.capability_status !== 'available') {
+                status.setMessage(
+                    `${frames.length} cached frames loaded; ${capabilityMessage || 'live provider access is unavailable.'}`,
+                );
+                status.setDataState('Cached only', 'stale');
+            } else {
+                status.setMessage(
+                    `${frames.length} frames available (${requestWindow.hours}h window). `
+                    + 'Newest frame requested first; visible tiles load from cache or render on demand.',
+                    'success',
+                );
+                if (!displayed) status.setDataState('Unable to display frame', 'error');
+            }
         } catch (err) {
             if (err.name === 'AbortError') return;
             if (token !== loadToken) return;
@@ -458,6 +479,7 @@ async function initialize() {
             scrubber.setFrames([], { silent: true });
             showScrubber(false);
             status.setMessage(`Satellite load failed: ${err.message}`, 'error');
+            status.setDataState('Load failed', 'error');
         } finally {
             if (loadController?.signal === signal) loadController = null;
         }
@@ -507,7 +529,6 @@ async function initialize() {
             const wasPlaying = scrubber.isPlaying();
             scrubber.setFrames(frames, { index: nextIndex, silent: true, keepPlaying: true });
             if (!wasPlaying) {
-                animator.primeLayers(nextIndex);
                 await showFrame(nextIndex);
             }
             animator.schedulePrefetch();
@@ -530,7 +551,7 @@ async function initialize() {
     }
 
     async function fitDynamicViewPreset(presetKey) {
-        if (presetKey !== 'himawari-target-current') return;
+        if (presetKey !== 'himawari-target-current' && presetKey !== 'goes-meso-current') return;
         const { satId, sector } = activeSelection();
         const channel = activeChannel() || 'Channel13';
         try {
@@ -540,12 +561,14 @@ async function initialize() {
             const payload = await resp.json();
             const bounds = payload?.bounds;
             if (!bounds) {
-                status.setMessage('No current Target Area is being observed right now.');
+                status.setMessage('No current sector bounds are available.');
                 return;
             }
+            const current = activeSelection();
+            if (current.satId !== satId || current.sector !== sector) return;
             fitPresetBounds([[bounds.south, bounds.west], [bounds.north, bounds.east]]);
         } catch (_) {
-            status.setMessage('Could not locate the current Target Area.');
+            status.setMessage('Could not locate the current satellite sector.');
         }
     }
 

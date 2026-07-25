@@ -12,9 +12,10 @@ import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 RefreshKey = tuple[str, ...]
 
@@ -97,6 +98,15 @@ class _PeriodicJob:
     function: Callable[[], object]
 
 
+@dataclass
+class _PresenceJob:
+    key: RefreshKey
+    provider: str
+    interval_seconds: float
+    next_run_at: float
+    function: Callable[[], object]
+
+
 class _CoordinatorStopping(RuntimeError):
     pass
 
@@ -133,6 +143,7 @@ class RefreshCoordinator:
         self._provider_last_started: dict[str, float] = {}
         self._states: dict[RefreshKey, RefreshState] = {}
         self._periodic_jobs: dict[RefreshKey, _PeriodicJob] = {}
+        self._presence_jobs: dict[RefreshKey, _PresenceJob] = {}
 
     @property
     def running(self) -> bool:
@@ -180,6 +191,56 @@ class RefreshCoordinator:
                 next_run_at=time.monotonic() + max(0.0, initial_delay_seconds),
                 function=function,
             )
+
+    def activate_presence_job(
+        self,
+        *,
+        key: RefreshKey,
+        provider: str,
+        interval_seconds: float,
+        function: Callable[[], object],
+        lease_seconds: float = 90.0,
+        min_success_interval_seconds: float = 0.0,
+        run_immediately: bool = True,
+        initial_delay_seconds: float = 0.0,
+    ) -> Submission:
+        """Renew a lease and run one deduplicated job per interval while active."""
+        normalized_key = self._normalize_key(key)
+        if interval_seconds <= 0:
+            raise ValueError("Presence job interval must be positive")
+        now = time.monotonic()
+        with self._lock:
+            current = self._presence_jobs.get(normalized_key)
+            next_run_at = (
+                current.next_run_at
+                if current is not None
+                else now + max(0.0, float(initial_delay_seconds))
+            )
+            self._presence_jobs[normalized_key] = _PresenceJob(
+                key=normalized_key,
+                provider=provider.strip().lower(),
+                interval_seconds=float(interval_seconds),
+                next_run_at=next_run_at,
+                function=function,
+            )
+        if not run_immediately:
+            self.record_presence(
+                key=normalized_key,
+                provider=provider,
+                lease_seconds=lease_seconds,
+            )
+            return Submission(
+                False,
+                "scheduled",
+                max(0.0, next_run_at - time.monotonic()),
+            )
+        return self.submit(
+            key=normalized_key,
+            provider=provider,
+            function=function,
+            lease_seconds=lease_seconds,
+            min_success_interval_seconds=min_success_interval_seconds,
+        )
 
     def start(self) -> None:
         with self._lock:
@@ -294,7 +355,8 @@ class RefreshCoordinator:
             state.finished_at = None
             state.retry_at = None
             state.error_type = None
-            state.lease_expires_at = now + lease_seconds if lease_seconds > 0 else None
+            if lease_seconds > 0:
+                state.lease_expires_at = now + lease_seconds
             self._states[normalized_key] = state
             self._active_jobs += 1
             executor = self._executor
@@ -393,6 +455,9 @@ class RefreshCoordinator:
                 "periodic_jobs": [
                     list(key) for key in sorted(self._periodic_jobs)
                 ],
+                "presence_jobs": [
+                    list(key) for key in sorted(self._presence_jobs)
+                ],
                 "states": states,
             }
 
@@ -405,6 +470,25 @@ class RefreshCoordinator:
                     return False
                 self._idle_condition.wait(timeout=remaining)
             return True
+
+    @contextmanager
+    def provider_budget(self, provider: str) -> Iterator[None]:
+        """Apply a registered provider's shared concurrency and pace budget."""
+        provider_key = provider.strip().lower()
+        if not provider_key:
+            raise ValueError("Provider is required")
+        provider_semaphore = self._provider_semaphore(provider_key)
+        acquired = False
+        try:
+            while not acquired:
+                if self._stop_event.is_set():
+                    raise _CoordinatorStopping
+                acquired = provider_semaphore.acquire(timeout=0.1)
+            self._wait_for_provider_budget(provider_key)
+            yield
+        finally:
+            if acquired:
+                provider_semaphore.release()
 
     def _execute(
         self,
@@ -490,21 +574,51 @@ class RefreshCoordinator:
         while not self._stop_event.wait(self._maintenance_interval_seconds):
             now_monotonic = time.monotonic()
             due: list[_PeriodicJob] = []
+            presence_due: list[_PresenceJob] = []
             with self._lock:
-                self._expire_backoff_locked(time.time())
-                self._prune_states_locked(time.time())
+                now = time.time()
+                self._expire_backoff_locked(now)
+                self._prune_states_locked(now)
                 for periodic_job in self._periodic_jobs.values():
                     if periodic_job.next_run_at <= now_monotonic:
                         periodic_job.next_run_at = (
                             now_monotonic + periodic_job.interval_seconds
                         )
                         due.append(periodic_job)
+                expired_presence_keys = []
+                for key, presence_job in self._presence_jobs.items():
+                    state = self._states.get(key)
+                    if (
+                        state is None
+                        or state.lease_expires_at is None
+                        or state.lease_expires_at <= now
+                    ):
+                        expired_presence_keys.append(key)
+                        continue
+                    if presence_job.next_run_at <= now_monotonic:
+                        presence_job.next_run_at = (
+                            now_monotonic + presence_job.interval_seconds
+                        )
+                        presence_due.append(presence_job)
+                for key in expired_presence_keys:
+                    self._presence_jobs.pop(key, None)
             for periodic_job in due:
                 self.submit(
                     key=periodic_job.key,
                     provider=periodic_job.provider,
                     function=periodic_job.function,
                     lease_seconds=0,
+                )
+            for presence_job in presence_due:
+                self.submit(
+                    key=presence_job.key,
+                    provider=presence_job.provider,
+                    function=presence_job.function,
+                    lease_seconds=0,
+                    # The dynamic schedule already enforces the cadence. A
+                    # second success gate here can skip a full interval when
+                    # the prior job finished after its scheduled start.
+                    min_success_interval_seconds=0,
                 )
 
     def _expire_backoff_locked(self, now: float) -> None:
@@ -661,6 +775,38 @@ for _policy_entry in (
         min_request_interval=1.0,
         max_concurrency=1,
         base_backoff_seconds=30.0,
+        max_backoff_seconds=600.0,
+        presence_required=True,
+    ),
+    RefreshPolicy(
+        provider="surface-gradient",
+        min_request_interval=0.0,
+        max_concurrency=1,
+        base_backoff_seconds=15.0,
+        max_backoff_seconds=300.0,
+        presence_required=True,
+    ),
+    RefreshPolicy(
+        provider="nodd-radar",
+        min_request_interval=0.0,
+        max_concurrency=1,
+        base_backoff_seconds=30.0,
+        max_backoff_seconds=300.0,
+        presence_required=True,
+    ),
+    RefreshPolicy(
+        provider="satellite-aws",
+        min_request_interval=0.0,
+        max_concurrency=1,
+        base_backoff_seconds=30.0,
+        max_backoff_seconds=300.0,
+        presence_required=True,
+    ),
+    RefreshPolicy(
+        provider="eumetsat",
+        min_request_interval=0.0,
+        max_concurrency=1,
+        base_backoff_seconds=60.0,
         max_backoff_seconds=600.0,
         presence_required=True,
     ),

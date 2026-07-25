@@ -43,6 +43,12 @@ required pattern for migrated request refreshes:
 6. Publish through `app_core/atomic_io.py` so readers see the previous or next
    complete generation, never an in-progress write.
 
+For selected work that must continue while a page remains present, use
+`activate_presence_job(...)`: key the real product/source scope, choose a
+source-appropriate interval, and let the coordinator remove the dynamic job
+after the 90-second lease expires. Optional acceleration should use an initial
+delay when immediate execution could compete with first paint.
+
 Do not add raw daemon threads or per-service in-flight sets. Provider minimum
 intervals, concurrency, retry/backoff, state reporting, periodic cleanup, and
 graceful shutdown belong to the coordinator. Phase 1 is explicitly
@@ -140,11 +146,13 @@ with the panel does not also manipulate or close the map view.
 
 ## Endpoint Progress Pattern
 
-Progress tracking (`active_tasks`, `/api/progress/{request_id}`) applies only to Radar and Satellite render endpoints.
+Progress tracking (`active_tasks` in `app_core/progress.py`, polled via
+`/api/progress/{task_id}` in `routes/core.py`) applies to the synchronous archive
+render workflow in `services/archive_service.py`, where render time is non-trivial.
 
-Weather cache-first endpoints (`/api/data/*`, `/api/overlay/*`) are lightweight reads — no progress tracking needed.
-
-Archive and export endpoints retain progress tracking where render time is non-trivial.
+Cache-first endpoints (`/api/data/*`, `/api/overlay/*`, `/api/radar/live/*`,
+`/api/satellite-v2/*`) are lightweight reads or bounded on-demand renders — no progress
+tracking needed.
 
 ## Radar Live Fallback Pattern (Standalone Page)
 
@@ -153,10 +161,17 @@ For `/api/radar/live/latest` and `/api/radar/live/frames`:
 1. Read from cache-first radar overlay store (`cache/overlays/radar/{SITE}/{LEVEL}/{PRODUCT}`).
 2. If cache miss, run bounded on-demand render path using `run_radar_live_site_product(...)`.
 3. For latest endpoint cold start, render newest-first with `max_render_frames=1` for immediate first paint.
-4. Start background history backfill after first frame so scrubber readiness improves without blocking current view.
-5. Guard fallback with per-site/per-product locks to avoid duplicate warm runs.
+4. Activate lease-bound coordinator history fill after first frame so scrubber
+   readiness improves without blocking current view.
+5. Key activity by site, level, product, elevation, and storm-motion variant;
+   retain the per-product fallback lock inside the worker boundary.
 
 Frontend should treat `history_filling=true` as a warm-state hint, not as an error.
+
+For Satellite, keep requested live tiles ahead of optional acceleration.
+Selected rapid-sector tile warming and Meteosat source prefetch use delayed
+presence jobs, source downloads deduplicate per platform/sector/frame, and
+provider capability failures use explicit response states.
 
 ## Radar Download Race-Tolerance Pattern (Windows)
 
@@ -212,21 +227,49 @@ Raster overlay lifecycle (`L.imageOverlay`):
 
 ## Region Bounds Pattern
 
-`STATE_BOUNDS` in `js/weather.js` stores `[west, east, south, north]` for each state (matching Python `geo_config.py` layout).
+`REGION_BOUNDS` in `frontend/core/map-core.js` defines the default map view for every
+region (WORLD, CONUS, the 50 states, PR). `fitRegion(code)` applies it, and the reset
+(⌂) button returns to the page's home region (fixed at init, ignores the dropdown).
 
-Convert to Leaflet before calling `fitBounds`:
+Each entry is **one of two forms**, and `fitRegion` dispatches on the shape
+(`Array.isArray` → box; otherwise curated):
+
+- **Box** — `[west, east, south, north]` (matching Python `geo_config.py` order),
+  applied with `fitBounds`. Good for whole states/basins: the box adapts to each map's
+  aspect ratio. **Container-dependent** — the same box can snap to a different zoom on
+  pages whose map area differs in size (NC fits at z8 on most pages but z7 on the
+  shorter alerts/water maps).
+- **Curated** — `{ center: [lat, lng], zoom }`, applied with `setView`.
+  **Container-independent**: frames identically on every page. Use this for hand-picked
+  defaults where a fitted box would drift after Leaflet's integer zoom-snap. WORLD and
+  CONUS use this form.
+
+Box → Leaflet conversion (box form only):
 
 ```js
-// geo_config format: [west, east, south, north]
-// Leaflet fitBounds: [[south, west], [north, east]]
-function leafletBounds(code) {
-  const b = STATE_BOUNDS[code];
-  return [
-    [b[2], b[0]],
-    [b[3], b[1]],
-  ];
-}
+// geo_config order: [west, east, south, north]
+// Leaflet fitBounds:  [[south, west], [north, east]]
+map.fitBounds([[b[2], b[0]], [b[3], b[1]]]);
 ```
+
+### Tuning a curated default view (dev workflow)
+
+Any region can be a curated `{ center, zoom }` instead of a box. To dial one in:
+
+1. In the browser console on any map page, run **`mapViewportLog(true)`** (defined in
+   `map-core.js`; persists across pages/reloads via localStorage, `mapViewportLog(false)`
+   to stop).
+2. Pan/zoom to frame the view. Each `moveend` logs, e.g.:
+   `[viewport] CONUS  [W, E, S, N] = [...]  center [37.58, -96.42]  zoom 5`
+3. Drop the logged `center` + `zoom` straight into the region's `REGION_BOUNDS` entry.
+
+Current curated defaults: `WORLD { center: [17.9, 1.48], zoom: 3 }`,
+`CONUS { center: [37.58, -96.42], zoom: 5 }`.
+
+The satellite platform views in `NAMED_VIEW_PRESETS`
+(`frontend/pages/satellite/satellite-page.js`) use the same two forms and the same
+`setView`-vs-`fitBounds` dispatch — retune the GOES full-disk or CONUS presets the same
+way (capture with `mapViewportLog`, paste the center/zoom).
 
 ## Projection Pattern
 
@@ -247,13 +290,13 @@ For RGB composites:
    `config/satellite_v2_config.py`.
 2. Return the same metadata from `satellite_v2.service.get_legend_payload()` as
    `legend_type: "interpretive"`.
-3. Mirror the interpretive metadata in `js/weather.js` as a frontend fallback so
-   static composite legends render immediately and do not disappear during
-   satellite/sector/product switches or transient API/catalog failures.
-4. Call the Satellite legend updater directly from `js/satellite-page.js`
+3. Mirror the interpretive metadata in `frontend/pages/satellite/satellite-engine.js`
+   as a frontend fallback so static composite legends render immediately and do not
+   disappear during satellite/sector/product switches or transient API/catalog failures.
+4. Call the Satellite legend updater directly from the satellite page's
    control-change handlers before frame reloads.
-5. Bump affected `weather.html` script query strings when changing Satellite
-   frontend wiring.
+5. Bump the `satellite.html` script query string when changing Satellite frontend
+   wiring.
 
 ## Response Shape Pattern
 
@@ -273,12 +316,10 @@ Frontend should treat `source_data_key` as the frame-lock token for follow-up po
 
 ## Animation Encoding Pattern
 
-Animation encoding applies to Radar and Satellite export endpoints only. Weather page does not produce animations.
-
-Radar/Satellite: H.264 via FFmpeg, `/api/radar/export-animation`, `/api/satellite/export-animation`.
-
-Standalone Radar playback is frame scrub/poll playback from cached overlays,
-not encoded export animation.
+Live Radar and Satellite playback is frame scrub/poll playback from cached overlays and
+tiles — not encoded video export. The previously-referenced
+`/api/radar/export-animation` and `/api/satellite/export-animation` endpoints do not
+exist in the current codebase.
 
 ## Date Validation Pattern
 
@@ -341,7 +382,7 @@ Keep product-specific selectors in product controls unless they truly apply to
 every product. For example, region selection should not become a global command
 bar control while Tropical uses basin selection instead.
 
-Canonical product URLs should be extensionless:
+Canonical product URLs are extensionless (all live, served by `routes/pages.py`):
 
 - `/alerts`
 - `/radar`
@@ -352,9 +393,11 @@ Canonical product URLs should be extensionless:
 - `/rtma`
 - `/drought`
 - `/tropical`
+- `/wpc`
+- `/water`
+- `/workspace`
 
-Legacy `.html` URLs may redirect to canonical routes or remain as temporary
-compatibility routes during migration.
+`/weather.html` 307-redirects to `/workspace`.
 
 ### Standalone sidebar control pattern
 
@@ -401,11 +444,11 @@ shared utilities:
 - Timeline/scrubber controller.
 - Shared constants that are intentionally duplicated from backend config.
 
-Do not create product pages by copy-pasting the current combined `weather.js`
-state model into separate files. Split shared utilities first, then give each
-product page a narrow entry module.
+The Phase 27 migration removed the combined `weather.js`; do not reintroduce a shared
+global state model. Common behavior lives in `frontend/core/`; each product page has a
+narrow entry module (plus an engine/controller when the product is rich).
 
-Tropical now demonstrates the boundary: reuse `frontend/core/` for API helpers,
+Tropical demonstrates the boundary: reuse `frontend/core/` for API helpers,
 map setup, navigation, sidebar tabs, status, and legend lifecycle, while keeping
 storm/archive domain behavior in `frontend/pages/tropical/`.
 

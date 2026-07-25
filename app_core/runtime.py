@@ -25,6 +25,20 @@ def is_using_nodd() -> bool:
     return USING_NODD
 
 
+def _start_application_maintenance(refresh_coordinator) -> None:
+    """Register task-free lifecycle maintenance and start the coordinator."""
+    from workers.cache_cleanup_worker import run_cache_cleanup_worker
+
+    refresh_coordinator.register_periodic(
+        key=("maintenance", "cache-cleanup"),
+        provider="local",
+        interval_seconds=6 * 60 * 60,
+        initial_delay_seconds=60,
+        function=run_cache_cleanup_worker,
+    )
+    refresh_coordinator.start()
+
+
 def initialize_runtime() -> None:
     """Load optional runtime modules at startup with timing."""
     global USING_NODD, radar_utils
@@ -60,23 +74,15 @@ def initialize_runtime() -> None:
         get_refresh_coordinator,
         validate_single_process_configuration,
     )
-    from workers.cache_cleanup_worker import run_cache_cleanup_worker
-
     validate_single_process_configuration()
     refresh_coordinator = get_refresh_coordinator()
-    refresh_coordinator.register_periodic(
-        key=("maintenance", "cache-cleanup"),
-        provider="local",
-        interval_seconds=6 * 60 * 60,
-        initial_delay_seconds=60,
-        function=run_cache_cleanup_worker,
-    )
-    refresh_coordinator.start()
+    _start_application_maintenance(refresh_coordinator)
     startup_events.append(
         ("[OK] Refresh coordinator (single process)", _time.time() - _t0)
     )
 
-    # 3. Initialize Background Scheduler
+    # 3. Load the stable worker-lifecycle compatibility hooks. Phase 8 removes
+    # broad fixed worker registration; refresh and maintenance are coordinator-owned.
     _t0 = _time.time()
     try:
         from workers.scheduler import start_scheduler as _start, stop_scheduler as _stop
@@ -84,47 +90,41 @@ def initialize_runtime() -> None:
         start_scheduler = _start
         stop_scheduler = _stop
         _SCHEDULER_AVAILABLE = True
-        startup_events.append(("[OK] APScheduler loaded", _time.time() - _t0))
+        startup_events.append(
+            ("[OK] Application worker lifecycle loaded", _time.time() - _t0)
+        )
     except Exception as sched_err:
         startup_events.append(
-            (f"[WARN] APScheduler unavailable: {sched_err}", _time.time() - _t0)
+            (f"[WARN] Worker lifecycle unavailable: {sched_err}", _time.time() - _t0)
         )
 
-    # 4. Start background workers (scheduler returns immediately; first ticks
-    # run in background threads via APScheduler `next_run_time=now`)
+    # 4. Start the compatibility hook. It registers no broad worker schedule.
     _t0 = _time.time()
     if _SCHEDULER_AVAILABLE and start_scheduler is not None:
         try:
             start_scheduler()
             startup_events.append(
-                ("[OK] Background workers scheduled", _time.time() - _t0)
+                ("[OK] Request-driven workers active", _time.time() - _t0)
             )
         except Exception as e:
             startup_events.append(
-                (f"[WARN] Background workers failed: {e}", _time.time() - _t0)
+                (f"[WARN] Worker lifecycle failed: {e}", _time.time() - _t0)
             )
 
-    # 5. Cache freshness health check. The OS-level Task Scheduler is the
-    # default source of truth for cache refresh; warn loudly if any sentinel
-    # is missing or stale so the operator knows to check `tools/install_tasks.ps1`.
-    _t0 = _time.time()
-    try:
-        from workers._freshness import check_cache_freshness
-
-        warnings = check_cache_freshness()
-        if warnings:
-            for w in warnings:
-                print(f"[WARN] {w}")
-            startup_events.append(
-                (f"[WARN] {len(warnings)} cache freshness issue(s)", _time.time() - _t0)
-            )
-        else:
-            startup_events.append(
-                ("[OK] All caches fresh (OS task healthy)", _time.time() - _t0)
-            )
-    except Exception as e:
+    # 5. Health is based on application/coordinator/source/cache state, not
+    # task-sentinel timestamps. Detailed credential-safe state is exposed at
+    # /api/health/coordinator.
+    coordinator_snapshot = refresh_coordinator.snapshot()
+    maintenance_registered = ["maintenance", "cache-cleanup"] in (
+        coordinator_snapshot.get("periodic_jobs") or []
+    )
+    if coordinator_snapshot.get("running") and maintenance_registered:
         startup_events.append(
-            (f"[WARN] Cache freshness check failed: {e}", _time.time() - _t0)
+            ("[OK] Coordinator/source/cache health model", 0.0)
+        )
+    else:
+        startup_events.append(
+            ("[WARN] Coordinator maintenance health degraded", 0.0)
         )
 
     print("\n" + "=" * 70)

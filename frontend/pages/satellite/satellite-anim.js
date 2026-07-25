@@ -21,7 +21,13 @@ const PREFETCH_RETRY_AFTER_MS = 20000;
 const PREFETCH_SEEN_LIMIT = 1200;
 const TILE_SIZE = 256;
 
-export function createSatelliteAnimator({ mapCore, apiUrl, getSelection, getCatalog }) {
+export function createSatelliteAnimator({
+    mapCore,
+    apiUrl,
+    getSelection,
+    getCatalog,
+    onFrameVisible = null,
+}) {
     const leaflet = mapCore.leaflet;
     const map = mapCore.map;
 
@@ -104,7 +110,7 @@ export function createSatelliteAnimator({ mapCore, apiUrl, getSelection, getCata
     function minNativeZoomForSector() {
         const sector = String(getSelection().sector || '').toUpperCase();
         if (sector === 'FULLDISK') return 1;
-        if (sector === 'MESO1' || sector === 'MESO2') return 7;
+        if (sector === 'MESO1' || sector === 'MESO2') return 5;
         return 5; // CONUS
     }
 
@@ -155,6 +161,12 @@ export function createSatelliteAnimator({ mapCore, apiUrl, getSelection, getCata
         return layerHasLoadedTilesForZoom(layer, zoomLevel) && layer._loading !== true;
     }
 
+    function reportFrameVisible(layer, frameKey) {
+        if (!enabled || activeLayer !== layer) return;
+        if (!layerHasAnyLoadedTileForZoom(layer, map.getZoom())) return;
+        onFrameVisible?.(frameKey);
+    }
+
     function setLayerZIndex(layer, active = false) {
         if (!layer || typeof layer.setZIndex !== 'function') return;
         if (active) {
@@ -197,6 +209,7 @@ export function createSatelliteAnimator({ mapCore, apiUrl, getSelection, getCata
                     scheduleProgressiveRedraws(layer, frameKey, { force: true });
                 }, retryDelayMs);
             });
+            layer.on('tileload', () => reportFrameVisible(layer, frameKey));
             layerPool.set(key, layer);
         }
         return layerPool.get(key);
@@ -206,6 +219,11 @@ export function createSatelliteAnimator({ mapCore, apiUrl, getSelection, getCata
         return frames.length > 0 && frames.length <= RETAIN_LAYER_LIMIT;
     }
 
+    function frameHasCachedTiles(frame) {
+        const counts = frame?.tile_counts || {};
+        return Number(counts[String(effectiveTileZoom(frame))] || 0) > 0;
+    }
+
     function hotFrameIndexes(activeIndex = frameIndex) {
         const count = frames.length;
         const indexes = new Set();
@@ -213,11 +231,18 @@ export function createSatelliteAnimator({ mapCore, apiUrl, getSelection, getCata
         const center = Math.max(0, Math.min(count - 1, Number(activeIndex) || 0));
         const radius = Math.max(0, Math.min(HOT_FRAME_RADIUS, count - 1));
         if (count <= radius * 2 + 1) {
-            for (let idx = 0; idx < count; idx += 1) indexes.add(idx);
+            for (let idx = 0; idx < count; idx += 1) {
+                if (idx === center || frameHasCachedTiles(frames[idx])) {
+                    indexes.add(idx);
+                }
+            }
             return indexes;
         }
         for (let offset = -radius; offset <= radius; offset += 1) {
-            indexes.add((center + offset + count) % count);
+            const index = (center + offset + count) % count;
+            if (index === center || frameHasCachedTiles(frames[index])) {
+                indexes.add(index);
+            }
         }
         return indexes;
     }
@@ -379,6 +404,7 @@ export function createSatelliteAnimator({ mapCore, apiUrl, getSelection, getCata
             frameIndex = clamped;
             scheduleProgressiveRedraws(nextLayer, frameKey);
             schedulePrefetch();
+            reportFrameVisible(nextLayer, frameKey);
         };
 
         if (prevLayer === nextLayer) {

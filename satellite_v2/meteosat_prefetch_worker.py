@@ -21,7 +21,7 @@ import os
 from pathlib import Path
 import shutil
 import time
-from typing import Iterable
+from typing import Callable, Iterable
 
 from config.satellite_v2_config import (
     SATELLITE_V2_METEOSAT_PREFETCH_BACKFILL,
@@ -167,6 +167,7 @@ def _prefetch_one_job(
     hours: int,
     max_frames: int,
     keep_hours: int,
+    should_continue: Callable[[], bool] | None = None,
 ) -> dict[str, int]:
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
@@ -209,6 +210,12 @@ def _prefetch_one_job(
     )
 
     for frame in to_download:
+        if should_continue is not None and not should_continue():
+            print(
+                f"[{worker_name}] {sat_key}/{sector_key}: "
+                "stopped after selection changed"
+            )
+            break
         frame_start = time.perf_counter()
         try:
             download_product_source_frames(
@@ -243,6 +250,7 @@ def run_satellite_v2_meteosat_prefetch_worker(
     hours: int | None = None,
     keep_hours: int | None = None,
     worker_name: str = _WORKER_NAME,
+    should_continue: Callable[[], bool] | None = None,
 ) -> dict[str, int]:
     fresh_window = int(SATELLITE_V2_METEOSAT_PREFETCH_FRESH_WINDOW_SECONDS)
     if not force and is_cache_fresh(worker_name, fresh_window):
@@ -263,6 +271,8 @@ def run_satellite_v2_meteosat_prefetch_worker(
             return totals
         run_start = time.perf_counter()
         for sat_id, sector in selected_jobs:
+            if should_continue is not None and not should_continue():
+                break
             try:
                 stats = _prefetch_one_job(
                     worker_name,
@@ -274,6 +284,7 @@ def run_satellite_v2_meteosat_prefetch_worker(
                     hours_value,
                     int(SATELLITE_V2_METEOSAT_PREFETCH_MAX_FRAMES),
                     keep_value,
+                    should_continue,
                 )
             except Exception as exc:
                 totals["errors"] += 1

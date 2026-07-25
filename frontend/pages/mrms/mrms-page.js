@@ -5,7 +5,7 @@ import { renderProductNav } from '../../core/nav.js';
 import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js';
+import { createStatusReporter } from '../../core/status.js?v=20260725e';
 import { createMrmsEngine, formatValidTimeLabel, timestampMs } from './mrms-engine.js';
 
 const byId = (id) => document.getElementById(id);
@@ -179,6 +179,7 @@ async function initialize() {
 
         const hours = lookbackHours();
         status.setMessage(`Loading MRMS ${product} frames…`);
+        status.setDataState('Loading newest frame…', 'loading');
         try {
             const batch = await engine.loadFrames(product, hours);
             if (token !== loadToken || batch === null) return;
@@ -189,6 +190,7 @@ async function initialize() {
                 scrubber.setFrames([], { silent: true });
                 showScrubber(false);
                 status.setMessage(`No ${product} animation frames cached; loading current overlay…`);
+                status.setDataState('Loading current frame…', 'loading');
                 const latest = await engine.loadLatest(product);
                 if (token !== loadToken || !latest) return;
                 const staleNote = latest.stale ? ' — cached data may be stale.' : '';
@@ -196,25 +198,30 @@ async function initialize() {
                     `${latest.data.full_name || product} valid ${formatValidTimeLabel(latest.tsMs)}.${staleNote}`,
                     staleNote ? 'error' : 'success',
                 );
+                status.setDataState(latest.stale ? 'Stale data' : 'Ready', latest.stale ? 'stale' : 'fresh');
                 if (batch.refreshing) scheduleHistoryPoll(token);
                 return;
             }
 
-            frames = loaded.map((frame) => ({ ...frame, label: frameLabel(frame) }));
+            frames = loaded
+                .map((frame) => ({ ...frame, label: frameLabel(frame) }))
+                .sort((left, right) => timestampMs(left.timestamp) - timestampMs(right.timestamp));
             showScrubber(true);
-            scrubber.setFrames(frames);
+            scrubber.setFrames(frames, { index: frames.length - 1 });
             status.setMessage(
                 batch.refreshing
                     ? `${frames.length} MRMS frames available; filling the ${hours}h window…`
                     : `${frames.length} MRMS frames from cache (${hours}h window).`,
                 batch.refreshing ? '' : 'success',
             );
+            status.setDataState(batch.refreshing ? 'Loading history…' : 'Ready', batch.refreshing ? 'loading' : 'fresh');
             if (batch.refreshing) scheduleHistoryPoll(token);
         } catch (err) {
             if (token !== loadToken) return;
             console.error('[mrms] frame load failed', err);
             showScrubber(false);
             status.setMessage(`MRMS load failed: ${err.message}`, 'error');
+            status.setDataState('Load failed', 'error');
         }
     }
 
@@ -231,7 +238,9 @@ async function initialize() {
             if (token !== loadToken) return false;
             const fresh = batch.frames;
             if (!fresh.length) return batch.refreshing;
-            const currentTimestamp = frames[scrubber.getIndex()]?.timestamp;
+            const currentIndex = scrubber.getIndex();
+            const wasAtNewest = currentIndex === frames.length - 1;
+            const currentTimestamp = frames[currentIndex]?.timestamp;
             const byTimestamp = new Map(
                 [...frames, ...fresh.map((frame) => ({ ...frame, label: frameLabel(frame) }))]
                     .map((frame) => [frame.timestamp, frame]),
@@ -244,7 +253,9 @@ async function initialize() {
             const preservedIndex = currentTimestamp
                 ? frames.findIndex((frame) => frame.timestamp === currentTimestamp)
                 : -1;
-            const index = preservedIndex >= 0 ? preservedIndex : frames.length - 1;
+            const index = wasAtNewest
+                ? frames.length - 1
+                : (preservedIndex >= 0 ? preservedIndex : frames.length - 1);
             showScrubber(true);
             scrubber.setFrames(frames, { index, silent: true, keepPlaying: true });
             if (force) {
@@ -255,6 +266,7 @@ async function initialize() {
                     batch.refreshing ? '' : 'success',
                 );
             }
+            status.setDataState(batch.refreshing ? 'Loading history…' : 'Ready', batch.refreshing ? 'loading' : 'fresh');
             return batch.refreshing;
         } catch (_) {
             return false;

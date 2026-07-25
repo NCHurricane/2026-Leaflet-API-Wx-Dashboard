@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+from pathlib import Path
+from types import SimpleNamespace
+
+from config.satellite_v2_config import (
+    fci_supported_products,
+    normalize_channel,
+    seviri_supported_products,
+)
+from satellite_v2 import catalog
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_wpc_raster_url_is_versioned_and_status_is_separate() -> None:
+    engine = (ROOT / "frontend/pages/wpc/wpc-engine.js").read_text(encoding="utf-8")
+    page = (ROOT / "frontend/pages/wpc/wpc.html").read_text(encoding="utf-8")
+
+    assert "versionedImageUrl(geojson.image_url, geojson._updated)" in engine
+    assert "status.setDataState('Fresh data', 'fresh')" in engine
+    assert "Refreshing stale data…" in engine
+    assert "wpc-page.js?v=20260725e" in page
+
+
+def test_mrms_initial_load_and_live_append_hold_at_newest() -> None:
+    page = (ROOT / "frontend/pages/mrms/mrms-page.js").read_text(encoding="utf-8")
+    markup = (ROOT / "frontend/pages/mrms/mrms.html").read_text(encoding="utf-8")
+
+    assert "scrubber.setFrames(frames, { index: frames.length - 1 })" in page
+    assert "const wasAtNewest = currentIndex === frames.length - 1;" in page
+    assert "Loading newest frame…" in page
+    assert "mrms-page.js?v=20260725e" in markup
+
+
+def test_satellite_requests_selected_newest_frame_before_neighbor_priming() -> None:
+    page = (ROOT / "frontend/pages/satellite/satellite-page.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "const nextIndex = frameIndexForReload(frames, preserveFrameKey);" in page
+    assert "let displayed = await showFrame(nextIndex" in page
+    assert "animator.primeLayers(nextIndex)" not in page
+    assert "Newest frame requested first" in page
+    assert "cached tiles); tiles fill as they render" not in page
+
+
+def test_channel14_is_registered_for_the_platforms_that_offer_it() -> None:
+    config = (ROOT / "config/satellite_v2_config.py").read_text(encoding="utf-8")
+
+    assert '"Channel14",' in config.split("SATELLITE_V2_DASHBOARD_PRODUCTS", 1)[1]
+    assert normalize_channel("Channel14") == "Channel14"
+    assert "Channel14" in fci_supported_products()
+    assert "Channel14" in seviri_supported_products()
+
+
+def test_satellite_ready_requires_a_visible_tile_event() -> None:
+    page = (ROOT / "frontend/pages/satellite/satellite-page.js").read_text(
+        encoding="utf-8"
+    )
+    animator = (ROOT / "frontend/pages/satellite/satellite-anim.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "updateState: false" in page
+    assert "onFrameVisible()" in page
+    assert "layer.on('tileload', () => reportFrameVisible(layer, frameKey))" in animator
+    assert "activeLayer !== layer" in animator
+    assert "displayed ? 'Ready'" not in page
+
+
+def test_fresh_satellite_catalog_is_chronological_with_newest_last(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(catalog, "count_frame_tiles", lambda *_args: {})
+    monkeypatch.setattr(catalog, "sample_frame_tiles", lambda *_args: [])
+    monkeypatch.setattr(catalog, "atomic_write_json", lambda *_args: None)
+    frames = [
+        SimpleNamespace(
+            frame_key="20260725T020000Z",
+            timestamp_utc="2026-07-25T02:00:00Z",
+            provider="test",
+            source_key="newest",
+            source_url="test://newest",
+            source_keys={},
+            source_urls={},
+            file_sizes={},
+        ),
+        SimpleNamespace(
+            frame_key="20260725T010000Z",
+            timestamp_utc="2026-07-25T01:00:00Z",
+            provider="test",
+            source_key="oldest",
+            source_url="test://oldest",
+            source_keys={},
+            source_urls={},
+            file_sizes={},
+        ),
+    ]
+
+    payload = catalog.build_catalog(
+        str(tmp_path),
+        "goes19",
+        "CONUS",
+        "Channel13",
+        hours=2,
+        max_frames=2,
+        list_frames_fn=lambda **_kwargs: frames,
+    )
+
+    assert [frame["frame_key"] for frame in payload["frames"]] == [
+        "20260725T010000Z",
+        "20260725T020000Z",
+    ]
+
+
+def test_global_timestamp_has_independent_data_state_line() -> None:
+    script = (ROOT / "frontend/core/status.js").read_text(encoding="utf-8")
+    styles = (ROOT / "frontend/core/core.css").read_text(encoding="utf-8")
+
+    assert "setDataState(value, tone = '')" in script
+    assert "core-global-timestamp-state" in script
+    assert "info.updateState !== false" in script
+    assert "Loading…" in script
+    assert 'data-state-tone="loading"' in styles
+    assert "core-status-pulse" in styles
+
+
+def test_all_pages_receive_the_shared_timestamp_state_assets() -> None:
+    page_entries = {
+        "alerts": "alerts-page.js",
+        "drought": "drought-page.js",
+        "mrms": "mrms-page.js",
+        "radar": "radar-page.js",
+        "rtma": "rtma-page.js",
+        "satellite": "satellite-page.js",
+        "spc": "spc-page.js",
+        "surface": "surface-page.js",
+        "tropical": "tropical-app.js",
+        "water": "water-app.js",
+        "workspace": "workspace-app.js",
+        "wpc": "wpc-page.js",
+    }
+    for page_name, entry_name in page_entries.items():
+        page_dir = ROOT / "frontend/pages" / page_name
+        markup = (page_dir / f"{page_name}.html").read_text(encoding="utf-8")
+        script = (page_dir / entry_name).read_text(encoding="utf-8")
+        assert "core.css?v=20260725e" in markup
+        assert f"{entry_name}?v=20260725e" in markup
+        assert "status.js?v=20260725e" in script

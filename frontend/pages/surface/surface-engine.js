@@ -53,6 +53,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
     const gate = createRequestGate();
     const gradientMetaCache = new Map();
     const gradientMetaInflight = new Map();
+    const gradientPendingKeys = new Set();
     let stations = [];
     let gradientStations = [];
     let gradientProduct = null;
@@ -73,7 +74,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
         return meta?.image_url ? meta : null;
     }
 
-    async function primeGradientMeta(product, region) {
+    async function primeGradientMeta(product, region, onMeta) {
         if (!product) return null;
         const key = gradientMetaKey(product, region);
         const cached = gradientMetaCache.get(key) || null;
@@ -85,20 +86,30 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
 
         const sourceRegion = gradientSourceRegion(region);
         const fetchPromise = (async () => {
+            let latest = cached;
             try {
-                const meta = await api.fetchJson(
-                    `/api/data/surface-gradient?region=${encodeURIComponent(sourceRegion)}&product=${encodeURIComponent(product)}`,
-                    { cache: 'no-cache' },
-                );
-                if (meta?.image_url && Array.isArray(meta.bounds) && meta.bounds.length === 4) {
-                    meta._fetchedAtMs = Date.now();
-                    gradientMetaCache.set(key, meta);
-                    return meta;
+                for (let attempt = 0; attempt < 60; attempt += 1) {
+                    const meta = await api.fetchJson(
+                        `/api/data/surface-gradient?region=${encodeURIComponent(sourceRegion)}&product=${encodeURIComponent(product)}`,
+                        { cache: 'no-cache' },
+                    );
+                    if (meta?.image_url && Array.isArray(meta.bounds) && meta.bounds.length === 4) {
+                        meta._fetchedAtMs = meta.refreshing ? 0 : Date.now();
+                        gradientMetaCache.set(key, meta);
+                        latest = meta;
+                        onMeta?.(meta);
+                    }
+                    if (!meta?.refreshing) return latest;
+                    const retrySeconds = Math.max(
+                        1,
+                        Math.min(5, Number(meta.retry_after_seconds) || 1),
+                    );
+                    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
                 }
             } catch (_) {
                 // Silent: the renderer falls back to client-side interpolation.
             }
-            return cached;
+            return latest;
         })();
 
         gradientMetaInflight.set(key, fetchPromise);
@@ -135,6 +146,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
     }
 
     function renderView(view) {
+        const gradientKey = gradientMetaKey(view.product, view.region);
         renderer.render(filteredStations(view), {
             product: view.product,
             region: view.region,
@@ -143,6 +155,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
             gradientEnabled: view.gradientEnabled,
             gradientOpacity: view.gradientOpacity,
             gradientMeta: view.gradientEnabled ? freshGradientMeta(view.product, view.region) : null,
+            gradientPending: view.gradientEnabled && gradientPendingKeys.has(gradientKey),
             gradientStations: gradientProduct === view.product
                 && gradientRegion === gradientSourceRegion(view.region)
                 ? gradientStations
@@ -168,6 +181,12 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
 
             stations = Array.isArray(data?.stations) ? data.stations : [];
             lastView = { ...view };
+            const gradientKey = gradientMetaKey(view.product, view.region);
+            if (view.gradientEnabled && !freshGradientMeta(view.product, view.region)) {
+                gradientPendingKeys.add(gradientKey);
+            } else {
+                gradientPendingKeys.delete(gradientKey);
+            }
             renderView(lastView);
             legend.setHtml(legendHtml(view.product, stations.length));
             onStationCount?.(stations.length);
@@ -207,6 +226,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
                 source: data?.timestamp_source === 'station_valid' || !data?.timestamp_source
                     ? 'Station observation valid time'
                     : String(data.timestamp_source),
+                stale,
             });
             status.setMessage(
                 `Surface ${label} for ${view.region}: ${stations.length} stations.${stale ? ' [STALE]' : ''}`,
@@ -215,11 +235,24 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
 
             if (view.gradientEnabled) {
                 const hadMeta = !!freshGradientMeta(view.product, view.region);
-                await ensureGradientStations(view.product, view.region, stations, request.signal);
-                const meta = await primeGradientMeta(view.product, view.region);
+                let meta = null;
+                try {
+                    await ensureGradientStations(view.product, view.region, stations, request.signal);
+                    meta = await primeGradientMeta(view.product, view.region, () => {
+                        if (
+                            gate.isCurrent(request.sequence)
+                            && lastView
+                            && gradientMetaKey(lastView.product, lastView.region) === gradientKey
+                        ) {
+                            renderView(lastView);
+                        }
+                    });
+                } finally {
+                    gradientPendingKeys.delete(gradientKey);
+                }
                 if (!gate.isCurrent(request.sequence)) return;
-                // Re-render once the worker PNG (or gradient source stations)
-                // arrives after the first marker paint.
+                // Use client interpolation only after the server path has
+                // finished without a usable current or last-complete PNG.
                 if (meta || !hadMeta) renderView(lastView);
             }
         } catch (error) {
@@ -241,21 +274,42 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
     // Gradient toggled on after load: make sure source stations and the worker
     // PNG metadata exist, then re-render.
     async function applyGradient(view) {
-        if (!rerender(view)) return;
+        const gradientKey = gradientMetaKey(view.product, view.region);
+        if (view.gradientEnabled && !freshGradientMeta(view.product, view.region)) {
+            gradientPendingKeys.add(gradientKey);
+        } else {
+            gradientPendingKeys.delete(gradientKey);
+        }
+        if (!rerender(view)) {
+            gradientPendingKeys.delete(gradientKey);
+            return;
+        }
         if (!lastView.gradientEnabled) return;
         const request = gate.begin();
         try {
             await ensureGradientStations(lastView.product, lastView.region, null, request.signal);
-            await primeGradientMeta(lastView.product, lastView.region);
+            await primeGradientMeta(lastView.product, lastView.region, () => {
+                if (
+                    gate.isCurrent(request.sequence)
+                    && lastView
+                    && gradientMetaKey(lastView.product, lastView.region) === gradientKey
+                ) {
+                    renderView(lastView);
+                }
+            });
+            gradientPendingKeys.delete(gradientKey);
             if (gate.isCurrent(request.sequence)) renderView(lastView);
         } catch (error) {
             if (error.name === 'AbortError') return;
             console.warn('[surface] gradient refresh failed', error);
+        } finally {
+            gradientPendingKeys.delete(gradientKey);
         }
     }
 
     function clear() {
         gate.cancel();
+        gradientPendingKeys.clear();
         stations = [];
         lastView = null;
         renderer.clear();

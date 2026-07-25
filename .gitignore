@@ -74,6 +74,7 @@ docs/RTMA_GPU_Alternative.md
 
 # Powershell Scripts
 *.ps1
+!tools/install_tasks.ps1
 
 # Downloaded data files
 *.nc
@@ -99,7 +100,6 @@ docs/llm_context/
 tropical_tab_handoff.txt
 tropical_tab_plan.md
 tropical_tab_redesign_plan.md
-tools/install_tasks.ps1
 .gitignore
 docs/tropical-next-session-plan.md
 

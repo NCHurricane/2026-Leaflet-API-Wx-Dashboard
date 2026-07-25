@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date prepared: 2026-07-23
+Date prepared: 2026-07-24
 
 Start in `F:\Python\dashboard_2026`.
 
@@ -9,19 +9,21 @@ Continue dashboard enhancement work in F:\Python\dashboard_2026.
 
 Read first:
 - docs/dashboard-change-and-enhancement-superfile.md
-- docs/worker-free-render-plan.md, Phase 6 only
+- docs/worker-free-render-plan.md, Phase 8 only
 - docs/phases-25-27-manual-smoke-checklist.md only when checking the older gate
 - docs/architecture.md or docs/patterns.md only when the next change crosses
   those boundaries
 
 Mandatory session-start directive:
-- Start worker-free Phase 6 only: targeted on-demand Surface gradients,
-  last-complete serving, shared observation snapshots, and bounded rendering.
-- Do not begin Phase 7 unless the Phase 6 gate passes or the user explicitly
-  changes the priority.
+- Continue worker-free Phase 8 closure only: zero-task whole-system/browser
+  acceptance and optional-warmer enabled/disabled acceptance.
+- Phase 7 Radar/Satellite is closed after its automated gate and corrected
+  user-owned browser/live-provider re-smokes passed.
+- Preview and list existing OS tasks before any migration. Do not unregister
+  tasks without explicit operator authorization.
 - Do not start, investigate, benchmark, or implement Radar optimization Phase 0
-  in this session. Radar remains deferred until worker-free Phase 6 passes its
-  documented gate or the user explicitly changes the priority.
+  as an alternative track in this session. Worker-free Phase 8 goes first
+  unless the user explicitly changes the priority.
 - Do not read `docs/radar-render-optimization-plan.md` or
   `docs/satellite-radar-render-pipeline-files.md` at startup unless the user
   explicitly redirects the session to Radar.
@@ -122,6 +124,114 @@ Current checkpoint:
   combined Water run passes 18/18. The corrected user-owned browser re-smoke
   passed on 2026-07-23, so Phase 5 is closed and Phase 6 is authorized.
   Evidence is in `docs/perf/2026-07-23-worker-free-phase5/`.
+- Task-scheduler-free Phase 6 Surface gradients is implemented. The endpoint
+  serves explicit fresh/stale/warming state and the prior complete image while
+  warming one shared region/minute observation snapshot or rendering exactly
+  one `(WORLD|CONUS, product)` key. Daily AviationWeather station metadata,
+  coordinator-budgeted IEM fallbacks, and a separate one-slot gradient budget
+  bound upstream and render work; the client polls until the requested artifact
+  is ready. The Phase 6 suite passes 24/24, including all 18 product/region
+  artifact paths on isolated reduced scratch grids; broader
+  Surface/coordinator tests pass 37/37. The first user-owned browser smoke found
+  no product failures and recorded similar render times across products; a
+  representative 2,246-point CONUS render took 4.2 seconds. It exposed the
+  unmasked client-canvas fallback while the server's baked-mask PNG was
+  pending. Warming now uses the prior masked PNG immediately or observations
+  alone on a truly cold request; the client fallback remains only for server
+  unavailability. Correction-focused validation passes 46/46. Full pytest
+  reaches 214 passing tests plus 42 subtests, with only the pre-existing
+  Workspace assertion against the concurrently removed
+  `WORKSPACE_REGION_BOUNDS`. The corrected user-owned browser re-smoke passed
+  for every CONUS and WORLD product on 2026-07-24. Phase 6 is closed and Phase
+  7 is authorized next.
+  Evidence is in `docs/perf/2026-07-23-worker-free-phase6/`.
+- Task-scheduler-free Phase 7 Radar/Satellite is implemented and its automated
+  gate passes. Lease-bound recurring coordinator jobs now stop after request
+  presence expires. Radar preserves newest-first fallback, keys activity by
+  site/level/product/elevation/storm motion, progressively fills history, and
+  reports `history_filling`; chunk-prefix discovery has a 30-second process
+  cache. Satellite retains live on-demand tiles as first priority, then delays
+  selected rapid/Meteosat acceleration by five seconds. Source acquisition is
+  deduplicated per frame, EUMETSAT FCI concurrency is one or two, and provider
+  access reports `credentials_required` or `license_required`. The focused gate
+  passes 53 tests plus 42 subtests; full pytest passes 222 tests plus 42
+  subtests and retains only the pre-existing Workspace assertion against
+  removed `WORKSPACE_REGION_BOUNDS`. The first Radar browser smoke exposed a
+  five-minute success gate that stopped a six-hour request after its initial
+  one-hour/12-frame batch; incomplete history now bypasses that cadence and
+  succeeded jobs no longer claim they are still filling. A separate stale
+  localhost-only server explained the apparent cross-page hang after restart;
+  removing it restored Workspace/Radar/Surface/Satellite navigation. Restart
+  and Radar re-smoke passed. The first Satellite smoke passed GOES-19 CONUS,
+  then exposed invisible/over-generated MESO tiles, live-tile priority
+  inversion on Himawari, and six-frame cold FCI fanout on Meteosat-12. Meso
+  now fits current frame bounds and uses zooms 5-6; accelerators wait for live
+  viewport work; cold neighboring frames prime only when cached. Follow-up
+  testing then confirmed that Meteosat-11 RSS continued eight or more frames
+  after switching to Meteosat-9 Full Disk. Satellite page instances now
+  supersede their prior accelerator between frames while allowing another page
+  viewing the old selection to keep it active. The single-worker application
+  accelerator also renders in-process, avoiding the Windows child re-import
+  that printed a Py-ART banner on Satellite. Restart/hard refresh and repeat
+  that exact RSS-to-Full-Disk switch passed: the in-progress RSS frame was the
+  allowed boundary, no additional abandoned RSS frames started, and the
+  mid-session Py-ART banner did not recur. Phase 7 is closed and Phase 8 is
+  authorized next. Evidence is in
+  `docs/perf/2026-07-24-worker-free-phase7/`.
+- Task-scheduler-free Phase 8 is implemented and awaiting acceptance closure.
+  `workers/scheduler.py` registers no broad schedule; startup and
+  `/api/health/coordinator` use application/source/cache/coordinator health
+  rather than task sentinels. Tropical current-season archive refresh remains
+  request-driven and six-hour cleanup is application lifecycle-owned. The task
+  script defaults to preview-only and its bounded `core`/`surface` warmers call
+  localhost API routes, returning `warmed`, `current`, `already_running`,
+  `backoff`, or `failed`. The real preview found all 13 legacy tasks disabled
+  and made no changes. Phase 8 focused tests pass 6/6; the combined
+  cutover/lifecycle/schedule run passes 18/18. Full pytest reaches 240 passing
+  tests plus 42 subtests; its only failure is the pre-existing Workspace
+  assertion against the concurrently removed `WORKSPACE_REGION_BOUNDS`.
+  A temporary port-8011 API probe returned healthy application-owned state, a
+  running single-process coordinator, registered cleanup, and no task-health
+  field. The first user-owned zero-task/browser smoke found WPC browser-cached
+  charts under unchanged URLs, MRMS opening at the oldest frame, and ambiguous
+  Satellite cached-tile/newest-first messaging. WPC now versions image URLs
+  with the payload update token; MRMS opens and progressively fills at newest;
+  Satellite explicitly keeps newest last, displays it before neighbor priming,
+  and explains that visible tiles load from cache or render on demand. A second
+  global-timestamp line exposes Loading/Fresh/Stale/Ready without repurposing
+  page messages. Correction-focused tests passed 39/39 plus syntax/compile/lint/
+  diff checks. A local in-app browser re-smoke confirmed WPC's versioned URL,
+  MRMS at 28/28 with the slider at maximum, and Meteosat-12 Channel 13
+  requesting 02:00Z before 01:45Z. The next user re-smoke passed WPC
+  chart/timestamp parity and newest-first MRMS/Satellite behavior with no other
+  product errors. It exposed Channel 14 being selectable but absent from the
+  backend registry, timestamp state not appearing on other pages, and Satellite
+  Ready preceding any rendered tile. Channel 14 is now registered for every
+  supported provider mapping. All standalone pages receive shared
+  Loading/Ready state; SPC and Surface additionally report computed stale state.
+  Satellite now changes to Ready only after a successful active-layer tile-load
+  event. The expanded correction suite passes 42/42 plus 16 Node syntax checks
+  and Python compilation. Browser proof held Loading at 0/40 rendered tiles,
+  changed to Ready at 23/40, and confirmed Ready on Drought. A fresh temporary
+  server accepted Channel 14 legend/catalog validation before unavailable
+  outbound NOAA S3 access stopped discovery. The continuing user-owned re-smoke
+  now passes Surface, Satellite, Alerts, MRMS, Drought, WPC, and Water. RTMA
+  passes the `Stale` to `Ready` transition; its observed cold fresh-data load
+  took about 60-75 seconds, consistent with source download/render and possible
+  shared heavy-render-slot queueing. Repeated RTMA testing exposed the latest
+  refresh and request render concurrently downloading the same GRIB through one
+  fixed `.part` path. GRIB acquisition is now serialized per destination and
+  rechecks the completed cache after waiting; the focused Phase 4 suite passes
+  11/11 plus Ruff and compilation. The corrected RTMA user re-smoke passed
+  without the collision recurring, and Radar also passes. Leaving MRMS stopped
+  page polling while the already-submitted bounded selected-product history
+  batch finished, which is expected; it must not launch new batches after
+  departure. SPC and Workspace also pass. Tropical initial refresh exposed a
+  missing `setTimeoutFn` dependency in the engine context; the dependency is
+  now wired and the focused Tropical/browser gate passes 23/23 plus Node syntax
+  and Ruff. The corrected Tropical user re-smoke passes, completing the
+  user-owned whole-system browser smoke. Optional-warmer enabled/disabled
+  acceptance remains pending.
 - Phase 1 supports one application process only. `WEB_CONCURRENCY` and
   `UVICORN_WORKERS` above 1 are rejected; do not use CLI multi-worker settings
   or legacy direct-write Windows tasks until persistent cross-process leases
@@ -243,6 +353,15 @@ Current checkpoint:
   convert all controls to one visual type.
 
 Validation at handoff:
+- Worker-free Phase 6 focused tests pass 24/24; the broader
+  Surface/coordinator run passes 37/37 and the correction-focused run passes
+  46/46. Focused Ruff, changed-Python
+  compilation, Surface JavaScript syntax, and `git diff --check` pass. The
+  complete suite reaches 214 passing tests plus 42 subtests; its only failure
+  is the pre-existing Workspace assertion against the concurrently removed
+  `WORKSPACE_REGION_BOUNDS`. The first browser smoke otherwise passed and
+  measured a representative 4.2-second full-resolution render; corrected
+  warming-mask re-smoke passed for every CONUS and WORLD product.
 - Worker-free Phase 5 focused tests pass 10/10 and the combined Water run passes
   18/18. Focused Ruff, changed-Python compilation, Water JavaScript syntax, and
   `git diff --check` pass. The complete suite reaches 189 passing tests plus 42
@@ -323,15 +442,14 @@ Validation at handoff:
   `.pytest_cache` write warning.
 
 Next step:
-1. Begin worker-free Phase 6 only: add a targeted on-demand Surface-gradient
-   entry point for `(WORLD|CONUS, product)`, serve observations and the prior
-   complete gradient while rendering, reuse one shared observation snapshot,
-   cache station metadata, and bound gradient rendering separately from other
-   heavy renders.
+1. Run the Phase 8 whole-system zero-task acceptance and user-owned browser
+   smoke with all legacy tasks left disabled.
+2. Exercise the optional warmer profiles disabled and enabled, including overlap
+   with active API requests. Actual legacy-task unregistration remains a
+   separate explicit operator-authorized action.
 
 Radar optimization Phase 0 is not an alternative next step. It stays deferred
-until Phase 6 is complete and its gate has been reviewed. Phase 7 is also
-blocked until the Phase 6 gate passes.
+behind worker-free Phase 8 unless the user explicitly changes the priority.
 
 Guardrails:
 - Browser smoke is user-owned; report static versus browser proof honestly.
@@ -339,11 +457,9 @@ Guardrails:
   Restarted-API verification returned 489 fresh national low-detail features
   and 25 fresh bbox-filtered full features from the same generation. Keep the
   legacy tasks disabled; browser smoke remains user-owned and unclaimed.
-- Preserve optional Windows task warming, but do not run or advertise legacy
-  task definitions concurrently with the coordinator. Task support
-  requires the same persistent cross-process leases, provider budgets,
-  deduplication keys, freshness state, and atomic publisher as request-driven
-  work, plus mixed task/browser acceptance testing.
+- Preserve optional Windows task warming through `workers.optional_warmer`;
+  never run or advertise legacy direct writers concurrently with the
+  coordinator. Mixed task/browser acceptance testing is still required.
 - Preserve product-specific controls and wiring; use the smallest coherent fix.
 - Keep route logic in routes, response/cache behavior in services, and upstream
   refresh behavior in workers.

@@ -405,6 +405,33 @@ is authorized next. Evidence is in
 
 ### Phase 6 - Surface gradients
 
+Implementation status (updated 2026-07-24): implemented and automated gate
+passed. The first user-owned browser smoke found no product failures and
+recorded similar full-resolution render times across products; a representative
+CONUS `wind_speed` render used 2,246 points and completed in 4.2 seconds. That
+timing parity is expected because every product interpolates and masks the same
+grid. The smoke did expose one visual handoff defect: the browser displayed its
+unmasked client-canvas fallback until the baked-mask PNG completed. The client
+now suppresses that fallback while server work is pending, immediately adopts
+the prior masked PNG returned by stale-while-refresh, and shows observations
+alone when no prior PNG exists. The fallback remains available only after the
+server path finishes without an image. The corrected user-owned re-smoke passed
+for every CONUS and WORLD product on 2026-07-24. Phase 6 is closed and Phase 7
+is authorized next.
+`/api/data/surface-gradient` now serves the last complete artifact while it
+warms observations or renders exactly one `(WORLD|CONUS, product)` key. Surface
+observations share one process snapshot per region/minute, AviationWeather
+station metadata is cached daily, IEM fallbacks use the coordinator's shared
+provider budget, and gradients have a separate bounded render slot. The client
+polls explicit warming state until the requested artifact is ready. The Phase 6
+suite passes 24/24, including all 18 product/region artifact paths on isolated
+reduced scratch grids; broader Surface/coordinator tests pass 37/37 and
+correction-focused validation passes 46/46. Full pytest reaches 214 passing
+tests plus 42 subtests, with only the pre-existing
+Workspace assertion against the concurrently removed
+`WORKSPACE_REGION_BOUNDS`. Evidence is in
+`docs/perf/2026-07-23-worker-free-phase6/`.
+
 - Add a targeted on-demand gradient entry point for `(WORLD|CONUS, product)` rather than invoking the broad Surface worker.
 - Serve existing observation points and the last complete gradient while the requested gradient is rendering.
 - Use the shared AviationWeather bulk observation snapshot for all requested Surface products within the same minute.
@@ -412,6 +439,42 @@ is authorized next. Evidence is in
 - Bound gradient rendering separately from satellite/radar rendering because it is CPU/memory-heavy.
 
 ### Phase 7 - Radar and Satellite without required warmers
+
+Implementation status (2026-07-24): complete. The automated gate and corrected
+user-owned browser/live-provider re-smokes passed. The coordinator now owns
+lease-bound recurring jobs that run at a source/provider interval only while
+the 90-second presence lease is active. Radar activity keys include site,
+level, product, elevation, and storm-motion variant; newest-frame synchronous
+fallback remains intact, progressive fills report `history_filling`, and Level
+2 chunk-prefix listings have a 30-second process cache. Satellite keeps live
+on-demand tiles as first priority, then starts selected rapid-sector or
+Meteosat source acceleration after a five-second delay while presence remains
+active. Source downloads deduplicate per platform/sector/frame, EUMETSAT FCI
+downloads are limited to one or two, and unavailable account state returns
+`credentials_required` or `license_required`. The focused suite passes 53
+tests plus 42 subtests. Evidence is in
+`docs/perf/2026-07-24-worker-free-phase7/`. Phase 7 is closed and Phase 8 is
+authorized next. The first Radar browser smoke
+found that the normal five-minute success cadence prevented a longer lookback
+from continuing after its initial one-hour batch. Incomplete history now
+bypasses that cadence and only queued/running work reports as filling. The same
+smoke also found two simultaneous port-8000 listeners; removing the stale
+localhost-only listener restored cross-page navigation. A clean server restart
+and Radar/Satellite re-smoke were required. Radar re-smoke passed. Satellite
+passed GOES-19 CONUS but exposed three ordering/fanout defects: MESO used a
+CONUS-scale view with zoom-7/8 full-sector warming, Himawari's accelerator could
+overtake live viewport tiles, and cold Meteosat primed all six FCI frames at
+once. Meso now fits current frame bounds and warms zooms 5-6, accelerators wait
+for live tiles to become idle, and uncached neighboring frames are not primed.
+Follow-up testing showed an abandoned Meteosat-11 RSS accelerator rendering at
+least eight more frames after a switch to Meteosat-9 Full Disk. Page-instance
+selection identity now cooperatively stops the old accelerator before its next
+frame while preserving another page's legitimate interest in that selection.
+The one-worker application accelerator also runs in-process so Windows does not
+spawn a child that re-imports Radar/Py-ART during Satellite work. The corrected
+RSS-to-Full-Disk user re-smoke passed: the old RSS accelerator stopped without
+starting more abandoned frames, and the mid-session Py-ART banner did not
+recur.
 
 #### Radar
 
@@ -430,6 +493,69 @@ is authorized next. Evidence is in
 - Preserve conservative Full Disk memory limits. Full-product availability permits a slower cold first view; it does not permit unbounded pre-rendering.
 
 ### Phase 8 - Zero-task cutover, health, and documentation
+
+Implementation status (2026-07-24): implemented; focused automated gate passes
+and whole-system/browser closure remains pending. `workers/scheduler.py`
+registers no broad schedule, startup no longer treats task sentinels as health,
+and `/api/health/coordinator` reports application-owned source/cache/coordinator
+plus lifecycle-maintenance state. Current-season Tropical archive refresh stays
+request-driven and six-hour cleanup remains coordinator-owned. The task tool
+defaults to a mutation-free preview and offers bounded `core` and `surface`
+profiles through `workers.optional_warmer`; these call the running localhost API
+and expose `warmed`, `current`, `already_running`, `backoff`, or `failed`.
+The preview found 13 existing `Wx-Dashboard-*` legacy tasks, all disabled. No
+tasks were registered, enabled, disabled, or unregistered. Phase 8 focused tests
+pass 6/6; the combined cutover/lifecycle/schedule run passes 18/18. Ruff,
+Python compilation, PowerShell parsing, and the real read-only task preview
+pass. Full pytest reaches 240 passing tests plus 42 subtests; its only failure
+is the pre-existing Workspace assertion against the concurrently removed
+`WORKSPACE_REGION_BOUNDS`. A temporary port-8011 runtime probe returned
+application-owned health, a running single-process coordinator, registered
+cleanup, and no task-health dependency. The first user-owned zero-task/browser
+smoke found three UI/data-selection defects: unchanged WPC image URLs could
+leave yesterday's chart in the browser cache, MRMS initialized at the oldest
+frame, and Satellite's aggregate cached-tile count obscured on-demand viewport
+rendering while neighbor priming made newest-first behavior harder to prove.
+WPC image URLs now include the payload update token, MRMS initializes and
+continues progressive filling at the newest frame, and Satellite displays the
+newest frame before any neighbor priming and reports that visible tiles load
+from cache or render on demand. A separate second timestamp line reports
+Loading, Fresh, Stale, or Ready state without moving or repurposing page message
+elements. The correction suite passed 39/39 plus Node syntax, Ruff, Python
+compilation, and diff checks. A local in-app browser re-smoke confirmed the
+versioned WPC URL and Fresh state, MRMS at 28/28 with its slider at maximum, and
+Meteosat-12 Channel 13 requesting the 02:00Z newest frame before 01:45Z.
+The next user-owned re-smoke passed WPC chart/timestamp parity and newest-first
+MRMS/Satellite behavior, with no other product errors, but exposed Channel 14
+being offered by the UI while omitted from the backend registry and showed that
+the timestamp state was limited to the three corrected pages. Channel 14 is now
+registered across GOES, Himawari, SEVIRI, and FCI mappings. The shared reporter
+now supplies Loading/Ready state to every standalone page, while SPC and Surface
+also pass their computed stale state. Satellite no longer derives Ready from
+catalog/layer acceptance: it remains `Loading visible tiles...` until a
+successful tile-load event belongs to the active layer. The expanded correction
+suite passes 42/42 plus 16 Node syntax checks and Python compilation. Browser
+proof held Loading with 0/40 rendered Satellite tiles, changed to Ready only at
+23/40 loaded tiles, and confirmed the new Ready line on Drought. A fresh
+temporary server accepted the Channel 14 legend/catalog path; the catalog probe
+then stopped only at unavailable outbound NOAA S3 access, not channel
+validation. The continuing user-owned re-smoke now passes Surface, Satellite,
+Alerts, MRMS, Drought, WPC, and Water. RTMA also passes the `Stale` to `Ready`
+state transition; its observed cold fresh-data load took about 60-75 seconds,
+consistent with source download/render and possible shared heavy-render-slot
+queueing. Repeated RTMA testing exposed the latest refresh and request render
+concurrently downloading the same GRIB through one fixed `.part` path. GRIB
+acquisition is now serialized per destination and rechecks the completed cache
+after waiting; the focused Phase 4 suite passes 11/11 plus Ruff and compilation.
+The corrected RTMA user re-smoke passed without the collision recurring, and
+Radar also passes. Leaving MRMS stopped page polling while the already-submitted
+bounded selected-product history batch finished, which is expected; it must not
+launch new batches after departure. SPC and Workspace also pass. Tropical
+initial refresh exposed a missing `setTimeoutFn` dependency in the engine
+context; the dependency is now wired and the focused Tropical/browser gate
+passes 23/23 plus Node syntax and Ruff. The corrected Tropical user re-smoke
+passes, completing the user-owned whole-system browser smoke. Optional-warmer
+enabled/disabled acceptance remains pending.
 
 1. Change `workers/scheduler.py` from "OS tasks are the source of truth" to application-owned coordination and lifecycle maintenance.
 2. Make `tools/install_tasks.ps1` explicitly optional. Its default behavior must not be required by startup documentation or health checks. Refactor retained tasks into clearly named optional-warmer profiles that satisfy the compatibility contract above; do not install or advertise legacy direct writers.

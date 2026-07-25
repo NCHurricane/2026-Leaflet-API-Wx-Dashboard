@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app_core.paths import BASE_DIR
-from app_core.refresh_coordinator import get_refresh_coordinator
+from app_core.refresh_coordinator import Submission, get_refresh_coordinator
 from config.refresh_schedules import (
     GTWO_SCHEDULE,
     TROPICAL_INTERMEDIATE_SCHEDULE,
@@ -158,18 +158,19 @@ def _tropical_warnings_in_effect() -> bool:
     return False
 
 
-def _submit_tropical_scope(scope: str) -> None:
-    get_refresh_coordinator().submit(
+def _submit_tropical_scope(scope: str) -> Submission:
+    return get_refresh_coordinator().submit(
         key=("tropical", scope),
         provider="nhc",
         function=lambda: _run_tropical_worker_once(scopes={scope}),
     )
 
 
-def _maybe_schedule_tropical_refresh() -> None:
+def _maybe_schedule_tropical_refresh() -> dict[str, Submission]:
     """Apply boundary gates plus a ten-minute active-page special probe."""
     now = datetime.now(timezone.utc)
     coordinator = get_refresh_coordinator()
+    submissions: dict[str, Submission] = {}
     for scope in ("advisories", "gtwo"):
         key = ("tropical", scope)
         coordinator.record_presence(key=key, provider="nhc")
@@ -191,7 +192,37 @@ def _maybe_schedule_tropical_refresh() -> None:
             or (now - last_checked).total_seconds() >= 10 * 60
         )
         if due or safety_due:
-            _submit_tropical_scope(scope)
+            submissions[scope] = _submit_tropical_scope(scope)
+    return submissions
+
+
+def _tropical_refresh_metadata(
+    submissions: dict[str, Submission],
+) -> dict[str, object]:
+    refreshing = any(
+        submission.status in {"queued", "running"}
+        for submission in submissions.values()
+    )
+    backed_off = any(
+        submission.status == "backoff"
+        for submission in submissions.values()
+    )
+    retry_values = [
+        submission.retry_after_seconds
+        for submission in submissions.values()
+        if submission.retry_after_seconds is not None
+    ]
+    return {
+        "cache_state": (
+            "refreshing" if refreshing else "backoff" if backed_off else "current"
+        ),
+        "refreshing": refreshing,
+        "retry_after_seconds": (
+            min(retry_values)
+            if retry_values
+            else 2.0 if refreshing else None
+        ),
+    }
 
 
 def _maybe_schedule_current_season_refresh(catalog: dict[str, Any]) -> None:
@@ -501,8 +532,9 @@ def get_tropical_storms_data(basin: str = "WORLD", force: bool = False) -> dict:
     if basin_key not in {"WORLD", "AL", "EP", "CP"}:
         raise HTTPException(status_code=400, detail="Invalid tropical basin.")
 
-    if not force:
-        _maybe_schedule_tropical_refresh()
+    refresh_submissions = (
+        {} if force else _maybe_schedule_tropical_refresh()
+    )
     summary = None if force else _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
     source = "worker-cache"
     if summary is None:
@@ -536,6 +568,7 @@ def get_tropical_storms_data(basin: str = "WORLD", force: bool = False) -> dict:
         "storms": storms,
         "count": len(storms),
         "errors": summary.get("errors", []),
+        **_tropical_refresh_metadata(refresh_submissions),
     }
 
 
@@ -573,7 +606,7 @@ def get_tropical_basin_feeds_data(basin_id: str) -> dict:
     if basin_key not in _TROPICAL_BASINS:
         raise HTTPException(status_code=400, detail="Invalid tropical basin.")
 
-    _maybe_schedule_tropical_refresh()
+    refresh_submissions = _maybe_schedule_tropical_refresh()
     basin_dir = _TROPICAL_CACHE_DIR / "basins" / basin_key
     index_payload = _read_tropical_cache_any_age(basin_dir / "index.json")
     gis_payload = _read_tropical_cache_any_age(basin_dir / "gis.json")
@@ -603,6 +636,7 @@ def get_tropical_basin_feeds_data(basin_id: str) -> dict:
         "gis": gis_payload,
         "assets": assets_payload,
         "gtwo": gtwo_payload,
+        **_tropical_refresh_metadata(refresh_submissions),
     }
 
 

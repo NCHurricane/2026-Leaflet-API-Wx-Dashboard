@@ -444,7 +444,7 @@ export function createSpcEngine({ api, renderer, legend, status, onCount, onEmpt
         }
     }
 
-    async function load(selection) {
+    async function load(selection, { refreshAttempt = 0 } = {}) {
         const { day, fireDay, hazards, supplemental } = selection;
         const request = gate.begin();
         renderer.clear();
@@ -703,11 +703,29 @@ export function createSpcEngine({ api, renderer, legend, status, onCount, onEmpt
                 timestamp: Number.isFinite(updatedMs) ? new Date(updatedMs).toISOString() : null,
                 provider: 'NOAA SPC',
                 source: 'SPC cache updated',
+                stale,
             });
             status.setMessage(
                 `SPC ${statusBits.join(' + ')}: ${count} feature(s).${stale ? ' [STALE]' : ''}`,
                 stale ? 'error' : 'success',
             );
+            const refreshingPayloads = payloads
+                .map(({ geojson }) => geojson)
+                .filter((geojson) => geojson?.cache_state === 'refreshing');
+            if (refreshingPayloads.length && refreshAttempt < 30) {
+                const retryValues = refreshingPayloads
+                    .map((geojson) => Number(geojson?.retry_after_seconds))
+                    .filter((value) => Number.isFinite(value) && value > 0);
+                const retryMs = Math.max(
+                    500,
+                    1000 * (retryValues.length ? Math.min(...retryValues) : 1),
+                );
+                window.setTimeout(() => {
+                    if (gate.isCurrent(request.sequence)) {
+                        load(selection, { refreshAttempt: refreshAttempt + 1 });
+                    }
+                }, retryMs);
+            }
         } catch (err) {
             if (!gate.isCurrent(request.sequence) || isAbortLikeError(err)) return;
             console.error('[spc] Load error:', err);

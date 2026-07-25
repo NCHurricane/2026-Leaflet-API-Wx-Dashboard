@@ -4,9 +4,9 @@ import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js';
+import { createStatusReporter } from '../../core/status.js?v=20260725e';
 import { createWpcDetailPanel } from './wpc-detail.js';
-import { createWpcEngine } from './wpc-engine.js?v=20260723b';
+import { createWpcEngine } from './wpc-engine.js?v=20260725d';
 import { createScrubber } from '../../core/scrubber.js';
 
 const byId = (id) => document.getElementById(id);

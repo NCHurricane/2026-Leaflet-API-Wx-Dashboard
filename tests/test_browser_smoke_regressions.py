@@ -30,6 +30,21 @@ def test_spc_watch_empty_state_and_fire_day_product_split() -> None:
     assert "input.disabled = !visible;" in page
 
 
+def test_spc_and_tropical_poll_background_refreshes() -> None:
+    spc_engine = _read("frontend/pages/spc/spc-engine.js")
+    tropical_engine = _read("frontend/pages/tropical/tropical-engine.js")
+    tropical_app = _read("frontend/pages/tropical/tropical-app.js")
+
+    assert "geojson?.cache_state === 'refreshing'" in spc_engine
+    assert "refreshAttempt: refreshAttempt + 1" in spc_engine
+    assert "if (data.refreshing && refreshAttempt < 30)" in tropical_engine
+    assert "loadStorms(false, refreshAttempt + 1)" in tropical_engine
+    engine_context = tropical_app.split(
+        "_tropicalEngine = _tropicalEngineFactory.createTropicalEngine({", 1
+    )[1]
+    assert "setTimeoutFn: (callback, delay) => setTimeout(callback, delay)," in engine_context
+
+
 @pytest.mark.parametrize("hazard", ["windrh", "dryt"])
 def test_spc_rejects_day_3_8_base_fire_products(hazard: str) -> None:
     with pytest.raises(HTTPException) as exc_info:

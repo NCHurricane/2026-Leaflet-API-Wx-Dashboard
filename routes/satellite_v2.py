@@ -37,6 +37,7 @@ def get_satellite_v2_catalog(
     hours: int = SATELLITE_V2_DEFAULT_HOURS,
     max_frames: int = SATELLITE_V2_DEFAULT_MAX_FRAMES,
     refresh: bool = False,
+    client_id: str | None = None,
 ):
     try:
         return satellite_v2_service.get_catalog_payload(
@@ -47,6 +48,7 @@ def get_satellite_v2_catalog(
             hours=max(1, int(hours or SATELLITE_V2_DEFAULT_HOURS)),
             max_frames=max(1, int(max_frames or SATELLITE_V2_DEFAULT_MAX_FRAMES)),
             refresh=refresh,
+            client_id=client_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

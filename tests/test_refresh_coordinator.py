@@ -237,6 +237,33 @@ def test_presence_lease_is_bounded():
     assert not coordinator.is_lease_active(("test", "active-page"))
 
 
+def test_presence_job_repeats_only_while_lease_is_active():
+    coordinator = _coordinator(maintenance_interval_seconds=0.005)
+    calls = []
+    coordinator.start()
+    try:
+        submission = coordinator.activate_presence_job(
+            key=("test", "active-product"),
+            provider="test",
+            interval_seconds=0.02,
+            lease_seconds=0.07,
+            function=lambda: calls.append(time.monotonic()),
+        )
+        assert submission.accepted
+        deadline = time.monotonic() + 1
+        while len(calls) < 2 and time.monotonic() < deadline:
+            time.sleep(0.005)
+        assert len(calls) >= 2
+
+        time.sleep(0.09)
+        calls_after_expiry = len(calls)
+        time.sleep(0.05)
+        assert len(calls) == calls_after_expiry
+        assert ["test", "active-product"] not in coordinator.snapshot()["presence_jobs"]
+    finally:
+        coordinator.stop()
+
+
 def test_atomic_publish_keeps_previous_file_during_graceful_shutdown(
     tmp_path, monkeypatch
 ):

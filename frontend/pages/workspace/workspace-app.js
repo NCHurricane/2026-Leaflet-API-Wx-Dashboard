@@ -4,10 +4,10 @@ import { renderProductNav } from '../../core/nav.js';
 import { createScrubber } from '../../core/scrubber.js';
 import { loadDefaultSettings } from '../../core/settings.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
-import { createStatusReporter } from '../../core/status.js';
+import { createStatusReporter } from '../../core/status.js?v=20260725e';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
 import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260719c';
-import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260723a';
+import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260724a';
 import { createRadarEngine } from '../radar/radar-engine.js?v=20260719b';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 
