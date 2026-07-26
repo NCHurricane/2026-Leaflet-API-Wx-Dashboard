@@ -150,14 +150,19 @@ operator-managed deployments.
 
 Optional Windows profiles in `workers/optional_warmer.py`:
 
-| Profile   | Interval | Scope                                      |
-| --------- | -------- | ------------------------------------------ |
-| `core`    | 5 min    | Alerts, SPC, WPC, Tropical, and Water index |
-| `surface` | 30 min   | CONUS temperature points and gradient       |
+| Profile   | Interval | Scope                                                   |
+| --------- | -------- | ------------------------------------------------------- |
+| `core`    | 5 min    | Alerts, SPC, WPC, Tropical, and Water index              |
+| `surface` | 30 min   | CONUS temperature points and gradient                    |
+| `rtma`    | 15 min   | CONUS Hourly and Rapid Update Temperature latest frames  |
+| `mrms`    | 5 min    | PrecipRate, LL 60-minute Rotation Track, and Instant MESH |
 
 The profiles expose `warmed`, `current`, `already_running`, `backoff`, or
 `failed`. They call the FastAPI routes instead of importing direct writers, so
 all work stays inside the application's coordinator/provider/render budgets.
+The RTMA and MRMS profiles are explicit opt-ins because they share heavyweight
+render capacity with Radar and Satellite. Keep every optional warmer disabled
+during performance benchmark capture.
 
 Manual RTMA backfill/preload:
 

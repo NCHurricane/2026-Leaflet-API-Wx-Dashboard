@@ -12,6 +12,7 @@ from app_core.refresh_coordinator import (
     Submission,
 )
 import services.surface_service as surface_service
+import services.spc_service as spc_service
 import services.wpc_service as wpc_service
 
 
@@ -116,6 +117,46 @@ def test_mixed_cold_surface_requests_start_one_region_refresh(tmp_path, monkeypa
         coordinator.stop()
 
 
+def test_mixed_cold_spc_requests_start_one_product_refresh(tmp_path, monkeypatch):
+    coordinator = RefreshCoordinator(
+        max_workers=2,
+        max_queued=8,
+        maintenance_interval_seconds=0.01,
+    )
+    coordinator.register_policy(
+        RefreshPolicy(provider="spc", min_request_interval=0, max_concurrency=1)
+    )
+    started = threading.Event()
+    release = threading.Event()
+    calls = []
+
+    def refresh(cache_name):
+        calls.append(cache_name)
+        started.set()
+        assert release.wait(timeout=2)
+        return {}
+
+    monkeypatch.setattr(spc_service, "CACHE_ROOT", str(tmp_path))
+    monkeypatch.setattr(spc_service, "get_refresh_coordinator", lambda: coordinator)
+    monkeypatch.setattr(spc_service, "_refresh_spc_product", refresh)
+    coordinator.start()
+    try:
+        with ThreadPoolExecutor(max_workers=10) as callers:
+            results = list(
+                callers.map(
+                    lambda _index: spc_service.get_spc_outlook(day=1, hazard="cat"),
+                    range(10),
+                )
+            )
+        assert started.wait(timeout=1)
+        assert calls == ["1_cat"]
+        assert all(result["cache_state"] == "refreshing" for result in results)
+        assert all(result["refreshing"] is True for result in results)
+    finally:
+        release.set()
+        coordinator.stop()
+
+
 def test_surface_region_refresh_fetches_once_and_publishes_all_products(
     tmp_path, monkeypatch
 ):
@@ -191,6 +232,57 @@ def test_stale_wpc_refresh_uses_shared_coordinator(tmp_path, monkeypatch):
     assert result["refreshing"] is True
     assert coordinator.calls[0]["key"] == ("wpc", "product", "ero_day1")
     assert coordinator.calls[0]["provider"] == "wpc"
+
+
+def test_mixed_cold_wpc_requests_start_one_product_refresh(tmp_path, monkeypatch):
+    coordinator = RefreshCoordinator(
+        max_workers=2,
+        max_queued=8,
+        maintenance_interval_seconds=0.01,
+    )
+    coordinator.register_policy(
+        RefreshPolicy(provider="wpc", min_request_interval=0, max_concurrency=1)
+    )
+    started = threading.Event()
+    release = threading.Event()
+    calls = []
+    product = {
+        "id": "ero_day1",
+        "label": "Day 1",
+        "cache_path": "ero/day1.json",
+        "group": "ero",
+        "day": 1,
+    }
+
+    def refresh(product_id):
+        calls.append(product_id)
+        started.set()
+        assert release.wait(timeout=2)
+        return {}
+
+    monkeypatch.setattr(wpc_service, "_WPC_CACHE", str(tmp_path))
+    monkeypatch.setattr(wpc_service, "_WPC_STATUS", str(tmp_path / ".status"))
+    monkeypatch.setattr(wpc_service, "get_product", lambda *args: product)
+    monkeypatch.setattr(wpc_service, "get_refresh_coordinator", lambda: coordinator)
+    monkeypatch.setattr(wpc_service, "_refresh_product", refresh)
+    coordinator.start()
+    try:
+        with ThreadPoolExecutor(max_workers=10) as callers:
+            results = list(
+                callers.map(
+                    lambda _index: wpc_service.get_wpc_layer(group="ero", day=1),
+                    range(10),
+                )
+            )
+        assert started.wait(timeout=1)
+        assert calls == ["ero_day1"]
+        assert all(result["cache_state"] == "refreshing" for result in results)
+        assert all(result["refreshing"] is True for result in results)
+        assert all(result["source_available"] is True for result in results)
+        assert all(result["empty_message"] == "Day 1 is warming…" for result in results)
+    finally:
+        release.set()
+        coordinator.stop()
 
 
 def test_failed_wpc_check_does_not_close_missed_boundary(tmp_path, monkeypatch):

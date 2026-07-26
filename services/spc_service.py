@@ -117,24 +117,27 @@ def get_spc_outlook(day: int = 1, hazard: str = "cat") -> dict:
     cache_name = f"fire_{day}_{hazard_lower}" if is_fire else f"{day}_{hazard_lower}"
     cache_file = os.path.join(CACHE_ROOT, "spc", f"{cache_name}.geojson")
 
+    refresh_submission = None
     if not os.path.exists(cache_file):
-        try:
-            from workers.spc_worker import run_spc_worker
-
-            run_spc_worker(product_ids={cache_name})
-        except Exception as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=f"SPC cache not yet available: {exc}",
-            )
+        refresh_submission = _start_spc_product_refresh(cache_name)
 
     if not os.path.exists(cache_file):
+        refresh_status = refresh_submission.status if refresh_submission else "failed"
         return {
             "type": "FeatureCollection",
             "features": [],
             "_source": "SPC",
             "_updated": None,
             "count": 0,
+            "cache_state": (
+                "refreshing"
+                if refresh_status in {"queued", "running"}
+                else refresh_status
+            ),
+            "refreshing": refresh_status in {"queued", "running"},
+            "retry_after_seconds": (
+                refresh_submission.retry_after_seconds if refresh_submission else None
+            ),
         }
 
     try:
@@ -144,8 +147,7 @@ def get_spc_outlook(day: int = 1, hazard: str = "cat") -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
     schedule = SPC_OUTLOOK_SCHEDULES.get(cache_name)
-    refresh_submission = None
-    if schedule and schedule.refresh_due(
+    if refresh_submission is None and schedule and schedule.refresh_due(
         now=datetime.now(timezone.utc),
         source_issued_at=_parse_iso(data.get("_issued")),
         last_checked_at=_parse_iso(data.get("_updated")),

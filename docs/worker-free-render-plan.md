@@ -494,8 +494,9 @@ recur.
 
 ### Phase 8 - Zero-task cutover, health, and documentation
 
-Implementation status (2026-07-24): implemented; focused automated gate passes
-and whole-system/browser closure remains pending. `workers/scheduler.py`
+Implementation status (2026-07-25): complete; the focused automated gate,
+whole-system browser smoke, and optional-warmer enabled/disabled acceptance
+pass. `workers/scheduler.py`
 registers no broad schedule, startup no longer treats task sentinels as health,
 and `/api/health/coordinator` reports application-owned source/cache/coordinator
 plus lifecycle-maintenance state. Current-season Tropical archive refresh stays
@@ -554,8 +555,17 @@ launch new batches after departure. SPC and Workspace also pass. Tropical
 initial refresh exposed a missing `setTimeoutFn` dependency in the engine
 context; the dependency is now wired and the focused Tropical/browser gate
 passes 23/23 plus Node syntax and Ruff. The corrected Tropical user re-smoke
-passes, completing the user-owned whole-system browser smoke. Optional-warmer
-enabled/disabled acceptance remains pending.
+passes, completing the user-owned whole-system browser smoke. The installed
+`core` and `surface` optional warmers then passed enabled runs through the
+localhost API. With both profiles disabled, their logs did not advance across
+the Core five-minute interval, coordinator health remained application-owned,
+and the user-owned browser matrix passed Surface, Alerts, Radar, SPC, Tropical,
+and Water. The final re-smoke corrected SPC's false universal 90-minute stale
+classification by using issuance-aware API state and the outlook issue time.
+Surface now honors coordinator retry timing instead of downloading the full
+observation payload every second during backoff. SPC Days 1-5 recovered stale
+products to Ready with current vectors/overlays, and Surface reached Ready with
+bounded polling. Phase 8 is closed.
 
 1. Change `workers/scheduler.py` from "OS tasks are the source of truth" to application-owned coordination and lifecycle maintenance.
 2. Make `tools/install_tasks.ps1` explicitly optional. Its default behavior must not be required by startup documentation or health checks. Refactor retained tasks into clearly named optional-warmer profiles that satisfy the compatibility contract above; do not install or advertise legacy direct writers.
@@ -613,6 +623,23 @@ Use a temporary `CACHE_ROOT`; do not delete the operator's real cache as part of
 8. Perform user-owned browser smoke after static/API validation; do not describe curl, unit tests, or syntax checks as browser proof.
 
 ### Optional-warmer acceptance
+
+Acceptance result (2026-07-25): passed. The bounded `core` and `surface`
+profiles were installed and exercised while enabled, including `current` and
+`warmed` outcomes. They remained API-only clients; cache work and publication
+stayed inside the application coordinator. Both profiles were then disabled.
+The Core log missed its next scheduled five-minute run, the Surface log did not
+advance, `/api/health/coordinator` remained healthy, and the user-owned
+browser-facing matrix continued to return 200 and Ready/display states. Focused
+post-correction validation passed 42 tests plus JavaScript syntax and diff
+checks. No legacy-task unregistration was performed.
+
+Post-closure extension (2026-07-25): bounded `rtma` and `mrms` profiles were
+added and registered disabled. RTMA targets only CONUS Hourly/Rapid Update
+Temperature latest frames; MRMS targets PrecipRate, LL 60-minute Rotation
+Track, and Instant MESH. These profiles have not yet undergone their own
+enabled browser acceptance and must remain disabled during Radar performance
+benchmarking because RTMA/MRMS share heavyweight render capacity with Radar.
 
 1. Install only the migrated optional-warmer profile and confirm the dashboard
    remains fully functional when every task is disabled.

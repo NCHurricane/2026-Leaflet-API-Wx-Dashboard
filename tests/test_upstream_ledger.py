@@ -1,4 +1,7 @@
 import json
+from urllib.error import HTTPError
+
+import pytest
 
 from app_core import upstream_ledger
 
@@ -96,6 +99,35 @@ def test_urlopen_records_consumed_bytes(tmp_path, monkeypatch):
     assert row["resource_key"] == "www.nhc.noaa.gov/data/"
     assert row["bytes"] == 8
     assert "signature" not in json.dumps(row)
+
+
+def test_urlopen_records_not_modified_as_successful_revalidation(
+    tmp_path, monkeypatch
+):
+    ledger_path = tmp_path / "urlopen-304.jsonl"
+    monkeypatch.setenv("WX_UPSTREAM_LEDGER_PATH", str(ledger_path))
+
+    def not_modified(request, *args, **kwargs):
+        url = request.full_url if hasattr(request, "full_url") else str(request)
+        raise HTTPError(
+            url,
+            304,
+            "Not Modified",
+            hdrs=None,
+            fp=None,
+        )
+
+    monkeypatch.setattr(upstream_ledger.urllib.request, "urlopen", not_modified)
+
+    with pytest.raises(HTTPError):
+        upstream_ledger.urlopen(
+            "https://www.nhc.noaa.gov/CurrentStorms.json"
+        )
+
+    row = _read_rows(ledger_path)[0]
+    assert row["status"] == 304
+    assert row["outcome"] == "success"
+    assert row["cache_result"] == "revalidated"
 
 
 def test_streaming_request_records_after_download(tmp_path, monkeypatch):

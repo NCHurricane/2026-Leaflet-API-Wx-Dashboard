@@ -123,6 +123,8 @@ def test_optional_warmer_exposes_supported_outcomes(monkeypatch) -> None:
         "targets": {"one": "warmed"},
     }
     assert optional_warmer._classify_payload({"cache_state": "backoff"}) == "backoff"
+    assert optional_warmer._classify_payload({"cache_state": "failed"}) == "failed"
+    assert optional_warmer._classify_payload({"cache_state": "succeeded"}) == "warmed"
     assert optional_warmer._classify_payload({"refreshing": True}) == "already_running"
     assert optional_warmer.OUTCOMES == {
         "warmed",
@@ -133,6 +135,26 @@ def test_optional_warmer_exposes_supported_outcomes(monkeypatch) -> None:
     }
 
 
+def test_optional_analysis_warmers_use_bounded_selected_products() -> None:
+    assert [(target.name, target.path) for target in optional_warmer.PROFILES["rtma"]] == [
+        (
+            "rtma-hourly-temperature",
+            "/api/data/rtma/frames?region=CONUS&stream=rtma_hourly"
+            "&product=temperature&max_hours=1",
+        ),
+        (
+            "rtma-rapid-temperature",
+            "/api/data/rtma/frames?region=CONUS&stream=rtma_rapid_update"
+            "&product=temperature&max_hours=1",
+        ),
+    ]
+    assert [target.path for target in optional_warmer.PROFILES["mrms"]] == [
+        "/api/mrms/set-product?product=PrecipRate",
+        "/api/mrms/set-product?product=RotationTrack_LL_60min",
+        "/api/mrms/set-product?product=MESH_Instant",
+    ]
+
+
 def test_task_installer_defaults_to_non_mutating_preview() -> None:
     source = Path("tools/install_tasks.ps1").read_text(encoding="utf-8")
 
@@ -141,3 +163,6 @@ def test_task_installer_defaults_to_non_mutating_preview() -> None:
     assert "[switch]$UnregisterLegacyTasks" in source
     assert "workers.optional_warmer" in source
     assert "workers.alerts_worker" not in source
+    assert "[ValidateSet('core', 'surface', 'rtma', 'mrms')]" in source
+    assert "rtma = 15" in source
+    assert "mrms = 5" in source

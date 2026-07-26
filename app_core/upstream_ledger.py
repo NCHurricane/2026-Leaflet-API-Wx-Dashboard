@@ -450,17 +450,19 @@ def urlopen(
     try:
         response = urllib.request.urlopen(request, *args, **kwargs)
     except Exception as exc:
+        status = getattr(exc, "code", None)
+        not_modified = status == 304
         record_upstream_request(
             provider=provider,
             resource_key=resource_key,
             method=method,
-            status=getattr(exc, "code", None),
+            status=status,
             bytes_transferred=0,
             duration_seconds=time.perf_counter() - started,
-            cache_result=ledger_cache_result,
+            cache_result="revalidated" if not_modified else ledger_cache_result,
             retry_state=ledger_retry_state,
             backoff_state=ledger_backoff_state,
-            outcome="error",
+            outcome="success" if not_modified else "error",
         )
         raise
     return _TrackedUrlResponse(

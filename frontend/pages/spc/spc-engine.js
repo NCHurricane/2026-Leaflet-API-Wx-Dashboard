@@ -87,7 +87,7 @@ const FIRE_HAZARDS = new Set(['windrh', 'dryt', 'drytcat', 'drytprob', 'windrhca
 
 const PRIMARY_TIMEOUT_MS = 10_000;
 const SUPPLEMENTAL_TIMEOUT_MS = 20_000;
-const STALE_THRESHOLD_MS = 90 * 60 * 1000;
+const STALE_CACHE_STATES = new Set(['backoff', 'failed', 'missing', 'stale', 'stopped']);
 
 // ── Pure helpers shared with the renderer ───────────────────────────────────
 export function isFireHazard(hazard) {
@@ -645,11 +645,17 @@ export function createSpcEngine({ api, renderer, legend, status, onCount, onEmpt
             applyLegend(selection, effectiveDay);
             onCount?.(count);
 
+            const refreshingPayloads = payloads
+                .map(({ geojson }) => geojson)
+                .filter((geojson) => geojson?.cache_state === 'refreshing');
+            const coldRefresh = count === 0 && refreshingPayloads.length > 0;
             if (count === 0) {
                 const uniqueLabels = Array.from(new Set(placeholderLabels));
                 const hazardLabels = hazards.map((h) => convectiveLabel(h, effectiveDay)).join(', ');
                 let msg;
-                if (hazards.length > 0) {
+                if (coldRefresh) {
+                    msg = `Warming SPC Day ${effectiveDay} ${hazardLabels || 'outlook'}…`;
+                } else if (hazards.length > 0) {
                     msg = uniqueLabels.length
                         ? `SPC Day ${effectiveDay} ${hazardLabels}: ${uniqueLabels.join(' · ')}`
                         : `No SPC data available for Day ${effectiveDay} ${hazardLabels}`;
@@ -693,25 +699,31 @@ export function createSpcEngine({ api, renderer, legend, status, onCount, onEmpt
             if (supplemental.watchesEnabled) {
                 statusBits.push(`Watches ${supplemental.watchLayers.map((w) => `${w.type}-${w.mode}`).join(',')}`);
             }
-            const updatedRaw = latestTimestampValue([
+            const issuedRaw = latestTimestampValue(
+                payloads.map(({ geojson }) => geojson?._issued),
+            );
+            const displayTimestampRaw = issuedRaw || latestTimestampValue([
                 ...payloads.map(({ geojson }) => geojson?._updated),
                 ...supplementalUpdatedValues,
             ]);
-            const updatedMs = timestampMs(updatedRaw);
-            const stale = Number.isFinite(updatedMs) && (Date.now() - updatedMs) > STALE_THRESHOLD_MS;
+            const displayTimestampMs = timestampMs(displayTimestampRaw);
+            const stale = payloads.some(({ geojson }) => (
+                STALE_CACHE_STATES.has(String(geojson?.cache_state || '').toLowerCase())
+            ));
             status.setDataInfo({
-                timestamp: Number.isFinite(updatedMs) ? new Date(updatedMs).toISOString() : null,
+                timestamp: Number.isFinite(displayTimestampMs)
+                    ? new Date(displayTimestampMs).toISOString()
+                    : null,
                 provider: 'NOAA SPC',
-                source: 'SPC cache updated',
+                source: issuedRaw ? 'SPC outlook issued' : 'SPC product time',
                 stale,
             });
             status.setMessage(
-                `SPC ${statusBits.join(' + ')}: ${count} feature(s).${stale ? ' [STALE]' : ''}`,
+                coldRefresh
+                    ? `SPC ${statusBits.join(' + ')}: warming requested outlook…`
+                    : `SPC ${statusBits.join(' + ')}: ${count} feature(s).${stale ? ' [STALE]' : ''}`,
                 stale ? 'error' : 'success',
             );
-            const refreshingPayloads = payloads
-                .map(({ geojson }) => geojson)
-                .filter((geojson) => geojson?.cache_state === 'refreshing');
             if (refreshingPayloads.length && refreshAttempt < 30) {
                 const retryValues = refreshingPayloads
                     .map((geojson) => Number(geojson?.retry_after_seconds))

@@ -3,6 +3,15 @@ import { SURFACE_COLORMAPS, SURFACE_PRODUCT_LABELS, SURFACE_PRODUCT_UNITS } from
 
 const GRADIENT_META_TTL_MS = 5 * 60 * 1000;
 const STALE_THRESHOLD_MS = 90 * 60 * 1000;
+const REFRESH_POLL_BUDGET_MS = 90 * 1000;
+
+function refreshPollDelayMs(data) {
+    const retrySeconds = Number(data?.retry_after_seconds);
+    if (data?.cache_state === 'backoff') {
+        return 1000 * Math.max(1, Math.min(60, retrySeconds || 5));
+    }
+    return 1000 * Math.max(1, Math.min(5, retrySeconds || 2));
+}
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -198,8 +207,12 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
                         ? `Showing cached ${label}; refreshing…`
                         : `Warming surface ${label} for ${view.region}…`,
                 );
+                const pollDeadline = Date.now() + REFRESH_POLL_BUDGET_MS;
                 for (let attempt = 0; attempt < 60; attempt += 1) {
-                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                    const remainingMs = pollDeadline - Date.now();
+                    if (remainingMs <= 0) break;
+                    const delayMs = Math.min(refreshPollDelayMs(data), remainingMs);
+                    await new Promise((resolve) => setTimeout(resolve, delayMs));
                     if (!gate.isCurrent(request.sequence)) return;
                     const refreshed = await api.fetchJson(baseUrl, { signal: request.signal });
                     data = refreshed;

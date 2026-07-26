@@ -12,6 +12,10 @@
     call the running localhost API; they never launch legacy direct-writing
     workers.
 
+.PARAMETER Profile
+    Optional warmer profiles to preview or register. Defaults to core and
+    surface; rtma and mrms must be selected explicitly.
+
 .PARAMETER InstallOptionalWarmers
     Register the selected optional-warmer profiles. New tasks are disabled
     unless EnableOptionalWarmers is also supplied.
@@ -32,12 +36,15 @@
 
 .EXAMPLE
     pwsh -File tools\install_tasks.ps1 -InstallOptionalWarmers -EnableOptionalWarmers
+
+.EXAMPLE
+    pwsh -File tools\install_tasks.ps1 -Profile rtma,mrms -InstallOptionalWarmers
 #>
 
 [CmdletBinding()]
 param(
     [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
-    [ValidateSet('core', 'surface')]
+    [ValidateSet('core', 'surface', 'rtma', 'mrms')]
     [string[]]$Profile = @('core', 'surface'),
     [string]$ApiBaseUrl = 'http://127.0.0.1:8000',
     [switch]$InstallOptionalWarmers,
@@ -66,6 +73,8 @@ $LegacyTaskNames = @(
 $ProfileIntervals = @{
     core = 5
     surface = 30
+    rtma = 15
+    mrms = 5
 }
 
 if ($EnableOptionalWarmers -and -not $InstallOptionalWarmers) {

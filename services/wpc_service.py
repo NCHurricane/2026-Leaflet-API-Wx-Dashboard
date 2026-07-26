@@ -82,8 +82,18 @@ def _cache_state(
     return age_seconds, stale
 
 
-def _empty_collection(group: str, day: int, product: dict, status: dict) -> dict:
-    source_status = status.get("status") or "unavailable"
+def _empty_collection(
+    group: str,
+    day: int,
+    product: dict,
+    status: dict,
+    refresh_submission: Submission | None = None,
+) -> dict:
+    refresh_status = refresh_submission.status if refresh_submission else None
+    refreshing = refresh_status in {"queued", "running"}
+    source_status = status.get("status") or (
+        "warming" if refreshing else "unavailable"
+    )
     return {
         "type": "FeatureCollection",
         "features": [],
@@ -94,15 +104,28 @@ def _empty_collection(group: str, day: int, product: dict, status: dict) -> dict
         "day": day,
         "product": product["id"],
         "product_label": product["label"],
-        "empty_message": None,
+        "empty_message": (
+            f"{product['label']} is warming…" if refreshing else None
+        ),
         "issued_text": None,
         "valid_text": None,
         "no_significant_weather": False,
-        "unavailable": True,
-        "source_available": False,
+        "unavailable": not refreshing,
+        "source_available": refreshing,
         "source_status": source_status,
         "source_error": status.get("error"),
         "stale": False,
+        "cache_state": (
+            "refreshing"
+            if refreshing
+            else refresh_status
+            if refresh_status
+            else "unavailable"
+        ),
+        "refreshing": refreshing,
+        "retry_after_seconds": (
+            refresh_submission.retry_after_seconds if refresh_submission else None
+        ),
         "cache_age_seconds": None,
     }
 
@@ -223,19 +246,18 @@ def get_wpc_layer(
         provider="wpc",
     )
 
+    refresh_submission = None
     if not os.path.exists(cache_file):
-        try:
-            from workers.wpc_worker import run_wpc_worker
-
-            run_wpc_worker(product_ids={product["id"]})
-        except Exception as exc:  # noqa: BLE001 - surface as 503 below
-            raise HTTPException(
-                status_code=503,
-                detail=f"WPC cache not yet available: {exc}",
-            )
+        refresh_submission = _start_product_refresh(product["id"])
 
     if not os.path.exists(cache_file):
-        return _empty_collection(group_key, day, product, _product_status(product))
+        return _empty_collection(
+            group_key,
+            day,
+            product,
+            _product_status(product),
+            refresh_submission,
+        )
 
     try:
         with open(cache_file, "r", encoding="utf-8") as fh:
@@ -250,8 +272,7 @@ def get_wpc_layer(
         status,
         payload,
     )
-    refresh_submission = None
-    if stale:
+    if stale and refresh_submission is None:
         refresh_submission = _start_product_refresh(product["id"])
     return _shape_collection(
         payload,

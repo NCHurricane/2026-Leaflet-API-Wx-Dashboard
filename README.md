@@ -181,10 +181,18 @@ Register the optional API-delegating profiles in a disabled state:
 pwsh -File tools\install_tasks.ps1 -InstallOptionalWarmers
 ```
 
+The default selection is `core,surface`. Register the heavier RTMA/MRMS
+profiles separately so they remain independently controllable:
+
+```powershell
+pwsh -File tools\install_tasks.ps1 -Profile rtma,mrms -InstallOptionalWarmers
+```
+
 Add `-EnableOptionalWarmers` only when scheduled prewarming is wanted. Legacy
 direct-writer removal requires the separate explicit
 `-UnregisterLegacyTasks` switch. The application remains fully functional when
-all tasks are absent or disabled.
+all tasks are absent or disabled. Disable every optional warmer while capturing
+Radar or Satellite performance benchmarks.
 
 Server starts on:
 

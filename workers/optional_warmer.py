@@ -49,6 +49,32 @@ PROFILES: dict[str, tuple[WarmerTarget, ...]] = {
             "/api/data/surface-gradient?region=CONUS&product=temperature",
         ),
     ),
+    "rtma": (
+        WarmerTarget(
+            "rtma-hourly-temperature",
+            "/api/data/rtma/frames?region=CONUS&stream=rtma_hourly"
+            "&product=temperature&max_hours=1",
+        ),
+        WarmerTarget(
+            "rtma-rapid-temperature",
+            "/api/data/rtma/frames?region=CONUS&stream=rtma_rapid_update"
+            "&product=temperature&max_hours=1",
+        ),
+    ),
+    "mrms": (
+        WarmerTarget(
+            "mrms-precip-rate",
+            "/api/mrms/set-product?product=PrecipRate",
+        ),
+        WarmerTarget(
+            "mrms-rotation-track",
+            "/api/mrms/set-product?product=RotationTrack_LL_60min",
+        ),
+        WarmerTarget(
+            "mrms-mesh",
+            "/api/mrms/set-product?product=MESH_Instant",
+        ),
+    ),
 }
 
 
@@ -58,6 +84,10 @@ def _classify_payload(payload: Any) -> str:
     state = str(payload.get("cache_state") or payload.get("status") or "").lower()
     if state == "backoff":
         return "backoff"
+    if state in {"failed", "stopped"}:
+        return "failed"
+    if state == "succeeded":
+        return "warmed"
     if payload.get("refreshing") or state in {"warming", "refreshing", "queued", "running"}:
         return "already_running"
     return "current"

@@ -227,8 +227,11 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
     function applyCacheState(geojson) {
         if (geojson?.source_available === false) {
             status.setDataState('Cached only — source unavailable', 'stale');
-        } else if (geojson?.cache_state === 'stale_refreshing') {
-            status.setDataState('Refreshing stale data…', 'loading');
+        } else if (['refreshing', 'stale_refreshing'].includes(geojson?.cache_state)) {
+            status.setDataState(
+                geojson.cache_state === 'refreshing' ? 'Warming data…' : 'Refreshing stale data…',
+                'loading',
+            );
         } else if (geojson?.stale || geojson?.cache_state === 'backoff') {
             status.setDataState('Stale data', 'stale');
         } else {
@@ -261,7 +264,10 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
             if (!gate.isCurrent(request.sequence)) return;
 
             const pollForFreshCache = () => {
-                if (geojson.cache_state !== 'stale_refreshing' || refreshAttempt >= 30) return;
+                if (
+                    !['refreshing', 'stale_refreshing'].includes(geojson.cache_state)
+                    || refreshAttempt >= 30
+                ) return;
                 window.setTimeout(() => {
                     if (gate.isCurrent(request.sequence)) {
                         load(selection, { refreshAttempt: refreshAttempt + 1 });

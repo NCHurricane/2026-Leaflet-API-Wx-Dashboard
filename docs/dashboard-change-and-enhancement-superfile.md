@@ -1,8 +1,8 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-24 (Task-scheduler-free rendering Phase 7 Radar and
-Satellite without required warmers is closed after its automated gate and
-corrected user-owned browser/live-provider re-smokes passed. Phase 8 is next.)
+Last updated: 2026-07-25 (Task-scheduler-free rendering Phases 0-8 are closed.
+The zero-task browser matrix and optional-warmer enabled/disabled acceptance
+passed. Radar render optimization Phase 0 is authorized next.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -23,11 +23,11 @@ Keep separate:
 - `docs/satellite-radar-render-pipeline-files.md` for the shared pipeline file
   reference; its Radar section is active and its Satellite section is historical.
 
-## Active Tracks (2026-07-23)
+## Active Tracks (2026-07-25)
 
-Priority order for upcoming work. Track 1 goes first because it may alter
-the plan for some future items; re-evaluate later tracks against the
-post-split structure, not the monolith.
+Track numbers preserve the existing roadmap grouping. The next authorized
+implementation is Track 3 Radar render optimization Phase 0; re-evaluate the
+remaining tracks after its benchmark and golden baseline.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
    this file (section below). Phases 18-24 are complete and user-confirmed.
@@ -39,7 +39,7 @@ post-split structure, not the monolith.
    Its later detail-panel, Region, legend, and sidebar-style follow-ups are
    implemented and statically validated but still need browser re-smoke;
    optional Water enhancements remain deferred.
-2. Task-scheduler-free refresh/rendering — Phases 0-7 are complete under
+2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
    `docs/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
    recorded, and the remediated live-NWS warm pass reused 471/471 alerts. It
@@ -91,10 +91,11 @@ post-split structure, not the monolith.
    implements the zero-task cutover: broad scheduling is retired, health is
    application/source/cache based, current-season Tropical and cleanup remain
    application-owned, and optional task profiles delegate through localhost.
-   Its focused automated gate passes; whole-system/browser closure remains.
+   Its focused automated gate, whole-system browser smoke, and optional-warmer
+   enabled/disabled acceptance pass. Phase 8 is closed.
 3. Radar render pipeline latency optimization — execution-grade plan prepared
    in `docs/radar-render-optimization-plan.md`; Phase 0 benchmark/golden capture
-   is next. Backend-only and may interleave with Track 1.
+   is authorized next. This phase is backend-only and behavior-neutral.
 4. Satellite render pipeline latency optimization — complete through Phase 5
    and archived. Optional Phase 6 warp threading is deferred unless later
    real-run profiling and explicit approval reopen it.
@@ -222,7 +223,8 @@ post-split structure, not the monolith.
   222 tests plus 42 subtests and retains only the pre-existing Workspace
   assertion against the concurrently removed `WORKSPACE_REGION_BOUNDS`. Evidence is in
   `docs/perf/2026-07-24-worker-free-phase7/`.
-- Worker-free Phase 8 is implemented and awaiting whole-system/browser closure.
+- Worker-free Phase 8 is closed after whole-system/browser and optional-warmer
+  enabled/disabled acceptance.
   `workers/scheduler.py` registers no broad jobs, startup health no longer reads
   scheduled-task sentinels, and `/api/health/coordinator` reports
   application-owned source/cache/coordinator plus maintenance state. Tropical
@@ -277,13 +279,30 @@ post-split structure, not the monolith.
   `setTimeoutFn` dependency in the engine context; the dependency is now wired
   and the focused Tropical/browser gate passes 23/23 plus Node syntax and Ruff.
   The corrected Tropical user re-smoke passes, completing the user-owned
-  whole-system browser smoke. Warmer-enabled/disabled acceptance remains
-  pending.
-- Radar render optimization is planned but not implemented. Phase 0 will add a
-  safe scratch-only benchmark and eight-row golden matrix before any behavior
-  changes. The first measured candidate is newest-frame-first empty-cache
-  response; later gated candidates are process-pool reuse, Level II source/decode
-  deduplication, discovery/finalize I/O, and optional renderer internals.
+  whole-system browser smoke. The installed `core` and `surface` optional
+  warmers then passed enabled API-delegating runs. With both disabled, their
+  logs did not advance across the Core five-minute interval, coordinator health
+  remained application-owned, and Surface, Alerts, Radar, SPC, Tropical, and
+  Water remained browser-functional. The final SPC correction replaced a
+  universal 90-minute stale rule with issuance-aware API state and displays the
+  outlook issue time. Surface now honors coordinator retry timing rather than
+  downloading its full observation payload every second during backoff. The
+  user's corrected re-smoke passed SPC Days 1-5 and showed bounded Surface
+  polling. Focused post-correction validation passes 42 tests plus JavaScript
+  syntax and diff checks. No legacy-task unregistration was performed. Phase 8
+  is closed.
+- Post-closure optional-warmer extension: separate `rtma` and `mrms` profiles
+  now target CONUS Hourly/Rapid Update Temperature latest frames and the
+  PrecipRate, LL 60-minute Rotation Track, and Instant MESH MRMS keys. Both
+  tasks were registered disabled. Keep every optional warmer disabled during
+  Radar Phase 0 benchmark capture; RTMA/MRMS share heavyweight render capacity
+  with Radar/Satellite.
+- Radar render optimization Phase 0 is authorized next but not implemented. It
+  will add a safe scratch-only benchmark and eight-row golden matrix before any
+  behavior changes. Stop for baseline review before Phase 1. The first measured
+  candidate is newest-frame-first empty-cache response; later gated candidates
+  are process-pool reuse, Level II source/decode deduplication,
+  discovery/finalize I/O, and optional renderer internals.
 - Satellite optimization Phase 0 was committed at `a6f5f83`; Phase 1 was
   committed at `fc534ba`: NetCDF LRU correctness, cheap PNG hit validation, and a
   geometry-aware composite meshgrid gate. The full 81-tile golden comparison
@@ -2584,7 +2603,7 @@ decisions; this superfile carries the durable final status.
 
 ### Radar render pipeline latency optimization — registered 2026-07-22
 
-Active track 2 (see Active Tracks). The execution plan is
+Authorized next as Track 3 (see Active Tracks). The execution plan is
 `docs/radar-render-optimization-plan.md`; the active pipeline map is
 `docs/satellite-radar-render-pipeline-files.md`. No Radar runtime behavior has
 changed yet.
