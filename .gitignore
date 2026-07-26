@@ -83,8 +83,12 @@ docs/RTMA_GPU_Alternative.md
 debug_*.txt
 diag.py
 false
+perf/
+tests/
 
 # AI/LLM tool caches and metadata
+
+# Performance data
 .ai-index/
 .aider.tags.cache.v4/
 .aider.conf.yml
