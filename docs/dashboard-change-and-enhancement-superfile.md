@@ -2,7 +2,11 @@
 
 Last updated: 2026-07-25 (Task-scheduler-free rendering Phases 0-8 are closed.
 The zero-task browser matrix and optional-warmer enabled/disabled acceptance
-passed. Radar render optimization Phase 0 is authorized next.)
+passed. Radar render optimization Phase 1 is implemented and golden-validated;
+its three-site browser acceptance passed. Phase 2 is implemented and
+golden-validated; `/radar` and `/workspace` browser acceptance passed. Phase 3
+is the next separately authorized implementation slice. A reversible high-zoom
+WebGL L2 Reflectivity pilot is planned after the PNG optimization prerequisites.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -25,9 +29,10 @@ Keep separate:
 
 ## Active Tracks (2026-07-25)
 
-Track numbers preserve the existing roadmap grouping. The next authorized
-implementation is Track 3 Radar render optimization Phase 0; re-evaluate the
-remaining tracks after its benchmark and golden baseline.
+Track numbers preserve the existing roadmap grouping. Track 3 Radar render
+optimization Phase 2 is closed, including browser acceptance on both consuming
+pages. Phase 3 is next but not authorized. Future WebGL work remains additive,
+feature-flagged, and independently revertible to PNG-only behavior.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
    this file (section below). Phases 18-24 are complete and user-confirmed.
@@ -94,8 +99,14 @@ remaining tracks after its benchmark and golden baseline.
    Its focused automated gate, whole-system browser smoke, and optional-warmer
    enabled/disabled acceptance pass. Phase 8 is closed.
 3. Radar render pipeline latency optimization — execution-grade plan prepared
-   in `docs/radar-render-optimization-plan.md`; Phase 0 benchmark/golden capture
-   is authorized next. This phase is backend-only and behavior-neutral.
+   in `docs/radar-render-optimization-plan.md`. Phase 0 is complete. Phase 1
+   returns one newest frame before the existing keyed background fill; its
+   focused, benchmark, golden, and browser gates pass. Phase 2 reusable pools
+   also pass automated/golden validation and browser acceptance on `/radar`
+   and `/workspace`. Phase 3 is next but not authorized. Phases 3-5 preserve
+   the PNG contract; later separately authorized phases may prefetch WebGL L2
+   Reflectivity at zoom 10, activate it at zoom 11, then add bounded high-zoom
+   animation without replacing the PNG workflow.
 4. Satellite render pipeline latency optimization — complete through Phase 5
    and archived. Optional Phase 6 warp threading is deferred unless later
    real-run profiling and explicit approval reopen it.
@@ -297,12 +308,69 @@ remaining tracks after its benchmark and golden baseline.
   tasks were registered disabled. Keep every optional warmer disabled during
   Radar Phase 0 benchmark capture; RTMA/MRMS share heavyweight render capacity
   with Radar/Satellite.
-- Radar render optimization Phase 0 is authorized next but not implemented. It
-  will add a safe scratch-only benchmark and eight-row golden matrix before any
-  behavior changes. Stop for baseline review before Phase 1. The first measured
-  candidate is newest-frame-first empty-cache response; later gated candidates
-  are process-pool reuse, Level II source/decode deduplication,
-  discovery/finalize I/O, and optional renderer internals.
+- Radar render optimization Phase 0 is complete and behavior-neutral.
+  `python -m radar.bench` writes raw evidence only below
+  `cache/radar/.bench/<run_id>/`; compact evidence is in
+  `docs/perf/2026-07-25-radar-baseline/`. All eight required golden rows passed
+  five byte-identical fresh-process renders. The current KGSP L3 N0B
+  three-frame empty-cache response measured 3.804/4.114 seconds p50/p95 versus
+  2.194/2.208 seconds for `render-one`; 12-frame backfill measured
+  8.230/8.352 seconds and about 2.52 GiB p95 peak working set. The focused
+  Radar gate passes 36 tests plus 42 subtests. Full pytest passes 261 tests plus
+  42 subtests and retains only the pre-existing Workspace assertion against the
+  removed `WORKSPACE_REGION_BOUNDS`. Ruff, Python compilation, and diff checks
+  pass. That baseline approved Phase 1. Later candidates remain process-pool
+  reuse, Level II source/decode deduplication, discovery/finalize I/O, and
+  optional renderer internals.
+- Radar render optimization Phase 1 is implemented. Empty `/frames` requests
+  render exactly one newest frame synchronously, then the existing keyed
+  background path fills the remaining initial/history frames.
+  `OVERLAY_EMPTY_CACHE_SYNC_FRAMES` remains `3`. KGSP L3 N0B improved from
+  3.804/4.114 seconds p50/p95 to 2.012/2.017 seconds, a 47.1%/51.0%
+  reduction. All eight Phase 0 golden comparisons pass. The focused Radar gate
+  passes 38 tests plus 42 subtests; full pytest passes 263 tests plus 42
+  subtests and retains only the pre-existing Workspace assertion against
+  removed `WORKSPACE_REGION_BOUNDS`. Evidence is in
+  `docs/perf/2026-07-25-radar-phase1/`. Three-site user-owned browser acceptance
+  passed: the scrubber stayed on newest while history grew and playback
+  remained continuous through the completed roughly 14-16-frame loops.
+- Radar render optimization Phase 2 is implemented. Scheduled runs share one
+  lazily started bounded render pool across site/product batches; a selected
+  product background run owns one pool for its batch. The response-critical
+  single-frame path starts no multiprocessing workers. Normal completion
+  closes/joins the pool and exceptional completion terminates/joins it.
+  `LIVE_RADAR_PARALLEL_WORKERS` remains unchanged. KGSP L3 N0B retained-pool
+  `backfill-12` measured 7.989/8.271 seconds p50/p95 versus 8.230/8.352
+  seconds in Phase 0, a 2.9%/1.0% reduction, with about 2.50 GiB p95 peak
+  working set. Every sample created one four-process pool; pool construction
+  and readiness/import were recorded separately. All eight golden rows pass.
+  The focused gate passes 49 tests plus 42 subtests; full pytest passes 268
+  tests plus 42 subtests with only the pre-existing Workspace assertion.
+  Evidence is in `docs/perf/2026-07-25-radar-phase2/`. User-owned browser
+  acceptance passed on both `/radar` and `/workspace`: KGGW and KTFX newest
+  frames preceded their eight- and ten-frame four-process background fills,
+  the scrubber stayed on newest, playback remained continuous, frame/PNG
+  requests returned HTTP 200, and no pool/render/Radar API errors appeared.
+  Phase 2 is closed; Phase 3 is not authorized.
+- The post-Phase 2 high-zoom investigation found that the representative KGGW
+  L2 sweep retains 720 radials, 1,832 gates, 250-meter range spacing, and about
+  0.486-degree azimuth spacing, while its 4,380-by-4,400 full-site PNG spans
+  roughly 1,110 km. At Leaflet zoom 11, each PNG pixel is enlarged to about
+  five screen pixels. Increasing full-site DPI is rejected because matching
+  zoom 11 would require roughly a 22,000-pixel-square image and about 25 times
+  the current pixel workload.
+- The approved planning direction keeps Phases 3-5 PNG-only. Phase 3 should
+  establish a bounded decoded-sweep consumer seam without producing a WebGL
+  artifact or adding a second Py-ART decode. After Phase 4 and the optional
+  Phase 5 decision, separately authorized Phase 6 may pilot feature-flagged
+  high-zoom WebGL for active, paused L2 Reflectivity. Below zoom 10 the client
+  remains PNG-only; zoom 10 keeps PNG visible while prefetching one texture;
+  zoom 11 activates WebGL only when ready. Phase 7 may add bounded L2
+  Reflectivity WebGL animation using a rolling current/one-prior/two-or-three-
+  upcoming texture window while PNG continues as the complete loop and
+  per-frame fallback. Phase 8 may expand only to explicitly approved core
+  product families. All-product WebGL conversion, tiles, and PNG retirement
+  remain outside the plan.
 - Satellite optimization Phase 0 was committed at `a6f5f83`; Phase 1 was
   committed at `fc534ba`: NetCDF LRU correctness, cheap PNG hit validation, and a
   geometry-aware composite meshgrid gate. The full 81-tile golden comparison
@@ -2603,29 +2671,59 @@ decisions; this superfile carries the durable final status.
 
 ### Radar render pipeline latency optimization — registered 2026-07-22
 
-Authorized next as Track 3 (see Active Tracks). The execution plan is
+Active as Track 3 (see Active Tracks). The execution plan is
 `docs/radar-render-optimization-plan.md`; the active pipeline map is
-`docs/satellite-radar-render-pipeline-files.md`. No Radar runtime behavior has
-changed yet.
+`docs/satellite-radar-render-pipeline-files.md`. Phase 0 is complete. Phase 1
+is complete, including three-site user-owned browser acceptance. Phase 2 is
+complete, including `/radar` and `/workspace` browser acceptance. Phase 3 is
+not authorized. Future WebGL work is additive and cannot replace PNG
+correctness or fallback.
 
 - Goal: reduce first usable newest-frame latency and background loop-fill time
   while preserving byte-identical PNGs and exact bounds, timestamps, frame
   order, elevations, sweep selection, palettes, masks, units, and cache keys.
 - Phase 0: add a scratch-only `radar.bench` harness, structured stage timings,
-  process working-set evidence, and an eight-row L2/L3 golden matrix.
-- Phase 1 candidate: on an empty frame cache, return one newest frame before the
-  remaining initial/history renders continue through the existing deduplicated
-  background path.
-- Phase 2 candidate: reuse one bounded render-process pool across scheduled or
-  backfill batches without changing `LIVE_RADAR_PARALLEL_WORKERS`.
+  process working-set evidence, and an eight-row L2/L3 golden matrix. Complete;
+  evidence is in `docs/perf/2026-07-25-radar-baseline/`.
+- Phase 1: on an empty frame cache, return one newest frame before the remaining
+  initial/history renders continue through the existing deduplicated background
+  path. Implemented; evidence is in
+  `docs/perf/2026-07-25-radar-phase1/`. Three-site browser acceptance passed.
+- Phase 2: reuse one lazily started, bounded render-process pool across an
+  owning scheduled run's batches and explicitly own the pool for a background
+  selected-product run without changing `LIVE_RADAR_PARALLEL_WORKERS`.
+  Implemented and golden-validated; evidence is in
+  `docs/perf/2026-07-25-radar-phase2/`. Both-page browser acceptance passed.
 - Phase 3 candidate: prove and then remove duplicate Level II source storage and
   Py-ART decodes across moments from the same site/volume. Dynamic SRV motion
-  variants remain separate render/cache products.
+  variants remain separate render/cache products. Establish a bounded
+  decoded-sweep consumer seam for a possible future polar artifact, but do not
+  implement WebGL or add a second decode in Phase 3.
 - Phase 4 candidate: reuse unchanged discovery results and replace same-volume
   temporary PNG copies with atomic moves, subject to crash-recovery tests.
 - Phase 5 is optional and measure-first: renderer-internal changes are attempted
   only if plot/encode remains dominant and are rejected on the first output
   mismatch.
+- Phase 6 candidate: separately authorized, feature-flagged high-zoom WebGL
+  pilot for active, paused L2 Reflectivity. Below zoom 10 the client performs
+  no WebGL request/GPU work; zoom 10 prefetches while retaining PNG; zoom 11
+  crossfades only after the texture is ready. PNG remains the immediate image,
+  playback layer, compatibility fallback, and configuration-first rollback.
+  Separate polar artifacts never overwrite PNG caches or indexes. Required
+  gates include no second decode, no more than 5% first-PNG p95 regression,
+  at most 2 MB representative payload, under-100-ms cached redraw, bounded
+  active-texture memory, exact product/value parity, threshold reversal/direct-
+  zoom behavior, and both-page browser acceptance.
+- Phase 7 candidate: after separate approval, extend the same zoom-10 prefetch
+  and zoom-11 activation policy to bounded L2 Reflectivity WebGL animation.
+  PNG playback starts immediately and continues until the active plus minimum
+  forward texture buffer is ready. Missing textures fall back per frame to PNG;
+  the rolling GPU window is limited to current, one prior, and two or three
+  upcoming frames. Playback must not restart, jump, pause, or move the scrubber
+  during the switch.
+- Phase 8 candidate: expand only to approved core families after Phase 7
+  passes. All-product WebGL conversion, PNG retirement, and server-rendered
+  tiles require a new migration plan.
 - `LIVE_RADAR_L2_USE_CHUNKS` remains `False`. The prior chunks experiment showed
   no latency advantage for completed scans and is not part of this track.
 

@@ -245,6 +245,7 @@ def _radar_live_sites():
 
 _RADAR_LIVE_FALLBACK_LOCKS: dict[tuple[str, str], threading.Lock] = {}
 _RADAR_LIVE_FALLBACK_LOCKS_GUARD = threading.Lock()
+_RADAR_EMPTY_CACHE_RESPONSE_SYNC_FRAMES = 1
 
 _NWS_RADAR_STATUS_CACHE: dict | None = None
 _NWS_RADAR_STATUS_CACHE_TS: float = 0.0
@@ -1021,7 +1022,10 @@ def get_radar_live_frames_data(
                 latest_only=False,
                 backfill_history=False,
                 newest_first=True,
-                max_render_frames=OVERLAY_EMPTY_CACHE_SYNC_FRAMES,
+                max_render_frames=min(
+                    _RADAR_EMPTY_CACHE_RESPONSE_SYNC_FRAMES,
+                    OVERLAY_EMPTY_CACHE_SYNC_FRAMES,
+                ),
                 elevation=elevation_key,
                 motion=motion,
                 lookback_hours=requested_hours,

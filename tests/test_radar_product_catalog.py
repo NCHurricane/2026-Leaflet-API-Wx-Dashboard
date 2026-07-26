@@ -7,6 +7,7 @@ from unittest.mock import patch
 import numpy as np
 
 from cache.overlay_cache_utils import radar_list_frames, radar_update_index
+from config.cache_config import OVERLAY_EMPTY_CACHE_SYNC_FRAMES
 from config.radar_config import (
     LIVE_RADAR_MAX_KEEP_FRAMES,
     LIVE_RADAR_PRODUCTS,
@@ -133,6 +134,94 @@ class RadarProductCatalogTests(unittest.TestCase):
         render_background.assert_called_once_with(
             "KMHX", "L2_REF", "0.5", None, 6.0, urgent=True
         )
+
+    @patch(
+        "services.radar_service._radar_live_render_still_filling",
+        return_value=False,
+    )
+    @patch("services.radar_service._radar_live_render_in_background", return_value=True)
+    @patch("services.radar_service._radar_live_render_on_demand", return_value=1)
+    @patch("cache.overlay_cache_utils.radar_list_frames")
+    def test_empty_frames_returns_one_newest_frame_before_background_fill(
+        self,
+        list_frames,
+        render_on_demand,
+        render_background,
+        _render_still_filling,
+    ):
+        now = datetime.now(timezone.utc)
+        newest = {
+            "frame_key": "2026_07_25_12_00_00",
+            "timestamp": (now - timedelta(minutes=2)).isoformat(),
+        }
+        list_frames.side_effect = [[], [newest]]
+
+        data = get_radar_live_frames_data(
+            site="KMHX",
+            product="L2_REF",
+            elevation="0.5",
+            hours=0.5,
+        )
+
+        self.assertEqual(OVERLAY_EMPTY_CACHE_SYNC_FRAMES, 3)
+        render_on_demand.assert_called_once_with(
+            "KMHX",
+            "L2_REF",
+            latest_only=False,
+            backfill_history=False,
+            newest_first=True,
+            max_render_frames=1,
+            elevation="0.5",
+            motion=None,
+            lookback_hours=0.5,
+        )
+        render_background.assert_called_once_with(
+            "KMHX", "L2_REF", "0.5", None, 0.5, urgent=True
+        )
+        self.assertEqual(data["frame_count"], 1)
+        self.assertEqual(data["frames"], [newest])
+        self.assertTrue(data["refreshing"])
+        self.assertTrue(data["history_filling"])
+
+    @patch(
+        "services.radar_service._radar_live_render_still_filling",
+        return_value=False,
+    )
+    @patch("services.radar_service._radar_live_render_in_background", return_value=False)
+    @patch("services.radar_service._radar_live_render_on_demand")
+    @patch("cache.overlay_cache_utils.radar_list_frames")
+    def test_completed_background_history_reuses_ordered_cache_without_sync_render(
+        self,
+        list_frames,
+        render_on_demand,
+        render_background,
+        _render_still_filling,
+    ):
+        now = datetime.now(timezone.utc)
+        frames = [
+            {
+                "frame_key": f"frame-{index}",
+                "timestamp": (now - timedelta(minutes=29 - index * 12)).isoformat(),
+            }
+            for index in range(3)
+        ]
+        list_frames.return_value = frames
+
+        data = get_radar_live_frames_data(
+            site="KMHX",
+            product="L2_REF",
+            elevation="0.5",
+            hours=0.5,
+        )
+
+        render_on_demand.assert_not_called()
+        render_background.assert_called_once_with(
+            "KMHX", "L2_REF", "0.5", None, 0.5, urgent=False
+        )
+        self.assertEqual(data["frames"], frames)
+        self.assertTrue(data["coverage_complete"])
+        self.assertFalse(data["refreshing"])
+        self.assertFalse(data["history_filling"])
 
     def test_supported_live_products_have_required_metadata(self):
         self.assertEqual(

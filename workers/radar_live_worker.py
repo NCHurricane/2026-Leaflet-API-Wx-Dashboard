@@ -15,6 +15,7 @@ import sys
 import shutil
 import time
 import zlib
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -71,6 +72,87 @@ _MAX_RANGE_NM = 250.0
 _NM_TO_KM = 1.852
 _KM_PER_DEG_LAT = 111.32
 _PADDING_FACTOR = 1.20
+
+
+def _radar_parallel_worker_count() -> int:
+    from config.radar_config import LIVE_RADAR_PARALLEL_WORKERS
+
+    configured = int(LIVE_RADAR_PARALLEL_WORKERS or 0)
+    if configured > 0:
+        return configured
+    return max(1, min(4, os.cpu_count() or 1))
+
+
+def _radar_render_pool_ping(_value: int) -> int:
+    return os.getpid()
+
+
+class _RadarRenderPoolOwner:
+    """Lazily own one bounded multiprocessing pool for a render run."""
+
+    def __init__(self, processes: int):
+        self.processes = max(1, int(processes))
+        self.creation_count = 0
+        self.render_batches = 0
+        self.startup_ms = 0.0
+        self.warm_ms = 0.0
+        self._pool = None
+        self._closed = False
+
+    def start(self):
+        if self._closed:
+            raise RuntimeError("Radar render pool owner is closed")
+        if self._pool is None:
+            started = time.perf_counter()
+            self._pool = multiprocessing.Pool(processes=self.processes)
+            self.startup_ms += (time.perf_counter() - started) * 1000.0
+            self.creation_count += 1
+        return self
+
+    def warm(self) -> list[int]:
+        """Start workers and wait for a lightweight task before timed reuse."""
+        self.start()
+        started = time.perf_counter()
+        process_ids = self._pool.map(
+            _radar_render_pool_ping,
+            range(self.processes),
+            chunksize=1,
+        )
+        self.warm_ms += (time.perf_counter() - started) * 1000.0
+        return process_ids
+
+    def starmap(self, function, work_items):
+        self.start()
+        self.render_batches += 1
+        return self._pool.starmap(function, work_items)
+
+    def close(self) -> None:
+        if self._pool is not None:
+            self._pool.close()
+            self._pool.join()
+            self._pool = None
+        self._closed = True
+
+    def terminate(self) -> None:
+        if self._pool is not None:
+            self._pool.terminate()
+            self._pool.join()
+            self._pool = None
+        self._closed = True
+
+
+@contextmanager
+def _radar_render_pool_owner(processes: int | None = None):
+    owner = _RadarRenderPoolOwner(
+        _radar_parallel_worker_count() if processes is None else processes
+    )
+    try:
+        yield owner
+    except BaseException:
+        owner.terminate()
+        raise
+    else:
+        owner.close()
 
 
 def _resolve_radar_data_utils(product_key: str = ""):
@@ -847,13 +929,15 @@ def _render_overlay_png(
     product_cfg: dict | None = None,
     sweep: int | None = None,
     profile: bool = False,
+    timings: dict[str, float] | None = None,
 ) -> bool:
     from config.radar_config import LIVE_RADAR_FIGURE_SIZE_INCHES, LIVE_RADAR_RENDER_DPI
 
     try:
         import pyart
 
-        t_start = time.time() if profile else None
+        record_timings = profile or timings is not None
+        t_start = time.perf_counter() if record_timings else None
 
         base_size = float((product_cfg or {}).get("figure_size_inches") or LIVE_RADAR_FIGURE_SIZE_INCHES or 20)
         dpi = int(LIVE_RADAR_RENDER_DPI or 200)
@@ -865,7 +949,6 @@ def _render_overlay_png(
             bounds, base_height=base_size, projection=map_projection
         )
         fig = plt.figure(figsize=(fig_width, fig_height), dpi=dpi)
-        t_fig = time.time() if profile else None
 
         ax = fig.add_axes([0.0, 0.0, 1.0, 1.0], projection=map_projection)
         fig.patch.set_alpha(0.0)
@@ -874,6 +957,7 @@ def _render_overlay_png(
         ax.set_extent(
             [bounds[0], bounds[1], bounds[2], bounds[3]], crs=ccrs.PlateCarree()
         )
+        t_fig = time.perf_counter() if record_timings else None
 
         # Ensure no-data/under-threshold bins render transparent so the overlay
         # does not appear as an opaque square when composited in Leaflet.
@@ -887,7 +971,7 @@ def _render_overlay_png(
             product_code,
             render_cfg,
         )
-        t_mask = time.time() if profile else None
+        t_mask = time.perf_counter() if record_timings else None
 
         display = pyart.graph.RadarMapDisplay(radar)
         from config.radar_colortable_utils import get_radar_colortable as _get_ct
@@ -900,7 +984,7 @@ def _render_overlay_png(
         vmin = _vmin
         vmax = _vmax
         sweep = _best_sweep(radar, field_name) if sweep is None else int(sweep)
-        t_sweep = time.time() if profile else None
+        t_sweep = time.perf_counter() if record_timings else None
 
         display.plot_ppi_map(
             field_name,
@@ -921,7 +1005,7 @@ def _render_overlay_png(
             edgecolors="face",
             linewidths=0,
         )
-        t_plot = time.time() if profile else None
+        t_plot = time.perf_counter() if record_timings else None
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(
@@ -934,10 +1018,23 @@ def _render_overlay_png(
             # cost of larger files, which is fine for a local disk cache.
             pil_kwargs={"compress_level": 1},
         )
-        t_save = time.time() if profile else None
+        t_save = time.perf_counter() if record_timings else None
 
         plt.close(fig)
-        t_close = time.time() if profile else None
+        t_close = time.perf_counter() if record_timings else None
+
+        if timings is not None and t_start is not None:
+            timings.update(
+                {
+                    "figure_ms": (t_fig - t_start) * 1000.0,
+                    "field_ms": (t_mask - t_fig) * 1000.0,
+                    "sweep_ms": (t_sweep - t_mask) * 1000.0,
+                    "plot_ms": (t_plot - t_sweep) * 1000.0,
+                    "encode_ms": (t_save - t_plot) * 1000.0,
+                    "close_ms": (t_close - t_save) * 1000.0,
+                    "render_ms": (t_close - t_start) * 1000.0,
+                }
+            )
 
         if profile and t_start:
             print(f"[PROFILE] Render {out_path.name}:")
@@ -1052,6 +1149,7 @@ def _render_site_product(
     elevation: str = "auto",
     use_mtime_key: bool = False,
     lookback_hours: float | None = None,
+    render_pool=None,
 ) -> int:
     """Render and cache frames for one site/product. Returns number of frames cached."""
     level = str(product_cfg.get("level") or "Level 3")
@@ -1128,8 +1226,6 @@ def _render_site_product(
         str(_CACHE_ROOT), site, level_code, cache_product_key
     )
 
-    from config.radar_config import LIVE_RADAR_PARALLEL_WORKERS
-
     cached = 0
     read_failures = 0
     _TMP_RENDER_ROOT.mkdir(parents=True, exist_ok=True)
@@ -1146,10 +1242,8 @@ def _render_site_product(
         return 0
 
     # Determine if we should use parallel rendering
-    use_parallel = len(unprocessed_files) > 1 and int(LIVE_RADAR_PARALLEL_WORKERS or 0) != 1
-    num_workers = int(LIVE_RADAR_PARALLEL_WORKERS or 0)
-    if num_workers <= 0:
-        num_workers = max(1, min(4, os.cpu_count() or 1))
+    num_workers = _radar_parallel_worker_count()
+    use_parallel = len(unprocessed_files) > 1 and num_workers != 1
 
     if use_parallel:
         print(
@@ -1184,9 +1278,13 @@ def _render_site_product(
                 )
             )
 
-        # Render in parallel
-        with multiprocessing.Pool(processes=num_workers) as pool:
-            results = pool.starmap(_render_single_frame_worker, work_items)
+        # Render in parallel. Scheduled/background owners can retain the same
+        # bounded pool across batches; direct callers still get one local pool.
+        if render_pool is None:
+            with _radar_render_pool_owner(num_workers) as owned_pool:
+                results = owned_pool.starmap(_render_single_frame_worker, work_items)
+        else:
+            results = render_pool.starmap(_render_single_frame_worker, work_items)
 
         # Process results
         frame_data = {}
@@ -1348,7 +1446,11 @@ def _render_site_product(
     return cached
 
 
-def _run_radar_live_worker_unbounded(force: bool = False) -> None:
+def _run_radar_live_worker_unbounded(
+    force: bool = False,
+    *,
+    render_pool=None,
+) -> None:
     """Render configured site/product live radar overlays into cache.
 
     L2 products (chunks): run every invocation — the task fires every minute
@@ -1386,6 +1488,7 @@ def _run_radar_live_worker_unbounded(force: bool = False) -> None:
                     product_cfg,
                     elevation=LIVE_RADAR_L2_DEFAULT_ELEVATION if is_l2 else "auto",
                     use_mtime_key=use_mtime,
+                    render_pool=render_pool,
                 )
                 total_cached += int(cached)
             except Exception as exc:
@@ -1409,7 +1512,11 @@ def run_radar_live_worker(force: bool = False) -> None:
     from app_core.render_budget import heavy_render_slot
 
     with heavy_render_slot():
-        _run_radar_live_worker_unbounded(force=force)
+        with _radar_render_pool_owner() as render_pool:
+            _run_radar_live_worker_unbounded(
+                force=force,
+                render_pool=render_pool,
+            )
 
 
 def _run_radar_live_site_product_unbounded(
@@ -1422,6 +1529,7 @@ def _run_radar_live_site_product_unbounded(
     elevation: str = "auto",
     storm_motion: dict | None = None,
     lookback_hours: float | None = None,
+    render_pool=None,
 ) -> int:
     """Render and cache frames for a single live radar site/product pair.
 
@@ -1463,6 +1571,7 @@ def _run_radar_live_site_product_unbounded(
         elevation=elevation,
         use_mtime_key=use_mtime,
         lookback_hours=lookback_hours,
+        render_pool=render_pool,
     )
     if cached > 0:
         mark_run_complete("radar_live")
@@ -1483,17 +1592,19 @@ def run_radar_live_site_product(
     from app_core.render_budget import heavy_render_slot
 
     with heavy_render_slot():
-        return _run_radar_live_site_product_unbounded(
-            site,
-            product_key,
-            force=force,
-            latest_only=latest_only,
-            newest_first=newest_first,
-            max_render_frames=max_render_frames,
-            elevation=elevation,
-            storm_motion=storm_motion,
-            lookback_hours=lookback_hours,
-        )
+        with _radar_render_pool_owner() as render_pool:
+            return _run_radar_live_site_product_unbounded(
+                site,
+                product_key,
+                force=force,
+                latest_only=latest_only,
+                newest_first=newest_first,
+                max_render_frames=max_render_frames,
+                elevation=elevation,
+                storm_motion=storm_motion,
+                lookback_hours=lookback_hours,
+                render_pool=render_pool,
+            )
 
 
 if __name__ == "__main__":
