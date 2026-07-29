@@ -5,10 +5,10 @@ import { createScrubber } from '../../core/scrubber.js';
 import { loadDefaultSettings } from '../../core/settings.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
-import { ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
+import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
 import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260726a';
-import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260726d';
-import { createRadarEngine } from '../radar/radar-engine.js?v=20260728b';
+import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260729b';
+import { createRadarEngine } from '../radar/radar-engine.js?v=20260729a';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 
 const byId = (id) => document.getElementById(id);
@@ -20,7 +20,6 @@ const NEW_ALERT_EVENTS = new Set([
     'Flash Flood Warning', 'Flash Flood Watch',
 ]);
 const WORKSPACE_WARNING_EVENTS = Object.freeze({
-    all: [...Object.values(SEVERE_EVENTS), 'Special Weather Statement'],
     tor: [SEVERE_EVENTS.tor],
     svr: [SEVERE_EVENTS.svr],
     ffw: [SEVERE_EVENTS.ffw],
@@ -28,7 +27,6 @@ const WORKSPACE_WARNING_EVENTS = Object.freeze({
     sps: ['Special Weather Statement'],
 });
 const WORKSPACE_WATCH_EVENTS = Object.freeze({
-    all: ['Tornado Watch', 'Severe Thunderstorm Watch', 'Flash Flood Watch', 'Flood Watch'],
     tor: ['Tornado Watch'],
     svr: ['Severe Thunderstorm Watch'],
     fld: ['Flash Flood Watch', 'Flood Watch'],
@@ -256,12 +254,17 @@ async function initialize() {
     window.addEventListener('keydown', unlockAlertSound, { once: true, capture: true });
 
     const activeAlertEvents = (rootId, dataKey, eventGroups) => {
-        const selected = [...byId(rootId).querySelectorAll('.is-active')]
-            .map((button) => button.dataset[dataKey]);
-        const keys = selected.includes('all') ? ['all'] : selected;
-        return keys.flatMap((key) => eventGroups[key] || []);
+        return [...byId(rootId).querySelectorAll('.is-active')]
+            .map((button) => button.dataset[dataKey])
+            .flatMap((key) => eventGroups[key] || []);
     };
     const alertSelection = () => {
+        if (byId('workspace-alert-all').classList.contains('is-active')) {
+            return {
+                categories: Object.keys(ALERT_CATEGORIES),
+                warningTypes: Object.keys(SEVERE_EVENTS),
+            };
+        }
         const warningEvents = activeAlertEvents('workspace-warning-filters', 'warning', WORKSPACE_WARNING_EVENTS);
         const watchEvents = activeAlertEvents('workspace-watch-filters', 'watch', WORKSPACE_WATCH_EVENTS);
         const categories = new Set();
@@ -650,6 +653,7 @@ async function initialize() {
         byId(controlsId).querySelectorAll('button').forEach((button) => { button.disabled = !enabled; });
     };
     byId('workspace-alerts-enabled').addEventListener('change', () => {
+        syncLayerToggle('workspace-alerts-enabled', 'workspace-alert-all-filter');
         syncLayerToggle('workspace-alerts-enabled', 'workspace-warning-filters');
         syncLayerToggle('workspace-alerts-enabled', 'workspace-watch-filters');
         syncRightRailVisibility();
@@ -658,6 +662,23 @@ async function initialize() {
             hideProjectedArrival();
         }
         void refreshAlerts({ notifyNewAlerts: false });
+    });
+    const setAllAlertsPill = (active) => {
+        const button = byId('workspace-alert-all');
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', String(active));
+    };
+    byId('workspace-alert-all').addEventListener('click', (event) => {
+        const active = !event.currentTarget.classList.contains('is-active');
+        setAllAlertsPill(active);
+        if (active) {
+            document.querySelectorAll('#workspace-warning-filters button, #workspace-watch-filters button').forEach((button) => {
+                button.classList.remove('is-active');
+                button.setAttribute('aria-pressed', 'false');
+            });
+        }
+        const nextSelection = alertSelection();
+        if (!alertsEngine.setSelection(nextSelection)) void alertsEngine.loadLive(nextSelection, regionSelect.value);
     });
     byId('workspace-lsr-enabled').addEventListener('change', () => {
         syncLayerToggle('workspace-lsr-enabled', 'workspace-lsr-filters');
@@ -668,11 +689,13 @@ async function initialize() {
     });
     byId('workspace-warning-filters').addEventListener('click', (event) => {
         if (!toggleAlertPill(event, 'warning')) return;
+        setAllAlertsPill(false);
         const nextSelection = alertSelection();
         if (!alertsEngine.setSelection(nextSelection)) void alertsEngine.loadLive(nextSelection, regionSelect.value);
     });
     byId('workspace-watch-filters').addEventListener('click', (event) => {
         if (!toggleAlertPill(event, 'watch')) return;
+        setAllAlertsPill(false);
         const nextSelection = alertSelection();
         if (!alertsEngine.setSelection(nextSelection)) void alertsEngine.loadLive(nextSelection, regionSelect.value);
     });
@@ -821,6 +844,7 @@ async function initialize() {
     mapCore.map.on('movestart zoomstart', detail.closeLsr);
     mapCore.map.on('moveend', () => void refreshAlerts({ silent: true, notifyNewAlerts: false, refreshFeeds: false }));
 
+    syncLayerToggle('workspace-alerts-enabled', 'workspace-alert-all-filter');
     syncLayerToggle('workspace-alerts-enabled', 'workspace-warning-filters');
     syncLayerToggle('workspace-alerts-enabled', 'workspace-watch-filters');
     syncLayerToggle('workspace-lsr-enabled', 'workspace-lsr-filters');

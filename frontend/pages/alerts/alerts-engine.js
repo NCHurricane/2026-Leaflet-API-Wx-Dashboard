@@ -113,6 +113,8 @@ export function createAlertsEngine(options) {
     const { api, mapCore, legend, lsrLegend = null, status, onAlertCount, onLsrCount, onWarnings, onRenderedAlerts, onDetail, onNewAlert, onLsrDetail, onLsrDetailClose, shouldHandleAlertClick } = options;
     const railScope = options.railScope === 'national' ? 'national' : 'rendered';
     const subdueWatches = options.subdueWatches === true;
+    const alertTooltipMinZoom = Number.isFinite(Number(options.alertTooltipMinZoom))
+        ? Number(options.alertTooltipMinZoom) : 10;
     const alertPaneZIndex = Number.isFinite(Number(options.alertPaneZIndex))
         ? Number(options.alertPaneZIndex) : 360;
     const { leaflet, map } = mapCore;
@@ -219,7 +221,16 @@ export function createAlertsEngine(options) {
         alertLayer?.eachLayer((layer) => syncAlertPulseLayer(layer));
     }
 
+    function syncAlertTooltipZoom() {
+        map.getContainer().classList.toggle(
+            'is-alert-tooltip-zoom-suppressed',
+            map.getZoom() >= alertTooltipMinZoom,
+        );
+    }
+
     map.on('zoomend', syncAlertPulseLayers);
+    map.on('zoomend', syncAlertTooltipZoom);
+    syncAlertTooltipZoom();
 
     function tooltipHtml(feature) {
         const props = feature?.properties || {};
@@ -231,7 +242,7 @@ export function createAlertsEngine(options) {
             pane, style: alertStyle,
             onEachFeature(feature, layer) {
                 layer.on('add', () => syncAlertPulseLayer(layer, feature));
-                layer.bindTooltip(tooltipHtml(feature), { sticky: true, opacity: 0.95, className: 'alerts-hover-tip' });
+                layer.bindTooltip(tooltipHtml(feature), { sticky: true, opacity: 1, className: 'alerts-hover-tip' });
                 layer.on('click', (event) => {
                     if (shouldHandleAlertClick && !shouldHandleAlertClick(feature, event)) return;
                     if (event.originalEvent) leaflet.DomEvent.stopPropagation(event.originalEvent);
@@ -622,7 +633,12 @@ export function createAlertsEngine(options) {
 
     return Object.freeze({
         clear, clearLsrSelection, clearSelectedAlert,
-        destroy() { map.off('zoomend', syncAlertPulseLayers); clear(); },
+        destroy() {
+            map.off('zoomend', syncAlertPulseLayers);
+            map.off('zoomend', syncAlertTooltipZoom);
+            map.getContainer().classList.remove('is-alert-tooltip-zoom-suppressed');
+            clear();
+        },
         getAlerts() { return [...renderedAlerts]; },
         loadArchive, loadLive, loadLsr, renderArchiveFrame, renderLegend, setSelection, showSelectedAlert,
         setOpacity(value) { opacity = Math.max(0.1, Math.min(1, Number(value) || 0.75)); alertLayer?.setStyle(alertStyle); watchLayer?.setStyle(alertStyle); selectedAlertLayer?.setStyle(selectedAlertStyle); syncAlertPulseLayers(); return opacity; },

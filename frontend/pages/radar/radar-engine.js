@@ -1,4 +1,4 @@
-import { createRadarWebglLayer } from './radar-webgl-layer.js?v=20260726c';
+import { createRadarWebglLayer } from './radar-webgl-layer.js?v=20260729a';
 
 const SITE_STATUS_COLORS = Object.freeze({
     online: '#22c55e', required: '#f59e0b', mandatory: '#f97316',
@@ -70,6 +70,19 @@ export function selectRadarFrameIndex(frames, currentFrame, preserveKey = null) 
         if (preserved >= 0) return preserved;
     }
     return frames.length - 1;
+}
+
+export function radarWebglProductEnabled(config, product, playback = false) {
+    const productId = String(product || '').toUpperCase();
+    const products = Array.isArray(config?.products)
+        ? config.products.map((value) => String(value).toUpperCase())
+        : [String(config?.product || '').toUpperCase()].filter(Boolean);
+    if (config?.enabled !== true || !products.includes(productId)) return false;
+    if (!playback) return true;
+    const animationProducts = Array.isArray(config?.animation_products)
+        ? config.animation_products.map((value) => String(value).toUpperCase())
+        : (config?.animation_enabled === true ? products : []);
+    return animationProducts.includes(productId);
 }
 
 function siteStatusClass(info, configured) {
@@ -213,6 +226,8 @@ export function createRadarEngine(options) {
         enabled: false,
         animation_enabled: false,
         product: 'L2_REF',
+        products: ['L2_REF'],
+        animation_products: [],
         prefetch_zoom: 10,
         activate_zoom: 11,
         release_grace_ms: 1500,
@@ -295,7 +310,7 @@ export function createRadarEngine(options) {
             map,
             paneName: 'radar-overlays',
             maxTextures: Math.max(1, Number(webglConfig.texture_budget) || 1),
-            animationEnabled: webglConfig.animation_enabled,
+            animationEnabled: true,
             onFailure() {
                 const identity = frameIdentity(currentFrame);
                 if (identity) webglFailedIdentities.add(identity);
@@ -306,9 +321,11 @@ export function createRadarEngine(options) {
     }
 
     function webglSelectionSupported(frame) {
-        return webglConfig.enabled === true
-            && (!playbackActive || webglConfig.animation_enabled === true)
-            && String(frame?.product || getSelection().product || '').toUpperCase() === webglConfig.product;
+        return radarWebglProductEnabled(
+            webglConfig,
+            frame?.product || getSelection().product,
+            playbackActive,
+        );
     }
 
     function canUseWebgl(frame) {
@@ -344,7 +361,11 @@ export function createRadarEngine(options) {
     function desiredWebglFrames() {
         const index = currentFrameIndex();
         if (index < 0 || !frames.length) return currentFrame ? [currentFrame] : [];
-        if (!playbackActive || webglConfig.animation_enabled !== true || frames.length < 2) {
+        if (
+            !playbackActive
+            || !radarWebglProductEnabled(webglConfig, getSelection().product, true)
+            || frames.length < 2
+        ) {
             return [frames[index]];
         }
         return selectRadarWebglWindow(
@@ -372,7 +393,7 @@ export function createRadarEngine(options) {
         if (!identity || frameIdentity(currentFrame) !== identity || map.getZoom() < webglConfig.activate_zoom) return;
         if (!webglLayer?.isReady(identity)) return;
         if (playbackActive) {
-            if (webglConfig.animation_enabled !== true) return;
+            if (!radarWebglProductEnabled(webglConfig, getSelection().product, true)) return;
             if (!webglAnimationReady) {
                 if (!hasMinimumForwardBuffer(currentFrameIndex())) return;
                 webglAnimationReady = true;
@@ -405,7 +426,15 @@ export function createRadarEngine(options) {
             ) continue;
             const controller = new AbortController();
             webglLoads.set(identity, { controller });
-            void layer.load(overlayUrl(frame.webgl_artifact.url), identity, controller.signal)
+            void layer.load(
+                overlayUrl(frame.webgl_artifact.url),
+                identity,
+                controller.signal,
+                {
+                    version: frame.webgl_artifact.version,
+                    product: frame.webgl_artifact.product || frame.product,
+                },
+            )
                 .then(() => {
                     if (webglDesiredFrames.some((item) => frameIdentity(item) === identity)) {
                         activateWebgl(currentFrame);
@@ -846,7 +875,10 @@ export function createRadarEngine(options) {
         setPlaybackActive(value) {
             playbackActive = !!value;
             webglAnimationReady = false;
-            if (playbackActive && webglConfig.animation_enabled !== true) releaseWebgl();
+            if (
+                playbackActive
+                && !radarWebglProductEnabled(webglConfig, getSelection().product, true)
+            ) releaseWebgl();
             else syncWebgl();
         },
         setSitesVisible(value) { sitesVisible = !!value; syncSiteVisibility(); if (!sitesVisible) legend.clear(); },

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+    radarWebglProductEnabled,
     selectRadarFrameIndex,
     selectRadarWebglWindow,
 } from '../frontend/pages/radar/radar-engine.js';
@@ -36,4 +37,19 @@ test('refresh preserves the frame active when the response completes', () => {
     const frames = ['a', 'b', 'c', 'd'].map(frame);
     assert.equal(selectRadarFrameIndex(frames, frames[2]), 2);
     assert.equal(selectRadarFrameIndex(frames, frames[2], 'missing'), 3);
+});
+
+test('Velocity and SRV require their separately enabled animation family', () => {
+    const config = {
+        enabled: true,
+        products: ['L2_REF', 'L2_VEL', 'L2_SRV'],
+        animation_products: ['L2_REF'],
+    };
+    assert.equal(radarWebglProductEnabled(config, 'L2_VEL', false), true);
+    assert.equal(radarWebglProductEnabled(config, 'L2_SRV', false), true);
+    assert.equal(radarWebglProductEnabled(config, 'L2_VEL', true), false);
+    config.animation_products.push('L2_VEL', 'L2_SRV');
+    assert.equal(radarWebglProductEnabled(config, 'L2_VEL', true), true);
+    assert.equal(radarWebglProductEnabled(config, 'L2_SRV', true), true);
+    assert.equal(radarWebglProductEnabled(config, 'L2_ZDR', false), false);
 });

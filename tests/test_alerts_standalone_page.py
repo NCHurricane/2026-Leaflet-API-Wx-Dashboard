@@ -90,3 +90,25 @@ def test_severe_alert_pulse_is_stroke_only_and_zoom_aware():
     for styles in (alerts_styles, workspace_styles):
         assert "fill-opacity: var(--alerts-pulse" not in styles
         assert "stroke-width: var(--alerts-pulse-stroke-high, 7)" in styles
+
+
+def test_polygon_tooltips_are_hidden_at_zoom_10_and_above_without_hiding_lsr():
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+    alerts_styles = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts.css"
+    ).read_text(encoding="utf-8")
+    workspace_styles = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.css"
+    ).read_text(encoding="utf-8")
+
+    assert "Number(options.alertTooltipMinZoom) : 10" in engine
+    assert "map.getZoom() >= alertTooltipMinZoom" in engine
+    assert "map.on('zoomend', syncAlertTooltipZoom)" in engine
+    assert "map.off('zoomend', syncAlertTooltipZoom)" in engine
+    for styles in (alerts_styles, workspace_styles):
+        assert (
+            ".is-alert-tooltip-zoom-suppressed "
+            ".leaflet-tooltip.alerts-hover-tip:not(.alerts-lsr-hover-tip)"
+        ) in styles

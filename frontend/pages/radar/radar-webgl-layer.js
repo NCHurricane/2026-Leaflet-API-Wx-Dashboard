@@ -54,6 +54,9 @@ function createProgram(gl) {
         uniform int u_ray_count;
         uniform int u_gate_count;
         uniform int u_palette_row;
+        uniform int u_palette_entries;
+        uniform int u_code_bytes;
+        uniform int u_missing_code;
         out vec4 out_color;
         const float PI = 3.14159265358979323846;
         const float TWO_PI = 6.28318530717958647692;
@@ -99,9 +102,18 @@ function createProgram(gl) {
                     best_ray = ray;
                 }
             }
-            int code = byte_at(gate + 2, best_ray);
-            if (code == 255) discard;
-            int palette_x = code * 4;
+            int gate_x = gate * u_code_bytes + 2;
+            int code = byte_at(gate_x, best_ray);
+            if (u_code_bytes == 2) code += byte_at(gate_x + 1, best_ray) * 256;
+            if (code == u_missing_code) discard;
+            int palette_index = code;
+            if (u_code_bytes == 2) {
+                palette_index = min(
+                    int(floor(float(code) / float(u_missing_code - 1) * float(u_palette_entries))),
+                    u_palette_entries - 1
+                );
+            }
+            int palette_x = palette_index * 4;
             out_color = vec4(
                 float(byte_at(palette_x, u_palette_row)),
                 float(byte_at(palette_x + 1, u_palette_row)),
@@ -241,6 +253,9 @@ export function createRadarWebglLayer({
         gl.uniform1i(gl.getUniformLocation(program, 'u_ray_count'), Number(header.ray_count));
         gl.uniform1i(gl.getUniformLocation(program, 'u_gate_count'), Number(header.gate_count));
         gl.uniform1i(gl.getUniformLocation(program, 'u_palette_row'), Number(header.ray_count));
+        gl.uniform1i(gl.getUniformLocation(program, 'u_palette_entries'), Number(header.palette_entries || 256));
+        gl.uniform1i(gl.getUniformLocation(program, 'u_code_bytes'), Number(header.code_bytes || 1));
+        gl.uniform1i(gl.getUniformLocation(program, 'u_missing_code'), Number(header.missing_code ?? 255));
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         lastDrawMs = performance.now() - started;
         canvas.dataset.radarWebglDrawMs = lastDrawMs.toFixed(3);
@@ -288,14 +303,18 @@ export function createRadarWebglLayer({
         syncTextureStats();
     }
 
-    async function load(url, identity, signal) {
+    async function load(url, identity, signal, expected = {}) {
         if (!ensureContext()) throw new Error('WebGL 2 is unavailable.');
         if (textures.has(identity)) return textures.get(identity).header;
         const response = await fetch(url, { cache: 'force-cache', signal });
         if (!response.ok) throw new Error(`Radar polar artifact returned HTTP ${response.status}.`);
         const parsed = parseRadarPolarArtifact(await response.arrayBuffer());
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-        if (Number(parsed.header.version) !== 1 || parsed.header.product !== 'L2_REF') {
+        if (
+            Number(parsed.header.version) !== Number(expected.version)
+            || String(parsed.header.product || '').toUpperCase() !== String(expected.product || '').toUpperCase()
+            || ![1, 2].includes(Number(parsed.header.code_bytes || 1))
+        ) {
             throw new Error('Radar polar artifact identity is unsupported.');
         }
         const texture = gl.createTexture();

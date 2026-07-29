@@ -124,9 +124,10 @@ def get_radar_live_webgl_artifact(
     site: str,
     elevation: str,
     frame_key: str,
+    variant: str | None = None,
 ):
     return get_radar_live_webgl_artifact_data(
-        version, product, site, elevation, frame_key
+        version, product, site, elevation, frame_key, variant
     )
 
 

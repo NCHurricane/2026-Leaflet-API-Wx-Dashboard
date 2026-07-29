@@ -9,7 +9,9 @@ the seven-product L2 batch p50/p95 by 28.5%/27.6%. The reversible high-zoom
 WebGL L2 Reflectivity pilot is default-off; two-page activation, redraw,
 visible-parity, PNG-only, fallback, and cancellation checks pass. Phase 7 adds
 default-off four-texture L2 Reflectivity animation; its automated, golden, and
-two-page browser gates pass. Phase 7 is closed; Phase 8 is not authorized.)
+two-page browser gates pass. Phase 7 is closed. The separately authorized
+Phase 8 L2 Velocity/SRV family is browser-accepted, passes all eight permanent
+PNG golden rows, and is closed.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -118,7 +120,13 @@ to PNG-only behavior.
    same-sweep QuadMesh reuse passes benchmark, memory, lifecycle, regression,
    and golden gates. Phases 6-7 add separately gated high-zoom WebGL L2
    Reflectivity activation and bounded animation while preserving PNG as the
-   complete workflow and fallback. Phase 8 product expansion is not authorized.
+   complete workflow and fallback. The first separately authorized Phase 8
+   family extends that path to L2 Velocity/SRV with product/motion-scoped `v2`
+   artifacts and separate default-off family/animation switches. Its measured
+   latency/payload, focused/full regression, rollback, and two-page browser
+   gates pass. The permanent Phase 0 sources are absent locally, so the
+   required eight-row golden rerun remains the closure gate. L3 N0B/N0G and
+   later families are not authorized.
 4. Satellite render pipeline latency optimization — complete through Phase 5
    and archived. Optional Phase 6 warp threading is deferred unless later
    real-run profiling and explicit approval reopen it.
@@ -431,7 +439,25 @@ to PNG-only behavior.
 - Codex in-app browser acceptance passes on both pages for bounded animation,
   zoom-threshold fallback/release, buffered activation, Workspace continuity
   across auto-refresh, and KAMX-to-KBYX stale-window cancellation. Phase 7 is
-  closed; Phase 8 is not authorized.
+  closed.
+- Radar render optimization Phase 8's first family is implemented for
+  `L2_VEL` and `L2_SRV` behind separate default-off activation and animation
+  switches. Artifact `v2` keeps Reflectivity's one-byte encoding and adds
+  two-byte Velocity/SRV codes, 512 palette entries, product identity, and
+  normalized SRV motion-variant isolation. The four-texture window is about
+  10.08 MiB and retains the two-load concurrency limit.
+- Five fresh-process first-PNG regressions remain below the 5% ceiling:
+  Velocity is +2.84%/+1.24% p50/p95 and SRV is +3.35%/+3.75%.
+  Current-source control/candidate PNG hashes are byte-identical. Focused
+  validation passes 79 tests plus 42 subtests, four JavaScript tests pass, and
+  full pytest passes 303 tests plus 42 subtests with only the known stale
+  Workspace assertion.
+- Codex in-app browser acceptance passes on `/radar` and `/workspace` for both
+  products, four-texture playback, Velocity-to-SRV stale-work cancellation,
+  and flag-off PNG-only playback. The permanent eight-row Phase 0 inputs are
+  absent locally, so this family is not closed. Evidence is in
+  `docs/perf/2026-07-29-radar-phase8-velocity/`; L3 N0B/N0G remains
+  unauthorized.
 - The post-Phase 2 high-zoom investigation found that the representative KGGW
   L2 sweep retains 720 radials, 1,832 gates, 250-meter range spacing, and about
   0.486-degree azimuth spacing, while its 4,380-by-4,400 full-site PNG spans
@@ -1328,15 +1354,21 @@ found it.
   Workspace interaction follow-up (2026-07-28/29): while either Value Inspector
   or Storm Tracks is enabled, alert-polygon hover tooltips are suppressed so
   they cannot compete with Radar inspection/track interaction; LSR hover
-  tooltips remain available. The user browser-confirmed this suppression.
+  tooltips remain available. Alert-polygon tooltips are additionally hidden at
+  zoom 10 and above on both Alerts and Workspace, without changing the existing
+  tool-selection suppression. The user browser-confirmed the tool-selection
+  behavior; the zoom threshold has focused static coverage.
   Disabling Storm Tracks now also increments the track request generation,
   clears/removes the mounted marker layer immediately, and rejects an older
   in-flight response when it returns, preventing stale icons from reappearing.
   This visibility-only toggle preserves selected-cell SRV motion identity and
-  playback state. JavaScript syntax, focused Workspace tests (2 passed), and
-  diff checks pass. The stale-request fix still needs a focused browser re-smoke
-  after the API is restarted; all Uvicorn sessions were intentionally stopped
-  at session end.
+  playback state. The user confirmed the focused Storm Tracks browser re-smoke.
+  Workspace legend bodies now use `padding: 0 15px`, removing the unwanted
+  legend scrollbar. A single global `All Active Alerts` polygon pill now
+  selects the same complete category scope as `/alerts`; any narrower warning
+  or watch selection deactivates it. JavaScript syntax, ten focused
+  Alerts/Workspace tests, and diff checks pass; all Uvicorn sessions were
+  intentionally stopped at session end.
   The Layers sidebar now presents Radar, Active Alerts, and Storm Reports as
   independently collapsible groups. Radar starts open; Active Alerts, Storm
   Reports, and the SPC/Satellite/RTMA/MRMS/WPC/Water placeholders start collapsed.
@@ -2815,9 +2847,14 @@ correctness or fallback.
   textures, and missing frames fall back without changing cadence or scrubber
   position. Both-page browser acceptance, all eight PNG goldens, and focused
   validation pass. Phase 7 is closed.
-- Phase 8 candidate: expand only to approved core families after Phase 7
-  passes. All-product WebGL conversion, PNG retirement, and server-rendered
-  tiles require a new migration plan.
+- Phase 8 first-family result: L2 Velocity/SRV is implemented and
+  browser-accepted behind separate default-off family switches. Its
+  `v2` artifacts preserve PNG identity, pass the measured 5% latency ceiling,
+  remain bounded to four textures/two loads, and pass all eight permanent PNG
+  golden rows. This family is closed. L3 N0B/N0G and later families require
+  separate authorization.
+  All-product WebGL conversion, PNG retirement, and server-rendered tiles
+  require a new migration plan.
 - `LIVE_RADAR_L2_USE_CHUNKS` remains `False`. The prior chunks experiment showed
   no latency advantage for completed scans and is not part of this track.
 

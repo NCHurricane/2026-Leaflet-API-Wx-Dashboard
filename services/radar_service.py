@@ -156,15 +156,18 @@ def _radar_webgl_artifact_metadata(
     site: str,
     product: str,
     requested_elevation: str,
+    motion: dict | None = None,
 ) -> dict | None:
     from radar.webgl_artifact import artifact_metadata
 
+    product_metadata = _radar_product_metadata_with_motion(product, motion)
     return artifact_metadata(
         CACHE_ROOT,
         site,
         product,
         frame.get("selected_elevation") or requested_elevation,
         frame.get("frame_key") or frame.get("source_data_key", ""),
+        str(product_metadata.get("cache_variant") or "") or None,
     )
 
 
@@ -977,7 +980,7 @@ def get_radar_live_latest_data(
         "units": meta.get("units", ""),
     }
     webgl_artifact = _radar_webgl_artifact_metadata(
-        payload, site_id, product_key, elevation_key
+        payload, site_id, product_key, elevation_key, motion
     )
     if webgl_artifact is not None:
         payload["webgl_artifact"] = webgl_artifact
@@ -1116,7 +1119,7 @@ def get_radar_live_frames_data(
     frames_with_artifacts = []
     for frame in filtered:
         artifact = _radar_webgl_artifact_metadata(
-            frame, site_id, product_key, elevation_key
+            frame, site_id, product_key, elevation_key, motion
         )
         frames_with_artifacts.append(
             {**frame, "webgl_artifact": artifact} if artifact is not None else frame
@@ -1157,12 +1160,13 @@ def get_radar_live_webgl_artifact_data(
     site: str,
     elevation: str,
     frame_key: str,
+    variant: str | None = None,
 ) -> FileResponse:
-    """Serve a versioned artifact only while the Phase 6 feature is enabled."""
+    """Serve a versioned product artifact only while its feature is enabled."""
     from radar.webgl_artifact import resolve_artifact
 
     path = resolve_artifact(
-        CACHE_ROOT, version, product, site, elevation, frame_key
+        CACHE_ROOT, version, product, site, elevation, frame_key, variant
     )
     if path is None:
         raise HTTPException(status_code=404, detail="Radar WebGL artifact unavailable.")

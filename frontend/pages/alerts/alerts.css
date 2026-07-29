@@ -74,7 +74,8 @@
 .alerts-detail-section p strong { color: #facc15; }
 .alerts-detail-link { display: inline-block; margin-top: 12px; color: #22e8ff; font-weight: 800; }
 .alerts-detail-zoom { display: block; width: 100%; margin-top: 12px; color: #211900; background: #facc15; border-color: #fde047; font-weight: 850; }
-.alerts-map-wrap .leaflet-tooltip.alerts-hover-tip { width: min(420px, calc(100vw - 48px)); max-width: min(420px, calc(100vw - 48px)); color: #e5eefc; background: rgba(4,14,30,0.96); border: 1px solid #35538b; line-height: 1.35; white-space: normal; overflow-wrap: break-word; }
+.alerts-map-wrap .leaflet-tooltip.alerts-hover-tip { width: min(420px, calc(100vw - 48px)); max-width: min(420px, calc(100vw - 48px)); color: #e5eefc; background: rgba(4, 14, 30, 0.5); border: 1px solid #35538b; line-height: 1.35; white-space: normal; overflow-wrap: break-word; }
+.alerts-map-wrap .leaflet-container.is-alert-tooltip-zoom-suppressed .leaflet-tooltip.alerts-hover-tip:not(.alerts-lsr-hover-tip) { display: none; }
 .alerts-notifications { position: absolute; top: 12px; left: 50%; z-index: 1250; width: min(430px, calc(100% - 24px)); transform: translateX(-50%); display: grid; gap: 7px; pointer-events: none; }
 .alerts-notification { position: relative; padding: 10px 38px 10px 12px; color: #eef6ff; background: rgba(4,14,30,0.97); border: 1px solid var(--alert-color); border-left: 6px solid var(--alert-color); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.45); pointer-events: auto; cursor: pointer; text-align: left; }
 .alerts-notification strong, .alerts-notification span { display: block; }

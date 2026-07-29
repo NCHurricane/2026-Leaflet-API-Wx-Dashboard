@@ -168,7 +168,9 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "elevation: '0.5'" in app
     assert "radarEngine.loadFrames({ refresh: true })" in app
     assert "notifyNewAlerts: false" in app
-    assert 'data-warning="all" aria-pressed="false"' in page
+    assert 'id="workspace-alert-all" type="button" aria-pressed="false"' in page
+    assert 'data-warning="all"' not in page
+    assert 'data-watch="all"' not in page
     assert 'class="is-active" type="button" data-warning="tor" aria-pressed="true"' in page
     assert 'class="is-active" type="button" data-warning="svr" aria-pressed="true"' in page
     assert 'data-warning="sps" aria-pressed="false" title="Special Weather Statement">SPS</button>' in page
@@ -180,6 +182,8 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "categories.add('Severe Weather Watches')" in app
     assert "categories.add('Hydrology Alerts')" in app
     assert "eventTypes: [...new Set([...warningEvents, ...watchEvents])]" in app
+    assert "categories: Object.keys(ALERT_CATEGORIES)" in app
+    assert "warningTypes: Object.keys(SEVERE_EVENTS)" in app
     assert "subdueWatches: true" in app
     assert 'class="is-active" type="button" data-hours="1"' in page
     assert 'class="is-active" type="button" data-hours="24"' not in page
@@ -246,6 +250,7 @@ def test_workspace_alerts_use_wide_unscrolled_legend_and_stale_while_revalidate_
     assert "#workspace-alerts-legend .core-legend-category-code" in styles
     assert "text-overflow: clip" in styles
     assert "overflow-wrap: anywhere" in styles
+    assert ".workspace-legend-content .core-legend-body { padding: 0 15px; }" in styles
     assert "LIVE_ALERT_CACHE_NAME = 'nch-alerts-live-v1'" in engine
     assert "const persisted = await readLiveAlertCache(api, paths)" in engine
     assert "const freshPayloads = await freshPromise" in engine
@@ -302,6 +307,21 @@ def test_workspace_suppresses_alert_tooltips_for_radar_tools():
     assert "byId('workspace-radar-inspector').checked" in app
     assert "classList.toggle('is-alert-tooltip-suppressed', suppress)" in app
     assert ".is-alert-tooltip-suppressed .leaflet-tooltip.alerts-hover-tip:not(.alerts-lsr-hover-tip)" in styles
+
+
+def test_workspace_all_alerts_pill_matches_standalone_category_scope():
+    page = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.html"
+    ).read_text(encoding="utf-8")
+    app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace-app.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'id="workspace-alert-all" type="button" aria-pressed="false"' in page
+    assert "Object.keys(ALERT_CATEGORIES)" in app
+    assert "Object.keys(SEVERE_EVENTS)" in app
+    assert "setAllAlertsPill(false)" in app
+    assert "#workspace-warning-filters button, #workspace-watch-filters button" in app
 
 
 def test_workspace_storm_track_disable_invalidates_inflight_load():

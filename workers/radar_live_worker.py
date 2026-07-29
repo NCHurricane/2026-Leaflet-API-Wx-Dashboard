@@ -1422,8 +1422,13 @@ def _publish_webgl_artifact(
     sweep: int,
     product_cfg: dict,
 ) -> Path | None:
-    """Publish the optional L2 REF artifact without affecting PNG success."""
-    if str(product_code).upper() != "REF":
+    """Publish an enabled Level II WebGL artifact without affecting PNG success."""
+    product_key = {
+        "REF": "L2_REF",
+        "VEL": "L2_VEL",
+        "SRV": "L2_SRV",
+    }.get(str(product_code).upper())
+    if product_key is None:
         return None
     try:
         return write_artifact(
@@ -1435,11 +1440,12 @@ def _publish_webgl_artifact(
             field_name,
             sweep,
             product_cfg,
+            product_key,
         )
     except Exception as exc:
         print(
             f"[radar_live_worker] WebGL artifact skipped for "
-            f"{site}/{frame_key}: {type(exc).__name__}: {exc}"
+            f"{site}/{product_key}/{frame_key}: {type(exc).__name__}: {exc}"
         )
         return None
 
@@ -1779,8 +1785,15 @@ def _render_site_product(
                     available_elevations=available_elevations,
                     selected_elevation=selected_elevation,
                 )
-                if product_key == "L2_REF":
-                    prune_artifacts(_CACHE_ROOT, site, selected_elevation, keep_n)
+                if product_key in {"L2_REF", "L2_VEL", "L2_SRV"}:
+                    prune_artifacts(
+                        _CACHE_ROOT,
+                        site,
+                        selected_elevation,
+                        keep_n,
+                        product_key,
+                        str(product_cfg.get("cache_variant") or "") or None,
+                    )
                 cached += 1
             except Exception as exc:
                 print(f"[radar_live_worker] Failed to finalize {frame_key}: {exc}")
@@ -1890,8 +1903,15 @@ def _render_site_product(
                     print(f"  FRAME TOTAL: {t_frame_total*1000:.1f}ms")
                     profile_first_frame = False
 
-                if product_key == "L2_REF":
-                    prune_artifacts(_CACHE_ROOT, site, selected_elevation, keep_n)
+                if product_key in {"L2_REF", "L2_VEL", "L2_SRV"}:
+                    prune_artifacts(
+                        _CACHE_ROOT,
+                        site,
+                        selected_elevation,
+                        keep_n,
+                        product_key,
+                        str(product_cfg.get("cache_variant") or "") or None,
+                    )
                 cached += 1
             except Exception as exc:
                 processed_keys.discard(source_key)
@@ -2076,12 +2096,14 @@ def _render_site_l2_products(
                     available_elevations=result["available_elevations"],
                     selected_elevation=result["selected_elevation"],
                 )
-                if product_key == "L2_REF":
+                if product_key in {"L2_REF", "L2_VEL", "L2_SRV"}:
                     prune_artifacts(
                         _CACHE_ROOT,
                         site,
                         result["selected_elevation"],
                         state["keep_n"],
+                        product_key,
+                        str(state["product_cfg"].get("cache_variant") or "") or None,
                     )
                 state["cached"] += 1
             except Exception as exc:

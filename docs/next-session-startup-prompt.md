@@ -166,19 +166,40 @@ Current checkpoint:
   bounded four-texture animation, zoom-9 PNG-only release, buffered zoom-11
   activation, continuous Workspace playback across its 30-second auto-refresh,
   and KAMX-to-KBYX cancellation without stale identity reappearance.
-- Phase 8 core-product WebGL expansion requires separate approval.
-  All-product conversion, tiles, and PNG retirement remain out of scope.
+- The first Radar Phase 8 family (`L2_VEL` and `L2_SRV`) was separately
+  authorized, implemented, and browser-accepted on `/radar` and `/workspace`.
+  Artifact `v2` adds product/motion-variant identity and two-byte velocity
+  codes while preserving the PNG workflow and fallback. Five-sample
+  first-PNG regressions remain below 5%; focused validation passes 79 tests
+  plus 42 subtests, four JavaScript tests pass, and full pytest passes 303
+  tests plus 42 subtests with only the known stale Workspace assertion.
+- The current-source control/candidate PNGs are byte-identical. The exact
+  permanent Phase 0 inputs were restored and verified against their committed
+  size and SHA-256 contracts; all eight PNG golden rows pass with the family
+  enabled. The first Phase 8 family is closed. Evidence is in
+  `docs/perf/2026-07-29-radar-phase8-velocity/`.
+- L3 N0B/N0G, all-product conversion, tiles, and PNG retirement remain
+  unauthorized and out of scope.
 - Workspace Radar interaction follow-up: alert-polygon hover tooltips are now
   suppressed whenever Value Inspector or Storm Tracks is enabled and return
-  when both are off. LSR hover tooltips are unaffected. The user confirmed this
-  behavior in the browser.
+  when both are off. Alert-polygon tooltips are also hidden at zoom 10 and
+  above on `/alerts` and `/workspace`; LSR hover tooltips are unaffected by either
+  condition. The user confirmed the tool-selection suppression in the browser;
+  the zoom threshold has focused static coverage.
+- Workspace legend bodies use `padding: 0 15px`, which the user added to remove
+  the unwanted legend scrollbar.
+- Workspace now has one global `All Active Alerts` polygon pill. It selects the
+  same complete category scope as `/alerts` without the narrower Workspace
+  event whitelist; choosing any warning or watch pill turns the global pill
+  off.
 - Storm Tracks checkbox-off behavior now invalidates any in-flight track
   request, immediately removes its marker layer, and rejects a stale response
   that would otherwise repopulate the icons. It deliberately retains
   selected-cell SRV motion state and playback continuity.
-- JavaScript syntax, two focused Workspace tests, and diff checks pass for
-  these interaction fixes. The broader Workspace file retains its unrelated
-  stale `WORKSPACE_REGION_BOUNDS` assertion.
+- The user confirmed the pending Storm Tracks browser re-smoke passed.
+- JavaScript syntax, ten focused Alerts/Workspace tests, and diff checks pass
+  for these interaction fixes. The broader Workspace file retains its
+  unrelated stale `WORKSPACE_REGION_BOUNDS` assertion.
 - All Uvicorn sessions were intentionally stopped. Restart the current API
   before making runtime or browser claims.
 
@@ -194,10 +215,8 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- After restarting the API, browser re-smoke Storm Tracks both after icons load
-  and while a track request is in flight. Confirm unchecking removes icons
-  immediately, they do not reappear, and selected-cell SRV playback remains
-  continuous.
-- Decide whether to authorize the first Phase 8 core-product WebGL family.
-  Do not begin Phase 8 without separate explicit authorization.
+- Decide whether to separately authorize the next Phase 8 family
+  (`L3_N0B`/`L3_N0G`).
+- Do not begin L3 N0B/N0G or another product family without that explicit
+  authorization.
 ```

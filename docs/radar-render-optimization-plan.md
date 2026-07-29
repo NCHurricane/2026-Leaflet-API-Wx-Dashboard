@@ -526,6 +526,39 @@ payload/GPU budget, animation gate, and browser matrix. The other Level II
 dual-pol and special Level III accumulation, categorical, Echo Tops, and VIL
 products remain PNG unless separately justified.
 
+**First-family implementation status (2026-07-29): complete and
+browser-accepted.** `L2_VEL` and `L2_SRV` now use the separately gated
+artifact `v2` path. Reflectivity keeps
+its one-byte encoding; Velocity/SRV use two-byte gate codes and a 512-entry
+palette, with measured maximum reconstruction error below 0.002 product units.
+Product and normalized SRV motion-variant identities scope disk paths, URLs,
+client validation, pruning, and stale-work cancellation.
+
+The family has separate default-off activation and animation switches. It
+retains Phase 7's zoom 10 prefetch, zoom 11 activation, four-texture/two-load
+window, immediate PNG workflow, and per-frame fallback. A representative
+four-texture Velocity/SRV window is about 10.08 MiB.
+
+Five fresh-process KGSP samples keep first-PNG p50/p95 regressions below the
+5% ceiling: Velocity is +2.84%/+1.24%, and SRV is +3.35%/+3.75%. Artifact
+creation is 25.289/25.501 ms p50/p95 for Velocity and 23.252/25.861 ms for
+SRV. Control/candidate PNG hashes are byte-identical for both products.
+Focused validation passes 79 tests plus 42 subtests, four JavaScript tests
+pass, and full pytest passes 303 tests plus 42 subtests with only the known
+stale Workspace assertion.
+
+Codex in-app browser acceptance passes on `/radar` and `/workspace` for both
+products: PNG remains at zoom 10, WebGL activates at zoom 11, four-texture
+playback preserves frame order, a Velocity-to-SRV change cancels the old
+identity, and disabling the family keeps zoom-13 playback PNG-only with no
+WebGL canvas.
+
+The exact permanent Phase 0 inputs were restored from the public archive and
+verified against their committed size and SHA-256 contracts. All eight PNG
+golden rows pass with the family enabled in scratch. This first family is
+closed. Evidence is in
+`docs/perf/2026-07-29-radar-phase8-velocity/`.
+
 All-product WebGL conversion, PNG retirement, and server-rendered tiles remain
 outside this plan. Any of those requires a new approved migration plan and
 retains PNG fallback until its own closure gate.
@@ -538,12 +571,14 @@ retains PNG fallback until its own closure gate.
    browser gates.
 3. Phase 7 is closed after passing its automated, golden, and both-page
    browser gates.
-4. Authorize each Phase 8 product family separately; do not infer approval for
-   all-product conversion.
-5. After every phase, run the complete PNG golden matrix, focused Radar tests, full
+4. The separately authorized L2 Velocity/SRV family is closed after all eight
+   golden rows passed.
+5. Authorize each later Phase 8 product family separately; do not infer
+   approval for L3 N0B/N0G or all-product conversion.
+6. After every phase, run the complete PNG golden matrix, focused Radar tests, full
    pytest, `py_compile`, JavaScript syntax checks if frontend files changed, and
    `git diff --check`.
-6. Keep browser claims separate. User browser smoke owns visible first-load,
+7. Keep browser claims separate. User browser smoke owns visible first-load,
    animation continuity, elevation, inspector, and storm-track acceptance.
 
 Rollback remains one phase commit at a time. No phase may depend on deleting

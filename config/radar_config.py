@@ -399,15 +399,22 @@ LIVE_RADAR_MAX_KEEP_FRAMES = max(
     live_radar_target_frames(LIVE_RADAR_MAX_LOOKBACK_HOURS),
 )
 
-# Optional high-zoom WebGL path. PNG remains authoritative at every zoom;
-# these switches only enable the separate Level II Reflectivity polar artifact.
+# Optional high-zoom WebGL path. PNG remains authoritative at every zoom.
+# Reflectivity and the separately gated Velocity/SRV family publish independent
+# versioned polar artifacts; disabling either family restores PNG-only behavior.
 LIVE_RADAR_WEBGL_ENABLED = os.environ.get(
     "LIVE_RADAR_WEBGL_ENABLED", "0"
 ).strip().lower() in {"1", "true", "yes", "on"}
 LIVE_RADAR_WEBGL_ANIMATION_ENABLED = os.environ.get(
     "LIVE_RADAR_WEBGL_ANIMATION_ENABLED", "0"
 ).strip().lower() in {"1", "true", "yes", "on"}
-LIVE_RADAR_WEBGL_ARTIFACT_VERSION = 1
+LIVE_RADAR_WEBGL_VELOCITY_ENABLED = os.environ.get(
+    "LIVE_RADAR_WEBGL_VELOCITY_ENABLED", "0"
+).strip().lower() in {"1", "true", "yes", "on"}
+LIVE_RADAR_WEBGL_VELOCITY_ANIMATION_ENABLED = os.environ.get(
+    "LIVE_RADAR_WEBGL_VELOCITY_ANIMATION_ENABLED", "0"
+).strip().lower() in {"1", "true", "yes", "on"}
+LIVE_RADAR_WEBGL_ARTIFACT_VERSION = 2
 LIVE_RADAR_WEBGL_PREFETCH_ZOOM = 10
 LIVE_RADAR_WEBGL_ACTIVATE_ZOOM = 11
 LIVE_RADAR_WEBGL_RELEASE_GRACE_MS = 1500

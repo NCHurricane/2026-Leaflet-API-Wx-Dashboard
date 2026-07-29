@@ -366,10 +366,10 @@ def _render_one(
             worker._finalize_rendered_png(temp_path, destination)
             record["finalize_ms"] = (time.perf_counter() - started) * 1000.0
 
-            if context["product"] == "L2_REF":
+            if context["product"].startswith("L2_"):
                 from radar.webgl_artifact import feature_config, write_artifact
 
-                if feature_config()["enabled"]:
+                if context["product"] in feature_config()["products"]:
                     started = time.perf_counter()
                     artifact = write_artifact(
                         cache_root,
@@ -380,6 +380,7 @@ def _render_one(
                         field_name,
                         sweep,
                         context["product_cfg"],
+                        context["product"],
                     )
                     record["webgl_artifact_ms"] = (
                         time.perf_counter() - started
