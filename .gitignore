@@ -97,8 +97,11 @@ docs/perf/*
 !docs/perf/2026-07-26-radar-phase6/**
 !docs/perf/2026-07-26-radar-phase7/
 !docs/perf/2026-07-26-radar-phase7/**
+!docs/perf/2026-07-29-radar-phase8/
+!docs/perf/2026-07-29-radar-phase8/**
 !tests/
 tests/*
+!tests/*
 !tests/test_radar_l2_dedup.py
 !tests/test_radar_phase4_io.py
 !tests/test_radar_webgl_artifact.py
