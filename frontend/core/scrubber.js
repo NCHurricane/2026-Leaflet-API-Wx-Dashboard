@@ -8,6 +8,7 @@ const LOOP_HOLD_MULTIPLIER = 2;
 
 export function createScrubber(containerEl, options = {}) {
     const onFrame = options.onFrame || (() => {});
+    const onPlayingChange = options.onPlayingChange || (() => {});
     const holdAtEnd = options.holdAtEnd === true;
 
     let frames = [];
@@ -69,9 +70,11 @@ export function createScrubber(containerEl, options = {}) {
     }
 
     function stopPlay() {
+        const wasPlaying = playing;
         if (playTimer) { clearTimeout(playTimer); playTimer = null; }
         playing = false;
         if (els.play) els.play.textContent = '▶';
+        if (wasPlaying) onPlayingChange(false);
     }
 
     function tick() {
@@ -93,6 +96,7 @@ export function createScrubber(containerEl, options = {}) {
         if (playing || frames.length < 2) return;
         playing = true;
         if (els.play) els.play.textContent = '⏸';
+        onPlayingChange(true);
         playTimer = setTimeout(tick, interval());
     }
 

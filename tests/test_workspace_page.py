@@ -86,6 +86,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert 'id="workspace-lsr-enabled" type="checkbox" checked' not in page
     assert 'class="wx-check-row workspace-radar-site-option" hidden' in page
     assert 'id="workspace-warning-filters"' in page
+    assert 'id="workspace-watch-filters"' in page
     assert 'id="workspace-lsr-filters"' in page
     assert 'id="workspace-lsr-hours"' in page
     assert 'id="workspace-alerts-legend"' in page
@@ -108,9 +109,9 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
         if f'<option value="{value}">' in page
     ]
     assert "WORKSPACE_REGION_BOUNDS" in app
-    assert "categories: Object.keys(ALERT_CATEGORIES)" in app
-    assert "if (warningTypes.length) categories.push('Severe Weather Warnings')" in app
-    assert "function toggleWarningPill" in app
+    assert "WORKSPACE_WARNING_EVENTS" in app
+    assert "WORKSPACE_WATCH_EVENTS" in app
+    assert "function toggleAlertPill" in app
     assert "function syncRadarControls" in app
     assert "String(product?.level || '') === level" in app
     assert "radarEngine.isConusSite(site)" in app
@@ -171,9 +172,15 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert 'class="is-active" type="button" data-warning="tor" aria-pressed="true"' in page
     assert 'class="is-active" type="button" data-warning="svr" aria-pressed="true"' in page
     assert 'data-warning="sps" aria-pressed="false" title="Special Weather Statement">SPS</button>' in page
-    assert "sps: 'Special Weather Statement'" in app
-    assert "if (filterTypes.includes('sps')) categories.push('Informational Alerts')" in app
-    assert "eventTypes: filterTypes.map" in app
+    assert 'class="is-active" type="button" data-watch="tor" aria-pressed="true" title="Tornado Watch"' in page
+    assert 'class="is-active" type="button" data-watch="svr" aria-pressed="true" title="Severe Thunderstorm Watch"' in page
+    assert 'data-watch="fld" aria-pressed="false" title="Flood Watch / Flash Flood Watch">FLD</button>' in page
+    assert "sps: ['Special Weather Statement']" in app
+    assert "fld: ['Flash Flood Watch', 'Flood Watch']" in app
+    assert "categories.add('Severe Weather Watches')" in app
+    assert "categories.add('Hydrology Alerts')" in app
+    assert "eventTypes: [...new Set([...warningEvents, ...watchEvents])]" in app
+    assert "subdueWatches: true" in app
     assert 'class="is-active" type="button" data-hours="1"' in page
     assert 'class="is-active" type="button" data-hours="24"' not in page
 
@@ -244,6 +251,107 @@ def test_workspace_alerts_use_wide_unscrolled_legend_and_stale_while_revalidate_
     assert "const freshPayloads = await freshPromise" in engine
     assert "void writeLiveAlertCache(api, paths, freshPayloads)" in engine
     assert "await Promise.all([radarEngine.loadCatalog(), refreshAlerts()])" in app
+
+
+def test_workspace_selected_alert_overlay_is_independent_of_polygon_filters():
+    app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace-app.js"
+    ).read_text(encoding="utf-8")
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+    detail = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-detail.js"
+    ).read_text(encoding="utf-8")
+    styles = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.css"
+    ).read_text(encoding="utf-8")
+
+    assert "alertsEngine.showSelectedAlert(feature)" in app
+    assert "alertsEngine?.clearSelectedAlert()" in app
+    assert "button.dataset.alertId = alertFeatureId(feature)" in app
+    assert "button.classList.add('is-selected')" in app
+    assert "onSelectedAlertRemoved(feature)" in app
+    assert "onClose(mode) { if (mode === 'alert') clearSelectedAlert(); }" in app
+    assert "mapCore.map.on('movestart zoomstart', detail.closeLsr)" in app
+    assert "mapCore.map.on('movestart zoomstart', detail.close)" not in app
+    assert "const selectedAlertPane = map.createPane('alerts-selected')" in engine
+    assert "function showSelectedAlert(feature)" in engine
+    assert "function reconcileSelectedAlert(features)" in engine
+    assert "...alertStyle(feature)" in engine
+    assert "color: '#f8fafc'" not in engine
+    assert "Selected alert" not in engine
+    assert "alerts-selected-legend-area" not in engine
+    assert "reconcileSelectedAlert: true" in engine
+    assert "options.onClose?.(closedMode)" in detail
+    assert "alerts-selected-legend-section" in engine
+    assert ".alerts-warning-card.is-selected" in styles
+    assert ".alerts-selected-polygon" not in styles
+
+
+def test_workspace_suppresses_alert_tooltips_for_radar_tools():
+    app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace-app.js"
+    ).read_text(encoding="utf-8")
+    styles = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.css"
+    ).read_text(encoding="utf-8")
+
+    assert "function syncAlertTooltipSuppression()" in app
+    assert "byId('workspace-radar-tracks').checked" in app
+    assert "byId('workspace-radar-inspector').checked" in app
+    assert "classList.toggle('is-alert-tooltip-suppressed', suppress)" in app
+    assert ".is-alert-tooltip-suppressed .leaflet-tooltip.alerts-hover-tip:not(.alerts-lsr-hover-tip)" in styles
+
+
+def test_workspace_storm_track_disable_invalidates_inflight_load():
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "radar" / "radar-engine.js"
+    ).read_text(encoding="utf-8")
+
+    assert "seq !== trackSequence || !tracksVisible || getSelection().site !== selection.site" in engine
+    assert "else {\n                trackSequence += 1;\n                stormLayer.clearLayers();" in engine
+    assert "selectedCell = null" not in engine.split("setStormTracksVisible(value)", 1)[1]
+
+
+def test_workspace_watch_filters_are_independent_and_workspace_scoped():
+    page = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.html"
+    ).read_text(encoding="utf-8")
+    app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace-app.js"
+    ).read_text(encoding="utf-8")
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+    map_core = (
+        Path(BASE_DIR) / "frontend" / "core" / "map-core.js"
+    ).read_text(encoding="utf-8")
+    styles = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.css"
+    ).read_text(encoding="utf-8")
+
+    assert 'id="workspace-watch-filters"' in page
+    assert 'aria-label="Watch polygons"' in page
+    assert 'data-watch="all" aria-pressed="false"' in page
+    assert 'data-watch="tor" aria-pressed="true" title="Tornado Watch"' in page
+    assert 'data-watch="svr" aria-pressed="true" title="Severe Thunderstorm Watch"' in page
+    assert 'data-watch="fld" aria-pressed="false" title="Flood Watch / Flash Flood Watch"' in page
+    assert "fld: ['Flash Flood Watch', 'Flood Watch']" in app
+    assert "activeAlertEvents('workspace-watch-filters', 'watch', WORKSPACE_WATCH_EVENTS)" in app
+    assert "byId('workspace-watch-filters').addEventListener('click'" in app
+    assert "syncLayerToggle('workspace-alerts-enabled', 'workspace-watch-filters')" in app
+    assert "subdueWatches: true" in app
+    assert "alertPaneZIndex: 440" in app
+    assert "const subdueWatches = options.subdueWatches === true" in engine
+    assert "watchesPane.style.zIndex = String(alertPaneZIndex - 10)" in engine
+    assert "alertsPane.style.zIndex = String(alertPaneZIndex)" in engine
+    assert "selectedAlertPane.style.zIndex = String(alertPaneZIndex + 10)" in engine
+    assert "boundaryPane.style.zIndex = '420'" in map_core
+    assert "fillOpacity: isSubduedWatch ? opacity * 0.16 : opacity" in engine
+    assert "buildAlertLayer(displayedWatches, 'alerts-watches')" in engine
+    assert "alerts-watch-legend-color" in engine
+    assert "#workspace-watch-filters { grid-template-columns: repeat(4" in styles
 
 
 def test_legacy_monolith_assets_are_deleted():

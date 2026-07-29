@@ -1,0 +1,46 @@
+{
+  "batch": {
+    "decode_count_per_run": 1,
+    "failed_products_total": 0,
+    "p50_ms": 16521.521,
+    "p95_ms": 16558.131,
+    "peak_rss_p95_mib": 1857.16,
+    "samples_ms": [
+      16566.514,
+      16455.389,
+      16413.258,
+      16524.6,
+      16521.521
+    ]
+  },
+  "configured_l2_products": 7,
+  "golden_rows_passed": 8,
+  "pinned_source": {
+    "path": "cache/radar/.bench/phase0-pinned-inputs/L2/KGSP/KGSP20260725_235847_V06",
+    "sha256": "7c53192ac03c77fa35b9ab5fd3696b20b55f9d5603fffb7da36c6e686fe1fba5",
+    "size_bytes": 6487723
+  },
+  "pre_change_source_identity": {
+    "common_kmhx_ref_vel_files": 12,
+    "duplicate_logical_bytes": 54026519,
+    "sha256_identical_files": 12
+  },
+  "separate_product_control": {
+    "decode_count_per_run": 7,
+    "failed_products_total": 0,
+    "p50_ms": 26269.579,
+    "p95_ms": 26516.376,
+    "peak_rss_p95_mib": 1302.29,
+    "samples_ms": [
+      26568.973,
+      26125.503,
+      26269.579,
+      26305.988,
+      25852.336
+    ]
+  },
+  "wall_improvement": {
+    "p50_percent": 37.1,
+    "p95_percent": 37.6
+  }
+}

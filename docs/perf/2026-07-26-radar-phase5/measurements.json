@@ -1,0 +1,34 @@
+{
+  "batch": {
+    "decode_count_per_run": 1,
+    "failed_products_total": 0,
+    "p50_ms": 11814.323,
+    "p95_ms": 11995.467,
+    "peak_rss_p95_mib": 1609.203,
+    "samples_ms": [
+      12036.403,
+      11814.323,
+      11787.033,
+      11831.721,
+      11806.654
+    ]
+  },
+  "configured_l2_products": 7,
+  "golden_rows_passed": 8,
+  "phase3_control": {
+    "p50_ms": 16521.521,
+    "p95_ms": 16558.131,
+    "peak_rss_p95_mib": 1857.16
+  },
+  "pinned_source": {
+    "path": "cache/radar/.bench/phase0-pinned-inputs/L2/KGSP/KGSP20260725_235847_V06",
+    "sha256": "7c53192ac03c77fa35b9ab5fd3696b20b55f9d5603fffb7da36c6e686fe1fba5",
+    "size_bytes": 6487723
+  },
+  "result": {
+    "batch_pngs_byte_identical": 35,
+    "p50_improvement_percent": 28.5,
+    "p95_improvement_percent": 27.6,
+    "peak_rss_improvement_percent": 13.4
+  }
+}

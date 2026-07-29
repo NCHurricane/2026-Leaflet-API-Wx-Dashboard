@@ -1,0 +1,88 @@
+{
+  "benchmark": {
+    "bounds": [
+      -88.30450421029533,
+      -76.13605578970467,
+      29.89204311174991,
+      39.87407688825009
+    ],
+    "cache_product_key": "L3_N0B__BR_MIN5DBZ_V4",
+    "elevation": "auto",
+    "level": "Level 3",
+    "level_code": "L3",
+    "product": "L3_N0B",
+    "product_cfg": {
+      "cache_variant": "br_min5dbz_v4",
+      "capabilities": {
+        "elevation_selection": false
+      },
+      "field_names": [
+        "reflectivity"
+      ],
+      "figure_size_inches": 22,
+      "label": "L3 Reflectivity",
+      "level": "Level 3",
+      "mask": "reflectivity",
+      "min_value": 5.0,
+      "palette": "BR",
+      "product": "N0B",
+      "units": "dBZ",
+      "value_scale": 1.0,
+      "vmax": 90.0,
+      "vmin": -30.0
+    },
+    "product_code": "N0B",
+    "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase4-no-op-worker\\results.jsonl",
+    "repeat": 10,
+    "run_id": "phase4-no-op-worker",
+    "scenario": "no-op-worker",
+    "site": "KGSP",
+    "source_product_code": "N0B",
+    "sources": [
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_22_55_31",
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_23_00_45",
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_23_06_05",
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_23_11_26",
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_23_17_01",
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_23_22_50",
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_23_28_38",
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_23_34_13",
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_23_40_02",
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_23_46_05",
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_23_52_38",
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\backfill\\GSP_N0B_2026_07_25_23_58_47"
+    ]
+  },
+  "cpu": "",
+  "cpu_count": 32,
+  "created_utc": "2026-07-26T22:30:39.543142+00:00",
+  "dirty_files": [
+    " M .gitignore",
+    " M docs/dashboard-change-and-enhancement-superfile.md",
+    " M docs/next-session-startup-prompt.md",
+    " M docs/radar-render-optimization-plan.md",
+    " M frontend/lib/leaflet/leaflet.js",
+    " M radar/bench.py",
+    " M radar/radar_nodd_utils.py",
+    " M tests/test_radar_product_catalog.py",
+    " M workers/radar_live_worker.py",
+    "?? docs/perf/2026-07-26-radar-phase3/",
+    "?? tests/test_radar_l2_dedup.py",
+    "?? tests/test_radar_phase4_io.py"
+  ],
+  "git_sha": "4a6bf4fdea5897f710d5598c456964bd83fff870",
+  "live_radar_l2_use_chunks": false,
+  "live_radar_parallel_workers": 0,
+  "packages": {
+    "Cartopy": "0.25.0",
+    "Pillow": "12.2.0",
+    "arm_pyart": "2.2.2",
+    "matplotlib": "3.11.0",
+    "numpy": "2.5.0",
+    "psutil": "7.2.2"
+  },
+  "platform": "Windows-11-10.0.26220-SP0",
+  "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+  "ram_bytes": 137107320832,
+  "worker_state_note": "All four optional warmers remain disabled by operator before capture."
+}

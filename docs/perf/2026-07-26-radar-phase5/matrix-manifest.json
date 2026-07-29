@@ -1,0 +1,387 @@
+{
+  "benchmark_runs": [
+    {
+      "bounds": [
+        -88.30450421029533,
+        -76.13605578970467,
+        29.89204311174991,
+        39.87407688825009
+      ],
+      "cache_product_key": "L2_REF__BR_MIN5DBZ_V4__ELEV_0P5",
+      "elevation": "0.5",
+      "level": "Level 2",
+      "level_code": "L2",
+      "product": "L2_REF",
+      "product_cfg": {
+        "cache_variant": "br_min5dbz_v4",
+        "capabilities": {
+          "elevation_selection": true
+        },
+        "field_names": [
+          "reflectivity"
+        ],
+        "figure_size_inches": 22,
+        "label": "L2 Reflectivity",
+        "level": "Level 2",
+        "mask": "reflectivity",
+        "min_value": 5.0,
+        "palette": "BR",
+        "product": "REF",
+        "units": "dBZ",
+        "value_scale": 1.0,
+        "vmax": 90.0,
+        "vmin": -30.0
+      },
+      "product_code": "REF",
+      "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase5-golden-01\\results.jsonl",
+      "repeat": 1,
+      "run_id": "phase5-golden-01",
+      "scenario": "render-one",
+      "site": "KGSP",
+      "source_product_code": "REF",
+      "sources": [
+        "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L2\\KGSP\\KGSP20260725_235847_V06"
+      ]
+    },
+    {
+      "bounds": [
+        -88.30450421029533,
+        -76.13605578970467,
+        29.89204311174991,
+        39.87407688825009
+      ],
+      "cache_product_key": "L2_REF__BR_MIN5DBZ_V4__ELEV_0P5",
+      "elevation": "0.5",
+      "level": "Level 2",
+      "level_code": "L2",
+      "product": "L2_REF",
+      "product_cfg": {
+        "cache_variant": "br_min5dbz_v4",
+        "capabilities": {
+          "elevation_selection": true
+        },
+        "field_names": [
+          "reflectivity"
+        ],
+        "figure_size_inches": 22,
+        "label": "L2 Reflectivity",
+        "level": "Level 2",
+        "mask": "reflectivity",
+        "min_value": 5.0,
+        "palette": "BR",
+        "product": "REF",
+        "units": "dBZ",
+        "value_scale": 1.0,
+        "vmax": 90.0,
+        "vmin": -30.0
+      },
+      "product_code": "REF",
+      "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase5-l2-batch-final\\results.jsonl",
+      "repeat": 5,
+      "run_id": "phase5-l2-batch-final",
+      "scenario": "l2-product-batch",
+      "site": "KGSP",
+      "source_product_code": "REF",
+      "sources": [
+        "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L2\\KGSP\\KGSP20260725_235847_V06"
+      ]
+    },
+    {
+      "bounds": [
+        -88.30450421029533,
+        -76.13605578970467,
+        29.89204311174991,
+        39.87407688825009
+      ],
+      "cache_product_key": "L2_VEL__ELEV_0P5",
+      "elevation": "0.5",
+      "level": "Level 2",
+      "level_code": "L2",
+      "product": "L2_VEL",
+      "product_cfg": {
+        "capabilities": {
+          "elevation_selection": true
+        },
+        "field_names": [
+          "velocity"
+        ],
+        "figure_size_inches": 22,
+        "label": "L2 Velocity",
+        "level": "Level 2",
+        "mask": "velocity",
+        "palette": "BV",
+        "product": "VEL",
+        "units": "mph",
+        "value_scale": 2.2369363,
+        "vmax": 64.0,
+        "vmin": -150.0
+      },
+      "product_code": "VEL",
+      "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase5-golden-02\\results.jsonl",
+      "repeat": 1,
+      "run_id": "phase5-golden-02",
+      "scenario": "render-one",
+      "site": "KGSP",
+      "source_product_code": "VEL",
+      "sources": [
+        "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L2\\KGSP\\KGSP20260725_235847_V06"
+      ]
+    },
+    {
+      "bounds": [
+        -88.30450421029533,
+        -76.13605578970467,
+        29.89204311174991,
+        39.87407688825009
+      ],
+      "cache_product_key": "L2_SRV__MOTION_25KT_TO045_V1__ELEV_0P5",
+      "elevation": "0.5",
+      "level": "Level 2",
+      "level_code": "L2",
+      "product": "L2_SRV",
+      "product_cfg": {
+        "cache_variant": "motion_25kt_to045_v1",
+        "capabilities": {
+          "elevation_selection": true
+        },
+        "derived_field": "storm_relative_velocity",
+        "field_names": [
+          "velocity"
+        ],
+        "figure_size_inches": 22,
+        "label": "L2 Storm-Relative Velocity",
+        "level": "Level 2",
+        "mask": "velocity",
+        "palette": "SRV",
+        "product": "SRV",
+        "source_product": "VEL",
+        "storm_motion_speed_kt": 25.0,
+        "storm_motion_to_degrees": 45.0,
+        "units": "kt",
+        "value_scale": 1.94384449,
+        "vmax": 160.0,
+        "vmin": -100.0
+      },
+      "product_code": "SRV",
+      "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase5-golden-03\\results.jsonl",
+      "repeat": 1,
+      "run_id": "phase5-golden-03",
+      "scenario": "render-one",
+      "site": "KGSP",
+      "source_product_code": "VEL",
+      "sources": [
+        "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L2\\KGSP\\KGSP20260725_235847_V06"
+      ]
+    },
+    {
+      "bounds": [
+        -88.30450421029533,
+        -76.13605578970467,
+        29.89204311174991,
+        39.87407688825009
+      ],
+      "cache_product_key": "L2_ZDR__ELEV_0P5",
+      "elevation": "0.5",
+      "level": "Level 2",
+      "level_code": "L2",
+      "product": "L2_ZDR",
+      "product_cfg": {
+        "capabilities": {
+          "elevation_selection": true
+        },
+        "field_names": [
+          "differential_reflectivity",
+          "corrected_differential_reflectivity"
+        ],
+        "figure_size_inches": 22,
+        "label": "L2 Differential Reflectivity",
+        "level": "Level 2",
+        "mask": "finite",
+        "palette": "ZDR",
+        "product": "ZDR",
+        "units": "dB",
+        "value_scale": 1.0,
+        "vmax": 8.0,
+        "vmin": -8.0
+      },
+      "product_code": "ZDR",
+      "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase5-golden-04\\results.jsonl",
+      "repeat": 1,
+      "run_id": "phase5-golden-04",
+      "scenario": "render-one",
+      "site": "KGSP",
+      "source_product_code": "ZDR",
+      "sources": [
+        "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L2\\KGSP\\KGSP20260725_235847_V06"
+      ]
+    },
+    {
+      "bounds": [
+        -88.30450421029533,
+        -76.13605578970467,
+        29.89204311174991,
+        39.87407688825009
+      ],
+      "cache_product_key": "L3_N0B__BR_MIN5DBZ_V4",
+      "elevation": "auto",
+      "level": "Level 3",
+      "level_code": "L3",
+      "product": "L3_N0B",
+      "product_cfg": {
+        "cache_variant": "br_min5dbz_v4",
+        "capabilities": {
+          "elevation_selection": false
+        },
+        "field_names": [
+          "reflectivity"
+        ],
+        "figure_size_inches": 22,
+        "label": "L3 Reflectivity",
+        "level": "Level 3",
+        "mask": "reflectivity",
+        "min_value": 5.0,
+        "palette": "BR",
+        "product": "N0B",
+        "units": "dBZ",
+        "value_scale": 1.0,
+        "vmax": 90.0,
+        "vmin": -30.0
+      },
+      "product_code": "N0B",
+      "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase5-golden-05\\results.jsonl",
+      "repeat": 1,
+      "run_id": "phase5-golden-05",
+      "scenario": "render-one",
+      "site": "KGSP",
+      "source_product_code": "N0B",
+      "sources": [
+        "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\GSP_N0B_2026_07_25_23_58_47"
+      ]
+    },
+    {
+      "bounds": [
+        -88.30450421029533,
+        -76.13605578970467,
+        29.89204311174991,
+        39.87407688825009
+      ],
+      "cache_product_key": "L3_N0G",
+      "elevation": "auto",
+      "level": "Level 3",
+      "level_code": "L3",
+      "product": "L3_N0G",
+      "product_cfg": {
+        "capabilities": {
+          "elevation_selection": false
+        },
+        "field_names": [
+          "velocity"
+        ],
+        "figure_size_inches": 22,
+        "label": "L3 Velocity",
+        "level": "Level 3",
+        "mask": "velocity",
+        "palette": "BV",
+        "product": "N0G",
+        "units": "mph",
+        "value_scale": 2.2369363,
+        "vmax": 64.0,
+        "vmin": -150.0
+      },
+      "product_code": "N0G",
+      "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase5-golden-06\\results.jsonl",
+      "repeat": 1,
+      "run_id": "phase5-golden-06",
+      "scenario": "render-one",
+      "site": "KGSP",
+      "source_product_code": "N0G",
+      "sources": [
+        "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0G\\GSP_N0G_2026_07_25_23_58_47"
+      ]
+    },
+    {
+      "bounds": [
+        -86.52558799705915,
+        -74.02275200294085,
+        32.03315311174991,
+        42.015186888250085
+      ],
+      "cache_product_key": "L3_DPR",
+      "elevation": "auto",
+      "level": "Level 3",
+      "level_code": "L3",
+      "product": "L3_DPR",
+      "product_cfg": {
+        "capabilities": {
+          "elevation_selection": false
+        },
+        "field_names": [
+          "radar_estimated_rain_rate"
+        ],
+        "label": "L3 Digital Precipitation Rate",
+        "level": "Level 3",
+        "mask": "nonnegative",
+        "palette": "DPA",
+        "product": "DPR",
+        "units": "in/hr",
+        "value_scale": 1.0,
+        "vmax": 8.0,
+        "vmin": 0.0
+      },
+      "product_code": "DPR",
+      "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase5-golden-07\\results.jsonl",
+      "repeat": 1,
+      "run_id": "phase5-golden-07",
+      "scenario": "render-one",
+      "site": "KFCX",
+      "source_product_code": "DPR",
+      "sources": [
+        "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KFCX\\DPR\\FCX_DPR_2026_07_25_23_57_26"
+      ]
+    },
+    {
+      "bounds": [
+        -86.52558799705915,
+        -74.02275200294085,
+        32.03315311174991,
+        42.015186888250085
+      ],
+      "cache_product_key": "L2_REF__BR_MIN5DBZ_V4__ELEV_0P5",
+      "elevation": "0.5",
+      "level": "Level 2",
+      "level_code": "L2",
+      "product": "L2_REF",
+      "product_cfg": {
+        "cache_variant": "br_min5dbz_v4",
+        "capabilities": {
+          "elevation_selection": true
+        },
+        "field_names": [
+          "reflectivity"
+        ],
+        "figure_size_inches": 22,
+        "label": "L2 Reflectivity",
+        "level": "Level 2",
+        "mask": "reflectivity",
+        "min_value": 5.0,
+        "palette": "BR",
+        "product": "REF",
+        "units": "dBZ",
+        "value_scale": 1.0,
+        "vmax": 90.0,
+        "vmin": -30.0
+      },
+      "product_code": "REF",
+      "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase5-golden-08\\results.jsonl",
+      "repeat": 1,
+      "run_id": "phase5-golden-08",
+      "scenario": "render-one",
+      "site": "KFCX",
+      "source_product_code": "REF",
+      "sources": [
+        "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L2\\KFCX\\KFCX20260725_235726_V06"
+      ]
+    }
+  ],
+  "updated_utc": "2026-07-26T23:09:39.417423+00:00"
+}

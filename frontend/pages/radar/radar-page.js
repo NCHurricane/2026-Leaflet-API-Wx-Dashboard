@@ -6,7 +6,7 @@ import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
-import { createRadarEngine } from './radar-engine.js?v=20260719b';
+import { createRadarEngine } from './radar-engine.js?v=20260728b';
 
 const byId = (id) => document.getElementById(id);
 const AUTO_UPDATE_INTERVAL_MS = 90_000;
@@ -71,6 +71,7 @@ async function initialize() {
     const scrubber = createScrubber(byId('radar-bottom-scrubber'), {
         holdAtEnd: true,
         onFrame(_frame, index) { void engine.renderFrameAt(index); },
+        onPlayingChange(playing) { engine.setPlaybackActive(playing); },
     });
 
     function showScrubber(visible) { scrubberBar.hidden = !visible; }
@@ -207,10 +208,15 @@ async function initialize() {
         onElevationData: updateElevationOptions,
         onFrames(nextFrames, options = {}) {
             const labeled = nextFrames.map((frame) => ({ ...frame, label: frameLabel(frame) }));
-            scrubber.setFrames(labeled, { index: options.index || 0, silent: true, keepPlaying: true });
+            scrubber.setFrames(labeled, {
+                index: options.index || 0,
+                silent: true,
+                keepPlaying: labeled.length > 0,
+            });
             showScrubber(labeled.length > 0);
         },
         onSitePicked(site, coords) {
+            scrubber.pause();
             byId('radar-site').value = site;
             syncRadarControls();
             engine.syncHighlights(site);

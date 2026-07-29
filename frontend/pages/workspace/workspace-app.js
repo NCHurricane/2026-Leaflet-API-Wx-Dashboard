@@ -5,10 +5,10 @@ import { createScrubber } from '../../core/scrubber.js';
 import { loadDefaultSettings } from '../../core/settings.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
-import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
-import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260719c';
-import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260724a';
-import { createRadarEngine } from '../radar/radar-engine.js?v=20260719b';
+import { ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
+import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260726a';
+import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260726d';
+import { createRadarEngine } from '../radar/radar-engine.js?v=20260728b';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 
 const byId = (id) => document.getElementById(id);
@@ -19,9 +19,19 @@ const NEW_ALERT_EVENTS = new Set([
     'Severe Thunderstorm Warning', 'Severe Thunderstorm Watch',
     'Flash Flood Warning', 'Flash Flood Watch',
 ]);
-const WORKSPACE_ALERT_EVENTS = Object.freeze({
-    ...SEVERE_EVENTS,
-    sps: 'Special Weather Statement',
+const WORKSPACE_WARNING_EVENTS = Object.freeze({
+    all: [...Object.values(SEVERE_EVENTS), 'Special Weather Statement'],
+    tor: [SEVERE_EVENTS.tor],
+    svr: [SEVERE_EVENTS.svr],
+    ffw: [SEVERE_EVENTS.ffw],
+    smw: [SEVERE_EVENTS.smw],
+    sps: ['Special Weather Statement'],
+});
+const WORKSPACE_WATCH_EVENTS = Object.freeze({
+    all: ['Tornado Watch', 'Severe Thunderstorm Watch', 'Flash Flood Watch', 'Flood Watch'],
+    tor: ['Tornado Watch'],
+    svr: ['Severe Thunderstorm Watch'],
+    fld: ['Flash Flood Watch', 'Flood Watch'],
 });
 const PROJECTED_ARRIVAL_EVENTS = new Set([
     'Tornado Warning',
@@ -128,12 +138,12 @@ function selectPill(event, dataAttribute) {
     return true;
 }
 
-function toggleWarningPill(event) {
-    const button = event.target.closest('button[data-warning]');
+function toggleAlertPill(event, dataKey) {
+    const button = event.target.closest(`button[data-${dataKey}]`);
     if (!button) return false;
     const active = !button.classList.contains('is-active');
-    const buttons = [...button.parentElement.querySelectorAll('button[data-warning]')];
-    if (button.dataset.warning === 'all' && active) {
+    const buttons = [...button.parentElement.querySelectorAll(`button[data-${dataKey}]`)];
+    if (button.dataset[dataKey] === 'all' && active) {
         buttons.forEach((item) => {
             const selected = item === button;
             item.classList.toggle('is-active', selected);
@@ -143,7 +153,7 @@ function toggleWarningPill(event) {
         button.classList.toggle('is-active', active);
         button.setAttribute('aria-pressed', String(active));
         if (active) {
-            const allButton = buttons.find((item) => item.dataset.warning === 'all');
+            const allButton = buttons.find((item) => item.dataset[dataKey] === 'all');
             allButton?.classList.remove('is-active');
             allButton?.setAttribute('aria-pressed', 'false');
         }
@@ -164,6 +174,11 @@ function alertIssuedMs(feature) {
     const props = feature?.properties || {};
     const value = Date.parse(props.sent || props.effective || props.onset || '');
     return Number.isFinite(value) ? value : 0;
+}
+
+function alertFeatureId(feature) {
+    const props = feature?.properties || {};
+    return String(feature?.id || `${props.event || ''}|${props.sent || ''}|${props.areaDesc || ''}`);
 }
 
 function radarFrameLabel(frame) {
@@ -206,8 +221,10 @@ async function initialize() {
     const lsrLegend = legendTray.legend('storm-reports');
     const radarLegend = legendTray.legend('radar');
     const stormTrackLegend = legendTray.legend('storm-tracks');
+    let alertsEngine = null;
     const detail = createAlertDetail(byId('workspace-detail'), {
         initialTop: 70,
+        onClose(mode) { if (mode === 'alert') clearSelectedAlert(); },
         lsrColor(feature) {
             const category = classifyLsrEvent(feature?.properties?.event);
             return (LSR_CATEGORIES[category] || LSR_CATEGORIES.other)[1];
@@ -238,25 +255,48 @@ async function initialize() {
     window.addEventListener('pointerdown', unlockAlertSound, { once: true, capture: true });
     window.addEventListener('keydown', unlockAlertSound, { once: true, capture: true });
 
+    const activeAlertEvents = (rootId, dataKey, eventGroups) => {
+        const selected = [...byId(rootId).querySelectorAll('.is-active')]
+            .map((button) => button.dataset[dataKey]);
+        const keys = selected.includes('all') ? ['all'] : selected;
+        return keys.flatMap((key) => eventGroups[key] || []);
+    };
     const alertSelection = () => {
-        const selected = [...byId('workspace-warning-filters').querySelectorAll('.is-active')]
-            .map((button) => button.dataset.warning);
-        const allActive = selected.includes('all');
-        const filterTypes = selected.filter((value) => value !== 'all');
-        const warningTypes = filterTypes.filter((value) => Object.hasOwn(SEVERE_EVENTS, value));
-        const categories = [];
-        if (warningTypes.length) categories.push('Severe Weather Warnings');
-        if (filterTypes.includes('sps')) categories.push('Informational Alerts');
-        return allActive
-            ? { categories: Object.keys(ALERT_CATEGORIES), warningTypes: Object.keys(SEVERE_EVENTS) }
-            : { categories, warningTypes, eventTypes: filterTypes.map((value) => WORKSPACE_ALERT_EVENTS[value]).filter(Boolean) };
+        const warningEvents = activeAlertEvents('workspace-warning-filters', 'warning', WORKSPACE_WARNING_EVENTS);
+        const watchEvents = activeAlertEvents('workspace-watch-filters', 'watch', WORKSPACE_WATCH_EVENTS);
+        const categories = new Set();
+        if (warningEvents.some((event) => event !== 'Special Weather Statement')) categories.add('Severe Weather Warnings');
+        if (warningEvents.includes('Special Weather Statement')) categories.add('Informational Alerts');
+        if (watchEvents.some((event) => event !== 'Flood Watch')) categories.add('Severe Weather Watches');
+        if (watchEvents.includes('Flood Watch')) categories.add('Hydrology Alerts');
+        return {
+            categories: [...categories],
+            warningTypes: Object.keys(SEVERE_EVENTS),
+            eventTypes: [...new Set([...warningEvents, ...watchEvents])],
+        };
     };
     const selectedLsrCategories = () => LSR_FILTER_CATEGORIES[activePillValue('workspace-lsr-filters', 'lsr', 'all')] || LSR_FILTER_CATEGORIES.all;
     const selectedLsrHours = () => Number(activePillValue('workspace-lsr-hours', 'hours', '1'));
     let currentWarnings = [];
     let warningRailFilter = 'all';
+    let selectedAlertId = '';
     let currentLsrReports = [];
     let lsrRailFilter = 'all';
+
+    function syncSelectedWarningCard() {
+        byId('workspace-warning-list').querySelectorAll('.alerts-warning-card').forEach((card) => {
+            const selected = Boolean(selectedAlertId) && card.dataset.alertId === selectedAlertId;
+            card.classList.toggle('is-selected', selected);
+            if (selected) card.setAttribute('aria-current', 'true');
+            else card.removeAttribute('aria-current');
+        });
+    }
+
+    function clearSelectedAlert() {
+        selectedAlertId = '';
+        alertsEngine?.clearSelectedAlert();
+        syncSelectedWarningCard();
+    }
 
     function hideProjectedArrival() {
         const group = byId('workspace-projected-arrival-group');
@@ -275,6 +315,7 @@ async function initialize() {
 
     function selectAlert(feature, options = { maxZoom: 9 }) {
         const props = feature?.properties || {};
+        clearSelectedAlert();
         if (supportsProjectedArrival(feature)) {
             tools.setSelectedAlert(feature);
             const group = byId('workspace-projected-arrival-group');
@@ -285,8 +326,13 @@ async function initialize() {
             hideProjectedArrival();
         }
         alertsEngine.zoomTo(feature, options);
+        const hasPolygon = alertsEngine.showSelectedAlert(feature);
+        selectedAlertId = hasPolygon ? alertFeatureId(feature) : '';
+        syncSelectedWarningCard();
         detail.open(feature);
-        status.setMessage(supportsProjectedArrival(feature)
+        status.setMessage(!hasPolygon
+            ? `${props.event || 'Alert'} selected; polygon unavailable.`
+            : supportsProjectedArrival(feature)
             ? `${props.event || 'Alert'} selected for the Projected Arrival Tool.`
             : `${props.event || 'Alert'} selected.`);
     }
@@ -348,7 +394,12 @@ async function initialize() {
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = 'alerts-warning-card';
+                button.dataset.alertId = alertFeatureId(feature);
                 button.dataset.issued = props.sent || props.effective || props.onset || '';
+                if (button.dataset.alertId === selectedAlertId) {
+                    button.classList.add('is-selected');
+                    button.setAttribute('aria-current', 'true');
+                }
                 button.style.setProperty('--alert-color', ALERT_COLORS[props.event] || ALERT_DEFAULT_COLOR);
                 button.style.setProperty('--alert-text-color', ALERT_TEXT_COLORS[props.event] || ALERT_COLORS[props.event] || ALERT_DEFAULT_COLOR);
                 const expires = Date.parse(props.expires || '');
@@ -419,18 +470,27 @@ async function initialize() {
         requestAnimationFrame(() => mapCore.map.invalidateSize({ pan: false }));
     }
 
-    const alertsEngine = createAlertsEngine({
+    alertsEngine = createAlertsEngine({
         api, mapCore, legend: alertsLegend, lsrLegend, status,
         railScope: 'national',
+        subdueWatches: true,
+        alertPaneZIndex: 440,
         onAlertCount(count) { byId('workspace-alert-count').textContent = String(count); },
         onLsrCount(count) { byId('workspace-lsr-count').textContent = String(count); },
         onRenderedAlerts(features) { tools.setAlerts(features); },
         onWarnings: renderWarnings,
         onLsrReports: renderLsrReports,
         onDetail: selectAlert,
-        onLsrDetail: (feature) => detail.openLsr(feature),
+        onLsrDetail(feature) { clearSelectedAlert(); detail.openLsr(feature); },
         onLsrDetailClose: detail.closeLsr,
         onNewAlert: showNewAlert,
+        onSelectedAlertRemoved(feature) {
+            selectedAlertId = '';
+            syncSelectedWarningCard();
+            detail.closeAlert();
+            hideProjectedArrival();
+            status.setMessage(`${feature?.properties?.event || 'Selected alert'} is no longer active.`);
+        },
         shouldHandleAlertClick: () => !tools.isDrawing(),
     });
 
@@ -457,6 +517,7 @@ async function initialize() {
     const radarScrubber = createScrubber(byId('workspace-radar-bottom-scrubber'), {
         holdAtEnd: true,
         onFrame(_frame, index) { void radarEngine.renderFrameAt(index); },
+        onPlayingChange(playing) { radarEngine.setPlaybackActive(playing); },
     });
     function showRadarScrubber(visible) {
         radarScrubberBar.hidden = !visible;
@@ -474,11 +535,16 @@ async function initialize() {
         },
         onFrames(frames, options = {}) {
             const labeled = frames.map((frame) => ({ ...frame, label: radarFrameLabel(frame) }));
-            radarScrubber.setFrames(labeled, { index: options.index ?? 0, silent: true, keepPlaying: true });
+            radarScrubber.setFrames(labeled, {
+                index: options.index ?? 0,
+                silent: true,
+                keepPlaying: labeled.length > 0,
+            });
             showRadarScrubber(labeled.length > 0);
         },
         onStormTrackLegend(html) { if (html) stormTrackLegend.setHtml(html); else stormTrackLegend.clear(); },
         onSitePicked(site, coords) {
+            radarScrubber.pause();
             alertsEngine.clearLsrSelection();
             byId('workspace-radar-site').value = site;
             syncRadarControls();
@@ -487,6 +553,12 @@ async function initialize() {
         },
         onMessage(message, tone) { status.setMessage(message, tone); },
     });
+
+    function syncAlertTooltipSuppression() {
+        const suppress = byId('workspace-radar-tracks').checked
+            || byId('workspace-radar-inspector').checked;
+        document.querySelector('.workspace-shell').classList.toggle('is-alert-tooltip-suppressed', suppress);
+    }
 
     function syncRadarControls() {
         const enabled = byId('workspace-radar-enabled').checked;
@@ -510,6 +582,7 @@ async function initialize() {
             radarEngine.setStormTracksVisible(false);
             radarEngine.setInspectorVisible(false);
         }
+        syncAlertTooltipSuppression();
     }
 
     resetWorkspaceState = () => {
@@ -578,6 +651,7 @@ async function initialize() {
     };
     byId('workspace-alerts-enabled').addEventListener('change', () => {
         syncLayerToggle('workspace-alerts-enabled', 'workspace-warning-filters');
+        syncLayerToggle('workspace-alerts-enabled', 'workspace-watch-filters');
         syncRightRailVisibility();
         if (!byId('workspace-alerts-enabled').checked) {
             detail.closeAlert();
@@ -593,7 +667,12 @@ async function initialize() {
         void refreshAlerts({ notifyNewAlerts: false });
     });
     byId('workspace-warning-filters').addEventListener('click', (event) => {
-        if (!toggleWarningPill(event)) return;
+        if (!toggleAlertPill(event, 'warning')) return;
+        const nextSelection = alertSelection();
+        if (!alertsEngine.setSelection(nextSelection)) void alertsEngine.loadLive(nextSelection, regionSelect.value);
+    });
+    byId('workspace-watch-filters').addEventListener('click', (event) => {
+        if (!toggleAlertPill(event, 'watch')) return;
         const nextSelection = alertSelection();
         if (!alertsEngine.setSelection(nextSelection)) void alertsEngine.loadLive(nextSelection, regionSelect.value);
     });
@@ -647,8 +726,14 @@ async function initialize() {
         }
     });
     byId('workspace-radar-sites').addEventListener('change', (event) => { if (byId('workspace-radar-enabled').checked) { radarEngine.setSitesVisible(event.target.checked); if (event.target.checked) radarEngine.showSiteLegend(); } });
-    byId('workspace-radar-tracks').addEventListener('change', (event) => radarEngine.setStormTracksVisible(event.target.checked));
-    byId('workspace-radar-inspector').addEventListener('change', (event) => radarEngine.setInspectorVisible(event.target.checked));
+    byId('workspace-radar-tracks').addEventListener('change', (event) => {
+        radarEngine.setStormTracksVisible(event.target.checked);
+        syncAlertTooltipSuppression();
+    });
+    byId('workspace-radar-inspector').addEventListener('change', (event) => {
+        radarEngine.setInspectorVisible(event.target.checked);
+        syncAlertTooltipSuppression();
+    });
     const opacityLabel = (prefix, value) => `${prefix} (${value.toFixed(2).replace(/\.?0+$/, '')})`;
     const radarOpacityInput = byId('workspace-radar-opacity');
     const alertsOpacityInput = byId('workspace-alerts-opacity');
@@ -673,6 +758,7 @@ async function initialize() {
     updateLsrOpacity();
     regionSelect.addEventListener('change', () => {
         alertsEngine.clearLsrSelection();
+        clearSelectedAlert();
         hideProjectedArrival();
         byId('workspace-radar-site').value = '';
         radarEngine.syncHighlights();
@@ -732,10 +818,11 @@ async function initialize() {
         input.addEventListener('change', () => void mapCore.setOverlayVisible(input.dataset.mapOverlay, input.checked));
         if (input.checked) void mapCore.setOverlayVisible(input.dataset.mapOverlay, true);
     });
-    mapCore.map.on('movestart zoomstart', detail.close);
+    mapCore.map.on('movestart zoomstart', detail.closeLsr);
     mapCore.map.on('moveend', () => void refreshAlerts({ silent: true, notifyNewAlerts: false, refreshFeeds: false }));
 
     syncLayerToggle('workspace-alerts-enabled', 'workspace-warning-filters');
+    syncLayerToggle('workspace-alerts-enabled', 'workspace-watch-filters');
     syncLayerToggle('workspace-lsr-enabled', 'workspace-lsr-filters');
     byId('workspace-lsr-hours').classList.add('is-disabled');
     byId('workspace-lsr-hours').querySelectorAll('button').forEach((button) => { button.disabled = true; });

@@ -17,8 +17,8 @@ units, elevation selection, storm-motion semantics, or cache identity.
 
 The optional WebGL track is progressive enhancement, not a PNG replacement.
 The existing PNG must remain the first usable frame, compatibility fallback,
-and one-switch rollback path. Phase 7 may add bounded WebGL playback at high
-zoom, but PNG playback remains available for every frame and becomes active
+and one-switch rollback path. Phase 7 adds bounded WebGL playback at high zoom,
+but PNG playback remains available for every frame and becomes active
 immediately whenever the WebGL buffer is incomplete or disabled.
 
 Preserve these current contracts:
@@ -259,6 +259,28 @@ Level III product-specific source layout.
 RSS, per-product failure isolation, retention cleanup, value-inspector results,
 and all golden rows.
 
+Implementation status (2026-07-26): implemented; focused, benchmark, and golden
+gates pass. Flat Level II volumes now use the site-owned
+`radar_level2_downloads/_VOLUME/<site>` spool. Existing product-owned
+directories remain readable for old value-inspector frames and expire through
+the existing bounded retention policy. Scheduled flat-volume runs list/download
+once per site and render the bounded seven-product set from one Py-ART decode;
+Level II chunks, Level III, per-product cache identity, and dynamic SRV variants
+are unchanged.
+
+Five fresh-process KGSP samples reduced decode count from seven to one and
+all-product wall p50/p95 from 26.270/26.516 seconds to 16.522/16.558 seconds,
+a 37.1%/37.6% improvement. Batch p95 peak RSS is 1.86 GiB, below the Phase 2
+backfill envelope. All eight Phase 0 golden rows pass, and shared-batch REF,
+VEL, SRV, and ZDR PNG hashes match their goldens. Focused tests cover source
+ownership, legacy lookup, one-decode fanout, field-state restoration, bounded
+consumers, and per-product failure isolation. The focused Radar gate passes 56
+tests plus 42 subtests. Full pytest passes 275 tests plus 42 subtests and
+retains only the pre-existing Workspace assertion against removed
+`WORKSPACE_REGION_BOUNDS`. Evidence is in
+`docs/perf/2026-07-26-radar-phase3/`. No frontend behavior changed, so browser
+proof was not required or claimed. Phase 3 is closed.
+
 ## Phase 4 — Discovery and finalize I/O
 
 Implement only the substeps supported by Phase 0 timings:
@@ -273,6 +295,29 @@ Implement only the substeps supported by Phase 0 timings:
 **Verify:** `no-op-worker` and `backfill-12` I/O/stage timings, interrupted
 finalization recovery, no orphan temp files, correct pruning, immediate newest
 frame visibility, and all golden rows.
+
+**Implementation status (2026-07-26): complete.** Discovery indexes now persist
+the directory mtime and validated ordered filenames, so unchanged source
+directories avoid a rescan while changed or invalid entries safely rediscover.
+All serial, parallel, and shared-Level-II render paths atomically replace the
+public PNG from the same-volume render temporary file and clean up after
+failure. Per-frame processed-key and index writes were deliberately retained:
+Phase 0 measured them at only about 0.4-0.8 ms, which did not justify widening
+the crash-consistency surface.
+
+Ten no-op samples reused discovery with zero rescans and measured 7.687/11.890
+ms p50/p95 versus 8.602/13.490 ms at baseline. Five fresh-process backfill-12
+samples measured 7.573/7.705 seconds versus Phase 2's 7.989/8.271 seconds, a
+5.2%/6.8% reduction. The median finalization measurement across the eight
+golden rows fell from 6.930 ms (median of baseline row p50s) to 0.860 ms, an
+87.6% reduction. All eight byte-identical golden comparisons pass. Focused
+tests cover reuse/invalidation, interrupted recovery, failed-render cleanup,
+immediate pre-index visibility, ordering, and pruning; the focused Radar gate
+passes 63 tests plus 42 subtests. Full pytest passes 282 tests plus 42 subtests
+and retains only the pre-existing Workspace assertion against removed
+`WORKSPACE_REGION_BOUNDS`. Evidence is in
+`docs/perf/2026-07-26-radar-phase4/`. No frontend behavior changed, so browser
+proof was not required or performed. Phase 4 is closed.
 
 ## Phase 5 — Optional renderer internals, measure first
 
@@ -293,6 +338,28 @@ extent, approximate gate geometry, altered colormaps, or lossy encoding.
 Phase 5 is a decision gate, not a prerequisite for WebGL. Defer it if the
 remaining PNG `plot_ms`/`encode_ms` cost does not justify more work or if the
 candidate would optimize code that the high-zoom pilot does not use.
+
+**Implementation status (2026-07-26): complete.** The measure-first pass
+rejected direct canvas PNG output, rasterization, omitted edge colors, and a
+direct `pcolormesh` path because their representative byte-identical trials
+produced no meaningful end-to-end saving.
+
+The accepted path reuses one Matplotlib QuadMesh for same-volume Level II
+products selecting the same sweep. Geometry, projection, bounds, figure size,
+DPI, and sweep remain unchanged; each consumer replaces only the masked field
+data, colormap, and configured limits. The cache is bounded to one decoded
+volume and closed before its worker returns.
+
+Five fresh-process KGSP samples improved the seven-product one-decode batch
+from Phase 3's 16.522/16.558 seconds p50/p95 to 11.814/11.995 seconds, a
+28.5%/27.6% reduction. p95 peak working set fell from 1,857.16 MiB to
+1,609.20 MiB, a 13.4% reduction. All 35 batch PNGs match the seven-product
+control byte-for-byte, and all eight permanent golden rows pass. The focused
+Radar gate passes 64 tests plus 42 subtests. Full pytest passes 283 tests plus
+42 subtests and retains only the pre-existing Workspace assertion against
+removed `WORKSPACE_REGION_BOUNDS`. Evidence is in
+`docs/perf/2026-07-26-radar-phase5/`. No frontend or API behavior changed, so
+browser proof was not required or claimed. Phase 5 is closed.
 
 ## Phase 6 — Optional high-zoom WebGL L2 Reflectivity pilot
 
@@ -355,6 +422,36 @@ Required acceptance gates:
   WebGL-context-loss, and PNG-only browser acceptance;
 - the complete Phase 0 PNG golden matrix and focused/full regression gates pass.
 
+**Implementation status (2026-07-26): complete and browser-accepted.** The
+default-off `LIVE_RADAR_WEBGL_ENABLED` switch now gates a
+separate `v1` L2 Reflectivity polar artifact, versioned API route, and the
+shared `/radar` plus `/workspace` client layer. The existing decode produces
+the artifact as a bounded byproduct; no second source read or Py-ART decode was
+added. Below zoom 10 the client performs no WebGL work, zoom 10 prefetches and
+uploads only the active paused frame, and zoom 11 crossfades only after its
+matching texture is ready. Playback, failure, context loss, selection changes,
+and threshold reversal restore PNG.
+
+The representative 720-by-1,832 KGGW artifact is 1,322,700 bytes and retains
+its 250-meter gate values with zero quantization error. Five fresh-process
+control/candidate samples measured 4,034.155/4,174.683 ms versus
+4,045.126/4,106.774 ms total p50/p95; artifact creation itself measured
+8.824/12.785 ms. All ten PNGs are byte-identical, and all eight permanent PNG
+golden rows pass with the feature enabled in scratch. Focused validation passes
+69 tests plus 42 subtests. Evidence is in
+`docs/perf/2026-07-26-radar-phase6/`.
+
+User-owned browser checks pass on both `/radar` and `/workspace` for zoom-11+
+activation, PNG-only behavior with the switch disabled, and same-frame visible
+color/mask/geometry parity. The recorded cached draw was 0.100 ms. At extreme
+zoom, WebGL correctly exposes native polar bins oriented with the radar scan;
+the legacy PNG exposes enlarged axis-aligned Web-Mercator raster pixels. A
+same-frame comparison found no constant horizontal or vertical displacement.
+Active-playback and context-loss fallback also passed. A throttled KBYX-to-KAMX
+selection change canceled the old browser fetches; the KBYX overlay never
+reappeared while KAMX became current. Phase 6 is closed. Phase 7 remains
+unstarted and requires separate authorization.
+
 Phase 6 fails if it materially delays the PNG path, cannot preserve value/color
 semantics, behaves inconsistently across the two pages, or requires the WebGL
 layer for ordinary Radar correctness.
@@ -398,6 +495,28 @@ cooperative cancellation, no additional server render request from pan/zoom,
 and both-page animation acceptance. PNG remains the complete one-hour loop and
 authoritative fallback; WebGL readiness never delays initial playback.
 
+**Implementation status (2026-07-26): complete and browser-accepted.** A
+separate default-off `LIVE_RADAR_WEBGL_ANIMATION_ENABLED` switch now extends
+the Phase 6 client layer without changing the artifact or PNG pipeline. The
+rolling window contains current, two upcoming, and one prior texture, bounded
+to four representative R8 textures (about 5.04 MiB total), with at most two
+artifact fetches in flight. Activation requires the active plus two forward
+textures. Missing/not-yet-ready textures remain on PNG while the scrubber and
+timer continue.
+
+Focused validation passes 70 tests plus 42 subtests, three JavaScript window
+tests pass, and all eight permanent PNG goldens pass with WebGL enabled in
+scratch. Full pytest passes 292 tests plus 42 subtests and retains only the
+pre-existing Workspace assertion against removed `WORKSPACE_REGION_BOUNDS`.
+Evidence is in `docs/perf/2026-07-26-radar-phase7/`.
+
+Codex in-app browser acceptance passes on `/radar` and `/workspace`: zoom-9
+PNG playback releases the window; direct zoom-11 activation retains PNG until
+the forward buffer is ready; the four-texture KAMX loop preserves frame order;
+Workspace remains continuous across its 30-second auto-refresh; and a
+KAMX-to-KBYX change aborts the old window and pauses playback without the old
+identity reappearing. Phase 7 is closed. Phase 8 remains separately gated.
+
 ## Phase 8 — Optional core-product WebGL expansion
 
 Enter only after Phase 7 passes and receives explicit approval. Expand in
@@ -413,21 +532,18 @@ retains PNG fallback until its own closure gate.
 
 ## Execution order
 
-1. Phases 0-2 are complete; keep their commits/evidence independently
+1. Phases 0-5 are complete; keep their commits/evidence independently
    revertible.
-2. Implement Phase 3 only after explicit authorization, preserving PNG output
-   while establishing canonical Level II source/decode ownership.
-3. Complete Phase 4 and then decide from measurements whether Phase 5 is worth
-   entering or should be deferred.
-4. Authorize Phase 6 separately. Its first implementation is L2 Reflectivity
-   only and feature-flagged off until automated gates pass.
-5. Authorize Phase 7 separately for bounded high-zoom L2 Reflectivity animation.
-6. Authorize each Phase 8 product family separately; do not infer approval for
+2. Phase 6 is closed after passing its automated, golden, and user-owned
+   browser gates.
+3. Phase 7 is closed after passing its automated, golden, and both-page
+   browser gates.
+4. Authorize each Phase 8 product family separately; do not infer approval for
    all-product conversion.
-7. After every phase, run the complete PNG golden matrix, focused Radar tests, full
+5. After every phase, run the complete PNG golden matrix, focused Radar tests, full
    pytest, `py_compile`, JavaScript syntax checks if frontend files changed, and
    `git diff --check`.
-8. Keep browser claims separate. User browser smoke owns visible first-load,
+6. Keep browser claims separate. User browser smoke owns visible first-load,
    animation continuity, elevation, inspector, and storm-track acceptance.
 
 Rollback remains one phase commit at a time. No phase may depend on deleting

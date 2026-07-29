@@ -99,8 +99,8 @@
 .alerts-notification-mode { margin-top: 6px; }
 
 @keyframes alerts-severe-polygon-pulse {
-    0%, 100% { fill-opacity: var(--alerts-pulse-fill-low, .12); stroke-opacity: .75; stroke-width: 2; }
-    50% { fill-opacity: var(--alerts-pulse-fill-high, .75); stroke-opacity: 1; stroke-width: 5; }
+    0%, 100% { stroke-opacity: .75; stroke-width: 2; }
+    50% { stroke-opacity: 1; stroke-width: var(--alerts-pulse-stroke-high, 7); }
 }
 .alerts-alert-pulse { animation: alerts-severe-polygon-pulse 1.25s ease-in-out infinite; }
 

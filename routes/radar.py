@@ -10,6 +10,7 @@ from services.radar_service import (
     get_radar_live_products_data,
     get_radar_live_sites_data,
     get_radar_live_value_data,
+    get_radar_live_webgl_artifact_data,
     get_radar_site_locations_data,
     get_radar_sites_data,
     get_radar_status_data,
@@ -111,6 +112,21 @@ def get_radar_live_frames(
         storm_motion_to_degrees=storm_motion_to_degrees,
         storm_motion_source=storm_motion_source,
         storm_cell_id=storm_cell_id,
+    )
+
+
+@router.get(
+    "/api/radar/live/webgl/{version}/{product}/{site}/{elevation}/{frame_key}"
+)
+def get_radar_live_webgl_artifact(
+    version: str,
+    product: str,
+    site: str,
+    elevation: str,
+    frame_key: str,
+):
+    return get_radar_live_webgl_artifact_data(
+        version, product, site, elevation, frame_key
     )
 
 

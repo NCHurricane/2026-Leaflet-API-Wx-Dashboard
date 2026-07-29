@@ -1,0 +1,68 @@
+{
+  "benchmark": {
+    "bounds": [
+      -88.30450421029533,
+      -76.13605578970467,
+      29.89204311174991,
+      39.87407688825009
+    ],
+    "cache_product_key": "L2_VEL__ELEV_0P5",
+    "elevation": "0.5",
+    "level": "Level 2",
+    "level_code": "L2",
+    "product": "L2_VEL",
+    "product_cfg": {
+      "capabilities": {
+        "elevation_selection": true
+      },
+      "field_names": [
+        "velocity"
+      ],
+      "figure_size_inches": 22,
+      "label": "L2 Velocity",
+      "level": "Level 2",
+      "mask": "velocity",
+      "palette": "BV",
+      "product": "VEL",
+      "units": "mph",
+      "value_scale": 2.2369363,
+      "vmax": 64.0,
+      "vmin": -150.0
+    },
+    "product_code": "VEL",
+    "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase3-golden-02\\results.jsonl",
+    "repeat": 1,
+    "run_id": "phase3-golden-02",
+    "scenario": "render-one",
+    "site": "KGSP",
+    "source_product_code": "VEL",
+    "sources": [
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L2\\KGSP\\KGSP20260725_235847_V06"
+    ]
+  },
+  "cpu": "",
+  "cpu_count": 32,
+  "created_utc": "2026-07-26T22:03:39.814707+00:00",
+  "dirty_files": [
+    " M frontend/lib/leaflet/leaflet.js",
+    " M radar/bench.py",
+    " M radar/radar_nodd_utils.py",
+    " M tests/test_radar_product_catalog.py",
+    " M workers/radar_live_worker.py"
+  ],
+  "git_sha": "4a6bf4fdea5897f710d5598c456964bd83fff870",
+  "live_radar_l2_use_chunks": false,
+  "live_radar_parallel_workers": 0,
+  "packages": {
+    "Cartopy": "0.25.0",
+    "Pillow": "12.2.0",
+    "arm_pyart": "2.2.2",
+    "matplotlib": "3.11.0",
+    "numpy": "2.5.0",
+    "psutil": "7.2.2"
+  },
+  "platform": "Windows-11-10.0.26220-SP0",
+  "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+  "ram_bytes": 137107320832,
+  "worker_state_note": "All four optional warmers remain disabled for Radar benchmarking."
+}

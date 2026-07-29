@@ -8,7 +8,7 @@ import re
 import threading
 
 from fastapi import HTTPException
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 
 from app_core.http import parse_utc_datetime
 from app_core.paths import BASE_DIR, CACHE_ROOT
@@ -143,6 +143,29 @@ def _radar_live_catalog():
     from config.radar_config import LIVE_RADAR_PRODUCTS
 
     return dict(LIVE_RADAR_PRODUCTS)
+
+
+def _radar_webgl_config() -> dict:
+    from radar.webgl_artifact import feature_config
+
+    return feature_config()
+
+
+def _radar_webgl_artifact_metadata(
+    frame: dict,
+    site: str,
+    product: str,
+    requested_elevation: str,
+) -> dict | None:
+    from radar.webgl_artifact import artifact_metadata
+
+    return artifact_metadata(
+        CACHE_ROOT,
+        site,
+        product,
+        frame.get("selected_elevation") or requested_elevation,
+        frame.get("frame_key") or frame.get("source_data_key", ""),
+    )
 
 
 def _radar_live_product_metadata(product_key: str) -> dict:
@@ -762,6 +785,7 @@ def get_radar_live_sites_data() -> dict:
             "sites": sites,
             "configured_sites": sorted(configured),
             "products": _radar_live_catalog(),
+            "webgl": _radar_webgl_config(),
             "count": len(sites),
         }
     except Exception as exc:
@@ -921,7 +945,7 @@ def get_radar_live_latest_data(
         motion,
         freshness_hours,
     )
-    return {
+    payload = {
         "status": "success",
         "source": (
             "live_cache_forced"
@@ -952,6 +976,12 @@ def get_radar_live_latest_data(
         "full_name": meta.get("full_name", product_key),
         "units": meta.get("units", ""),
     }
+    webgl_artifact = _radar_webgl_artifact_metadata(
+        payload, site_id, product_key, elevation_key
+    )
+    if webgl_artifact is not None:
+        payload["webgl_artifact"] = webgl_artifact
+    return payload
 
 
 def get_radar_live_frames_data(
@@ -1083,6 +1113,15 @@ def get_radar_live_frames_data(
         site_id, product_key, elevation_key, motion
     )
     history_filling = bool(not coverage_complete and refreshing)
+    frames_with_artifacts = []
+    for frame in filtered:
+        artifact = _radar_webgl_artifact_metadata(
+            frame, site_id, product_key, elevation_key
+        )
+        frames_with_artifacts.append(
+            {**frame, "webgl_artifact": artifact} if artifact is not None else frame
+        )
+    filtered = frames_with_artifacts
 
     return {
         "status": "success",
@@ -1110,6 +1149,28 @@ def get_radar_live_frames_data(
         "refreshing": refreshing,
         "frames": filtered,
     }
+
+
+def get_radar_live_webgl_artifact_data(
+    version: str,
+    product: str,
+    site: str,
+    elevation: str,
+    frame_key: str,
+) -> FileResponse:
+    """Serve a versioned artifact only while the Phase 6 feature is enabled."""
+    from radar.webgl_artifact import resolve_artifact
+
+    path = resolve_artifact(
+        CACHE_ROOT, version, product, site, elevation, frame_key
+    )
+    if path is None:
+        raise HTTPException(status_code=404, detail="Radar WebGL artifact unavailable.")
+    return FileResponse(
+        path,
+        media_type="application/vnd.nchurricane.radar-polar",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 def get_radar_live_value_data(

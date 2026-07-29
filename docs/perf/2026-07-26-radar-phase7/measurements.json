@@ -1,0 +1,38 @@
+{
+  "browser_acceptance": {
+    "pages": [
+      "/radar",
+      "/workspace"
+    ],
+    "passed": [
+      "bounded_texture_window",
+      "png_only_below_prefetch_zoom",
+      "buffered_zoom_11_activation",
+      "stable_frame_order_and_cadence",
+      "workspace_auto_refresh_continuity",
+      "selection_cancellation",
+      "per_frame_png_crossfade_fallback"
+    ],
+    "status": "passed"
+  },
+  "focused_validation": {
+    "javascript_tests_passed": 3,
+    "pytest_passed": 70,
+    "unittest_subtests_passed": 42
+  },
+  "full_validation": {
+    "pre_existing_failures": 1,
+    "pytest_passed": 292,
+    "unittest_subtests_passed": 42
+  },
+  "golden_rows_passed": 8,
+  "phase": 7,
+  "status": "complete",
+  "webgl_window": {
+    "max_concurrent_loads": 2,
+    "max_textures": 4,
+    "min_forward_textures": 2,
+    "representative_gpu_bytes": 5289256,
+    "representative_gpu_mib": 5.04
+  }
+}

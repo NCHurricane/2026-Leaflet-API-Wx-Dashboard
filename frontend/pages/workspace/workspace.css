@@ -5031,8 +5031,8 @@ button.wx-tropical-outlook-card:focus-visible {
 .alerts-notification-mode { margin-top: 6px; }
 
 @keyframes alerts-severe-polygon-pulse {
-    0%, 100% { fill-opacity: var(--alerts-pulse-fill-low, .12); stroke-opacity: .75; stroke-width: 2; }
-    50% { fill-opacity: var(--alerts-pulse-fill-high, .75); stroke-opacity: 1; stroke-width: 5; }
+    0%, 100% { stroke-opacity: .75; stroke-width: 2; }
+    50% { stroke-opacity: 1; stroke-width: var(--alerts-pulse-stroke-high, 7); }
 }
 .alerts-alert-pulse { animation: alerts-severe-polygon-pulse 1.25s ease-in-out infinite; }
 
@@ -5224,6 +5224,15 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
 .workspace-layer-toggle input:focus-visible + span { outline: 2px solid #7dd3fc; outline-offset: 2px; }
 .workspace-pills { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
 #workspace-warning-filters { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+#workspace-watch-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.workspace-alert-filter-group { display: grid; gap: 4px; }
+.workspace-alert-filter-label {
+    color: #8fa9c1;
+    font-size: .61rem;
+    font-weight: 850;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+}
 .workspace-pills-wrap { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .workspace-radar-levels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .workspace-radar-product-options { display: grid; gap: 7px; }
@@ -5308,6 +5317,9 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
     white-space: normal;
     word-break: normal;
 }
+.workspace-shell.is-alert-tooltip-suppressed .leaflet-tooltip.alerts-hover-tip:not(.alerts-lsr-hover-tip) {
+    display: none;
+}
 .workspace-shell .leaflet-tooltip.alerts-lsr-hover-tip {
     width: min(260px, calc(100vw - 48px));
     max-width: min(260px, calc(100vw - 48px));
@@ -5336,6 +5348,15 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
 }
 .workspace-shell #workspace-map .leaflet-interactive:focus-visible,
 .workspace-shell #workspace-map .leaflet-marker-icon:focus-visible {
+    outline: 2px solid #7dd3fc;
+    outline-offset: 2px;
+}
+.workspace-right-rail .alerts-warning-card.is-selected {
+    border-color: #f8fafc;
+    background: #21344f;
+    box-shadow: inset 0 0 0 1px rgba(248, 250, 252, .45), 0 0 0 2px rgba(56, 189, 248, .28);
+}
+.workspace-right-rail .alerts-warning-card.is-selected:focus-visible {
     outline: 2px solid #7dd3fc;
     outline-offset: 2px;
 }

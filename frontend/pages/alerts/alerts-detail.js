@@ -115,7 +115,13 @@ function installDrag(root, handle) {
 export function createAlertDetail(root, options = {}) {
     let mode = '';
     const initialTop = Math.max(0, Number(options.initialTop) || 12);
-    function close() { mode = ''; root.replaceChildren(); root.hidden = true; }
+    function close() {
+        const closedMode = mode;
+        mode = '';
+        root.replaceChildren();
+        root.hidden = true;
+        if (closedMode) options.onClose?.(closedMode);
+    }
     function position(color, textColor = color) {
         root.style.setProperty('--alert-color', color);
         root.style.setProperty('--alert-text-color', textColor);

@@ -36,6 +36,7 @@ NEXRAD_LEVEL3_GCP_REALTIME_BUCKET = "gcp-public-data-nexrad-l3-realtime"
 CACHE_MAX_BYTES = 20 * 1024 * 1024 * 1024
 DOWNLOAD_RETRY_ATTEMPTS = 3
 DOWNLOAD_RETRY_SLEEP_SECONDS = 0.12
+LEVEL2_SOURCE_SPOOL = "_VOLUME"
 
 
 LEVEL3_PREFIX_PATTERNS = [
@@ -569,6 +570,7 @@ def download_radar_data(
 ):
     provider = str(provider).lower()
     level_path = str(level).lower().replace(" ", "")
+    storage_product = LEVEL2_SOURCE_SPOOL if level_path == "level2" else product
 
     # Use explicit date range if provided, otherwise lookback from now
     is_archive = bool(date_from and date_to)
@@ -580,14 +582,14 @@ def download_radar_data(
             base_dir,
             "archive",
             f"radar_{level_path}_downloads",
-            product,
+            storage_product,
             station_id,
         )
     else:
         end_dt = datetime.now(timezone.utc)
         start_dt = end_dt - timedelta(hours=float(lookback_hours))
         save_dir = os.path.join(
-            base_dir, f"radar_{level_path}_downloads", product, station_id
+            base_dir, f"radar_{level_path}_downloads", storage_product, station_id
         )
     os.makedirs(save_dir, exist_ok=True)
 

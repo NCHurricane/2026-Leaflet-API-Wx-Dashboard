@@ -63,7 +63,7 @@ class RadarProductCatalogTests(unittest.TestCase):
             existing = (
                 Path(temp_dir)
                 / "radar_level2_downloads"
-                / "REF"
+                / radar_nodd_utils.LEVEL2_SOURCE_SPOOL
                 / "KMHX"
                 / "KMHX-new"
             )

@@ -147,5 +147,5 @@ def test_all_pages_receive_the_shared_timestamp_state_assets() -> None:
         markup = (page_dir / f"{page_name}.html").read_text(encoding="utf-8")
         script = (page_dir / entry_name).read_text(encoding="utf-8")
         assert "core.css?v=20260725e" in markup
-        assert f"{entry_name}?v=20260725e" in markup
+        assert f"/frontend/pages/{page_name}/{entry_name}?v=" in markup
         assert "status.js?v=20260725e" in script

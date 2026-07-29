@@ -1,12 +1,15 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-25 (Task-scheduler-free rendering Phases 0-8 are closed.
+Last updated: 2026-07-29 (Task-scheduler-free rendering Phases 0-8 are closed.
 The zero-task browser matrix and optional-warmer enabled/disabled acceptance
-passed. Radar render optimization Phase 1 is implemented and golden-validated;
-its three-site browser acceptance passed. Phase 2 is implemented and
-golden-validated; `/radar` and `/workspace` browser acceptance passed. Phase 3
-is the next separately authorized implementation slice. A reversible high-zoom
-WebGL L2 Reflectivity pilot is planned after the PNG optimization prerequisites.)
+passed. Radar render optimization Phases 1-7 are implemented and
+golden-validated; the Phase 1-2 browser acceptance passed and the backend-only
+Phases 3-5 required no browser smoke. Phase 5 same-sweep QuadMesh reuse reduces
+the seven-product L2 batch p50/p95 by 28.5%/27.6%. The reversible high-zoom
+WebGL L2 Reflectivity pilot is default-off; two-page activation, redraw,
+visible-parity, PNG-only, fallback, and cancellation checks pass. Phase 7 adds
+default-off four-texture L2 Reflectivity animation; its automated, golden, and
+two-page browser gates pass. Phase 7 is closed; Phase 8 is not authorized.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -27,12 +30,17 @@ Keep separate:
 - `docs/satellite-radar-render-pipeline-files.md` for the shared pipeline file
   reference; its Radar section is active and its Satellite section is historical.
 
-## Active Tracks (2026-07-25)
+## Active Tracks (2026-07-26)
 
 Track numbers preserve the existing roadmap grouping. Track 3 Radar render
-optimization Phase 2 is closed, including browser acceptance on both consuming
-pages. Phase 3 is next but not authorized. Future WebGL work remains additive,
-feature-flagged, and independently revertible to PNG-only behavior.
+optimization Phases 3-5 are closed with byte-identical golden output,
+one-decode Level II product fanout, persisted discovery reuse, and atomic PNG
+publication. Phase 5 reuses one same-volume QuadMesh per selected sweep and
+passes its benchmark, memory, lifecycle, regression, and golden gates. Phase 6
+is closed after passing its automated payload/latency/golden gates and
+user-owned two-page activation, redraw, visible-parity, PNG-only, fallback,
+and cancellation checks. WebGL remains additive and independently revertible
+to PNG-only behavior.
 
 1. Frontend True Split (Stage 2) + Severe Weather Workspace — planned in
    this file (section below). Phases 18-24 are complete and user-confirmed.
@@ -103,10 +111,14 @@ feature-flagged, and independently revertible to PNG-only behavior.
    returns one newest frame before the existing keyed background fill; its
    focused, benchmark, golden, and browser gates pass. Phase 2 reusable pools
    also pass automated/golden validation and browser acceptance on `/radar`
-   and `/workspace`. Phase 3 is next but not authorized. Phases 3-5 preserve
-   the PNG contract; later separately authorized phases may prefetch WebGL L2
-   Reflectivity at zoom 10, activate it at zoom 11, then add bounded high-zoom
-   animation without replacing the PNG workflow.
+   and `/workspace`. Phase 3 site-owned Level II sources and one-decode bounded
+   product fanout pass automated/benchmark/golden validation. Phase 4
+   persisted discovery reuse and atomic PNG publication also pass their
+   automated, benchmark, recovery, pruning, and golden gates. Phase 5
+   same-sweep QuadMesh reuse passes benchmark, memory, lifecycle, regression,
+   and golden gates. Phases 6-7 add separately gated high-zoom WebGL L2
+   Reflectivity activation and bounded animation while preserving PNG as the
+   complete workflow and fallback. Phase 8 product expansion is not authorized.
 4. Satellite render pipeline latency optimization — complete through Phase 5
    and archived. Optional Phase 6 warp threading is deferred unless later
    real-run profiling and explicit approval reopen it.
@@ -351,7 +363,75 @@ feature-flagged, and independently revertible to PNG-only behavior.
   frames preceded their eight- and ten-frame four-process background fills,
   the scrubber stayed on newest, playback remained continuous, frame/PNG
   requests returned HTTP 200, and no pool/render/Radar API errors appeared.
-  Phase 2 is closed; Phase 3 is not authorized.
+  Phase 2 is closed.
+- Radar render optimization Phase 3 is implemented. Flat Level II volumes use
+  one site-owned `_VOLUME` spool, and scheduled product batches render all
+  seven configured products from one Py-ART decode while preserving independent
+  caches, sweeps, palettes, units, failure handling, and SRV motion variants.
+  Five fresh-process samples improved all-product wall p50/p95 by 37.1%/37.6%;
+  all eight goldens and the shared-batch REF/VEL/SRV/ZDR hashes pass. Evidence
+  is in `docs/perf/2026-07-26-radar-phase3/`. The focused gate passes 56 tests
+  plus 42 subtests; full pytest passes 275 tests plus 42 subtests with only the
+  pre-existing Workspace assertion. No frontend behavior changed, so browser
+  proof was not required or claimed. Phase 3 is closed.
+- Radar render optimization Phase 4 is implemented. Unchanged directories reuse
+  persisted validated discovery lists, and all render paths atomically publish
+  same-volume temporary PNGs while preserving failure cleanup and immediate
+  visibility. No-op p50/p95 improved 10.6%/11.9%, backfill-12 improved
+  5.2%/6.8% over Phase 2, and eight-row median finalization fell 87.6%. All
+  eight goldens pass; focused validation passes 63 tests plus 42 subtests and
+  full pytest passes 282 tests plus 42 subtests with only the pre-existing
+  Workspace assertion. Evidence is in
+  `docs/perf/2026-07-26-radar-phase4/`. Phase 4 is closed without a browser
+  smoke because no frontend behavior changed.
+- Radar render optimization Phase 5 is implemented. Same-volume Level II
+  products selecting the same sweep reuse one Matplotlib QuadMesh while
+  retaining exact geometry, projection, bounds, DPI, masked data semantics,
+  palettes, and limits. The cache is bounded to one decoded-volume consumer
+  call and closes before return. Five fresh-process KGSP samples improved the
+  seven-product batch from 16.522/16.558 seconds p50/p95 to 11.814/11.995
+  seconds, a 28.5%/27.6% reduction; p95 peak working set fell 13.4% to
+  1,609.20 MiB. All 35 batch outputs and all eight permanent golden rows pass
+  byte-identically. Evidence is in `docs/perf/2026-07-26-radar-phase5/`.
+  Focused validation passes 64 tests plus 42 subtests; full pytest passes 283
+  tests plus 42 subtests with only the pre-existing Workspace assertion. No
+  frontend or API behavior changed, so browser proof was not required or
+  claimed. Phase 5 is closed.
+- Radar render optimization Phase 6 is implemented behind the default-off
+  `LIVE_RADAR_WEBGL_ENABLED` switch. A separate `v1` L2 Reflectivity artifact
+  is emitted from the existing decoded sweep and served only while enabled.
+  The shared client stays PNG-only below zoom 10, prefetches/uploads the active
+  paused frame at zoom 10, and activates its one WebGL texture at zoom 11 only
+  after readiness. Playback, failure, context loss, selection changes, and
+  threshold reversal restore PNG immediately.
+- The representative 720-by-1,832 KGGW artifact is 1,322,700 bytes with zero
+  gate-value quantization error. Five-run control/candidate total p50/p95 is
+  4,034.155/4,174.683 ms versus 4,045.126/4,106.774 ms; all ten PNGs and all
+  eight permanent golden rows remain byte-identical. Focused validation passes
+  69 tests plus 42 subtests. Evidence is in
+  `docs/perf/2026-07-26-radar-phase6/`.
+- User-owned Phase 6 checks pass on `/radar` and `/workspace` for zoom-11+
+  activation, a 0.100 ms cached draw, same-frame visible shader parity, and
+  PNG-only behavior with the switch disabled. Native WebGL bins correctly
+  follow the radial scan; enlarged legacy PNG pixels remain screen-axis
+  aligned, and no constant overlay displacement was found. Active-playback and
+  context-loss fallback passed. A throttled KBYX-to-KAMX selection change
+  canceled the stale fetches without the KBYX overlay reappearing. Phase 6 is
+  closed.
+- Radar render optimization Phase 7 is implemented behind the separate
+  default-off `LIVE_RADAR_WEBGL_ANIMATION_ENABLED` switch. It retains current,
+  two upcoming, and one prior L2 Reflectivity texture, bounded to about
+  5.04 MiB for four representative R8 textures, with at most two artifact
+  fetches in flight. PNG playback remains immediate and authoritative; WebGL
+  activates only after the active and two forward textures are ready.
+- Focused validation passes 70 tests plus 42 subtests, three JavaScript window
+  tests pass, and all eight permanent PNG goldens pass. Full pytest passes 292
+  tests plus 42 subtests with only the pre-existing Workspace assertion.
+  Evidence is in `docs/perf/2026-07-26-radar-phase7/`.
+- Codex in-app browser acceptance passes on both pages for bounded animation,
+  zoom-threshold fallback/release, buffered activation, Workspace continuity
+  across auto-refresh, and KAMX-to-KBYX stale-window cancellation. Phase 7 is
+  closed; Phase 8 is not authorized.
 - The post-Phase 2 high-zoom investigation found that the representative KGGW
   L2 sweep retains 720 radials, 1,832 gates, 250-meter range spacing, and about
   0.486-degree azimuth spacing, while its 4,380-by-4,400 full-site PNG spans
@@ -359,18 +439,17 @@ feature-flagged, and independently revertible to PNG-only behavior.
   five screen pixels. Increasing full-site DPI is rejected because matching
   zoom 11 would require roughly a 22,000-pixel-square image and about 25 times
   the current pixel workload.
-- The approved planning direction keeps Phases 3-5 PNG-only. Phase 3 should
-  establish a bounded decoded-sweep consumer seam without producing a WebGL
-  artifact or adding a second Py-ART decode. After Phase 4 and the optional
-  Phase 5 decision, separately authorized Phase 6 may pilot feature-flagged
-  high-zoom WebGL for active, paused L2 Reflectivity. Below zoom 10 the client
-  remains PNG-only; zoom 10 keeps PNG visible while prefetching one texture;
-  zoom 11 activates WebGL only when ready. Phase 7 may add bounded L2
-  Reflectivity WebGL animation using a rolling current/one-prior/two-or-three-
-  upcoming texture window while PNG continues as the complete loop and
-  per-frame fallback. Phase 8 may expand only to explicitly approved core
-  product families. All-product WebGL conversion, tiles, and PNG retirement
-  remain outside the plan.
+- The approved implementation keeps Phases 3-5 PNG-only. Phase 3 established
+  the bounded decoded-volume consumer seam without adding a second Py-ART
+  decode, and Phase 5 reuses same-sweep renderer geometry inside that seam.
+  Phase 6 now emits its separate feature-gated artifact from that seam for
+  active, paused L2 Reflectivity. Below zoom 10 the client remains PNG-only;
+  zoom 10 keeps PNG visible while prefetching one texture; zoom 11 activates
+  WebGL only when ready. Phase 7 extends that path to a bounded current,
+  one-prior, two-upcoming animation window while PNG continues as the complete
+  loop and per-frame fallback. Phase 8 may expand only to explicitly approved
+  core product families. All-product WebGL conversion, tiles, and PNG
+  retirement remain outside the plan.
 - Satellite optimization Phase 0 was committed at `a6f5f83`; Phase 1 was
   committed at `fc534ba`: NetCDF LRU correctness, cheap PNG hit validation, and a
   geometry-aware composite meshgrid gate. The full 81-tile golden comparison
@@ -1246,6 +1325,18 @@ found it.
   queues one pending sample behind the in-flight request instead of aborting and
   restarting on every mousemove. Static validation passed, followed by the user's
   iterative KGSP smoke/testing cycle.
+  Workspace interaction follow-up (2026-07-28/29): while either Value Inspector
+  or Storm Tracks is enabled, alert-polygon hover tooltips are suppressed so
+  they cannot compete with Radar inspection/track interaction; LSR hover
+  tooltips remain available. The user browser-confirmed this suppression.
+  Disabling Storm Tracks now also increments the track request generation,
+  clears/removes the mounted marker layer immediately, and rejects an older
+  in-flight response when it returns, preventing stale icons from reappearing.
+  This visibility-only toggle preserves selected-cell SRV motion identity and
+  playback state. JavaScript syntax, focused Workspace tests (2 passed), and
+  diff checks pass. The stale-request fix still needs a focused browser re-smoke
+  after the API is restarted; all Uvicorn sessions were intentionally stopped
+  at session end.
   The Layers sidebar now presents Radar, Active Alerts, and Storm Reports as
   independently collapsible groups. Radar starts open; Active Alerts, Storm
   Reports, and the SPC/Satellite/RTMA/MRMS/WPC/Water placeholders start collapsed.
@@ -2673,10 +2764,10 @@ decisions; this superfile carries the durable final status.
 
 Active as Track 3 (see Active Tracks). The execution plan is
 `docs/radar-render-optimization-plan.md`; the active pipeline map is
-`docs/satellite-radar-render-pipeline-files.md`. Phase 0 is complete. Phase 1
-is complete, including three-site user-owned browser acceptance. Phase 2 is
-complete, including `/radar` and `/workspace` browser acceptance. Phase 3 is
-not authorized. Future WebGL work is additive and cannot replace PNG
+`docs/satellite-radar-render-pipeline-files.md`. Phases 0-5 are complete.
+Phase 1 includes three-site user-owned browser acceptance, and Phase 2 includes
+`/radar` and `/workspace` browser acceptance. Phases 3-5 are backend-only and
+golden-validated. Future WebGL work is additive and cannot replace PNG
 correctness or fallback.
 
 - Goal: reduce first usable newest-frame latency and background loop-fill time
@@ -2694,33 +2785,36 @@ correctness or fallback.
   selected-product run without changing `LIVE_RADAR_PARALLEL_WORKERS`.
   Implemented and golden-validated; evidence is in
   `docs/perf/2026-07-25-radar-phase2/`. Both-page browser acceptance passed.
-- Phase 3 candidate: prove and then remove duplicate Level II source storage and
-  Py-ART decodes across moments from the same site/volume. Dynamic SRV motion
-  variants remain separate render/cache products. Establish a bounded
-  decoded-sweep consumer seam for a possible future polar artifact, but do not
-  implement WebGL or add a second decode in Phase 3.
-- Phase 4 candidate: reuse unchanged discovery results and replace same-volume
-  temporary PNG copies with atomic moves, subject to crash-recovery tests.
-- Phase 5 is optional and measure-first: renderer-internal changes are attempted
-  only if plot/encode remains dominant and are rejected on the first output
-  mismatch.
-- Phase 6 candidate: separately authorized, feature-flagged high-zoom WebGL
-  pilot for active, paused L2 Reflectivity. Below zoom 10 the client performs
-  no WebGL request/GPU work; zoom 10 prefetches while retaining PNG; zoom 11
-  crossfades only after the texture is ready. PNG remains the immediate image,
-  playback layer, compatibility fallback, and configuration-first rollback.
-  Separate polar artifacts never overwrite PNG caches or indexes. Required
-  gates include no second decode, no more than 5% first-PNG p95 regression,
-  at most 2 MB representative payload, under-100-ms cached redraw, bounded
-  active-texture memory, exact product/value parity, threshold reversal/direct-
-  zoom behavior, and both-page browser acceptance.
-- Phase 7 candidate: after separate approval, extend the same zoom-10 prefetch
-  and zoom-11 activation policy to bounded L2 Reflectivity WebGL animation.
-  PNG playback starts immediately and continues until the active plus minimum
-  forward texture buffer is ready. Missing textures fall back per frame to PNG;
-  the rolling GPU window is limited to current, one prior, and two or three
-  upcoming frames. Playback must not restart, jump, pause, or move the scrubber
-  during the switch.
+- Phase 3 result: byte-identical Level II volumes use one site-owned source
+  spool, and a bounded decoded-volume consumer seam renders the configured
+  product set with one Py-ART decode. Dynamic SRV variants remain separate
+  render/cache products. The five-sample wall p50/p95 improvement is
+  37.1%/37.6%; all eight goldens pass. No WebGL artifact or endpoint was added.
+- Phase 4 result: persisted validated discovery lists avoid unchanged-directory
+  rescans, and same-volume temporary PNGs are atomically published with tested
+  interruption cleanup, visibility, ordering, and pruning. No-op p50/p95
+  improved 10.6%/11.9%, backfill-12 improved 5.2%/6.8% over Phase 2, all eight
+  goldens pass, and evidence is in `docs/perf/2026-07-26-radar-phase4/`.
+- Phase 5 result: same-volume Level II products selecting the same sweep reuse
+  one bounded Matplotlib QuadMesh. The seven-product one-decode batch improves
+  28.5%/27.6% p50/p95 and uses 13.4% less p95 peak working set. All 35
+  five-sample batch PNGs and all eight permanent goldens pass byte-identically;
+  evidence is in `docs/perf/2026-07-26-radar-phase5/`.
+- Phase 6 result: the separately authorized active-paused-frame L2 Reflectivity
+  pilot is implemented behind a default-off switch. It uses one versioned
+  1,322,700-byte KGGW polar artifact and one client texture, adds no second
+  decode, preserves all PNG goldens, and passes the first-PNG latency gate.
+  Below zoom 10 remains PNG-only, zoom 10 prefetches behind PNG, and zoom 11
+  crossfades only after readiness. User-owned two-page activation, 0.100 ms
+  cached redraw, same-frame visible parity, PNG-only, active-playback fallback,
+  context-loss fallback, and stale-selection cancellation checks pass. Phase 6
+  is closed.
+- Phase 7 result: the separately gated L2 Reflectivity animation retains a
+  four-texture current/two-upcoming/one-prior window with two-load concurrency.
+  PNG playback starts immediately, WebGL waits for the active plus two forward
+  textures, and missing frames fall back without changing cadence or scrubber
+  position. Both-page browser acceptance, all eight PNG goldens, and focused
+  validation pass. Phase 7 is closed.
 - Phase 8 candidate: expand only to approved core families after Phase 7
   passes. All-product WebGL conversion, PNG retirement, and server-rendered
   tiles require a new migration plan.

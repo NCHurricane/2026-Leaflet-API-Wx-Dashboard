@@ -1,6 +1,7 @@
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, LSR_CATEGORIES, SEVERE_EVENTS } from './alerts-config.js?v=20260719a';
 
 const PULSE_ALERT_EVENTS = new Set(Object.values(SEVERE_EVENTS));
+const WATCH_ALERT_EVENTS = new Set(['Tornado Watch', 'Severe Thunderstorm Watch', 'Flash Flood Watch', 'Flood Watch']);
 
 const CATEGORY_EVENTS = new Set(Object.values(ALERT_CATEGORIES).flat());
 
@@ -111,12 +112,23 @@ async function writeLiveAlertCache(api, paths, payloads) {
 export function createAlertsEngine(options) {
     const { api, mapCore, legend, lsrLegend = null, status, onAlertCount, onLsrCount, onWarnings, onRenderedAlerts, onDetail, onNewAlert, onLsrDetail, onLsrDetailClose, shouldHandleAlertClick } = options;
     const railScope = options.railScope === 'national' ? 'national' : 'rendered';
+    const subdueWatches = options.subdueWatches === true;
+    const alertPaneZIndex = Number.isFinite(Number(options.alertPaneZIndex))
+        ? Number(options.alertPaneZIndex) : 360;
     const { leaflet, map } = mapCore;
+    if (subdueWatches) {
+        const watchesPane = map.createPane('alerts-watches');
+        watchesPane.style.zIndex = String(alertPaneZIndex - 10);
+    }
     const alertsPane = map.createPane('alerts-polygons');
-    alertsPane.style.zIndex = '360';
+    alertsPane.style.zIndex = String(alertPaneZIndex);
+    const selectedAlertPane = map.createPane('alerts-selected');
+    selectedAlertPane.style.zIndex = String(alertPaneZIndex + 10);
     const lsrPane = map.createPane('alerts-lsr');
     lsrPane.style.zIndex = '470';
     let alertLayer = null;
+    let watchLayer = null;
+    let selectedAlertLayer = null;
     let lsrLayer = null;
     let fullBaseFeatures = [];
     let displayBaseFeatures = [];
@@ -140,6 +152,7 @@ export function createAlertsEngine(options) {
     let lsrSequence = 0;
     let archiveSequence = 0;
     let knownAlertIds = null;
+    let selectedAlert = null;
     let selectedLsrId = '';
 
     function featureId(feature) {
@@ -170,7 +183,23 @@ export function createAlertsEngine(options) {
     }
 
     function alertStyle(feature) {
-        return { pane: 'alerts-polygons', color: eventColor(feature), weight: 2, opacity: 1, fillColor: eventColor(feature), fillOpacity: opacity };
+        const isSubduedWatch = subdueWatches && WATCH_ALERT_EVENTS.has(feature?.properties?.event);
+        return {
+            pane: isSubduedWatch ? 'alerts-watches' : 'alerts-polygons',
+            color: eventColor(feature),
+            weight: 2,
+            opacity: 1,
+            fillColor: eventColor(feature),
+            fillOpacity: isSubduedWatch ? opacity * 0.16 : opacity,
+        };
+    }
+
+    function selectedAlertStyle(feature) {
+        return {
+            ...alertStyle(feature),
+            pane: 'alerts-selected',
+            className: 'alerts-selected-polygon',
+        };
     }
 
     function syncAlertPulseLayer(layer, feature = layer?.feature) {
@@ -179,11 +208,10 @@ export function createAlertsEngine(options) {
         const active = pulseEnabled && PULSE_ALERT_EVENTS.has(feature?.properties?.event);
         element.classList.toggle('alerts-alert-pulse', active);
         if (active) {
-            element.style.setProperty('--alerts-pulse-fill-low', String(Math.max(0.08, opacity * 0.2)));
-            element.style.setProperty('--alerts-pulse-fill-high', String(Math.max(0.35, opacity)));
+            const zoom = map.getZoom();
+            element.style.setProperty('--alerts-pulse-stroke-high', String(zoom >= 9 ? 7 : zoom >= 7 ? 4 : 3));
         } else {
-            element.style.removeProperty('--alerts-pulse-fill-low');
-            element.style.removeProperty('--alerts-pulse-fill-high');
+            element.style.removeProperty('--alerts-pulse-stroke-high');
         }
     }
 
@@ -191,14 +219,16 @@ export function createAlertsEngine(options) {
         alertLayer?.eachLayer((layer) => syncAlertPulseLayer(layer));
     }
 
+    map.on('zoomend', syncAlertPulseLayers);
+
     function tooltipHtml(feature) {
         const props = feature?.properties || {};
         return `<strong style="color:${eventColor(feature)}">${escapeHtml(props.event || 'Weather Alert')}</strong>${props.areaDesc ? `<br>${escapeHtml(props.areaDesc)}` : ''}`;
     }
 
-    function buildAlertLayer(features) {
+    function buildAlertLayer(features, pane = 'alerts-polygons') {
         return leaflet.geoJSON({ type: 'FeatureCollection', features }, {
-            pane: 'alerts-polygons', style: alertStyle,
+            pane, style: alertStyle,
             onEachFeature(feature, layer) {
                 layer.on('add', () => syncAlertPulseLayer(layer, feature));
                 layer.bindTooltip(tooltipHtml(feature), { sticky: true, opacity: 0.95, className: 'alerts-hover-tip' });
@@ -211,12 +241,73 @@ export function createAlertsEngine(options) {
         });
     }
 
+    function buildSelectedAlertLayer(feature) {
+        return leaflet.geoJSON(feature, {
+            pane: 'alerts-selected',
+            style: selectedAlertStyle,
+            onEachFeature(selectedFeature, layer) {
+                layer.bindTooltip(tooltipHtml(selectedFeature), { sticky: true, opacity: 0.95, className: 'alerts-hover-tip' });
+                layer.on('click', (event) => {
+                    if (shouldHandleAlertClick && !shouldHandleAlertClick(selectedFeature, event)) return;
+                    if (event.originalEvent) leaflet.DomEvent.stopPropagation(event.originalEvent);
+                    onDetail?.(selectedFeature);
+                });
+            },
+        });
+    }
+
+    function renderSelectedAlert() {
+        selectedAlertLayer = replaceLayer(
+            selectedAlertLayer,
+            selectedAlert ? buildSelectedAlertLayer(selectedAlert) : null,
+        );
+    }
+
+    function clearSelectedAlert(notifyRemoved = false) {
+        const removed = selectedAlert;
+        selectedAlert = null;
+        selectedAlertLayer = replaceLayer(selectedAlertLayer, null);
+        renderLegend();
+        if (removed && notifyRemoved) options.onSelectedAlertRemoved?.(removed);
+    }
+
+    function showSelectedAlert(feature) {
+        if (!['Polygon', 'MultiPolygon'].includes(feature?.geometry?.type)) {
+            clearSelectedAlert();
+            return false;
+        }
+        selectedAlert = feature;
+        renderSelectedAlert();
+        renderLegend();
+        return true;
+    }
+
+    function reconcileSelectedAlert(features) {
+        if (!selectedAlert) return;
+        const selectedId = featureId(selectedAlert);
+        const replacement = features.find((feature) => featureId(feature) === selectedId);
+        if (!replacement) {
+            clearSelectedAlert(true);
+            return;
+        }
+        selectedAlert = replacement;
+        renderSelectedAlert();
+        renderLegend();
+    }
+
     function renderAlerts() {
         const full = fullBaseFeatures.filter((feature) => matchesSelection(feature, selection));
         const display = displayBaseFeatures.filter((feature) => matchesSelection(feature, selection));
         const rail = railScope === 'national' ? railAlertBaseFeatures : full;
+        const displayedWatches = subdueWatches
+            ? display.filter((feature) => WATCH_ALERT_EVENTS.has(feature?.properties?.event))
+            : [];
+        const displayedWarnings = subdueWatches
+            ? display.filter((feature) => !WATCH_ALERT_EVENTS.has(feature?.properties?.event))
+            : display;
         renderedAlerts = full;
-        alertLayer = replaceLayer(alertLayer, display.length ? buildAlertLayer(display) : null);
+        watchLayer = replaceLayer(watchLayer, displayedWatches.length ? buildAlertLayer(displayedWatches, 'alerts-watches') : null);
+        alertLayer = replaceLayer(alertLayer, displayedWarnings.length ? buildAlertLayer(displayedWarnings) : null);
         onAlertCount?.(full.length);
         onRenderedAlerts?.(full);
         onWarnings?.(rail);
@@ -233,8 +324,14 @@ export function createAlertsEngine(options) {
             const event = feature?.properties?.event || 'Other Alert';
             counts.set(event, (counts.get(event) || 0) + 1);
         });
+        const legendSwatch = (event) => {
+            const color = ALERT_COLORS[event] || ALERT_DEFAULT_COLOR;
+            return subdueWatches && WATCH_ALERT_EVENTS.has(event)
+                ? `<span class="core-legend-color alerts-watch-legend-color" style="background:transparent;border:2px solid ${color}"></span>`
+                : `<span class="core-legend-color" style="background:${color}"></span>`;
+        };
         const alertRows = [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([event, count]) => (
-            `<div class="core-legend-category"><span class="core-legend-color" style="background:${ALERT_COLORS[event] || ALERT_DEFAULT_COLOR}"></span><div class="core-legend-category-copy"><span class="core-legend-category-code">${escapeHtml(event)} (${count})</span></div></div>`
+            `<div class="core-legend-category">${legendSwatch(event)}<div class="core-legend-category-copy"><span class="core-legend-category-code">${escapeHtml(event)} (${count})</span></div></div>`
         )).join('');
         const lsrCounts = new Map();
         renderedLsr.forEach((feature) => {
@@ -247,16 +344,32 @@ export function createAlertsEngine(options) {
         }).join('');
         const alertSection = alertRows
             ? `<div class="alerts-legend-section"><div class="alerts-legend-label">Alerts in view</div><div class="core-legend-categories">${alertRows}</div></div>` : '';
+        let selectedSection = '';
+        if (selectedAlert) {
+            const selectedId = featureId(selectedAlert);
+            const selectedInLegend = matchesSelection(selectedAlert, selection) && renderedAlerts.some((feature) => {
+                if (featureId(feature) !== selectedId) return false;
+                try {
+                    return leaflet.geoJSON(feature).getBounds().intersects(bounds);
+                } catch (_) {
+                    return false;
+                }
+            });
+            if (!selectedInLegend) {
+                const props = selectedAlert.properties || {};
+                selectedSection = `<div class="alerts-legend-section alerts-selected-legend-section"><div class="core-legend-categories"><div class="core-legend-category">${legendSwatch(props.event)}<div class="core-legend-category-copy"><span class="core-legend-category-code">${escapeHtml(props.event || 'Weather Alert')}</span></div></div></div></div>`;
+            }
+        }
         const lsrSection = lsrRows
             ? `<div class="alerts-legend-section"><div class="alerts-legend-label">Local storm reports</div><div class="core-legend-categories">${lsrRows}</div></div>` : '';
         if (lsrLegend) {
-            if (alertSection) legend.setHtml(`${legendHeader('Active Alerts')}<div class="core-legend-body">${alertSection}</div>`);
+            if (alertSection || selectedSection) legend.setHtml(`${legendHeader('Active Alerts')}<div class="core-legend-body">${alertSection}${selectedSection}</div>`);
             else legend.clear();
             if (lsrSection) lsrLegend.setHtml(`${legendHeader('Local Storm Reports')}<div class="core-legend-body">${lsrSection}</div>`);
             else lsrLegend.clear();
             return;
         }
-        const sections = `${alertSection}${lsrSection}`;
+        const sections = `${alertSection}${selectedSection}${lsrSection}`;
         if (!sections) { legend.clear(); return; }
         legend.setHtml(`${legendHeader('Active Alerts')}<div class="core-legend-body">${sections}</div>`);
     }
@@ -323,6 +436,9 @@ export function createAlertsEngine(options) {
                 else if (nationalRail) railAlertBaseFeatures = activeFeatures(nationalRail.features);
                 alertCacheReady = true;
                 renderAlerts();
+                if (applyOptions.reconcileSelectedAlert === true) {
+                    reconcileSelectedAlert(railScope === 'national' ? railAlertBaseFeatures : fullBaseFeatures);
+                }
                 const hasNotificationPayload = railScope !== 'national' || Boolean(nationalRail);
                 if (hasNotificationPayload) {
                     const notificationFeatures = railScope === 'national' ? railAlertBaseFeatures : renderedAlerts;
@@ -362,7 +478,7 @@ export function createAlertsEngine(options) {
             alertPayloadCache.set(cacheKey, freshPayloads);
             if (alertPayloadCache.size > 16) alertPayloadCache.delete(alertPayloadCache.keys().next().value);
             void writeLiveAlertCache(api, paths, freshPayloads);
-            applyPayloads(freshPayloads);
+            applyPayloads(freshPayloads, { ...loadOptions, reconcileSelectedAlert: true });
         } catch (error) {
             if (seq === liveSequence) {
                 status.setMessage(
@@ -498,17 +614,18 @@ export function createAlertsEngine(options) {
         fullBaseFeatures = []; displayBaseFeatures = []; railAlertBaseFeatures = []; renderedAlerts = []; renderedLsr = [];
         alertCacheReady = false; lsrBaseFeatures = []; railLsrBaseFeatures = []; lsrCacheKey = ''; lsrCacheReady = false;
         knownAlertIds = null;
+        selectedAlert = null;
         clearLsrSelection();
-        alertLayer = replaceLayer(alertLayer, null); lsrLayer = replaceLayer(lsrLayer, null);
+        alertLayer = replaceLayer(alertLayer, null); watchLayer = replaceLayer(watchLayer, null); selectedAlertLayer = replaceLayer(selectedAlertLayer, null); lsrLayer = replaceLayer(lsrLayer, null);
         onAlertCount?.(0); onLsrCount?.(0); onRenderedAlerts?.([]); onWarnings?.([]); options.onLsrReports?.([]); legend.clear(); lsrLegend?.clear();
     }
 
     return Object.freeze({
-        clear, clearLsrSelection,
-        destroy() { clear(); },
+        clear, clearLsrSelection, clearSelectedAlert,
+        destroy() { map.off('zoomend', syncAlertPulseLayers); clear(); },
         getAlerts() { return [...renderedAlerts]; },
-        loadArchive, loadLive, loadLsr, renderArchiveFrame, renderLegend, setSelection,
-        setOpacity(value) { opacity = Math.max(0.1, Math.min(1, Number(value) || 0.75)); alertLayer?.setStyle(alertStyle); syncAlertPulseLayers(); return opacity; },
+        loadArchive, loadLive, loadLsr, renderArchiveFrame, renderLegend, setSelection, showSelectedAlert,
+        setOpacity(value) { opacity = Math.max(0.1, Math.min(1, Number(value) || 0.75)); alertLayer?.setStyle(alertStyle); watchLayer?.setStyle(alertStyle); selectedAlertLayer?.setStyle(selectedAlertStyle); syncAlertPulseLayers(); return opacity; },
         setLsrOpacity(value) {
             lsrOpacity = Math.max(0.1, Math.min(1, Number(value) || 1));
             lsrLayer?.eachLayer((layer) => layer.setOpacity?.(lsrOpacity));

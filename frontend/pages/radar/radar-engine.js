@@ -1,3 +1,5 @@
+import { createRadarWebglLayer } from './radar-webgl-layer.js?v=20260726c';
+
 const SITE_STATUS_COLORS = Object.freeze({
     online: '#22c55e', required: '#f59e0b', mandatory: '#f97316',
     startup: '#60a5fa', configured: '#facc15', unconfigured: '#64748b',
@@ -35,6 +37,39 @@ function normalizeFrames(rawFrames, site, product) {
             return true;
         })
         .sort((a, b) => (timestampMs(a.timestamp) || 0) - (timestampMs(b.timestamp) || 0));
+}
+
+export function selectRadarWebglWindow(frames, index, textureBudget = 4, minForward = 2) {
+    if (!Array.isArray(frames) || !frames.length || index < 0 || index >= frames.length) return [];
+    const budget = Math.max(1, Math.min(8, Number(textureBudget) || 1));
+    const forward = Math.max(0, Math.min(budget - 1, Number(minForward) || 0));
+    const desired = [];
+    const seen = new Set();
+    const add = (frame) => {
+        const identity = frameIdentity(frame);
+        if (!identity || seen.has(identity) || desired.length >= budget) return;
+        seen.add(identity);
+        desired.push(frame);
+    };
+    add(frames[index]);
+    for (let offset = 1; offset <= forward; offset += 1) {
+        add(frames[(index + offset) % frames.length]);
+    }
+    add(frames[(index - 1 + frames.length) % frames.length]);
+    for (let offset = forward + 1; desired.length < budget && offset < frames.length; offset += 1) {
+        add(frames[(index + offset) % frames.length]);
+    }
+    return desired;
+}
+
+export function selectRadarFrameIndex(frames, currentFrame, preserveKey = null) {
+    if (!Array.isArray(frames) || !frames.length) return 0;
+    const key = preserveKey ?? frameIdentity(currentFrame);
+    if (key) {
+        const preserved = frames.findIndex((frame) => frameIdentity(frame) === key);
+        if (preserved >= 0) return preserved;
+    }
+    return frames.length - 1;
 }
 
 function siteStatusClass(info, configured) {
@@ -174,6 +209,27 @@ export function createRadarEngine(options) {
     let inspectorPending = false;
     let inspectorLatestLatLng = null;
     let inspectorSuppressed = false;
+    let webglConfig = {
+        enabled: false,
+        animation_enabled: false,
+        product: 'L2_REF',
+        prefetch_zoom: 10,
+        activate_zoom: 11,
+        release_grace_ms: 1500,
+        texture_budget: 4,
+        min_forward_textures: 2,
+        max_concurrent_loads: 2,
+    };
+    let webglLayer = null;
+    const webglLoads = new Map();
+    const webglFailedIdentities = new Set();
+    let webglDesiredFrames = [];
+    let webglScopeKey = '';
+    let webglReleaseTimer = null;
+    let webglCrossfadeTimer = null;
+    let webglActive = false;
+    let webglAnimationReady = false;
+    let playbackActive = false;
 
     const message = (text, tone = '') => onMessage?.(text, tone);
     const selectionMatches = (snapshot) => {
@@ -212,6 +268,195 @@ export function createRadarEngine(options) {
         });
     }
 
+    function restorePng() {
+        clearTimeout(webglCrossfadeTimer);
+        webglCrossfadeTimer = null;
+        webglActive = false;
+        webglLayer?.setActive(false);
+        if (currentOverlay) currentOverlay.setOpacity(opacity);
+    }
+
+    function releaseWebgl() {
+        clearTimeout(webglReleaseTimer);
+        webglReleaseTimer = null;
+        webglLoads.forEach(({ controller }) => controller.abort());
+        webglLoads.clear();
+        webglDesiredFrames = [];
+        webglScopeKey = '';
+        webglAnimationReady = false;
+        restorePng();
+        webglLayer?.release();
+    }
+
+    function ensureWebglLayer() {
+        if (webglLayer) return webglLayer;
+        webglLayer = createRadarWebglLayer({
+            leaflet,
+            map,
+            paneName: 'radar-overlays',
+            maxTextures: Math.max(1, Number(webglConfig.texture_budget) || 1),
+            animationEnabled: webglConfig.animation_enabled,
+            onFailure() {
+                const identity = frameIdentity(currentFrame);
+                if (identity) webglFailedIdentities.add(identity);
+                releaseWebgl();
+            },
+        });
+        return webglLayer;
+    }
+
+    function webglSelectionSupported(frame) {
+        return webglConfig.enabled === true
+            && (!playbackActive || webglConfig.animation_enabled === true)
+            && String(frame?.product || getSelection().product || '').toUpperCase() === webglConfig.product;
+    }
+
+    function canUseWebgl(frame) {
+        return webglSelectionSupported(frame) && !!frame?.webgl_artifact?.url;
+    }
+
+    function webglSelectionKey() {
+        const selection = getSelection();
+        const motion = selectedMotion();
+        return [
+            selection.site,
+            selection.product,
+            selection.elevation || 'auto',
+            selection.hours || 1,
+            motion?.speed ?? '',
+            motion?.direction ?? '',
+            motion?.cellId ?? '',
+        ].join('|');
+    }
+
+    function cancelStaleWebglWork() {
+        const scopeKey = webglSelectionKey();
+        if (!webglScopeKey || webglScopeKey === scopeKey) return;
+        releaseWebgl();
+        webglFailedIdentities.clear();
+    }
+
+    function currentFrameIndex() {
+        const identity = frameIdentity(currentFrame);
+        return identity ? frames.findIndex((frame) => frameIdentity(frame) === identity) : -1;
+    }
+
+    function desiredWebglFrames() {
+        const index = currentFrameIndex();
+        if (index < 0 || !frames.length) return currentFrame ? [currentFrame] : [];
+        if (!playbackActive || webglConfig.animation_enabled !== true || frames.length < 2) {
+            return [frames[index]];
+        }
+        return selectRadarWebglWindow(
+            frames,
+            index,
+            webglConfig.texture_budget,
+            webglConfig.min_forward_textures,
+        );
+    }
+
+    function hasMinimumForwardBuffer(index) {
+        if (index < 0 || !webglLayer?.isReady(frameIdentity(frames[index]))) return false;
+        const required = Math.min(
+            Math.max(0, Number(webglConfig.min_forward_textures) || 0),
+            Math.max(0, frames.length - 1),
+        );
+        for (let offset = 1; offset <= required; offset += 1) {
+            if (!webglLayer.isReady(frameIdentity(frames[(index + offset) % frames.length]))) return false;
+        }
+        return true;
+    }
+
+    function activateWebgl(frame) {
+        const identity = frameIdentity(frame);
+        if (!identity || frameIdentity(currentFrame) !== identity || map.getZoom() < webglConfig.activate_zoom) return;
+        if (!webglLayer?.isReady(identity)) return;
+        if (playbackActive) {
+            if (webglConfig.animation_enabled !== true) return;
+            if (!webglAnimationReady) {
+                if (!hasMinimumForwardBuffer(currentFrameIndex())) return;
+                webglAnimationReady = true;
+            }
+        }
+        if (!webglLayer.setActive(true, opacity, identity)) return;
+        webglActive = true;
+        clearTimeout(webglCrossfadeTimer);
+        webglCrossfadeTimer = setTimeout(() => {
+            if (webglActive && frameIdentity(currentFrame) === identity && currentOverlay) {
+                currentOverlay.setOpacity(0);
+            }
+        }, 150);
+    }
+
+    function pumpWebglLoads() {
+        const layer = ensureWebglLayer();
+        const maxLoads = Math.max(
+            1,
+            Math.min(4, Number(webglConfig.max_concurrent_loads) || 1),
+        );
+        for (const frame of webglDesiredFrames) {
+            if (webglLoads.size >= maxLoads) break;
+            const identity = frameIdentity(frame);
+            if (
+                !identity
+                || layer.isReady(identity)
+                || webglLoads.has(identity)
+                || webglFailedIdentities.has(identity)
+            ) continue;
+            const controller = new AbortController();
+            webglLoads.set(identity, { controller });
+            void layer.load(overlayUrl(frame.webgl_artifact.url), identity, controller.signal)
+                .then(() => {
+                    if (webglDesiredFrames.some((item) => frameIdentity(item) === identity)) {
+                        activateWebgl(currentFrame);
+                    }
+                })
+                .catch((error) => {
+                    if (error?.name !== 'AbortError') webglFailedIdentities.add(identity);
+                })
+                .finally(() => {
+                    webglLoads.delete(identity);
+                    pumpWebglLoads();
+                });
+        }
+    }
+
+    function warmWebglWindow() {
+        webglDesiredFrames = desiredWebglFrames().filter(canUseWebgl);
+        const desiredIdentities = webglDesiredFrames.map(frameIdentity);
+        const allowed = new Set(desiredIdentities);
+        webglLoads.forEach(({ controller }, identity) => {
+            if (!allowed.has(identity)) controller.abort();
+        });
+        ensureWebglLayer().retain(desiredIdentities);
+        pumpWebglLoads();
+        activateWebgl(currentFrame);
+    }
+
+    function syncWebgl() {
+        const zoom = map.getZoom();
+        if (!currentFrame || !webglSelectionSupported(currentFrame)) {
+            releaseWebgl();
+            return;
+        }
+        const scopeKey = webglSelectionKey();
+        cancelStaleWebglWork();
+        webglScopeKey = scopeKey;
+        if (zoom < webglConfig.activate_zoom) restorePng();
+        if (zoom < webglConfig.prefetch_zoom) {
+            if (!webglReleaseTimer) {
+                webglReleaseTimer = setTimeout(
+                    releaseWebgl,
+                    Math.max(0, Number(webglConfig.release_grace_ms) || 0),
+                );
+            }
+            return;
+        }
+        clearTimeout(webglReleaseTimer);
+        webglReleaseTimer = null;
+        warmWebglWindow();
+    }
+
     function getOrCreateOverlay(frame) {
         const key = frameIdentity(frame);
         if (!key) return null;
@@ -238,6 +483,7 @@ export function createRadarEngine(options) {
 
     async function renderFrame(frame, index = -1) {
         if (!frame?.image_url || !Array.isArray(frame.bounds)) return;
+        restorePng();
         const seq = ++renderSequence;
         const record = getOrCreateOverlay(frame);
         if (!record) return;
@@ -255,6 +501,7 @@ export function createRadarEngine(options) {
         status.setDataInfo({ timestamp: ts, provider: 'NEXRAD', source: frame.source || 'live cache' });
         message(`${frame.site || getSelection().site} ${frame.product || getSelection().product} ${new Date(ts).toLocaleString()}.`);
         if (tracksVisible) void loadStormTracks(ts);
+        syncWebgl();
     }
 
     function clearOverlays() {
@@ -267,6 +514,8 @@ export function createRadarEngine(options) {
         overlayPool.clear();
         currentOverlay = null;
         currentFrame = null;
+        webglFailedIdentities.clear();
+        releaseWebgl();
         selectedCell = null;
         frames = [];
         onFrames?.([], { index: 0 });
@@ -303,13 +552,14 @@ export function createRadarEngine(options) {
 
     async function loadCatalog() {
         const [siteData, radarStatus] = await Promise.all([
-            api.fetchJson('/api/radar/live/sites', { cache: 'no-store' }),
+            api.fetchJson('/api/radar/live/sites?config_revision=2', { cache: 'no-store' }),
             api.fetchJson('/api/radar/status', { cache: 'no-store' }).catch(() => ({ stations: {} })),
         ]);
         const rawStatus = radarStatus?.stations || {};
         statusMap = new Map(Object.entries(rawStatus).map(([key, value]) => [String(key).toUpperCase(), value]));
         const sites = Array.isArray(siteData?.sites) ? siteData.sites : [];
         Object.entries(siteData?.products || {}).forEach(([key, value]) => products.set(String(key).toUpperCase(), value));
+        webglConfig = { ...webglConfig, ...(siteData?.webgl || {}) };
         siteLayer.clearLayers();
         sites.forEach((site) => {
             const id = String(site?.site || '').toUpperCase();
@@ -379,9 +629,10 @@ export function createRadarEngine(options) {
         }
     }
 
-    async function loadFrames({ refresh = false, preserveKey = '' } = {}) {
+    async function loadFrames({ refresh = false, preserveKey = null } = {}) {
         const selection = { ...getSelection() };
         if (!selection.site || !selection.product) return [];
+        cancelStaleWebglWork();
         const seq = requestSequence;
         const params = new URLSearchParams({
             site: selection.site, product: selection.product,
@@ -395,11 +646,7 @@ export function createRadarEngine(options) {
             onElevationData?.(data);
             const nextFrames = normalizeFrames(data?.frames, selection.site, selection.product);
             frames = nextFrames;
-            let index = frames.length - 1;
-            if (preserveKey) {
-                const preserved = frames.findIndex((frame) => frameIdentity(frame) === preserveKey);
-                if (preserved >= 0) index = preserved;
-            }
+            const index = selectRadarFrameIndex(frames, currentFrame, preserveKey);
             onFrames?.(frames, { index: Math.max(0, index) });
             if (frames.length && index >= 0) await renderFrame(frames[index], index);
             if (!frames.length) message(`No radar frames found for ${selection.site}/${selection.product}.`);
@@ -421,6 +668,7 @@ export function createRadarEngine(options) {
 
     async function refreshAll() {
         if (!getSelection().site) return;
+        cancelStaleWebglWork();
         requestSequence += 1;
         const latestPromise = loadLatest();
         const framesPromise = loadFrames();
@@ -439,7 +687,7 @@ export function createRadarEngine(options) {
             const params = new URLSearchParams({ site: selection.site, hours: String(Math.max(1, selection.hours || 1)) });
             if (frameTimestamp) params.set('timestamp', String(frameTimestamp));
             const data = await api.fetchJson(`/api/radar/live/storm-tracks?${params}`, { cache: 'no-store' });
-            if (seq !== trackSequence || getSelection().site !== selection.site) return;
+            if (seq !== trackSequence || !tracksVisible || getSelection().site !== selection.site) return;
             const features = data?.feature_collection?.features || [];
             features.forEach((feature) => {
                 const geometry = feature?.geometry || {};
@@ -562,6 +810,7 @@ export function createRadarEngine(options) {
     }
     map.on('mousemove', onMouseMove);
     map.on('mouseout movestart zoomstart', hideInspector);
+    map.on('zoomend', syncWebgl);
 
     return Object.freeze({
         clear: clearOverlays,
@@ -573,6 +822,9 @@ export function createRadarEngine(options) {
             hideInspector(); clearOverlays();
             map.off('mousemove', onMouseMove);
             map.off('mouseout movestart zoomstart', hideInspector);
+            map.off('zoomend', syncWebgl);
+            webglLayer?.destroy();
+            webglLayer = null;
             [siteLayer, highlightLayer, stormLayer].forEach((layer) => { if (map.hasLayer(layer)) map.removeLayer(layer); });
         },
         frameAt(index) { return frames[index] || null; },
@@ -587,15 +839,26 @@ export function createRadarEngine(options) {
         setInspectorVisible(value) { inspectorVisible = !!value; if (!inspectorVisible) hideInspector(); },
         setOpacity(value) {
             opacity = Math.max(0.1, Math.min(1, Number(value) || 0.9));
-            if (currentOverlay) currentOverlay.setOpacity(opacity);
+            if (webglActive) webglLayer?.setActive(true, opacity);
+            else if (currentOverlay) currentOverlay.setOpacity(opacity);
             return opacity;
+        },
+        setPlaybackActive(value) {
+            playbackActive = !!value;
+            webglAnimationReady = false;
+            if (playbackActive && webglConfig.animation_enabled !== true) releaseWebgl();
+            else syncWebgl();
         },
         setSitesVisible(value) { sitesVisible = !!value; syncSiteVisibility(); if (!sitesVisible) legend.clear(); },
         setStormTracksVisible(value) {
             tracksVisible = !!value;
             onStormTrackLegend?.(tracksVisible ? stormTrackLegendHtml() : null);
             if (tracksVisible) void loadStormTracks(currentFrame?.timestamp);
-            else { stormLayer.clearLayers(); if (map.hasLayer(stormLayer)) map.removeLayer(stormLayer); }
+            else {
+                trackSequence += 1;
+                stormLayer.clearLayers();
+                if (map.hasLayer(stormLayer)) map.removeLayer(stormLayer);
+            }
         },
         showProductLegend: updateProductLegend,
         showSiteLegend,

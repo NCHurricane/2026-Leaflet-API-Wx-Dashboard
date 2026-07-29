@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260725e">
-    <link rel="stylesheet" href="/frontend/pages/alerts/alerts.css?v=20260720a">
+    <link rel="stylesheet" href="/frontend/pages/alerts/alerts.css?v=20260726a">
 </head>
 <body>
     <header class="core-header">
@@ -84,7 +84,7 @@
                 <section id="alerts-panel-settings" class="core-sidebar-panel core-settings-panel alerts-panel-stack" role="tabpanel"
                     aria-labelledby="alerts-tab-settings" data-sidebar-panel="settings" hidden>
                     <div class="core-field"><label for="alerts-basemap">Basemap</label><select id="alerts-basemap"><option>Dark (No Labels)</option><option>Light (No Labels)</option><option>Voyager</option><option>USGS</option><option>Satellite</option></select></div>
-                    <div class="core-adjustment"><label id="alerts-opacity-label" for="alerts-opacity">Polygon Opacity (0.75)</label><input id="alerts-opacity" type="range" min="0.1" max="1" step="0.05" value="0.75"></div>
+                    <div class="core-adjustment"><label id="alerts-opacity-label" for="alerts-opacity">Polygon Opacity (0.30)</label><input id="alerts-opacity" type="range" min="0.1" max="1" step="0.05" value="0.30"></div>
                     <div class="core-settings-section"><h2>Cities</h2>
                         <div class="core-segmented" role="radiogroup" aria-label="Cities">
                             <label><input name="alerts-cities-source" type="radio" value="off" checked><span>Off</span></label>
@@ -174,6 +174,6 @@
         </aside>
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/alerts/alerts-page.js?v=20260725e"></script>
+    <script type="module" src="/frontend/pages/alerts/alerts-page.js?v=20260726a"></script>
 </body>
 </html>

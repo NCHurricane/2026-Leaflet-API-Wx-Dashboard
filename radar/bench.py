@@ -25,11 +25,15 @@ _SCENARIOS = (
     "empty-cache-response",
     "backfill-12",
     "no-op-worker",
+    "l2-product-separate",
+    "l2-product-batch",
 )
 _FRESH_PROCESS_SCENARIOS = {
     "render-one",
     "empty-cache-response",
     "backfill-12",
+    "l2-product-separate",
+    "l2-product-batch",
 }
 _PACKAGE_NAMES = (
     "arm_pyart",
@@ -359,9 +363,30 @@ def _render_one(
                     frame_key,
                 )
             )
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(temp_path, destination)
+            worker._finalize_rendered_png(temp_path, destination)
             record["finalize_ms"] = (time.perf_counter() - started) * 1000.0
+
+            if context["product"] == "L2_REF":
+                from radar.webgl_artifact import feature_config, write_artifact
+
+                if feature_config()["enabled"]:
+                    started = time.perf_counter()
+                    artifact = write_artifact(
+                        cache_root,
+                        context["site"],
+                        frame_key,
+                        selected,
+                        radar,
+                        field_name,
+                        sweep,
+                        context["product_cfg"],
+                    )
+                    record["webgl_artifact_ms"] = (
+                        time.perf_counter() - started
+                    ) * 1000.0
+                    record["webgl_artifact_bytes"] = (
+                        artifact.stat().st_size if artifact is not None else 0
+                    )
 
             started = time.perf_counter()
             radar_update_index(
@@ -421,6 +446,8 @@ def _worker_scenario(
 
     if scenario == "backfill-12":
         needed = 12
+    elif scenario in {"l2-product-separate", "l2-product-batch"}:
+        needed = 1
     elif scenario == "empty-cache-response":
         from services.radar_service import _RADAR_EMPTY_CACHE_RESPONSE_SYNC_FRAMES
 
@@ -528,7 +555,74 @@ def _worker_scenario(
                 )
                 record["pool_render_batches"] = render_pool.render_batches
             elif scenario == "no-op-worker":
-                record["rendered_frames"] = worker._render_site_product(**common)
+                original_discover = worker._discover_radar_files
+                discovery_scan_count = 0
+
+                def counted_discover(data_path):
+                    nonlocal discovery_scan_count
+                    discovery_scan_count += 1
+                    return original_discover(data_path)
+
+                worker._discover_radar_files = counted_discover
+                try:
+                    record["rendered_frames"] = worker._render_site_product(**common)
+                finally:
+                    worker._discover_radar_files = original_discover
+                record["discovery_scan_count"] = discovery_scan_count
+                record["discovery_reused"] = discovery_scan_count == 0
+            elif scenario in {"l2-product-separate", "l2-product-batch"}:
+                from config.radar_config import (
+                    LIVE_RADAR_L2_DEFAULT_ELEVATION,
+                    LIVE_RADAR_PRODUCTS,
+                )
+
+                products = [
+                    (product_key, dict(product_cfg))
+                    for product_key, product_cfg in LIVE_RADAR_PRODUCTS.items()
+                    if worker._level_code(product_cfg.get("level", "Level 3")) == "L2"
+                ]
+                original_read = worker._read_radar
+                decode_count = 0
+
+                def counted_read(level, source_path):
+                    nonlocal decode_count
+                    decode_count += 1
+                    return original_read(level, source_path)
+
+                worker._read_radar = counted_read
+                try:
+                    if scenario == "l2-product-batch":
+                        rendered, failed = worker._render_site_l2_products(
+                            provider,
+                            context["site"],
+                            products,
+                            elevation=LIVE_RADAR_L2_DEFAULT_ELEVATION,
+                        )
+                    else:
+                        rendered = 0
+                        failed = 0
+                        for product_key, product_cfg in products:
+                            try:
+                                rendered += worker._render_site_product(
+                                    provider,
+                                    "Pinned-Disk",
+                                    context["site"],
+                                    product_key,
+                                    product_cfg,
+                                    elevation=LIVE_RADAR_L2_DEFAULT_ELEVATION,
+                                )
+                            except Exception:
+                                failed += 1
+                finally:
+                    worker._read_radar = original_read
+                record.update(
+                    {
+                        "rendered_frames": rendered,
+                        "failed_products": failed,
+                        "product_count": len(products),
+                        "decode_count": decode_count,
+                    }
+                )
             else:
                 raise ValueError(
                     f"Unsupported worker benchmark scenario: {scenario}"

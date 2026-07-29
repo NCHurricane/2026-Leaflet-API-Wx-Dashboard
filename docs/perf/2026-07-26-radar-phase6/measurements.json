@@ -1,0 +1,48 @@
+{
+  "artifact": {
+    "format_version": 1,
+    "gate_count": 1832,
+    "max_quantization_error": 0.0,
+    "payload_bytes": 1322700,
+    "ray_count": 720,
+    "texture_bytes": 1322314
+  },
+  "browser_acceptance": {
+    "cached_draw_ms": 0.1,
+    "passed": [
+      "radar_zoom_11_activation",
+      "workspace_zoom_11_activation",
+      "same_frame_visible_parity",
+      "png_only_switch_disabled",
+      "active_playback_fallback",
+      "context_loss_fallback",
+      "stale_selection_cancellation"
+    ],
+    "pending": [],
+    "status": "passed"
+  },
+  "candidate": {
+    "artifact_ms_p50": 8.823900017887354,
+    "artifact_ms_p95": 12.785059999441728,
+    "run_id": "phase6-webgl-candidate-02",
+    "total_ms_p50": 4045.12589998194,
+    "total_ms_p95": 4106.774379994022
+  },
+  "control": {
+    "run_id": "phase6-png-control",
+    "total_ms_p50": 4034.154799999669,
+    "total_ms_p95": 4174.683280003956
+  },
+  "focused_validation": {
+    "pytest_passed": 69,
+    "unittest_subtests_passed": 42
+  },
+  "full_validation": {
+    "pre_existing_failures": 1,
+    "pytest_passed": 288,
+    "unittest_subtests_passed": 42
+  },
+  "golden_rows_passed": 8,
+  "phase": 6,
+  "status": "complete"
+}

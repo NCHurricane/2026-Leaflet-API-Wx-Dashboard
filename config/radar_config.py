@@ -1,6 +1,7 @@
 # NEXRAD Level II and Level III product definitions.
 
 import math
+import os
 
 L2_PRODUCTS = {
     "REF": "Reflectivity",
@@ -397,6 +398,25 @@ LIVE_RADAR_MAX_KEEP_FRAMES = max(
     LIVE_RADAR_KEEP_FRAMES,
     live_radar_target_frames(LIVE_RADAR_MAX_LOOKBACK_HOURS),
 )
+
+# Optional high-zoom WebGL path. PNG remains authoritative at every zoom;
+# these switches only enable the separate Level II Reflectivity polar artifact.
+LIVE_RADAR_WEBGL_ENABLED = os.environ.get(
+    "LIVE_RADAR_WEBGL_ENABLED", "0"
+).strip().lower() in {"1", "true", "yes", "on"}
+LIVE_RADAR_WEBGL_ANIMATION_ENABLED = os.environ.get(
+    "LIVE_RADAR_WEBGL_ANIMATION_ENABLED", "0"
+).strip().lower() in {"1", "true", "yes", "on"}
+LIVE_RADAR_WEBGL_ARTIFACT_VERSION = 1
+LIVE_RADAR_WEBGL_PREFETCH_ZOOM = 10
+LIVE_RADAR_WEBGL_ACTIVATE_ZOOM = 11
+LIVE_RADAR_WEBGL_RELEASE_GRACE_MS = 1500
+# Four representative 1.32 MB R8 textures total about 5.3 MB of GPU storage:
+# current, one prior, and two upcoming. Fetch concurrency is independently
+# bounded so playback cannot fan out one request per loop frame.
+LIVE_RADAR_WEBGL_TEXTURE_BUDGET = 4
+LIVE_RADAR_WEBGL_MIN_FORWARD_TEXTURES = 2
+LIVE_RADAR_WEBGL_MAX_CONCURRENT_LOADS = 2
 
 # Rendering performance settings (easily tunable without code changes)
 # Figure size in inches. At DPI=200: 12 → 2400×2400px (native L3 Super-Res 0.25km grid)

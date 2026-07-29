@@ -12,10 +12,10 @@ import math
 import multiprocessing
 import os
 import sys
-import shutil
+import threading
 import time
 import zlib
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -55,6 +55,7 @@ from config.radar_config import (
     live_radar_target_frames,
     normalize_live_radar_lookback_hours,
 )
+from radar.webgl_artifact import prune_artifacts, write_artifact
 from workers._freshness import is_cache_fresh, mark_run_complete
 
 _CACHE_ROOT = Path(__file__).resolve().parent.parent / "cache"
@@ -72,6 +73,10 @@ _MAX_RANGE_NM = 250.0
 _NM_TO_KM = 1.852
 _KM_PER_DEG_LAT = 111.32
 _PADDING_FACTOR = 1.20
+_MAX_L2_VOLUME_CONSUMERS = 8
+_DISCOVERY_INDEX_VERSION = 1
+_L2_SOURCE_LOCKS: dict[str, threading.Lock] = {}
+_L2_SOURCE_LOCKS_GUARD = threading.Lock()
 
 
 def _radar_parallel_worker_count() -> int:
@@ -81,6 +86,12 @@ def _radar_parallel_worker_count() -> int:
     if configured > 0:
         return configured
     return max(1, min(4, os.cpu_count() or 1))
+
+
+def _l2_source_lock(site: str) -> threading.Lock:
+    site_key = str(site).strip().upper()
+    with _L2_SOURCE_LOCKS_GUARD:
+        return _L2_SOURCE_LOCKS.setdefault(site_key, threading.Lock())
 
 
 def _radar_render_pool_ping(_value: int) -> int:
@@ -633,7 +644,29 @@ def _file_key(f: Path, use_mtime: bool) -> str:
 
 def _radar_source_download_dir(site: str, level: str, source_product_code: str) -> Path:
     level_path = str(level).lower().replace(" ", "")
-    return _RADAR_ROOT / f"radar_{level_path}_downloads" / source_product_code / site
+    storage_product = source_product_code
+    if level_path == "level2" and not LIVE_RADAR_L2_USE_CHUNKS:
+        from radar.radar_nodd_utils import LEVEL2_SOURCE_SPOOL
+
+        storage_product = LEVEL2_SOURCE_SPOOL
+    return _RADAR_ROOT / f"radar_{level_path}_downloads" / storage_product / site
+
+
+def _radar_source_download_dirs(
+    site: str, level: str, source_product_code: str
+) -> list[Path]:
+    canonical = _radar_source_download_dir(site, level, source_product_code)
+    paths = [canonical]
+    if _level_code(level) == "L2" and not LIVE_RADAR_L2_USE_CHUNKS:
+        legacy = (
+            _RADAR_ROOT
+            / "radar_level2_downloads"
+            / source_product_code
+            / site
+        )
+        if legacy != canonical:
+            paths.append(legacy)
+    return paths
 
 
 def _find_source_file_for_frame(
@@ -643,18 +676,23 @@ def _find_source_file_for_frame(
     frame_key: str,
     source_data_key: str | None = None,
 ) -> Path | None:
-    data_dir = _radar_source_download_dir(site, level, source_product_code)
+    data_dirs = _radar_source_download_dirs(site, level, source_product_code)
     if source_data_key:
-        direct = data_dir / str(source_data_key)
-        if direct.exists() and direct.is_file():
-            return direct
+        for data_dir in data_dirs:
+            direct = data_dir / str(source_data_key)
+            if direct.exists() and direct.is_file():
+                return direct
     try:
         target_dt = frame_key_from_datetime(datetime_from_frame_key(frame_key))
     except Exception:
         target_dt = str(frame_key or "")
-    try:
-        candidates = [p for p in data_dir.iterdir() if p.is_file()]
-    except OSError:
+    candidates = []
+    for data_dir in data_dirs:
+        try:
+            candidates.extend(p for p in data_dir.iterdir() if p.is_file())
+        except OSError:
+            continue
+    if not candidates:
         return None
     frame_key_text = str(frame_key or "")
     if frame_key_text:
@@ -823,25 +861,36 @@ def _read_discovery_index(
         path = _discovery_index_path(site, level_code, product_key)
         if path.exists():
             with open(path, "r", encoding="utf-8") as fh:
-                return json.load(fh)
+                payload = json.load(fh)
+            if isinstance(payload, dict):
+                return payload
     except (OSError, json.JSONDecodeError):
         pass
-    return {"dir_mtime": None, "files": {}}
+    return {}
 
 
 def _write_discovery_index(
     site: str, level_code: str, product_key: str, index: dict
 ) -> None:
     """Write the discovery index atomically."""
+    tmp = None
     try:
         path = _discovery_index_path(site, level_code, product_key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = str(path) + ".tmp"
+        tmp = path.with_name(
+            f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(index, fh, separators=(",", ":"))
-        os.replace(tmp, str(path))
+        os.replace(str(tmp), str(path))
     except Exception:
         pass
+    finally:
+        try:
+            if tmp is not None:
+                tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _discover_radar_files(data_path: Path) -> list[Path]:
@@ -864,6 +913,91 @@ def _discover_radar_files(data_path: Path) -> list[Path]:
             continue
         files.append(entry)
     return sorted(files, key=lambda p: p.name)
+
+
+def _files_from_discovery_index(
+    data_path: Path,
+    index: dict,
+    dir_mtime_ns: int,
+) -> list[Path] | None:
+    if index.get("version") != _DISCOVERY_INDEX_VERSION:
+        return None
+    if index.get("dir_mtime_ns") != dir_mtime_ns:
+        return None
+    names = index.get("files")
+    if not isinstance(names, list):
+        return None
+
+    files = []
+    for raw_name in names:
+        name = str(raw_name or "")
+        if not name or Path(name).name != name:
+            return None
+        candidate = data_path / name
+        try:
+            if not candidate.is_file() or candidate.stat().st_size <= 0:
+                return None
+        except OSError:
+            return None
+        files.append(candidate)
+    return sorted(files, key=lambda path: path.name)
+
+
+def _discover_radar_files_cached(
+    data_path: Path,
+    site: str,
+    level_code: str,
+    product_key: str,
+) -> tuple[list[Path], bool]:
+    try:
+        dir_mtime_ns = data_path.stat().st_mtime_ns
+    except OSError:
+        return [], False
+
+    index = _read_discovery_index(site, level_code, product_key)
+    cached = _files_from_discovery_index(data_path, index, dir_mtime_ns)
+    if cached is not None:
+        return cached, True
+
+    files = _discover_radar_files(data_path)
+    _write_discovery_index(
+        site,
+        level_code,
+        product_key,
+        {
+            "version": _DISCOVERY_INDEX_VERSION,
+            "dir_mtime_ns": dir_mtime_ns,
+            "files": [path.name for path in files],
+        },
+    )
+    return files, False
+
+
+def _finalize_rendered_png(temp_path: Path | str, destination: Path | str) -> Path:
+    """Atomically move a completed same-volume render into the public cache."""
+    source = Path(temp_path)
+    target = Path(destination)
+    try:
+        source_stat = source.stat()
+    except OSError as exc:
+        raise RuntimeError(f"Radar temporary render is unavailable: {source}") from exc
+    if not source.is_file() or source_stat.st_size <= 0:
+        raise RuntimeError(f"Radar temporary render is empty: {source}")
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target_device = target.parent.stat().st_dev
+    except OSError as exc:
+        raise RuntimeError(
+            f"Radar destination directory is unavailable: {target.parent}"
+        ) from exc
+    if source_stat.st_dev != target_device:
+        raise OSError(
+            f"Radar atomic finalization requires one volume: {source} -> {target}"
+        )
+
+    os.replace(str(source), str(target))
+    return target
 
 
 def _compute_extent_ratio(bounds: list[float], projection=None) -> float:
@@ -930,7 +1064,22 @@ def _render_overlay_png(
     sweep: int | None = None,
     profile: bool = False,
     timings: dict[str, float] | None = None,
+    render_cache: dict | None = None,
 ) -> bool:
+    if render_cache is not None:
+        if sweep is None:
+            raise ValueError("Reusable Radar rendering requires an explicit sweep")
+        return _render_overlay_png_reusing_mesh(
+            radar=radar,
+            field_name=field_name,
+            bounds=bounds,
+            out_path=out_path,
+            product_code=product_code,
+            product_cfg=product_cfg or {},
+            sweep=int(sweep),
+            render_cache=render_cache,
+        )
+
     from config.radar_config import LIVE_RADAR_FIGURE_SIZE_INCHES, LIVE_RADAR_RENDER_DPI
 
     try:
@@ -1056,6 +1205,146 @@ def _render_overlay_png(
         return False
 
 
+def _render_overlay_png_reusing_mesh(
+    radar,
+    field_name: str,
+    bounds: list[float],
+    out_path: Path,
+    product_code: str,
+    product_cfg: dict,
+    sweep: int,
+    render_cache: dict,
+) -> bool:
+    """Reuse one same-volume QuadMesh for products sharing a selected sweep."""
+    from config.radar_config import LIVE_RADAR_FIGURE_SIZE_INCHES, LIVE_RADAR_RENDER_DPI
+
+    cache_key = None
+    figure = None
+    try:
+        import pyart
+
+        base_size = float(
+            product_cfg.get("figure_size_inches")
+            or LIVE_RADAR_FIGURE_SIZE_INCHES
+            or 20
+        )
+        dpi = int(LIVE_RADAR_RENDER_DPI or 200)
+        map_projection = ccrs.epsg(3857)
+        fig_width, fig_height = _figure_size_for_extent(
+            bounds, base_height=base_size, projection=map_projection
+        )
+
+        is_velocity = (
+            str(product_cfg.get("mask") or "").lower() == "velocity"
+            or product_code in {"N0G", "N0U", "N1U", "N0S", "NVW", "VEL"}
+        )
+        radar.fields[field_name]["data"] = _prepare_field_data(
+            radar.fields[field_name].get("data"),
+            product_code,
+            product_cfg,
+        )
+        from config.radar_colortable_utils import get_radar_colortable as _get_ct
+
+        palette_key = str(
+            product_cfg.get("palette") or ("BV" if is_velocity else "BR")
+        )
+        vmin = float(
+            product_cfg.get("vmin", -120.0 if is_velocity else -30.0)
+        )
+        vmax = float(product_cfg.get("vmax", 120.0 if is_velocity else 90.0))
+        cmap = _get_ct(palette_key, vmin, vmax)["cmap"]
+
+        cache_key = (int(sweep), float(fig_width), float(fig_height), dpi)
+        cached = render_cache.get(cache_key)
+        if cached is None:
+            figure = plt.figure(figsize=(fig_width, fig_height), dpi=dpi)
+            ax = figure.add_axes(
+                [0.0, 0.0, 1.0, 1.0], projection=map_projection
+            )
+            figure.patch.set_alpha(0.0)
+            ax.patch.set_alpha(0.0)
+            ax.set_axis_off()
+            ax.set_extent(
+                [bounds[0], bounds[1], bounds[2], bounds[3]],
+                crs=ccrs.PlateCarree(),
+            )
+            display = pyart.graph.RadarMapDisplay(radar)
+            display.plot_ppi_map(
+                field_name,
+                sweep=int(sweep),
+                ax=ax,
+                projection=map_projection,
+                min_lon=bounds[0],
+                max_lon=bounds[1],
+                min_lat=bounds[2],
+                max_lat=bounds[3],
+                embellish=False,
+                add_grid_lines=False,
+                colorbar_flag=False,
+                title_flag=False,
+                cmap=cmap,
+                vmin=vmin,
+                vmax=vmax,
+                edgecolors="face",
+                linewidths=0,
+            )
+            cached = {
+                "figure": figure,
+                "display": display,
+                "mesh": display.plots[-1],
+            }
+            render_cache[cache_key] = cached
+        else:
+            # Geometry, projection, extent, DPI, and sweep are unchanged.
+            # Only the masked field values and their configured color mapping
+            # differ between same-volume product consumers.
+            display = cached["display"]
+            mesh = cached["mesh"]
+            plot_data = display._get_data(
+                field_name,
+                int(sweep),
+                None,
+                True,
+                None,
+            )
+            mesh.set_array(plot_data)
+            mesh.set_cmap(cmap)
+            mesh.set_clim(vmin, vmax)
+
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        cached["figure"].savefig(
+            str(out_path),
+            format="png",
+            dpi=dpi,
+            transparent=True,
+            pad_inches=0,
+            pil_kwargs={"compress_level": 1},
+        )
+        return True
+    except Exception as exc:
+        cached = render_cache.pop(cache_key, None)
+        figure_to_close = cached["figure"] if cached is not None else figure
+        if figure_to_close is not None:
+            try:
+                plt.close(figure_to_close)
+            except Exception:
+                pass
+        print(
+            f"[radar_live_worker] Reusable Radar render failed for "
+            f"{out_path.name}: {exc}"
+        )
+        return False
+
+
+def _close_reusable_overlay_cache(render_cache: dict) -> None:
+    for cached in render_cache.values():
+        try:
+            plt.close(cached["figure"])
+        except Exception:
+            pass
+    render_cache.clear()
+
+
 def _render_single_frame_worker(
     src_file_path: str,
     level: str,
@@ -1064,6 +1353,7 @@ def _render_single_frame_worker(
     temp_render_path: str,
     product_cfg: dict,
     elevation: str,
+    site: str,
 ) -> tuple[bool, str, str, list[float], float | None]:
     """Worker function for parallel frame rendering. Returns (success, source_key, frame_key or error)."""
     try:
@@ -1099,6 +1389,16 @@ def _render_single_frame_worker(
         )
 
         if success:
+            _publish_webgl_artifact(
+                site,
+                product_code,
+                frame_key,
+                selected_elevation,
+                radar,
+                field_name,
+                sweep,
+                product_cfg,
+            )
             return (
                 True,
                 source_key,
@@ -1110,6 +1410,156 @@ def _render_single_frame_worker(
             return (False, source_key, "render_failed", [], None)
     except Exception as exc:
         return (False, src_file_path, f"error: {type(exc).__name__}", [], None)
+
+
+def _publish_webgl_artifact(
+    site: str,
+    product_code: str,
+    frame_key: str,
+    selected_elevation: str | float | None,
+    radar,
+    field_name: str,
+    sweep: int,
+    product_cfg: dict,
+) -> Path | None:
+    """Publish the optional L2 REF artifact without affecting PNG success."""
+    if str(product_code).upper() != "REF":
+        return None
+    try:
+        return write_artifact(
+            _CACHE_ROOT,
+            site,
+            frame_key,
+            selected_elevation,
+            radar,
+            field_name,
+            sweep,
+            product_cfg,
+        )
+    except Exception as exc:
+        print(
+            f"[radar_live_worker] WebGL artifact skipped for "
+            f"{site}/{frame_key}: {type(exc).__name__}: {exc}"
+        )
+        return None
+
+
+def _consume_decoded_l2_volume(
+    radar,
+    src_file: Path,
+    bounds: list[float],
+    product_requests: list[dict],
+) -> list[dict]:
+    """Render bounded product consumers from one already-decoded Level II volume."""
+    frame_dt = _frame_dt_from_radar(radar, src_file)
+    if frame_dt is None:
+        return [
+            {
+                "success": False,
+                "product_key": request["product_key"],
+                "error": "no_timestamp",
+            }
+            for request in product_requests
+        ]
+
+    frame_key = frame_key_from_datetime(frame_dt)
+    available_fields = list(getattr(radar, "fields", {}).keys())
+    results = []
+    reusable_render_cache = {}
+    for request in product_requests:
+        product_key = request["product_key"]
+        product_code = request["product_code"]
+        product_cfg = request["product_cfg"]
+        try:
+            field_name = _field_for_product(
+                "Level 2", product_code, available_fields, product_cfg
+            )
+            if not field_name:
+                raise ValueError("Radar field is unavailable for product.")
+            field_name = _ensure_derived_field(radar, field_name, product_cfg)
+            sweep, available_elevations, selected_elevation = _select_sweep(
+                radar, field_name, request["elevation"]
+            )
+            original_field_data = radar.fields[field_name].get("data")
+            try:
+                render_kwargs = {
+                    "radar": radar,
+                    "field_name": field_name,
+                    "bounds": bounds,
+                    "out_path": Path(request["temp_render_path"]),
+                    "product_code": product_code,
+                    "product_cfg": product_cfg,
+                    "sweep": sweep,
+                }
+                success = _render_overlay_png(
+                    **render_kwargs,
+                    profile=False,
+                    render_cache=reusable_render_cache,
+                )
+                if success:
+                    _publish_webgl_artifact(
+                        request.get("site", ""),
+                        product_code,
+                        frame_key,
+                        selected_elevation,
+                        radar,
+                        field_name,
+                        sweep,
+                        product_cfg,
+                    )
+            finally:
+                radar.fields[field_name]["data"] = original_field_data
+            if not success:
+                raise RuntimeError("render_failed")
+            results.append(
+                {
+                    "success": True,
+                    "product_key": product_key,
+                    "frame_key": frame_key,
+                    "available_elevations": available_elevations,
+                    "selected_elevation": selected_elevation,
+                    "temp_render_path": request["temp_render_path"],
+                }
+            )
+        except Exception as exc:
+            results.append(
+                {
+                    "success": False,
+                    "product_key": product_key,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "temp_render_path": request["temp_render_path"],
+                }
+            )
+    _close_reusable_overlay_cache(reusable_render_cache)
+    return results
+
+
+def _render_l2_volume_products_worker(
+    src_file_path: str,
+    bounds: list[float],
+    product_requests: list[dict],
+) -> tuple[str, list[dict]]:
+    """Decode one Level II source once and isolate each product consumer."""
+    src_file = Path(src_file_path)
+    try:
+        radar = _read_radar("Level 2", str(src_file))
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        return (
+            src_file.name,
+            [
+                {
+                    "success": False,
+                    "product_key": request["product_key"],
+                    "error": error,
+                }
+                for request in product_requests
+            ],
+        )
+    return (
+        src_file.name,
+        _consume_decoded_l2_volume(radar, src_file, bounds, product_requests),
+    )
 
 
 def _units_for_product(
@@ -1169,38 +1619,34 @@ def _render_site_product(
     requested_lookback = normalize_live_radar_lookback_hours(
         LIVE_RADAR_LOOKBACK_HOURS if lookback_hours is None else lookback_hours
     )
-    data_dir, total_files, _downloaded = radar_data_utils.download_radar_data(
-        level,
-        site,
-        source_product_code,
-        requested_lookback,
-        str(_RADAR_ROOT),
-        latest_only=latest_only,
-        **kwargs,
+    source_context = (
+        _l2_source_lock(site)
+        if level_code == "L2"
+        and radar_data_utils.__name__.endswith("radar_nodd_utils")
+        else nullcontext()
     )
+    with source_context:
+        data_dir, total_files, _downloaded = radar_data_utils.download_radar_data(
+            level,
+            site,
+            source_product_code,
+            requested_lookback,
+            str(_RADAR_ROOT),
+            latest_only=latest_only,
+            **kwargs,
+        )
 
     if not data_dir or int(total_files or 0) <= 0:
         return 0
 
     data_path = Path(data_dir)
 
-    # Track discovery via index to avoid repeated I/O on unchanged directories
-    level_code = _level_code(level)
-    index = _read_discovery_index(site, level_code, product_key)
-    cached_dir_mtime = index.get("dir_mtime")
-    try:
-        current_dir_mtime = data_path.stat().st_mtime if data_path.exists() else None
-    except OSError:
-        current_dir_mtime = None
-
-    # Re-scan only if directory changed
-    if current_dir_mtime != cached_dir_mtime:
-        radar_files = _discover_radar_files(data_path)
-        if current_dir_mtime is not None:
-            index["dir_mtime"] = current_dir_mtime
-            _write_discovery_index(site, level_code, product_key, index)
-    else:
-        radar_files = _discover_radar_files(data_path)
+    radar_files, _discovery_reused = _discover_radar_files_cached(
+        data_path,
+        site,
+        level_code,
+        product_key,
+    )
 
     if not radar_files:
         return 0
@@ -1275,6 +1721,7 @@ def _render_site_product(
                     temp_render_path,
                     product_cfg,
                     elevation,
+                    site,
                 )
             )
 
@@ -1303,7 +1750,7 @@ def _render_site_product(
             else:
                 read_failures += 1
 
-        # Copy files and update index (must be done serially)
+        # Atomically publish files and update the index serially.
         for source_key, (
             frame_key,
             temp_render_path,
@@ -1316,8 +1763,7 @@ def _render_site_product(
                         str(_CACHE_ROOT), site, level_code, cache_product_key, frame_key
                     )
                 )
-                dest_image.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(temp_render_path, str(dest_image))
+                _finalize_rendered_png(temp_render_path, dest_image)
 
                 processed_keys.add(file_key_map.get(source_key, source_key))
                 radar_update_index(
@@ -1333,6 +1779,8 @@ def _render_site_product(
                     available_elevations=available_elevations,
                     selected_elevation=selected_elevation,
                 )
+                if product_key == "L2_REF":
+                    prune_artifacts(_CACHE_ROOT, site, selected_elevation, keep_n)
                 cached += 1
             except Exception as exc:
                 print(f"[radar_live_worker] Failed to finalize {frame_key}: {exc}")
@@ -1388,49 +1836,73 @@ def _render_site_product(
                 profile=should_profile,
             ):
                 continue
-
-            t_copy_start = time.time()
-            dest_image = Path(
-                radar_overlay_image_path(
-                    str(_CACHE_ROOT), site, level_code, cache_product_key, frame_key
-                )
-            )
-            dest_image.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(str(temp_render), str(dest_image))
-            t_copy = time.time() - t_copy_start
-
-            t_index_start = time.time()
-            processed_keys.add(source_key)
-            radar_update_index(
-                str(_CACHE_ROOT),
+            _publish_webgl_artifact(
                 site,
-                level_code,
-                cache_product_key,
+                product_code,
                 frame_key,
-                bounds=bounds,
-                full_name=product_label,
-                units=_units_for_product(product_key, product_code, product_cfg),
-                data_key=source_key,
-                available_elevations=available_elevations,
-                selected_elevation=selected_elevation,
+                selected_elevation,
+                radar,
+                field_name,
+                sweep,
+                product_cfg,
             )
-            t_index = time.time() - t_index_start
 
-            t_frame_total = time.time() - t_frame_start
-            if should_profile:
-                print(f"[PROFILE] Frame {frame_key} ({site}/{product_key}):")
-                print(f"  Read radar file: {t_read*1000:.1f}ms")
-                print(f"  Render to PNG: (see above)")
-                print(f"  Copy file: {t_copy*1000:.1f}ms")
-                print(f"  Update index: {t_index*1000:.1f}ms")
-                print(f"  FRAME TOTAL: {t_frame_total*1000:.1f}ms")
-                profile_first_frame = False
-
-            cached += 1
             try:
-                temp_render.unlink(missing_ok=True)
-            except Exception:
-                pass
+                t_finalize_start = time.time()
+                dest_image = Path(
+                    radar_overlay_image_path(
+                        str(_CACHE_ROOT),
+                        site,
+                        level_code,
+                        cache_product_key,
+                        frame_key,
+                    )
+                )
+                _finalize_rendered_png(temp_render, dest_image)
+                t_finalize = time.time() - t_finalize_start
+
+                t_index_start = time.time()
+                processed_keys.add(source_key)
+                radar_update_index(
+                    str(_CACHE_ROOT),
+                    site,
+                    level_code,
+                    cache_product_key,
+                    frame_key,
+                    bounds=bounds,
+                    full_name=product_label,
+                    units=_units_for_product(
+                        product_key, product_code, product_cfg
+                    ),
+                    data_key=source_key,
+                    available_elevations=available_elevations,
+                    selected_elevation=selected_elevation,
+                )
+                t_index = time.time() - t_index_start
+
+                t_frame_total = time.time() - t_frame_start
+                if should_profile:
+                    print(f"[PROFILE] Frame {frame_key} ({site}/{product_key}):")
+                    print(f"  Read radar file: {t_read*1000:.1f}ms")
+                    print("  Render to PNG: (see above)")
+                    print(f"  Atomic finalize: {t_finalize*1000:.1f}ms")
+                    print(f"  Update index: {t_index*1000:.1f}ms")
+                    print(f"  FRAME TOTAL: {t_frame_total*1000:.1f}ms")
+                    profile_first_frame = False
+
+                if product_key == "L2_REF":
+                    prune_artifacts(_CACHE_ROOT, site, selected_elevation, keep_n)
+                cached += 1
+            except Exception as exc:
+                processed_keys.discard(source_key)
+                print(
+                    f"[radar_live_worker] Failed to finalize {frame_key}: {exc}"
+                )
+            finally:
+                try:
+                    temp_render.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     if read_failures:
         print(
@@ -1444,6 +1916,206 @@ def _render_site_product(
         str(_CACHE_ROOT), site, level_code, cache_product_key, keep_n=keep_n
     )
     return cached
+
+
+def _render_site_l2_products(
+    radar_data_utils,
+    site: str,
+    products: list[tuple[str, dict]],
+    *,
+    elevation: str,
+    render_pool=None,
+) -> tuple[int, int]:
+    """Download/list once and decode each Level II frame once for all products."""
+    if not products:
+        return 0, 0
+    if len(products) > _MAX_L2_VOLUME_CONSUMERS:
+        raise ValueError(
+            f"Level II product batch exceeds {_MAX_L2_VOLUME_CONSUMERS} consumers"
+        )
+
+    requested_lookback = normalize_live_radar_lookback_hours(
+        LIVE_RADAR_LOOKBACK_HOURS
+    )
+    first_cfg = products[0][1]
+    source_product_code = _source_product_code(
+        str(first_cfg.get("product") or "REF"), first_cfg
+    )
+    with _l2_source_lock(site):
+        data_dir, total_files, _downloaded = radar_data_utils.download_radar_data(
+            "Level 2",
+            site,
+            source_product_code,
+            requested_lookback,
+            str(_RADAR_ROOT),
+            latest_only=False,
+            provider="aws",
+            newest_first=False,
+            max_new_files=None,
+        )
+    if not data_dir or int(total_files or 0) <= 0:
+        return 0, 0
+
+    data_path = Path(data_dir)
+    radar_files, _discovery_reused = _discover_radar_files_cached(
+        data_path,
+        site,
+        "L2",
+        "_VOLUME",
+    )
+    bounds = _site_bounds(site)
+    if not radar_files or not bounds:
+        return 0, 0
+
+    target_n = live_radar_target_frames(requested_lookback)
+    selected_files = radar_files[-target_n:]
+    states: dict[str, dict] = {}
+    for product_key, product_cfg in products:
+        product_code = str(product_cfg.get("product") or "REF").upper()
+        cache_product_key = _radar_cache_product_key(
+            product_key, elevation, product_cfg
+        )
+        existing_count = len(
+            radar_list_frames(str(_CACHE_ROOT), site, "L2", cache_product_key)
+        )
+        keep_n = min(
+            int(LIVE_RADAR_MAX_KEEP_FRAMES),
+            max(int(LIVE_RADAR_KEEP_FRAMES or 30), target_n, existing_count),
+        )
+        states[product_key] = {
+            "product_cfg": product_cfg,
+            "product_code": product_code,
+            "product_label": str(product_cfg.get("label") or product_key),
+            "cache_product_key": cache_product_key,
+            "processed_keys": radar_read_processed_keys(
+                str(_CACHE_ROOT), site, "L2", cache_product_key
+            ),
+            "keep_n": keep_n,
+            "cached": 0,
+        }
+
+    work_items = []
+    for src_file in selected_files:
+        source_key = _file_key(src_file, False)
+        requests = []
+        for product_key, state in states.items():
+            if source_key in state["processed_keys"]:
+                continue
+            cache_product_key = state["cache_product_key"]
+            requests.append(
+                {
+                    "site": site,
+                    "product_key": product_key,
+                    "product_code": state["product_code"],
+                    "product_cfg": state["product_cfg"],
+                    "elevation": elevation,
+                    "temp_render_path": str(
+                        _TMP_RENDER_ROOT
+                        / f"{site}_{cache_product_key}_{src_file.name}.png"
+                    ),
+                }
+            )
+        if requests:
+            work_items.append((str(src_file), bounds, requests))
+    if not work_items:
+        return 0, 0
+
+    _TMP_RENDER_ROOT.mkdir(parents=True, exist_ok=True)
+    num_workers = _radar_parallel_worker_count()
+    if len(work_items) > 1 and num_workers != 1:
+        if render_pool is None:
+            with _radar_render_pool_owner(num_workers) as owned_pool:
+                batch_results = owned_pool.starmap(
+                    _render_l2_volume_products_worker, work_items
+                )
+        else:
+            batch_results = render_pool.starmap(
+                _render_l2_volume_products_worker, work_items
+            )
+    else:
+        batch_results = [
+            _render_l2_volume_products_worker(*work_item) for work_item in work_items
+        ]
+
+    failed_products = set()
+    for source_key, product_results in batch_results:
+        for result in product_results:
+            product_key = result["product_key"]
+            state = states[product_key]
+            temp_render_path = result.get("temp_render_path")
+            try:
+                if not result.get("success"):
+                    failed_products.add(product_key)
+                    continue
+                frame_key = result["frame_key"]
+                dest_image = Path(
+                    radar_overlay_image_path(
+                        str(_CACHE_ROOT),
+                        site,
+                        "L2",
+                        state["cache_product_key"],
+                        frame_key,
+                    )
+                )
+                _finalize_rendered_png(temp_render_path, dest_image)
+                state["processed_keys"].add(source_key)
+                radar_update_index(
+                    str(_CACHE_ROOT),
+                    site,
+                    "L2",
+                    state["cache_product_key"],
+                    frame_key,
+                    bounds=bounds,
+                    full_name=state["product_label"],
+                    units=_units_for_product(
+                        product_key,
+                        state["product_code"],
+                        state["product_cfg"],
+                    ),
+                    data_key=source_key,
+                    available_elevations=result["available_elevations"],
+                    selected_elevation=result["selected_elevation"],
+                )
+                if product_key == "L2_REF":
+                    prune_artifacts(
+                        _CACHE_ROOT,
+                        site,
+                        result["selected_elevation"],
+                        state["keep_n"],
+                    )
+                state["cached"] += 1
+            except Exception as exc:
+                failed_products.add(product_key)
+                print(
+                    f"[radar_live_worker] Failed to finalize "
+                    f"{site}/{product_key}/{result.get('frame_key')}: {exc}"
+                )
+            finally:
+                if temp_render_path:
+                    try:
+                        Path(temp_render_path).unlink(missing_ok=True)
+                    except Exception:
+                        pass
+
+    total_cached = 0
+    for product_key, state in states.items():
+        radar_write_processed_keys(
+            str(_CACHE_ROOT),
+            site,
+            "L2",
+            state["cache_product_key"],
+            state["processed_keys"],
+            state["keep_n"],
+        )
+        radar_prune_frames(
+            str(_CACHE_ROOT),
+            site,
+            "L2",
+            state["cache_product_key"],
+            keep_n=state["keep_n"],
+        )
+        total_cached += int(state["cached"])
+    return total_cached, len(failed_products)
 
 
 def _run_radar_live_worker_unbounded(
@@ -1468,10 +2140,39 @@ def _run_radar_live_worker_unbounded(
         site_id = str(site).strip().upper()
         if not site_id:
             continue
+        l2_products = [
+            (str(product_key), product_cfg)
+            for product_key, product_cfg in LIVE_RADAR_PRODUCTS.items()
+            if _level_code(str(product_cfg.get("level") or "Level 3")) == "L2"
+        ]
+        l2_batched = False
+        if l2_products:
+            l2_utils = _resolve_radar_data_utils(l2_products[0][0])
+            if not _is_chunks_utils(l2_utils):
+                l2_batched = True
+                try:
+                    cached, failed = _render_site_l2_products(
+                        l2_utils,
+                        site_id,
+                        l2_products,
+                        elevation=LIVE_RADAR_L2_DEFAULT_ELEVATION,
+                        render_pool=render_pool,
+                    )
+                    total_cached += int(cached)
+                    total_failed += int(failed)
+                except Exception as exc:
+                    total_failed += len(l2_products)
+                    print(
+                        f"[radar_live_worker] {site_id}/Level II batch failed: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+
         for product_key, product_cfg in LIVE_RADAR_PRODUCTS.items():
             level = str(product_cfg.get("level") or "Level 3")
             is_l2 = "2" in str(level)
 
+            if is_l2 and l2_batched:
+                continue
             if not is_l2 and not run_l3:
                 continue
 

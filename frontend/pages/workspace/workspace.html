@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260725e">
-    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260721c">
+    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260728a">
 </head>
 <body>
     <header class="core-header">
@@ -79,17 +79,29 @@
                             </label>
                         </summary>
                         <div class="workspace-group-body">
-                            <div id="workspace-warning-filters" class="workspace-pills" role="group" aria-label="Active alert type">
-                                <button type="button" data-warning="all" aria-pressed="false">All</button>
-                                <button class="is-active" type="button" data-warning="tor" aria-pressed="true">TOR</button>
-                                <button class="is-active" type="button" data-warning="svr" aria-pressed="true">SVR</button>
-                                <button type="button" data-warning="ffw" aria-pressed="false">FFW</button>
-                                <button type="button" data-warning="smw" aria-pressed="false">SMW</button>
-                                <button type="button" data-warning="sps" aria-pressed="false" title="Special Weather Statement">SPS</button>
+                            <div class="workspace-alert-filter-group">
+                                <span class="workspace-alert-filter-label">Warnings / Statements</span>
+                                <div id="workspace-warning-filters" class="workspace-pills" role="group" aria-label="Warning and statement polygons">
+                                    <button type="button" data-warning="all" aria-pressed="false">All</button>
+                                    <button class="is-active" type="button" data-warning="tor" aria-pressed="true">TOR</button>
+                                    <button class="is-active" type="button" data-warning="svr" aria-pressed="true">SVR</button>
+                                    <button type="button" data-warning="ffw" aria-pressed="false">FFW</button>
+                                    <button type="button" data-warning="smw" aria-pressed="false">SMW</button>
+                                    <button type="button" data-warning="sps" aria-pressed="false" title="Special Weather Statement">SPS</button>
+                                </div>
+                            </div>
+                            <div class="workspace-alert-filter-group">
+                                <span class="workspace-alert-filter-label">Watches</span>
+                                <div id="workspace-watch-filters" class="workspace-pills" role="group" aria-label="Watch polygons">
+                                    <button type="button" data-watch="all" aria-pressed="false">All</button>
+                                    <button class="is-active" type="button" data-watch="tor" aria-pressed="true" title="Tornado Watch">TOR</button>
+                                    <button class="is-active" type="button" data-watch="svr" aria-pressed="true" title="Severe Thunderstorm Watch">SVR</button>
+                                    <button type="button" data-watch="fld" aria-pressed="false" title="Flood Watch / Flash Flood Watch">FLD</button>
+                                </div>
                             </div>
                             <div class="core-adjustment workspace-opacity-control">
-                                <label id="workspace-alerts-opacity-label" for="workspace-alerts-opacity">Alerts Opacity (0.75)</label>
-                                <input id="workspace-alerts-opacity" type="range" min="0.1" max="1" step="0.05" value="0.75">
+                                <label id="workspace-alerts-opacity-label" for="workspace-alerts-opacity">Alerts Opacity (0.30)</label>
+                                <input id="workspace-alerts-opacity" type="range" min="0.1" max="1" step="0.05" value="0.30">
                             </div>
                         </div>
                     </details>
@@ -235,6 +247,6 @@
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
     <script src="/frontend/lib/tz-lookup/tz.js?v=6.1.25"></script>
-    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260725e"></script>
+    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260728b"></script>
 </body>
 </html>

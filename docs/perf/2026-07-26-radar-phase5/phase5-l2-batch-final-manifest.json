@@ -1,0 +1,78 @@
+{
+  "benchmark": {
+    "bounds": [
+      -88.30450421029533,
+      -76.13605578970467,
+      29.89204311174991,
+      39.87407688825009
+    ],
+    "cache_product_key": "L2_REF__BR_MIN5DBZ_V4__ELEV_0P5",
+    "elevation": "0.5",
+    "level": "Level 2",
+    "level_code": "L2",
+    "product": "L2_REF",
+    "product_cfg": {
+      "cache_variant": "br_min5dbz_v4",
+      "capabilities": {
+        "elevation_selection": true
+      },
+      "field_names": [
+        "reflectivity"
+      ],
+      "figure_size_inches": 22,
+      "label": "L2 Reflectivity",
+      "level": "Level 2",
+      "mask": "reflectivity",
+      "min_value": 5.0,
+      "palette": "BR",
+      "product": "REF",
+      "units": "dBZ",
+      "value_scale": 1.0,
+      "vmax": 90.0,
+      "vmin": -30.0
+    },
+    "product_code": "REF",
+    "raw_jsonl": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase5-l2-batch-final\\results.jsonl",
+    "repeat": 5,
+    "run_id": "phase5-l2-batch-final",
+    "scenario": "l2-product-batch",
+    "site": "KGSP",
+    "source_product_code": "REF",
+    "sources": [
+      "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L2\\KGSP\\KGSP20260725_235847_V06"
+    ]
+  },
+  "cpu": "",
+  "cpu_count": 32,
+  "created_utc": "2026-07-26T23:08:13.123833+00:00",
+  "dirty_files": [
+    " M .gitignore",
+    " M docs/dashboard-change-and-enhancement-superfile.md",
+    " M docs/next-session-startup-prompt.md",
+    " M docs/radar-render-optimization-plan.md",
+    " M frontend/lib/leaflet/leaflet.js",
+    " M radar/bench.py",
+    " M radar/radar_nodd_utils.py",
+    " M tests/test_radar_product_catalog.py",
+    " M workers/radar_live_worker.py",
+    "?? docs/perf/2026-07-26-radar-phase3/",
+    "?? docs/perf/2026-07-26-radar-phase4/",
+    "?? tests/test_radar_l2_dedup.py",
+    "?? tests/test_radar_phase4_io.py"
+  ],
+  "git_sha": "4a6bf4fdea5897f710d5598c456964bd83fff870",
+  "live_radar_l2_use_chunks": false,
+  "live_radar_parallel_workers": 0,
+  "packages": {
+    "Cartopy": "0.25.0",
+    "Pillow": "12.2.0",
+    "arm_pyart": "2.2.2",
+    "matplotlib": "3.11.0",
+    "numpy": "2.5.0",
+    "psutil": "7.2.2"
+  },
+  "platform": "Windows-11-10.0.26220-SP0",
+  "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+  "ram_bytes": 137107320832,
+  "worker_state_note": "Canonical handoff records all four optional warmers disabled; live Task Scheduler query returned no readable task state."
+}

@@ -85,6 +85,24 @@ diag.py
 false
 perf/
 tests/
+!docs/perf/
+docs/perf/*
+!docs/perf/2026-07-26-radar-phase3/
+!docs/perf/2026-07-26-radar-phase3/**
+!docs/perf/2026-07-26-radar-phase4/
+!docs/perf/2026-07-26-radar-phase4/**
+!docs/perf/2026-07-26-radar-phase5/
+!docs/perf/2026-07-26-radar-phase5/**
+!docs/perf/2026-07-26-radar-phase6/
+!docs/perf/2026-07-26-radar-phase6/**
+!docs/perf/2026-07-26-radar-phase7/
+!docs/perf/2026-07-26-radar-phase7/**
+!tests/
+tests/*
+!tests/test_radar_l2_dedup.py
+!tests/test_radar_phase4_io.py
+!tests/test_radar_webgl_artifact.py
+!tests/radar_webgl_window.test.mjs
 
 # AI/LLM tool caches and metadata
 

@@ -71,3 +71,22 @@ def test_alerts_cache_rejects_generations_older_than_latest_seen():
     )
     assert "isCurrentAlertPayload(persisted)" in engine
     assert "if (!isCurrentAlertPayload(freshPayloads)) return;" in engine
+
+
+def test_severe_alert_pulse_is_stroke_only_and_zoom_aware():
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+    alerts_styles = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts.css"
+    ).read_text(encoding="utf-8")
+    workspace_styles = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.css"
+    ).read_text(encoding="utf-8")
+
+    assert "zoom >= 9 ? 7 : zoom >= 7 ? 4 : 3" in engine
+    assert "map.on('zoomend', syncAlertPulseLayers)" in engine
+    assert "map.off('zoomend', syncAlertPulseLayers)" in engine
+    for styles in (alerts_styles, workspace_styles):
+        assert "fill-opacity: var(--alerts-pulse" not in styles
+        assert "stroke-width: var(--alerts-pulse-stroke-high, 7)" in styles
