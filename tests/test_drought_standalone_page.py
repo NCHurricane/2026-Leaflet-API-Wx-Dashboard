@@ -72,6 +72,16 @@ def test_drought_page_includes_shared_map_parity_controls():
     ).read_text(encoding="utf-8")
 
 
+def test_country_borders_repeat_across_wrapped_worlds():
+    map_core = (
+        Path(BASE_DIR) / "frontend" / "core" / "map-core.js"
+    ).read_text(encoding="utf-8")
+
+    assert "COUNTRY_WORLD_OFFSETS = Object.freeze([-360, 0, 360])" in map_core
+    assert "longitude + longitudeOffset" in map_core
+    assert "leaflet.featureGroup(countryLayers)" in map_core
+
+
 def test_drought_sidebar_uses_accessible_mounted_tab_panels():
     page = (
         Path(BASE_DIR) / "frontend" / "pages" / "drought" / "drought.html"

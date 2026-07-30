@@ -39,10 +39,32 @@ z9 did not interrupt the scrubber, and the new z9 frames also loaded quickly.
 
 ## Phase 1 — GK2A direct-channel expansion
 
-Phase 0 browser acceptance has passed. Enter Phase 1 only after explicit
-approval. Add direct visible, shortwave IR, water-vapor, and longwave IR
-products one calibrated family at a time. Each family needs a live proof
-render and product filtering; do not expose unsupported composites.
+Status: implemented after explicit approval; user-owned browser acceptance is
+pending.
+
+- Added calibrated direct visible/near-IR products `Channel01`, `Channel02`,
+  `Channel03`, and `Channel05`.
+- Added shortwave-IR products `Channel07` and `Channel07Fire`, water-vapor
+  products `Channel08RAMSDIS` and `Channel09RAMSDIS`, and longwave-IR
+  `Channel14`. Channel 13 remains available from Phase 0.
+- Product filtering exposes only those ten physically mapped direct products;
+  no GK2A composites are exposed.
+- High-resolution AMI inputs are read with bounded grid decimation before
+  calibration. The worst-case live Channel 02 proof used a 473,301,589-byte
+  source, produced a 7333 x 7333 working raster in 5.538 seconds, rendered the
+  proof tile in 0.182 seconds, and peaked at about 735.5 MiB working set.
+- Current live sources from every added calibrated family rendered nonblank,
+  plausibly oriented proof PNGs.
+- The focused gate passes 68 tests. The full-suite run has 320 passing tests
+  plus 42 passing subtests; only the two known stale Workspace assertions
+  fail.
+
+Browser acceptance must confirm the ten-product filter and sample Channel 02,
+Channel 07 Fire, both water-vapor products, and Channel 14. With playback
+active, zoom to z9 and confirm the scrubber continues while new tiles fill.
+Channel 02 deserves particular attention because every native source is
+roughly 451 MiB and a multi-frame history can require several large downloads.
+Do not close Phase 1 or enter Phase 2 until this browser gate passes.
 
 ## Phase 2 — GK2A composites
 

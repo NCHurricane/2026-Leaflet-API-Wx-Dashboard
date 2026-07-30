@@ -237,8 +237,18 @@ Current checkpoint:
   Workspace assertions. A current live listing and real-source direct PNG
   render pass. User-owned browser acceptance passed: all default-zoom frames
   loaded quickly, and active playback continued while newly requested z9
-  frames also loaded quickly. Phase 0 is closed; broader GK2A products and
-  GMGSI are not started.
+  frames also loaded quickly. Phase 0 is closed.
+- GK2A Phase 1 direct-channel expansion is implemented after explicit
+  approval. The filtered product set is `Channel01`, `Channel02`, `Channel03`,
+  `Channel05`, `Channel07`, `Channel07Fire`, `Channel08RAMSDIS`,
+  `Channel09RAMSDIS`, `Channel13`, and `Channel14`; no composites are exposed.
+  Current live source renders pass for every added calibrated family. The
+  largest proof, Channel 02, read a 473,301,589-byte native source into a
+  bounded 7333 x 7333 raster in 5.538 seconds, rendered its proof tile in
+  0.182 seconds, and peaked near 735.5 MiB working set. The focused gate passes
+  68 tests. The full-suite run has 320 passing tests plus 42 passing subtests;
+  only the two known stale Workspace assertions fail. Browser acceptance is
+  still pending, so Phase 1 is not closed.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -252,8 +262,11 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- No authorized Radar render-optimization work remains. GK2A Phase 0 is closed.
-  Stop for explicit approval before Phase 1 direct-channel expansion. GMGSI
-  remains a later separate phase. All-product Radar WebGL conversion, tiles,
-  or PNG retirement would require a new approved migration plan.
+- Run user-owned GK2A Phase 1 browser acceptance. Confirm the ten-product
+  filter, then sample Channel 02, Channel 07 Fire, both water-vapor products,
+  and Channel 14. While playback is active, zoom to z9 and confirm the
+  scrubber continues while new tiles fill. Pay particular attention to
+  Channel 02 first-frame/history load because each native frame is roughly
+  451 MiB. Stop for explicit approval before Phase 2 composites; GMGSI remains
+  a later separate phase. No authorized Radar render-optimization work remains.
 ```

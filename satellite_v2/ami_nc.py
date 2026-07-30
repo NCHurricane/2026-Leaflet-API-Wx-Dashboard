@@ -11,7 +11,10 @@ from rasterio.crs import CRS as RioCRS
 from rasterio.transform import from_bounds as rio_from_bounds
 import xarray as xr
 
-from config.satellite_v2_config import ami_channel_for_source_channel
+from config.satellite_v2_config import (
+    SATELLITE_V2_AMI_MAX_GRID,
+    ami_channel_for_source_channel,
+)
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,21 @@ def _calibrate_brightness_temperature(
     return np.asarray(c0 + c1 * effective + c2 * effective * effective, dtype=np.float32)
 
 
+def _calibrate_reflectance(
+    dataset: xr.Dataset,
+    counts: np.ndarray,
+    valid: np.ndarray,
+) -> np.ndarray:
+    gain = float(dataset.attrs["DN_to_Radiance_Gain"])
+    offset = float(dataset.attrs["DN_to_Radiance_Offset"])
+    reflectance = counts.astype(np.float32)
+    reflectance *= np.float32(gain)
+    reflectance += np.float32(offset)
+    reflectance *= np.float32(dataset.attrs["Radiance_to_Albedo_c"])
+    reflectance[~valid] = np.nan
+    return reflectance
+
+
 def load_ami_raster(dataset: xr.Dataset, source_channel: str) -> AmiRaster:
     expected_channel = ami_channel_for_source_channel(source_channel).upper()
     if str(dataset.attrs.get("instrument_name") or "").upper() != "AMI":
@@ -65,11 +83,22 @@ def load_ami_raster(dataset: xr.Dataset, source_channel: str) -> AmiRaster:
             f"expected {expected_channel}."
         )
 
+    full_rows, full_cols = image.shape
+    stride = max(
+        1,
+        math.ceil(max(full_rows, full_cols) / SATELLITE_V2_AMI_MAX_GRID),
+    )
+    offset = stride // 2
+    if stride > 1:
+        image = image[offset::stride, offset::stride]
     packed = np.asarray(image.values, dtype=np.uint16)
     valid_bits = int(image.attrs["number_of_valid_bits_per_pixel"])
-    counts = packed & np.uint16((1 << valid_bits) - 1)
     valid = (packed & np.uint16(0xC000)) == 0
-    values = _calibrate_brightness_temperature(dataset, counts, valid)
+    packed &= np.uint16((1 << valid_bits) - 1)
+    if channel_name.startswith(("VI", "NR")):
+        values = _calibrate_reflectance(dataset, packed, valid)
+    else:
+        values = _calibrate_brightness_temperature(dataset, packed, valid)
 
     rows, cols = values.shape
     equatorial_radius = float(dataset.attrs["earth_equatorial_radius"])
@@ -79,10 +108,20 @@ def load_ami_raster(dataset: xr.Dataset, source_channel: str) -> AmiRaster:
     )
     longitude = math.degrees(float(dataset.attrs["sub_longitude"]))
 
-    x_first = float(dataset.attrs["image_upperleft_x"]) * perspective_height
-    x_last = float(dataset.attrs["image_lowerright_x"]) * perspective_height
-    y_first = float(dataset.attrs["image_upperleft_y"]) * perspective_height
-    y_last = float(dataset.attrs["image_lowerright_y"]) * perspective_height
+    full_x_first = float(dataset.attrs["image_upperleft_x"])
+    full_x_last = float(dataset.attrs["image_lowerright_x"])
+    full_y_first = float(dataset.attrs["image_upperleft_y"])
+    full_y_last = float(dataset.attrs["image_lowerright_y"])
+    x_step = (full_x_last - full_x_first) / max(1, full_cols - 1)
+    y_step = (full_y_last - full_y_first) / max(1, full_rows - 1)
+    x_first = (full_x_first + offset * x_step) * perspective_height
+    x_last = (
+        full_x_first + (offset + (cols - 1) * stride) * x_step
+    ) * perspective_height
+    y_first = (full_y_first + offset * y_step) * perspective_height
+    y_last = (
+        full_y_first + (offset + (rows - 1) * stride) * y_step
+    ) * perspective_height
     x_half = abs(x_last - x_first) / (2.0 * max(1, cols - 1))
     y_half = abs(y_first - y_last) / (2.0 * max(1, rows - 1))
     src_transform = rio_from_bounds(

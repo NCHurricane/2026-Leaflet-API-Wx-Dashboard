@@ -132,13 +132,17 @@ to PNG-only behavior.
    and archived. Optional Phase 6 warp threading is deferred unless later
    real-run profiling and explicit approval reopen it.
 5. GK2A + GMGSI new platforms — active under
-   `docs/satellite-platform-expansion-plan.md`. Phase 0 implements the bounded
+   `docs/satellite-platform-expansion-plan.md`. Phase 0 implemented the bounded
    GK2A Full Disk Channel 13 live-on-demand proof in the migrated standalone
-   Satellite page. The focused gate passes 67 tests; the full suite passes 318
-   tests plus 42 subtests with the two known stale Workspace assertions.
-   Provider/direct-render evidence passes. User-owned browser acceptance
-   passed at the default zoom and during continuous z9 playback, so Phase 0 is
-   closed. GMGSI and broader GK2A products are not started.
+   Satellite page and passed user-owned browser acceptance. Phase 1 is
+   implemented after explicit approval with ten filtered direct products
+   spanning visible/near-IR, shortwave IR, water vapor, and longwave IR; it
+   exposes no composites. Live source renders pass for every added family. The
+   focused gate passes 68 tests. The full-suite run has 320 passing tests plus
+   42 passing subtests; only the two known stale Workspace assertions fail.
+   Phase 1 remains open for user-owned browser acceptance, with the roughly
+   451 MiB-per-frame Channel 02 path called out for load testing. GMGSI is not
+   started.
 
 ## Current State
 
@@ -2309,6 +2313,19 @@ Current international-satellite product direction:
     acceptance passed 2026-07-29: all default-zoom frames loaded quickly, and
     playback continued while newly requested z9 frames also loaded quickly.
     Phase 0 is closed.
+  - GK2A Phase 1 is implemented after explicit approval. The standalone page
+    filters GK2A to ten mapped direct products: `Channel01`, `Channel02`,
+    `Channel03`, `Channel05`, `Channel07`, `Channel07Fire`,
+    `Channel08RAMSDIS`, `Channel09RAMSDIS`, `Channel13`, and `Channel14`.
+    Visible/near-IR reflectance calibration, bounded high-resolution reads,
+    and the additional thermal mappings have live-source proof renders. The
+    largest test used a 473,301,589-byte Channel 02 source, produced a bounded
+    7333 x 7333 working raster in 5.538 seconds, rendered a proof tile in
+    0.182 seconds, and peaked near 735.5 MiB working set. The focused gate
+    passes 68 tests. The full-suite run has 320 passing tests plus 42 passing
+    subtests; only the two known stale Workspace assertions fail. User-owned
+    browser acceptance is pending, so Phase 1 remains open and Phase 2
+    composites remain gated.
   - NOAA GMGSI (`noaa-gmgsi-pds`) remains a later, separate hourly global
     mosaic phase. Its regular lon/lat grid and four direct products must not be
     folded into the GK2A instrument path.

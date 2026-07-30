@@ -44,7 +44,12 @@ const METEOSAT_CHANNELS = [
     'NighttimeMicrophysics', 'Dust', 'Ash',
 ];
 const PLATFORM_CHANNELS = {
-    gk2a: new Set(['Channel13', 'Channel14']),
+    gk2a: new Set([
+        'Channel01', 'Channel02', 'Channel03', 'Channel05',
+        'Channel07', 'Channel07Fire',
+        'Channel08RAMSDIS', 'Channel09RAMSDIS',
+        'Channel13', 'Channel14',
+    ]),
     himawari9: null,
     meteosat12: new Set(['Channel01', 'Channel06', ...METEOSAT_CHANNELS]),
     meteosat9: new Set(METEOSAT_CHANNELS),

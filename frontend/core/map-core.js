@@ -70,6 +70,7 @@ const CITY_LABEL_CHAR_PX = 5.2;
 const CITY_LABEL_HEIGHT_PX = 11;
 const CITY_LABEL_X_PAD = 4;
 const CITY_LABEL_Y_PAD = 2;
+const COUNTRY_WORLD_OFFSETS = Object.freeze([-360, 0, 360]);
 
 function cityDistanceRangeKm(source, zoom) {
     if (source === 'world') {
@@ -311,11 +312,17 @@ export function createMapCore(element, options = {}) {
         }
         const payload = await countryPayloadPromise;
         if (!overlays.has('countries')) {
-            overlays.set('countries', leaflet.geoJSON(payload, {
-                pane: 'boundary-lines',
-                style: { color: '#d7e5ef', weight: 1.1, opacity: 0.8, fillOpacity: 0 },
-                interactive: false,
-            }));
+            const countryLayers = COUNTRY_WORLD_OFFSETS.map((longitudeOffset) => (
+                leaflet.geoJSON(payload, {
+                    pane: 'boundary-lines',
+                    style: { color: '#d7e5ef', weight: 1.1, opacity: 0.8, fillOpacity: 0 },
+                    coordsToLatLng: ([longitude, latitude, altitude]) => (
+                        leaflet.latLng(latitude, longitude + longitudeOffset, altitude)
+                    ),
+                    interactive: false,
+                })
+            ));
+            overlays.set('countries', leaflet.featureGroup(countryLayers));
         }
     }
 

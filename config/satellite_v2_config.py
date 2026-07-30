@@ -710,6 +710,13 @@ def ahi_band_for_source_channel(source_channel: str) -> int:
 # AMI channel names for the proven GK2A direct products. Product keys remain
 # ABI-named so the existing renderer, legend, and cache contracts stay stable.
 AMI_CHANNEL_FOR_ABI_CHANNEL = {
+    "Channel01": "vi004",
+    "Channel02": "vi006",
+    "Channel03": "vi008",
+    "Channel05": "nr016",
+    "Channel07": "sw038",
+    "Channel08": "wv063",
+    "Channel09": "wv069",
     "Channel13": "ir105",
     "Channel14": "ir112",
 }
@@ -973,6 +980,9 @@ SATELLITE_V2_GOES_FULLDISK_MAX_GRID = _env_int(
 )
 SATELLITE_V2_AHI_MAX_GRID = _env_int(
     "WX_SATELLITE_V2_AHI_MAX_GRID", 10848, 1024, 21696
+)
+SATELLITE_V2_AMI_MAX_GRID = _env_int(
+    "WX_SATELLITE_V2_AMI_MAX_GRID", 10848, 1024, 22000
 )
 SATELLITE_V2_FCI_MAX_GRID = _env_int(
     "WX_SATELLITE_V2_FCI_MAX_GRID", 10848, 1024, 22272

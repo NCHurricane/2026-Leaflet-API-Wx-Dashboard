@@ -98,14 +98,14 @@ def test_surface_cached_gradient_does_not_depend_on_marker_rows():
     assert "if (stations.length) {" in render_body
 
 
-def test_shared_border_defaults_enable_state_and_county_only():
+def test_shared_border_defaults_enable_state_only():
     for page in ("surface", "alerts", "radar", "satellite", "spc", "rtma", "mrms", "drought", "wpc", "water", "workspace", "tropical"):
         html = page_text(page)
         state = re.search(r'<input[^>]*data-map-overlay="states"[^>]*>', html).group()
         county = re.search(r'<input[^>]*data-map-overlay="counties"[^>]*>', html).group()
         country = re.search(r'<input[^>]*data-map-overlay="countries"[^>]*>', html).group()
         assert "checked" in state
-        assert "checked" in county
+        assert "checked" not in county
         assert "checked" not in country
         graticule = re.search(r'<input[^>]*(?:data-map-overlay="graticule"|id="weather-tropical-graticule")[^>]*>', html).group()
         assert "checked" not in graticule
