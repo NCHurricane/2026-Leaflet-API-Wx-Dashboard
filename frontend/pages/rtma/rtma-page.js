@@ -64,7 +64,7 @@ async function initialize() {
 
     const mapCore = createMapCore(byId('rtma-map'), {
         region: regionSelect.value,
-        basemap: 'Dark (No Labels)',
+        basemap: 'Dark',
     });
     const legend = createLegendHost(byId('rtma-legend'), { align: 'left' });
     const status = createStatusReporter({

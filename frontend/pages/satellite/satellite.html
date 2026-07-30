@@ -64,6 +64,8 @@
                             role="tab" aria-selected="false" data-satellite-sat="goes18">GOES-18</button>
                         <button id="satellite-subtab-goes19" class="satellite-subtab-button" type="button"
                             role="tab" aria-selected="false" data-satellite-sat="goes19">GOES-19</button>
+                        <button id="satellite-subtab-gk2a" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sat="gk2a">GK2A</button>
                         <button id="satellite-subtab-himawari9" class="satellite-subtab-button" type="button"
                             role="tab" aria-selected="false" data-satellite-sat="himawari9">Himawari-9</button>
                         <button id="satellite-subtab-meteosat12" class="satellite-subtab-button" type="button"
@@ -77,6 +79,7 @@
                         <option value="" selected>— Select Satellite —</option>
                         <option value="goes19">GOES-19 (East)</option>
                         <option value="goes18">GOES-18 (West)</option>
+                        <option value="gk2a">GK2A (Asia-Pacific)</option>
                         <option value="himawari9">Himawari-9 (West Pacific)</option>
                         <option value="meteosat12">Meteosat-12 (Europe/Africa)</option>
                         <option value="meteosat9">Meteosat-9 (Indian Ocean)</option>
@@ -123,6 +126,7 @@
                             <option value="conus">CONUS</option>
                             <option value="southeast-us">Southeast US</option>
                             <option value="goes-west-full-disk">GOES-West Full Disk</option>
+                            <option value="asia-pacific">Asia-Pacific</option>
                             <option value="west-pacific">West Pacific</option>
                             <option value="europe-africa">Europe/Africa</option>
                             <option value="indian-ocean">Indian Ocean</option>
@@ -168,11 +172,6 @@
                         </select>
                     </div>
 
-                    <label class="satellite-check-row satellite-control-block satellite-auto-update-row">
-                        <span>Auto-Update</span>
-                        <input id="satellite-auto-update" type="checkbox">
-                    </label>
-
                     <div id="satellite-lookback-block" class="satellite-lookback satellite-control-block">
                         <div class="satellite-lookback-header">
                             <span>Lookback Hours</span>
@@ -181,6 +180,12 @@
                         <input id="satellite-lookback" type="range" min="1" max="12" step="1" value="1">
                         <div class="satellite-lookback-labels"><span>1h</span><span>12h</span></div>
                     </div>
+
+                    <label class="satellite-check-row satellite-control-block satellite-auto-update-row">
+                        <span>Auto-Update</span>
+                        <input id="satellite-auto-update" type="checkbox">
+                    </label>
+
                 </section>
 
                 <section id="satellite-panel-settings" class="core-sidebar-panel core-settings-panel satellite-panel-stack"
@@ -188,8 +193,8 @@
                     <div class="core-field">
                         <label for="satellite-basemap">Basemap</label>
                         <select id="satellite-basemap">
-                            <option>Dark (No Labels)</option><option>Light (No Labels)</option>
-                            <option>Voyager</option><option>USGS</option><option>Satellite</option>
+                            Dark<option>Dark</option><option>Light</option><option>Hydro</option>
+                            <option>Voyager</option><option>USGS</option><option>USGSTopo</option><option>Satellite</option>
                         </select>
                     </div>
                     <div class="core-adjustment">
@@ -247,6 +252,6 @@
     </main>
 
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/satellite/satellite-page.js?v=20260725e"></script>
+    <script type="module" src="/frontend/pages/satellite/satellite-page.js?v=20260729b"></script>
 </body>
 </html>

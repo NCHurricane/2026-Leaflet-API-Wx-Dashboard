@@ -8,7 +8,7 @@ import { createStatusReporter } from '../../core/status.js?v=20260725e';
 
 const byId = (id) => document.getElementById(id);
 const L = window.L;
-const mapCore = createMapCore(byId('weather-map'), { region: 'CONUS', basemap: 'Dark (No Labels)' });
+const mapCore = createMapCore(byId('weather-map'), { region: 'CONUS', basemap: 'Dark' });
 const map = mapCore.map;
 const waterMarkersPane = map.createPane('water-markers');
 waterMarkersPane.style.zIndex = '470';

@@ -199,7 +199,7 @@ async function initialize() {
     let resetWorkspaceState = () => {};
     const mapCore = createMapCore(byId('workspace-map'), {
         region: 'CONUS',
-        basemap: 'Dark (No Labels)',
+        basemap: 'Dark',
         onResetView: () => resetWorkspaceState(),
     });
     // Delegate to the core region table so CONUS/AK/HI/PR share one source of truth.

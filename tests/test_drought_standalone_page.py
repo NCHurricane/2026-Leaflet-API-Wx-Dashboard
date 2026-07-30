@@ -37,8 +37,8 @@ def test_drought_page_includes_shared_map_parity_controls():
 
     assert 'id="global-timestamp"' in page
     assert 'id="drought-age"' in page
-    assert page.index('<option>Dark (No Labels)</option>') < page.index(
-        '<option>Light (No Labels)</option>'
+    assert page.index('Dark<option>Dark</option><option>Light</option>') < page.index(
+        '<option>Hydro</option>'
     )
     assert 'data-map-overlay="graticule"' in page
     assert 'data-map-overlay="states"' in page
@@ -61,7 +61,7 @@ def test_drought_page_includes_shared_map_parity_controls():
     assert "core-reset-view" in map_core
     assert "core-zoom-indicator" in map_core
     assert "ChuckCopeland.com/NCHurricane.com" in map_core
-    assert "options.basemap || 'Dark (No Labels)'" in map_core
+    assert "options.basemap || 'Dark'" in map_core
     assert "/data/us-cities-all.json" in map_core
     assert "/data/world-cities.json" in map_core
     assert "setCitySource" in map_core

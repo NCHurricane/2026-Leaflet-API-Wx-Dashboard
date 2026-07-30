@@ -669,6 +669,7 @@ def _build_product_registry() -> dict[str, SatelliteV2Product]:
 SATELLITE_V2_PRODUCTS: dict[str, SatelliteV2Product] = _build_product_registry()
 
 SATELLITE_V2_SUPPORTED_SATELLITES = {
+    "gk2a",
     "goes18",
     "goes19",
     "himawari9",
@@ -704,6 +705,31 @@ def ahi_band_for_source_channel(source_channel: str) -> int:
     if band is None:
         raise ValueError(f"No Himawari AHI band mapping for '{source_channel}'.")
     return band
+
+
+# AMI channel names for the proven GK2A direct products. Product keys remain
+# ABI-named so the existing renderer, legend, and cache contracts stay stable.
+AMI_CHANNEL_FOR_ABI_CHANNEL = {
+    "Channel13": "ir105",
+    "Channel14": "ir112",
+}
+
+
+def ami_channel_for_source_channel(source_channel: str) -> str:
+    channel = normalize_source_channel(source_channel)
+    ami_name = AMI_CHANNEL_FOR_ABI_CHANNEL.get(channel)
+    if ami_name is None:
+        raise ValueError(f"No GK2A AMI channel mapping for '{source_channel}'.")
+    return ami_name
+
+
+def ami_supported_products() -> tuple[str, ...]:
+    supported = []
+    for product_key in SATELLITE_V2_DASHBOARD_PRODUCTS:
+        sources = SATELLITE_V2_PRODUCTS[product_key].source_channels
+        if all(ch in AMI_CHANNEL_FOR_ABI_CHANNEL for ch in sources):
+            supported.append(product_key)
+    return tuple(supported)
 
 
 # SEVIRI channel name for each ABI source channel (Meteosat SEVIRI).
@@ -797,6 +823,7 @@ SATELLITE_V2_CACHE_NAMESPACE = "satellite"
 # These versions retain the filled-image opacity invalidation and advance each
 # platform past Channel02 tiles rendered with the former 0.90 white point.
 SATELLITE_V2_RENDER_VERSION = "products-v6"
+SATELLITE_V2_RENDER_VERSION_GK2A = "products-ami1"
 SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi4"
 # fci4 also retains the Meteosat-12 east-west mirror invalidation from fci1.
 SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci4"
@@ -810,6 +837,8 @@ SATELLITE_V2_MESO_ZOOMS = tuple(range(4, 9))
 
 def satellite_v2_render_version_for_satellite(sat_id: str | None) -> str:
     sat_key = str(sat_id or "").strip().lower()
+    if sat_key == "gk2a":
+        return SATELLITE_V2_RENDER_VERSION_GK2A
     if sat_key == "himawari9":
         return SATELLITE_V2_RENDER_VERSION_HIMAWARI
     if sat_key == "meteosat12":

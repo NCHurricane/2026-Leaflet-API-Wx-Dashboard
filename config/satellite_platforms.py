@@ -8,6 +8,7 @@ from __future__ import annotations
 
 # Provider type constants
 PROVIDER_AWS_GOES = "aws_goes"
+PROVIDER_AWS_GK2A = "aws_gk2a"
 PROVIDER_AWS_HIMAWARI = "aws_himawari"
 PROVIDER_EUMETSAT = "eumetsat"
 
@@ -43,6 +44,16 @@ SATELLITE_PLATFORMS: dict[str, dict] = {
         "sectors": ["FULLDISK", "JAPAN", "TARGET"],
         "default_sector": "FULLDISK",
         "lon_0": 140.7,
+        "implemented": True,
+    },
+    "gk2a": {
+        "label": "GK2A",
+        "short_label": "GK2A",
+        "instrument": "AMI",
+        "provider": PROVIDER_AWS_GK2A,
+        "sectors": ["FULLDISK"],
+        "default_sector": "FULLDISK",
+        "lon_0": 128.2,
         "implemented": True,
     },
     "meteosat12": {

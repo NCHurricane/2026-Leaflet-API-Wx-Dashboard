@@ -81,8 +81,9 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     color: var(--core-text);
+    font-weight: 700;
 }
 
 .satellite-auto-update-row {
@@ -90,10 +91,8 @@
 }
 
 .satellite-control-block {
-    padding: 9px 10px;
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    border-radius: 6px;
-    background: rgba(15, 23, 42, 0.55);
+    padding: 8px 0 0 0;
+    border-top: 1px solid var(--core-line);
 }
 .satellite-control-block input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--core-accent); }
 

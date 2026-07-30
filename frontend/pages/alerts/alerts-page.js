@@ -48,7 +48,7 @@ async function initialize() {
     let closeDetail = () => {};
     const mapCore = createMapCore(byId('alerts-map'), {
         region: regionSelect.value,
-        basemap: 'Dark (No Labels)',
+        basemap: 'Dark',
         onResetView: () => closeDetail(),
     });
     const legend = createLegendHost(byId('alerts-legend'), { align: 'left' });

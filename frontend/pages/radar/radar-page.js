@@ -52,7 +52,7 @@ async function initialize() {
     let resetRadarState = () => {};
     const mapCore = createMapCore(byId('radar-map'), {
         region: regionSelect.value,
-        basemap: 'Dark (No Labels)',
+        basemap: 'Dark',
         onResetView: () => resetRadarState(),
     });
     const legend = createLegendHost(byId('radar-legend'), { align: 'left' });

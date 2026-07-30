@@ -10,7 +10,7 @@ const byId = (id) => document.getElementById(id);
 const L = window.L;
 const _tropicalEngineFactory = window.NCHTropicalEngine;
 const _tropicalPageController = window.NCHTropicalPage;
-const mapCore = createMapCore(byId('weather-map'), { region: 'WORLD', basemap: 'Dark (No Labels)' });
+const mapCore = createMapCore(byId('weather-map'), { region: 'WORLD', basemap: 'Dark' });
 const map = mapCore.map;
 const legend = createLegendHost(byId('weather-colorbar'), { align: 'left' });
 const status = createStatusReporter({

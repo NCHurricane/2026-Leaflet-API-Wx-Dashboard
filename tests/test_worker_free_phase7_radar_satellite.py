@@ -320,4 +320,4 @@ def test_satellite_page_surfaces_cached_provider_capability_state():
     assert "client_id" in (
         root / "frontend/pages/satellite/satellite-engine.js"
     ).read_text("utf-8")
-    assert "satellite-page.js?v=20260725e" in page
+    assert "satellite-page.js?v=20260729b" in page

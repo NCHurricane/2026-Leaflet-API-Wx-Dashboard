@@ -124,7 +124,7 @@ async function initialize() {
 
     const mapCore = createMapCore(byId('wpc-map'), {
         region: regionSelect.value,
-        basemap: 'Dark (No Labels)',
+        basemap: 'Dark',
     });
     const legend = createLegendHost(byId('wpc-legend'), { align: 'left' });
     const status = createStatusReporter({

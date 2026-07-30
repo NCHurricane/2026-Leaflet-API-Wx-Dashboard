@@ -131,10 +131,14 @@ to PNG-only behavior.
 4. Satellite render pipeline latency optimization — complete through Phase 5
    and archived. Optional Phase 6 warp threading is deferred unless later
    real-run profiling and explicit approval reopen it.
-5. GK2A + GMGSI new platforms. Adds `PLATFORM_*` entries to
-   `js/satellite-page.js`; if started mid-split those entries must be
-   ported to `pages/satellite/`, so prefer starting it before the split
-   reaches satellite or after that page migration completes.
+5. GK2A + GMGSI new platforms — active under
+   `docs/satellite-platform-expansion-plan.md`. Phase 0 implements the bounded
+   GK2A Full Disk Channel 13 live-on-demand proof in the migrated standalone
+   Satellite page. The focused gate passes 67 tests; the full suite passes 318
+   tests plus 42 subtests with the two known stale Workspace assertions.
+   Provider/direct-render evidence passes. User-owned browser acceptance
+   passed at the default zoom and during continuous z9 playback, so Phase 0 is
+   closed. GMGSI and broader GK2A products are not started.
 
 ## Current State
 
@@ -942,7 +946,7 @@ found it.
   county geometry; counties download only when enabled. The client also filters
   returned U.S. features by their declared layer and uses boundary cache version
   4, preventing a response cached from an older unfiltered API process from
-  crossing state and county toggle behavior. Dark (No Labels) is the standalone
+  crossing state and county toggle behavior. Dark is the standalone
   page and shared map-core default basemap, matching the pre-split shell.
   Option 1A from the Drought sidebar design handoff established the accepted
   300px shell with pinned Data Status/Region header, accessible tabs, a
@@ -2293,10 +2297,21 @@ Current international-satellite product direction:
   sector, product, and frame count. Prefer the live-on-demand version first
   because it needs less orchestration and cannot warm stale or wrong storm
   locations.
-- After the current platforms, auto-center, standard products, and extent
-  presets are complete, add these future sources:
-  - GK2A from `arn:aws:s3:::noaa-gk2a-pds`.
-  - NOAA GMGSI Meteosat composite from `noaa-gmgsi-pds`.
+- GK2A + GMGSI expansion is now tracked in
+  `docs/satellite-platform-expansion-plan.md`.
+  - GK2A Phase 0 adds the public `noaa-gk2a-pds` AMI Full Disk Channel 13 path:
+    10-minute discovery, atomic source download, packed-pixel quality masking,
+    file-coefficient brightness-temperature calibration, native GEOS
+    georeferencing, isolated `products-ami1` tiles, and an Asia-Pacific page
+    preset. The focused gate passes 67 tests, and a live listing plus
+    real-source PNG render pass. The full suite passes 318 tests plus 42
+    subtests with the two known stale Workspace assertions. User-owned browser
+    acceptance passed 2026-07-29: all default-zoom frames loaded quickly, and
+    playback continued while newly requested z9 frames also loaded quickly.
+    Phase 0 is closed.
+  - NOAA GMGSI (`noaa-gmgsi-pds`) remains a later, separate hourly global
+    mosaic phase. Its regular lon/lat grid and four direct products must not be
+    folded into the GK2A instrument path.
 
 #### Meteosat-9 — native SEVIRI `.nat` validation completed 2026-07-02
 

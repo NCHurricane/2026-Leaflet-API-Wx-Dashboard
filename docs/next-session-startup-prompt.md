@@ -9,6 +9,7 @@ Read first:
 - docs/token-saver-maybe.md
 - docs/dashboard-change-and-enhancement-superfile.md
 - docs/worker-free-render-plan.md, Phase 8 completion summary only
+- docs/satellite-platform-expansion-plan.md
 - git status
 
 Current checkpoint:
@@ -228,6 +229,16 @@ Current checkpoint:
   unrelated stale `WORKSPACE_REGION_BOUNDS` assertion.
 - All Uvicorn sessions were intentionally stopped. Restart the current API
   before making runtime or browser claims.
+- Satellite platform expansion Phase 0 is implemented for GK2A Full Disk
+  Channel 13. It adds anonymous NOAA bucket discovery/download, AMI IR
+  calibration/georeferencing, isolated `products-ami1` tiles, and the
+  standalone Asia-Pacific control path. The focused gate passes 67 tests; the
+  full suite passes 318 tests plus 42 subtests with the two known stale
+  Workspace assertions. A current live listing and real-source direct PNG
+  render pass. User-owned browser acceptance passed: all default-zoom frames
+  loaded quickly, and active playback continued while newly requested z9
+  frames also loaded quickly. Phase 0 is closed; broader GK2A products and
+  GMGSI are not started.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -241,8 +252,8 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- No authorized Radar render-optimization work remains. Review the Satellite
-  page and choose its next bounded priority. GK2A + GMGSI platform support is
-  the next planned substantive candidate; all-product Radar WebGL conversion,
-  tiles, or PNG retirement would require a new approved migration plan.
+- No authorized Radar render-optimization work remains. GK2A Phase 0 is closed.
+  Stop for explicit approval before Phase 1 direct-channel expansion. GMGSI
+  remains a later separate phase. All-product Radar WebGL conversion, tiles,
+  or PNG retirement would require a new approved migration plan.
 ```

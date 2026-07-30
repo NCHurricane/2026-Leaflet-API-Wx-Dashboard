@@ -53,10 +53,12 @@ const REGION_BOUNDS = Object.freeze({
 });
 
 const BASEMAPS = Object.freeze({
-    'Light (No Labels)': ['https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', '© OpenStreetMap © CARTO'],
-    'Dark (No Labels)': ['https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', '© OpenStreetMap © CARTO'],
-    Voyager: ['https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', '© OpenStreetMap © CARTO'],
+    Hydro: ['https://basemap.nationalmap.gov/arcgis/rest/services/USGSHydroCached/MapServer/tile/{z}/{y}/{x}', 'Tiles © Esri'],
+    Light: ['http://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png', '© OpenStreetMap © CARTO'],
+    Dark: ['http://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png', '© OpenStreetMap © CARTO'],
+    Voyager: ['https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', '© OpenStreetMap © CARTO'],
     USGS: ['https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}', 'Tiles courtesy of the U.S. Geological Survey'],
+    USGSTopo: ['https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}', 'Tiles courtesy of the U.S. Geological Survey'],
     Satellite: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', 'Tiles © Esri'],
 });
 
@@ -257,7 +259,7 @@ export function createMapCore(element, options = {}) {
     viewportLoggers.add(logViewport);
 
     function setBasemap(name) {
-        const selected = BASEMAPS[name] ? name : 'Dark (No Labels)';
+        const selected = BASEMAPS[name] ? name : 'Dark';
         if (baseLayer) map.removeLayer(baseLayer);
         const [url, attribution] = BASEMAPS[selected];
         baseLayer = leaflet.tileLayer(url, {
@@ -423,7 +425,7 @@ export function createMapCore(element, options = {}) {
         return fontSize;
     }
 
-    setBasemap(options.basemap || 'Dark (No Labels)');
+    setBasemap(options.basemap || 'Dark');
     fitRegion(options.region || 'CONUS');
     map.attributionControl.addAttribution('©2026 ChuckCopeland.com/NCHurricane.com');
     updateZoomIndicator();

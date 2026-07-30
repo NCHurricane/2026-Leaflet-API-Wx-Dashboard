@@ -109,6 +109,7 @@ const INTERPRETIVE_LEGENDS = Object.freeze({
 export const SAT_DISPLAY_NAMES = Object.freeze({
     goes18: 'GOES-18 (West)',
     goes19: 'GOES-19 (East)',
+    gk2a: 'GK2A',
     himawari9: 'Himawari-9',
     meteosat12: 'Meteosat-12',
     meteosat9: 'Meteosat-9',
@@ -118,6 +119,7 @@ export const SAT_DISPLAY_NAMES = Object.freeze({
 export const SAT_SOURCES = Object.freeze({
     goes18: 'NOAA',
     goes19: 'NOAA',
+    gk2a: 'KMA via NOAA',
     himawari9: 'JMA',
     meteosat12: 'EUMETSAT',
     meteosat9: 'EUMETSAT',

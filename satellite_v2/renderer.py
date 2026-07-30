@@ -666,6 +666,27 @@ def _is_ahi_hsd_file(path: Path) -> bool:
     return name.endswith(".dat") or name.endswith(".dat.bz2")
 
 
+def _is_ami_l1b_file(path: Path) -> bool:
+    return (
+        "gk2a_ami_le1b_" in path.name.lower()
+        and path.suffix.lower() == ".nc"
+    )
+
+
+def _load_ami_source_raster(path: Path, source_channel: str) -> SourceRaster:
+    from satellite_v2.ami_nc import load_ami_raster
+
+    raster = load_ami_raster(_load_netcdf_dataset(path), source_channel)
+    return SourceRaster(
+        cmi=raster.values,
+        src_transform=raster.src_transform,
+        src_crs=raster.src_crs,
+        observation_time=raster.observation_time,
+        satellite_longitude=raster.satellite_longitude,
+        satellite_height_km=raster.satellite_height_km,
+    )
+
+
 def _load_ahi_source_raster(primary_segment: Path) -> SourceRaster:
     """Load Himawari AHI HSD segments into a SourceRaster.
 
@@ -878,7 +899,7 @@ def _load_source_raster(
     source_file: str | Path,
     source_channel: str | None = None,
 ) -> SourceRaster:
-    """Load a GOES NetCDF, AHI HSD, or SEVIRI .nat source for reprojection.
+    """Load a GOES/GK2A NetCDF, AHI HSD, or SEVIRI .nat source.
 
     ``source_channel`` matters only for SEVIRI: one .nat bundles all
     channels, so the loader must know which one to extract. GOES and AHI
@@ -891,6 +912,10 @@ def _load_source_raster(
         return _load_aod_source_raster(path)
     if source_channel == "FRP":
         return _load_frp_source_raster(path)
+    if _is_ami_l1b_file(path):
+        if not source_channel:
+            raise ValueError("GK2A AMI sources require a source_channel.")
+        return _load_ami_source_raster(path, source_channel)
     if _is_ahi_hsd_file(path):
         return _load_ahi_source_raster(path)
     if _is_fci_chunk_file(path):

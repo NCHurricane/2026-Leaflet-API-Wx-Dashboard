@@ -12,16 +12,23 @@ import threading
 from types import ModuleType
 
 from config.satellite_platforms import (
+    PROVIDER_AWS_GK2A,
     PROVIDER_AWS_GOES,
     PROVIDER_AWS_HIMAWARI,
     PROVIDER_EUMETSAT,
     platform_descriptor,
 )
-from satellite_v2 import provider_aws, provider_eumetsat, provider_himawari
+from satellite_v2 import (
+    provider_aws,
+    provider_eumetsat,
+    provider_gk2a,
+    provider_himawari,
+)
 from satellite_v2.models import SourceFrame
 
 _PROVIDER_MODULES: dict[str, ModuleType] = {
     PROVIDER_AWS_GOES: provider_aws,
+    PROVIDER_AWS_GK2A: provider_gk2a,
     PROVIDER_AWS_HIMAWARI: provider_himawari,
     PROVIDER_EUMETSAT: provider_eumetsat,
 }
