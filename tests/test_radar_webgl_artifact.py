@@ -50,10 +50,16 @@ def _enable_velocity(monkeypatch):
     monkeypatch.setattr(radar_config, "LIVE_RADAR_WEBGL_VELOCITY_ENABLED", True)
 
 
+def _enable_level3(monkeypatch):
+    _enable(monkeypatch)
+    monkeypatch.setattr(radar_config, "LIVE_RADAR_WEBGL_LEVEL3_ENABLED", True)
+
+
 def test_feature_config_bounds_animation_window(monkeypatch):
     monkeypatch.setattr(radar_config, "LIVE_RADAR_WEBGL_ENABLED", True)
     monkeypatch.setattr(radar_config, "LIVE_RADAR_WEBGL_ANIMATION_ENABLED", True)
     monkeypatch.setattr(radar_config, "LIVE_RADAR_WEBGL_VELOCITY_ENABLED", False)
+    monkeypatch.setattr(radar_config, "LIVE_RADAR_WEBGL_LEVEL3_ENABLED", False)
 
     config = webgl_artifact.feature_config()
 
@@ -84,6 +90,25 @@ def test_velocity_family_has_separate_product_and_animation_gates(monkeypatch):
         radar_config, "LIVE_RADAR_WEBGL_VELOCITY_ANIMATION_ENABLED", True
     )
     assert {"L2_VEL", "L2_SRV"}.issubset(
+        webgl_artifact.feature_config()["animation_products"]
+    )
+
+
+def test_level3_family_has_separate_product_and_animation_gates(monkeypatch):
+    _enable_level3(monkeypatch)
+    monkeypatch.setattr(
+        radar_config, "LIVE_RADAR_WEBGL_LEVEL3_ANIMATION_ENABLED", False
+    )
+
+    config = webgl_artifact.feature_config()
+    assert set(config["products"]) == {"L2_REF", "L3_N0B", "L3_N0G"}
+    assert "L3_N0B" not in config["animation_products"]
+    assert "L3_N0G" not in config["animation_products"]
+
+    monkeypatch.setattr(
+        radar_config, "LIVE_RADAR_WEBGL_LEVEL3_ANIMATION_ENABLED", True
+    )
+    assert {"L3_N0B", "L3_N0G"}.issubset(
         webgl_artifact.feature_config()["animation_products"]
     )
 
@@ -134,19 +159,23 @@ def test_polar_artifact_is_versioned_compact_and_round_trips(tmp_path, monkeypat
 
 
 @pytest.mark.parametrize(
-    ("product", "field_name"),
+    ("product", "field_name", "family"),
     [
-        ("L2_VEL", "velocity"),
-        ("L2_SRV", "storm_relative_velocity"),
+        ("L2_VEL", "velocity", "velocity"),
+        ("L2_SRV", "storm_relative_velocity", "velocity"),
+        ("L3_N0G", "velocity", "level3"),
     ],
 )
-def test_velocity_family_uses_bounded_u16_value_encoding(
-    tmp_path, monkeypatch, product, field_name
+def test_velocity_products_use_bounded_u16_value_and_palette_encoding(
+    tmp_path, monkeypatch, product, field_name, family
 ):
     from config.radar_colortable_utils import get_radar_colortable
     from matplotlib.colors import Normalize
 
-    _enable_velocity(monkeypatch)
+    if family == "level3":
+        _enable_level3(monkeypatch)
+    else:
+        _enable_velocity(monkeypatch)
     product_cfg = dict(radar_config.LIVE_RADAR_PRODUCTS[product])
     path = webgl_artifact.write_artifact(
         tmp_path,
@@ -207,6 +236,43 @@ def test_velocity_family_uses_bounded_u16_value_encoding(
     np.testing.assert_array_equal(palette[palette_indexes], expected_rgba)
 
 
+@pytest.mark.parametrize(
+    ("product", "field_name", "code_bytes", "payload_limit"),
+    [
+        ("L3_N0B", "reflectivity", 1, 2_000_000),
+        ("L3_N0G", "velocity", 2, 3_000_000),
+    ],
+)
+def test_level3_family_uses_product_matched_bounded_encoding(
+    tmp_path, monkeypatch, product, field_name, code_bytes, payload_limit
+):
+    _enable_level3(monkeypatch)
+    product_cfg = dict(radar_config.LIVE_RADAR_PRODUCTS[product])
+    path = webgl_artifact.write_artifact(
+        tmp_path,
+        "KGGW",
+        "2026_07_26_02_32_50",
+        0.5,
+        FakeRadar(),
+        field_name,
+        0,
+        product_cfg,
+        product,
+    )
+
+    assert path is not None
+    assert path.stat().st_size < payload_limit
+    header, _texture_bytes = webgl_artifact.read_artifact(path)
+    assert header["product"] == product
+    assert header["code_bytes"] == code_bytes
+    assert header["max_quantization_error"] <= header["value_scale"] / 2 + 1e-6
+    metadata = webgl_artifact.artifact_metadata(
+        tmp_path, "KGGW", product, 0.5, "2026_07_26_02_32_50"
+    )
+    assert metadata["product"] == product
+    assert f"/{product}/" in metadata["url"]
+
+
 def test_srv_motion_variants_are_isolated(tmp_path, monkeypatch):
     _enable_velocity(monkeypatch)
     first_cfg = dict(radar_config.LIVE_RADAR_PRODUCTS["L2_SRV"])
@@ -262,7 +328,13 @@ def test_srv_motion_variants_are_isolated(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize(
     ("product_code", "product_key"),
-    [("REF", "L2_REF"), ("VEL", "L2_VEL"), ("SRV", "L2_SRV")],
+    [
+        ("REF", "L2_REF"),
+        ("VEL", "L2_VEL"),
+        ("SRV", "L2_SRV"),
+        ("N0B", "L3_N0B"),
+        ("N0G", "L3_N0G"),
+    ],
 )
 def test_worker_publishes_only_the_bounded_webgl_family(product_code, product_key):
     with patch.object(radar_live_worker, "write_artifact", return_value=None) as write:

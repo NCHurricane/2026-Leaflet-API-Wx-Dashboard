@@ -483,6 +483,60 @@ def _radar_live_render_bg_key(
     )
 
 
+def _radar_live_latest_bg_key(
+    site_id: str, product_key: str, elevation: str, motion: dict | None
+) -> tuple:
+    motion_key = str((motion or {}).get("cache_variant") or "default")
+    level_code = "L2" if product_key.startswith("L2_") else "L3"
+    return (
+        "radar-live-latest",
+        site_id,
+        level_code,
+        product_key,
+        elevation,
+        motion_key,
+    )
+
+
+def _radar_live_refresh_latest_in_background(
+    site_id: str,
+    product_key: str,
+    elevation: str = "auto",
+    motion: dict | None = None,
+    lookback_hours: float | None = None,
+) -> bool:
+    """Keep the newest frame current without running a full history fill."""
+    from config.radar_config import (
+        LIVE_RADAR_LATEST_INTERVAL_SEC,
+        LIVE_RADAR_PRESENCE_LEASE_SEC,
+    )
+
+    interval_seconds = max(30.0, float(LIVE_RADAR_LATEST_INTERVAL_SEC or 60))
+    key = _radar_live_latest_bg_key(site_id, product_key, elevation, motion)
+    submission = get_refresh_coordinator().activate_presence_job(
+        key=key,
+        provider="nodd-radar",
+        interval_seconds=interval_seconds,
+        lease_seconds=max(
+            interval_seconds * 2,
+            float(LIVE_RADAR_PRESENCE_LEASE_SEC or 180),
+        ),
+        min_success_interval_seconds=interval_seconds,
+        function=lambda: _radar_live_render_on_demand(
+            site_id,
+            product_key,
+            latest_only=True,
+            backfill_history=False,
+            newest_first=True,
+            max_render_frames=1,
+            elevation=elevation,
+            motion=motion,
+            lookback_hours=lookback_hours,
+        ),
+    )
+    return submission.status in {"queued", "running"}
+
+
 def _radar_live_render_in_background(
     site_id: str,
     product_key: str,
@@ -536,6 +590,18 @@ def _radar_live_render_still_filling(
     earlier request's background render is the one actually still running.
     """
     key = _radar_live_render_bg_key(site_id, product_key, elevation, motion)
+    coordinator = get_refresh_coordinator()
+    state = coordinator.describe(key) or {}
+    return coordinator.is_lease_active(key) and state.get("status") in {
+        "queued",
+        "running",
+    }
+
+
+def _radar_live_latest_still_refreshing(
+    site_id: str, product_key: str, elevation: str, motion: dict | None
+) -> bool:
+    key = _radar_live_latest_bg_key(site_id, product_key, elevation, motion)
     coordinator = get_refresh_coordinator()
     state = coordinator.describe(key) or {}
     return coordinator.is_lease_active(key) and state.get("status") in {
@@ -1104,18 +1170,42 @@ def get_radar_live_frames_data(
         oldest_filtered_dt
         and oldest_filtered_dt <= cutoff_dt + timedelta(minutes=10)
     )
-    activity_active = _radar_live_render_in_background(
+    history_active = False
+    if not coverage_complete:
+        history_active = _radar_live_render_in_background(
+            site_id,
+            product_key,
+            elevation_key,
+            motion,
+            requested_hours,
+            urgent=True,
+        )
+    history_active = history_active or _radar_live_render_still_filling(
         site_id,
         product_key,
         elevation_key,
         motion,
-        requested_hours,
-        urgent=not coverage_complete,
     )
-    refreshing = activity_active or _radar_live_render_still_filling(
-        site_id, product_key, elevation_key, motion
+    latest_refreshing = False
+    if refresh and filtered:
+        latest_refreshing = _radar_live_refresh_latest_in_background(
+            site_id,
+            product_key,
+            elevation_key,
+            motion,
+            requested_hours,
+        )
+    latest_refreshing = (
+        latest_refreshing
+        or _radar_live_latest_still_refreshing(
+            site_id,
+            product_key,
+            elevation_key,
+            motion,
+        )
     )
-    history_filling = bool(not coverage_complete and refreshing)
+    refreshing = history_active or latest_refreshing
+    history_filling = bool(not coverage_complete and history_active)
     frames_with_artifacts = []
     for frame in filtered:
         artifact = _radar_webgl_artifact_metadata(
@@ -1149,6 +1239,7 @@ def get_radar_live_frames_data(
         "lookback_hours": requested_hours,
         "coverage_complete": coverage_complete,
         "history_filling": history_filling,
+        "latest_refreshing": latest_refreshing,
         "refreshing": refreshing,
         "frames": filtered,
     }

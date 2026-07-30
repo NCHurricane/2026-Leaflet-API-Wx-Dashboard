@@ -353,6 +353,11 @@ LIVE_RADAR_PRODUCTS = {
 # Worker cadence and retention.
 LIVE_RADAR_LOOKBACK_HOURS = 1
 LIVE_RADAR_WORKER_INTERVAL_MIN = 5
+# Selected-resource newest-frame discovery is independent from the slower
+# history/backfill cadence. The lease spans two standalone-page polls plus
+# scheduling jitter so a visible selection stays active in background tabs.
+LIVE_RADAR_LATEST_INTERVAL_SEC = 60
+LIVE_RADAR_PRESENCE_LEASE_SEC = 180
 # Use the unidata-nexrad-level2-chunks S3 bucket for L2 products.
 # Enables sub-minute latency by assembling scans incrementally as chunks arrive,
 # but the flat unidata-nexrad-level2 bucket posts a completed scan at the exact
@@ -400,8 +405,8 @@ LIVE_RADAR_MAX_KEEP_FRAMES = max(
 )
 
 # Optional high-zoom WebGL path. PNG remains authoritative at every zoom.
-# Reflectivity and the separately gated Velocity/SRV family publish independent
-# versioned polar artifacts; disabling either family restores PNG-only behavior.
+# Reflectivity plus separately gated Velocity/SRV and Level III core families
+# publish product-scoped polar artifacts; disabling a family restores PNG-only.
 LIVE_RADAR_WEBGL_ENABLED = os.environ.get(
     "LIVE_RADAR_WEBGL_ENABLED", "0"
 ).strip().lower() in {"1", "true", "yes", "on"}
@@ -413,6 +418,12 @@ LIVE_RADAR_WEBGL_VELOCITY_ENABLED = os.environ.get(
 ).strip().lower() in {"1", "true", "yes", "on"}
 LIVE_RADAR_WEBGL_VELOCITY_ANIMATION_ENABLED = os.environ.get(
     "LIVE_RADAR_WEBGL_VELOCITY_ANIMATION_ENABLED", "0"
+).strip().lower() in {"1", "true", "yes", "on"}
+LIVE_RADAR_WEBGL_LEVEL3_ENABLED = os.environ.get(
+    "LIVE_RADAR_WEBGL_LEVEL3_ENABLED", "0"
+).strip().lower() in {"1", "true", "yes", "on"}
+LIVE_RADAR_WEBGL_LEVEL3_ANIMATION_ENABLED = os.environ.get(
+    "LIVE_RADAR_WEBGL_LEVEL3_ANIMATION_ENABLED", "0"
 ).strip().lower() in {"1", "true", "yes", "on"}
 LIVE_RADAR_WEBGL_ARTIFACT_VERSION = 2
 LIVE_RADAR_WEBGL_PREFETCH_ZOOM = 10

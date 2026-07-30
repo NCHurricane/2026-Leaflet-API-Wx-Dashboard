@@ -4,6 +4,7 @@ const SITE_STATUS_COLORS = Object.freeze({
     online: '#22c55e', required: '#f59e0b', mandatory: '#f97316',
     startup: '#60a5fa', configured: '#facc15', unconfigured: '#64748b',
 });
+const LATEST_REFRESH_POLL_LIMIT = 20;
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -70,6 +71,22 @@ export function selectRadarFrameIndex(frames, currentFrame, preserveKey = null) 
         if (preserved >= 0) return preserved;
     }
     return frames.length - 1;
+}
+
+export function radarFramePollMode(
+    data,
+    refreshRequested = false,
+    latestPollAttempt = 0,
+) {
+    if (data?.history_filling) return 'history';
+    if (
+        data?.latest_refreshing
+        && (refreshRequested || latestPollAttempt > 0)
+        && latestPollAttempt < LATEST_REFRESH_POLL_LIMIT
+    ) {
+        return 'latest';
+    }
+    return '';
 }
 
 export function radarWebglProductEnabled(config, product, playback = false) {
@@ -658,7 +675,11 @@ export function createRadarEngine(options) {
         }
     }
 
-    async function loadFrames({ refresh = false, preserveKey = null } = {}) {
+    async function loadFrames({
+        refresh = false,
+        preserveKey = null,
+        latestPollAttempt = 0,
+    } = {}) {
         const selection = { ...getSelection() };
         if (!selection.site || !selection.product) return [];
         cancelStaleWebglWork();
@@ -679,7 +700,12 @@ export function createRadarEngine(options) {
             onFrames?.(frames, { index: Math.max(0, index) });
             if (frames.length && index >= 0) await renderFrame(frames[index], index);
             if (!frames.length) message(`No radar frames found for ${selection.site}/${selection.product}.`);
-            if (data?.history_filling) scheduleHistoryRefresh();
+            const pollMode = radarFramePollMode(data, refresh, latestPollAttempt);
+            if (pollMode === 'history') {
+                scheduleHistoryRefresh();
+            } else if (pollMode === 'latest') {
+                scheduleLatestRefresh(frameIdentity(currentFrame), latestPollAttempt);
+            }
             return frames;
         } catch (error) {
             if (selectionMatches(selection)) message(`Radar frame load failed: ${error.message}`, 'error');
@@ -695,12 +721,22 @@ export function createRadarEngine(options) {
         }, 3000);
     }
 
-    async function refreshAll() {
+    function scheduleLatestRefresh(preserveKey, attempt) {
+        clearTimeout(historyTimer);
+        historyTimer = setTimeout(() => {
+            void loadFrames({
+                preserveKey,
+                latestPollAttempt: attempt + 1,
+            });
+        }, 3000);
+    }
+
+    async function refreshAll({ refresh = true } = {}) {
         if (!getSelection().site) return;
         cancelStaleWebglWork();
         requestSequence += 1;
         const latestPromise = loadLatest();
-        const framesPromise = loadFrames();
+        const framesPromise = loadFrames({ refresh });
         await Promise.allSettled([latestPromise, framesPromise]);
     }
 

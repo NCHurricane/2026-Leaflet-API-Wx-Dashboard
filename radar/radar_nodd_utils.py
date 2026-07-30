@@ -37,6 +37,8 @@ CACHE_MAX_BYTES = 20 * 1024 * 1024 * 1024
 DOWNLOAD_RETRY_ATTEMPTS = 3
 DOWNLOAD_RETRY_SLEEP_SECONDS = 0.12
 LEVEL2_SOURCE_SPOOL = "_VOLUME"
+LATEST_LISTING_CACHE_TTL_SECONDS = 30
+ARCHIVE_LISTING_CACHE_TTL_SECONDS = 120
 
 
 LEVEL3_PREFIX_PATTERNS = [
@@ -110,7 +112,12 @@ def _iter_days(start_dt, end_dt):
 
 
 def _list_objects_for_prefix(
-    s3_client, bucket, prefix, start_after=None, max_keys=None
+    s3_client,
+    bucket,
+    prefix,
+    start_after=None,
+    max_keys=None,
+    ttl_seconds=ARCHIVE_LISTING_CACHE_TTL_SECONDS,
 ):
     def _fetch():
         keys = []
@@ -140,13 +147,19 @@ def _list_objects_for_prefix(
 
     return cached_call(
         namespace="radar_nodd_aws_prefix",
-        key=(bucket, prefix, start_after or "", max_keys or 0),
+        key=(bucket, prefix, start_after or "", max_keys or 0, int(ttl_seconds)),
         fetch_fn=_fetch,
-        ttl_seconds=120,
+        ttl_seconds=ttl_seconds,
     )
 
 
-def _list_gcs_keys_for_prefix(bucket, prefix, start_offset=None, max_results=None):
+def _list_gcs_keys_for_prefix(
+    bucket,
+    prefix,
+    start_offset=None,
+    max_results=None,
+    ttl_seconds=ARCHIVE_LISTING_CACHE_TTL_SECONDS,
+):
     def _fetch():
         keys = []
         page_token = None
@@ -186,9 +199,15 @@ def _list_gcs_keys_for_prefix(bucket, prefix, start_offset=None, max_results=Non
 
     return cached_call(
         namespace="radar_nodd_gcp_prefix",
-        key=(bucket, prefix, start_offset or "", max_results or 0),
+        key=(
+            bucket,
+            prefix,
+            start_offset or "",
+            max_results or 0,
+            int(ttl_seconds),
+        ),
         fetch_fn=_fetch,
-        ttl_seconds=120,
+        ttl_seconds=ttl_seconds,
     )
 
 
@@ -253,6 +272,11 @@ def list_nexrad_files(
 ):
     provider = str(provider).lower()
     level_lower = str(level).lower().replace(" ", "")
+    listing_ttl_seconds = (
+        LATEST_LISTING_CACHE_TTL_SECONDS
+        if latest_only
+        else ARCHIVE_LISTING_CACHE_TTL_SECONDS
+    )
     keys = []
 
     level2_bucket = (
@@ -278,10 +302,17 @@ def list_nexrad_files(
             _log(f"[NODD] Level2: Probing prefix {prefix} on {level2_bucket}")
             try:
                 if provider == "gcp":
-                    day_keys = _list_gcs_keys_for_prefix(level2_bucket, prefix)
+                    day_keys = _list_gcs_keys_for_prefix(
+                        level2_bucket,
+                        prefix,
+                        ttl_seconds=listing_ttl_seconds,
+                    )
                 else:
                     day_keys = _list_objects_for_prefix(
-                        s3_client, level2_bucket, prefix
+                        s3_client,
+                        level2_bucket,
+                        prefix,
+                        ttl_seconds=listing_ttl_seconds,
                     )
                 _log(f"[NODD] Level2: Found {len(day_keys)} files in {prefix}")
                 keys.extend(day_keys)
@@ -312,55 +343,56 @@ def list_nexrad_files(
                 f"{station_short}_{product}_",
                 f"{station_id}_{product}_",
             ]
+            recent_start = max(start_dt, end_dt - timedelta(hours=2))
 
             for flat_prefix in flat_prefixes:
-                for hours_back in (0, 24):
-                    ref_dt = end_dt - timedelta(hours=hours_back)
+                marker = (
+                    f"{flat_prefix}{recent_start:%Y%m%d_%H%M%S}"
+                    if provider == "gcp"
+                    else f"{flat_prefix}{recent_start:%Y_%m_%d_%H_%M_%S}"
+                )
 
-                    if provider == "gcp":
-                        marker = f"{flat_prefix}{ref_dt:%Y%m%d}"
-                    else:
-                        marker = f"{flat_prefix}{ref_dt:%Y_%m_%d}"
+                for bucket in level3_buckets:
+                    try:
+                        if provider == "gcp":
+                            probe_keys = _list_gcs_keys_for_prefix(
+                                bucket,
+                                flat_prefix,
+                                start_offset=marker,
+                                max_results=128,
+                                ttl_seconds=listing_ttl_seconds,
+                            )
+                        else:
+                            probe_keys = _list_objects_for_prefix(
+                                s3_client,
+                                bucket,
+                                flat_prefix,
+                                start_after=marker,
+                                max_keys=128,
+                                ttl_seconds=listing_ttl_seconds,
+                            )
+                    except Exception:
+                        continue
 
-                    for bucket in level3_buckets:
-                        try:
-                            if provider == "gcp":
-                                probe_keys = _list_gcs_keys_for_prefix(
-                                    bucket,
-                                    flat_prefix,
-                                    start_offset=marker,
-                                    max_results=128,
-                                )
-                            else:
-                                probe_keys = _list_objects_for_prefix(
-                                    s3_client,
-                                    bucket,
-                                    flat_prefix,
-                                    start_after=marker,
-                                    max_keys=128,
-                                )
-                        except Exception:
+                    for key in probe_keys:
+                        file_dt = _parse_radar_time_from_key(key)
+                        if file_dt is None:
+                            continue
+                        if not (start_dt <= file_dt <= end_dt):
                             continue
 
-                        for key in probe_keys:
-                            file_dt = _parse_radar_time_from_key(key)
-                            if file_dt is None:
-                                continue
-                            if not (start_dt <= file_dt <= end_dt):
-                                continue
+                        if (
+                            latest_candidate is None
+                            or file_dt > latest_candidate[0]
+                        ):
+                            latest_candidate = (file_dt, key)
 
-                            if (
-                                latest_candidate is None
-                                or file_dt > latest_candidate[0]
-                            ):
-                                latest_candidate = (file_dt, key)
-
-                    if latest_candidate:
-                        _log(
-                            f"[NODD] Latest found via flat probe "
-                            f"in {_time.perf_counter() - _t0:.2f}s"
-                        )
-                        return [latest_candidate[1]]
+                if latest_candidate:
+                    _log(
+                        f"[NODD] Latest found via flat probe "
+                        f"in {_time.perf_counter() - _t0:.2f}s"
+                    )
+                    return [latest_candidate[1]]
 
             # ---- Fallback: today + yesterday only ----
             for day in (
@@ -383,10 +415,17 @@ def list_nexrad_files(
                     for bucket in level3_buckets:
                         try:
                             if provider == "gcp":
-                                day_keys = _list_gcs_keys_for_prefix(bucket, prefix)
+                                day_keys = _list_gcs_keys_for_prefix(
+                                    bucket,
+                                    prefix,
+                                    ttl_seconds=listing_ttl_seconds,
+                                )
                             else:
                                 day_keys = _list_objects_for_prefix(
-                                    s3_client, bucket, prefix
+                                    s3_client,
+                                    bucket,
+                                    prefix,
+                                    ttl_seconds=listing_ttl_seconds,
                                 )
                         except Exception:
                             continue

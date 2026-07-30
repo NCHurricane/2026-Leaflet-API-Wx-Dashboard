@@ -9,9 +9,10 @@ the seven-product L2 batch p50/p95 by 28.5%/27.6%. The reversible high-zoom
 WebGL L2 Reflectivity pilot is default-off; two-page activation, redraw,
 visible-parity, PNG-only, fallback, and cancellation checks pass. Phase 7 adds
 default-off four-texture L2 Reflectivity animation; its automated, golden, and
-two-page browser gates pass. Phase 7 is closed. The separately authorized
-Phase 8 L2 Velocity/SRV family is browser-accepted, passes all eight permanent
-PNG golden rows, and is closed.)
+two-page browser gates pass. Phase 7 is closed. Both separately authorized
+Phase 8 core-product families—L2 Velocity/SRV and L3 N0B/N0G—are
+browser-accepted, pass all eight permanent PNG golden rows, and are closed.
+Radar render optimization Phase 8 is complete.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -120,13 +121,13 @@ to PNG-only behavior.
    same-sweep QuadMesh reuse passes benchmark, memory, lifecycle, regression,
    and golden gates. Phases 6-7 add separately gated high-zoom WebGL L2
    Reflectivity activation and bounded animation while preserving PNG as the
-   complete workflow and fallback. The first separately authorized Phase 8
-   family extends that path to L2 Velocity/SRV with product/motion-scoped `v2`
-   artifacts and separate default-off family/animation switches. Its measured
-   latency/payload, focused/full regression, rollback, and two-page browser
-   gates pass. The permanent Phase 0 sources are absent locally, so the
-   required eight-row golden rerun remains the closure gate. L3 N0B/N0G and
-   later families are not authorized.
+   complete workflow and fallback. Phase 8 extends that path through two
+   separately gated core-product families: L2 Velocity/SRV and L3 N0B/N0G.
+   Product/motion-scoped `v2` artifacts, separate default-off activation and
+   animation switches, measured latency/payload, focused/full regression,
+   rollback, both-page browser gates, and all eight permanent Phase 0 PNG
+   golden rows pass. Both families and Radar render optimization Phase 8 are
+   closed.
 4. Satellite render pipeline latency optimization — complete through Phase 5
    and archived. Optional Phase 6 warp threading is deferred unless later
    real-run profiling and explicit approval reopen it.
@@ -454,10 +455,45 @@ to PNG-only behavior.
   Workspace assertion.
 - Codex in-app browser acceptance passes on `/radar` and `/workspace` for both
   products, four-texture playback, Velocity-to-SRV stale-work cancellation,
-  and flag-off PNG-only playback. The permanent eight-row Phase 0 inputs are
-  absent locally, so this family is not closed. Evidence is in
-  `docs/perf/2026-07-29-radar-phase8-velocity/`; L3 N0B/N0G remains
-  unauthorized.
+  and flag-off PNG-only playback. The restored permanent Phase 0 inputs pass
+  all eight PNG golden rows, so this family is closed. Evidence is in
+  `docs/perf/2026-07-29-radar-phase8-velocity/`.
+- Radar render optimization Phase 8's second core family is implemented for
+  `L3_N0B` and `L3_N0G` behind separate default-off activation and animation
+  switches. N0B uses the exact one-byte reflectivity encoding; N0G uses the
+  two-byte velocity encoding and 512-entry palette. Representative
+  four-texture windows are 5.07 MiB and 6.61 MiB.
+- Five fresh-process first-PNG regressions remain below the 5% ceiling: N0B is
+  -1.71%/-7.00% p50/p95 and N0G is +1.29%/+2.26%. Control/candidate PNG hashes
+  are byte-identical. Focused validation passes 85 tests plus 42 subtests,
+  five JavaScript tests pass, and all eight permanent PNG goldens pass. Full
+  pytest passes 310 tests plus 42 subtests with only two pre-existing
+  Workspace assertion failures.
+- Codex in-app browser acceptance passes on `/radar` and `/workspace` for both
+  products, four-texture playback, N0B-to-N0G stale-work cancellation, and
+  family-flag-off PNG-only playback. Evidence is in
+  `docs/perf/2026-07-29-radar-phase8-level3/`. Both core-product families and
+  Radar render optimization Phase 8 are closed.
+- DONE 2026-07-29: The post-Phase 8 live-freshness correction restores the
+  documented meaning of `/api/radar/live/frames?refresh=true` without coupling
+  newest-frame discovery to history backfill. Active selections use a separate
+  keyed latest-only job at a 60-second cadence with a 180-second presence lease;
+  it probes/renders at most one newest unprocessed source while incomplete
+  lookbacks retain their bounded five-minute/12-frame history path.
+- Latest-mode NODD listings use an isolated 30-second cache; archive/history
+  listings retain 120 seconds. Workspace and Radar keep their 30/90-second UI
+  cadences. A queued latest refresh triggers bounded three-second manifest
+  polling for at most 60 seconds, preserves the active frame identity and
+  playback state, and exposes `latest_refreshing` separately from
+  `history_filling`. Manual Refresh uses the same path. The operational target
+  is no more than roughly two minutes from S3 publication to an active
+  scrubber. Focused validation passes 38 tests plus 42 subtests and six
+  JavaScript tests; full pytest passes 315 tests plus 42 subtests with only the
+  two documented stale Workspace assertions. A read-only live KSFX/N0B probe
+  returned the current `SFX_N0B_2026_07_30_00_21_02` key in 0.25 seconds.
+  User-owned browser acceptance then passed with sooner updates for both Level
+  II and Level III across two different radar sites, satisfying the remaining
+  arrival-timing gate and closing the freshness correction.
 - The post-Phase 2 high-zoom investigation found that the representative KGGW
   L2 sweep retains 720 radials, 1,832 gates, 250-meter range spacing, and about
   0.486-degree azimuth spacing, while its 4,380-by-4,400 full-site PNG spans
@@ -1574,10 +1610,12 @@ Completed radar enhancements:
 - Debug endpoint `/api/radar/debug/meso-raw?site=KXXX` returns raw IEM
   `meso`/`tvs` field values for every cell at a site — use this when tuning
   the rank threshold.
-- Radar scrubber auto-update now triggers an on-demand backend render on each
-  tick via `?refresh=true` on `/api/radar/live/frames`, then restarts the warm
-  poll (~3 s interval) to pick up the new frame as soon as the render completes.
-  `RADAR_AUTO_REFRESH_MS` is 90 s (was 3 min).
+- Radar scrubber auto-update sends `?refresh=true` on
+  `/api/radar/live/frames`. The selected-resource coordinator keeps one
+  deduplicated latest-only probe active at a 60-second cadence and the client
+  polls the manifest every three seconds, bounded to 60 seconds, while that
+  probe runs. `RADAR_AUTO_REFRESH_MS` is 90 s (was 3 min); Workspace remains
+  30 s. Full history backfill stays separate and bounded.
 - DONE 2026-07-16: Live radar lookback requests now propagate from
   `/api/radar/live/frames?hours=` into the NODD worker instead of only filtering
   its fixed one-hour cache. The scheduled worker still defaults to one hour;
@@ -2851,8 +2889,12 @@ correctness or fallback.
   browser-accepted behind separate default-off family switches. Its
   `v2` artifacts preserve PNG identity, pass the measured 5% latency ceiling,
   remain bounded to four textures/two loads, and pass all eight permanent PNG
-  golden rows. This family is closed. L3 N0B/N0G and later families require
-  separate authorization.
+  golden rows. This family is closed.
+- Phase 8 second-family result: L3 N0B/N0G is implemented and browser-accepted
+  behind separate default-off family switches. Its product-scoped `v2`
+  artifacts pass value/palette, payload, latency, bounded-window, cancellation,
+  flag-off, full golden, and both-page browser gates. This family and Radar
+  render optimization Phase 8 are closed.
   All-product WebGL conversion, PNG retirement, and server-rendered tiles
   require a new migration plan.
 - `LIVE_RADAR_L2_USE_CHUNKS` remains `False`. The prior chunks experiment showed

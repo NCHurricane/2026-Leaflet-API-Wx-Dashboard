@@ -6,7 +6,7 @@ import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
-import { createRadarEngine } from './radar-engine.js?v=20260729a';
+import { createRadarEngine } from './radar-engine.js?v=20260729b';
 
 const byId = (id) => document.getElementById(id);
 const AUTO_UPDATE_INTERVAL_MS = 90_000;

@@ -210,6 +210,28 @@ def test_standalone_radar_uses_explicit_lowest_tilt_default():
     assert "holdAtEnd: true" in app
 
 
+def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets():
+    root = Path(BASE_DIR) / "frontend" / "pages"
+    engine = (root / "radar" / "radar-engine.js").read_text(encoding="utf-8")
+    radar_app = (root / "radar" / "radar-page.js").read_text(encoding="utf-8")
+    radar_page = (root / "radar" / "radar.html").read_text(encoding="utf-8")
+    workspace_app = (root / "workspace" / "workspace-app.js").read_text(
+        encoding="utf-8"
+    )
+    workspace_page = (root / "workspace" / "workspace.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "async function refreshAll({ refresh = true } = {})" in engine
+    assert "const framesPromise = loadFrames({ refresh });" in engine
+    assert "data?.latest_refreshing" in engine
+    assert "latestPollAttempt < LATEST_REFRESH_POLL_LIMIT" in engine
+    assert "radar-engine.js?v=20260729b" in radar_app
+    assert "radar-engine.js?v=20260729b" in workspace_app
+    assert "radar-page.js?v=20260729b" in radar_page
+    assert "workspace-app.js?v=20260729e" in workspace_page
+
+
 def test_radar_scrubbers_hold_on_the_newest_frame():
     scrubber = (
         Path(BASE_DIR) / "frontend" / "core" / "scrubber.js"

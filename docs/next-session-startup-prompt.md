@@ -178,8 +178,34 @@ Current checkpoint:
   size and SHA-256 contracts; all eight PNG golden rows pass with the family
   enabled. The first Phase 8 family is closed. Evidence is in
   `docs/perf/2026-07-29-radar-phase8-velocity/`.
-- L3 N0B/N0G, all-product conversion, tiles, and PNG retirement remain
-  unauthorized and out of scope.
+- The second Radar Phase 8 family (`L3_N0B` and `L3_N0G`) was authorized,
+  implemented, and browser-accepted on `/radar` and `/workspace`. Separate
+  default-off Level III activation and animation switches preserve the PNG
+  workflow and rollback. Five-sample first-PNG regressions remain below 5%;
+  representative artifacts are 1.33 MB and 1.73 MB.
+- Focused validation passes 85 tests plus 42 subtests, five JavaScript tests
+  pass, and all eight permanent PNG golden rows pass. Full pytest passes 310
+  tests plus 42 subtests and retains only two pre-existing Workspace
+  assertions. Evidence is in
+  `docs/perf/2026-07-29-radar-phase8-level3/`.
+- Both core-product families and Radar render optimization Phase 8 are closed.
+  Other dual-pol, categorical, accumulation, Echo Tops, and VIL products
+  remain PNG. All-product conversion, tiles, and PNG retirement remain outside
+  this plan.
+- A post-Phase 8 live-freshness correction is implemented. `refresh=true`
+  activates a separate selected-resource latest-only job every 60 seconds with
+  a 180-second lease and one-frame render bound. Latest NODD listings use a
+  separate 30-second cache; five-minute bounded history fill and 120-second
+  history/archive listing caches remain unchanged.
+- The shared Radar client follows a queued latest refresh with bounded
+  three-second manifest polls for at most 60 seconds. Manual Refresh uses the
+  same path, and current-frame/playback preservation remains authoritative.
+  Focused validation passes 38 tests plus 42 subtests and six JavaScript tests;
+  full pytest passes 315 tests plus 42 subtests with only the two known stale
+  Workspace assertions. A read-only live KSFX/N0B probe returned the current
+  key in 0.25 seconds. User-owned browser acceptance then passed with sooner
+  Level II and Level III updates across two different radar sites, satisfying
+  the remaining arrival-timing gate.
 - Workspace Radar interaction follow-up: alert-polygon hover tooltips are now
   suppressed whenever Value Inspector or Storm Tracks is enabled and return
   when both are off. Alert-polygon tooltips are also hidden at zoom 10 and
@@ -215,8 +241,8 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- Decide whether to separately authorize the next Phase 8 family
-  (`L3_N0B`/`L3_N0G`).
-- Do not begin L3 N0B/N0G or another product family without that explicit
-  authorization.
+- No authorized Radar render-optimization work remains. Review the Satellite
+  page and choose its next bounded priority. GK2A + GMGSI platform support is
+  the next planned substantive candidate; all-product Radar WebGL conversion,
+  tiles, or PNG retirement would require a new approved migration plan.
 ```

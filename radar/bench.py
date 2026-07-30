@@ -366,28 +366,27 @@ def _render_one(
             worker._finalize_rendered_png(temp_path, destination)
             record["finalize_ms"] = (time.perf_counter() - started) * 1000.0
 
-            if context["product"].startswith("L2_"):
-                from radar.webgl_artifact import feature_config, write_artifact
+            from radar.webgl_artifact import feature_config, write_artifact
 
-                if context["product"] in feature_config()["products"]:
-                    started = time.perf_counter()
-                    artifact = write_artifact(
-                        cache_root,
-                        context["site"],
-                        frame_key,
-                        selected,
-                        radar,
-                        field_name,
-                        sweep,
-                        context["product_cfg"],
-                        context["product"],
-                    )
-                    record["webgl_artifact_ms"] = (
-                        time.perf_counter() - started
-                    ) * 1000.0
-                    record["webgl_artifact_bytes"] = (
-                        artifact.stat().st_size if artifact is not None else 0
-                    )
+            if context["product"] in feature_config()["products"]:
+                started = time.perf_counter()
+                artifact = write_artifact(
+                    cache_root,
+                    context["site"],
+                    frame_key,
+                    selected,
+                    radar,
+                    field_name,
+                    sweep,
+                    context["product_cfg"],
+                    context["product"],
+                )
+                record["webgl_artifact_ms"] = (
+                    time.perf_counter() - started
+                ) * 1000.0
+                record["webgl_artifact_bytes"] = (
+                    artifact.stat().st_size if artifact is not None else 0
+                )
 
             started = time.perf_counter()
             radar_update_index(

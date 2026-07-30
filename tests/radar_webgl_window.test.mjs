@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+    radarFramePollMode,
     radarWebglProductEnabled,
     selectRadarFrameIndex,
     selectRadarWebglWindow,
@@ -39,6 +40,14 @@ test('refresh preserves the frame active when the response completes', () => {
     assert.equal(selectRadarFrameIndex(frames, frames[2], 'missing'), 3);
 });
 
+test('latest refresh polling is bounded and separate from history filling', () => {
+    assert.equal(radarFramePollMode({ history_filling: true }, true, 0), 'history');
+    assert.equal(radarFramePollMode({ latest_refreshing: true }, true, 0), 'latest');
+    assert.equal(radarFramePollMode({ latest_refreshing: true }, false, 1), 'latest');
+    assert.equal(radarFramePollMode({ latest_refreshing: true }, false, 20), '');
+    assert.equal(radarFramePollMode({ latest_refreshing: false }, true, 0), '');
+});
+
 test('Velocity and SRV require their separately enabled animation family', () => {
     const config = {
         enabled: true,
@@ -52,4 +61,19 @@ test('Velocity and SRV require their separately enabled animation family', () =>
     assert.equal(radarWebglProductEnabled(config, 'L2_VEL', true), true);
     assert.equal(radarWebglProductEnabled(config, 'L2_SRV', true), true);
     assert.equal(radarWebglProductEnabled(config, 'L2_ZDR', false), false);
+});
+
+test('L3 N0B and N0G require their separately enabled animation family', () => {
+    const config = {
+        enabled: true,
+        products: ['L2_REF', 'L3_N0B', 'L3_N0G'],
+        animation_products: ['L2_REF'],
+    };
+    assert.equal(radarWebglProductEnabled(config, 'L3_N0B', false), true);
+    assert.equal(radarWebglProductEnabled(config, 'L3_N0G', false), true);
+    assert.equal(radarWebglProductEnabled(config, 'L3_N0B', true), false);
+    config.animation_products.push('L3_N0B', 'L3_N0G');
+    assert.equal(radarWebglProductEnabled(config, 'L3_N0B', true), true);
+    assert.equal(radarWebglProductEnabled(config, 'L3_N0G', true), true);
+    assert.equal(radarWebglProductEnabled(config, 'L3_DPR', false), false);
 });

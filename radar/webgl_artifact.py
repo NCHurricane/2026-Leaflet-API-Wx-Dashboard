@@ -16,8 +16,12 @@ PRODUCT = "L2_REF"
 VALUE_OFFSET = -32.0
 VALUE_SCALE = 0.5
 MISSING_CODE = 255
-SUPPORTED_PRODUCTS = frozenset({"L2_REF", "L2_VEL", "L2_SRV"})
+REFLECTIVITY_PRODUCTS = frozenset({"L2_REF", "L3_N0B"})
 VELOCITY_PRODUCTS = frozenset({"L2_VEL", "L2_SRV"})
+LEVEL3_PRODUCTS = frozenset({"L3_N0B", "L3_N0G"})
+SUPPORTED_PRODUCTS = frozenset(
+    REFLECTIVITY_PRODUCTS | VELOCITY_PRODUCTS | LEVEL3_PRODUCTS
+)
 U8_PALETTE_ENTRIES = 256
 U16_PALETTE_ENTRIES = 512
 U16_MISSING_CODE = 65535
@@ -32,6 +36,8 @@ def feature_config() -> dict:
         LIVE_RADAR_WEBGL_ANIMATION_ENABLED,
         LIVE_RADAR_WEBGL_ARTIFACT_VERSION,
         LIVE_RADAR_WEBGL_ENABLED,
+        LIVE_RADAR_WEBGL_LEVEL3_ANIMATION_ENABLED,
+        LIVE_RADAR_WEBGL_LEVEL3_ENABLED,
         LIVE_RADAR_WEBGL_MAX_CONCURRENT_LOADS,
         LIVE_RADAR_WEBGL_MIN_FORWARD_TEXTURES,
         LIVE_RADAR_WEBGL_PREFETCH_ZOOM,
@@ -43,14 +49,19 @@ def feature_config() -> dict:
 
     enabled = bool(LIVE_RADAR_WEBGL_ENABLED)
     velocity_enabled = bool(enabled and LIVE_RADAR_WEBGL_VELOCITY_ENABLED)
+    level3_enabled = bool(enabled and LIVE_RADAR_WEBGL_LEVEL3_ENABLED)
     products = [PRODUCT]
     if velocity_enabled:
         products.extend(sorted(VELOCITY_PRODUCTS))
+    if level3_enabled:
+        products.extend(sorted(LEVEL3_PRODUCTS))
     animation_products = []
     if enabled and LIVE_RADAR_WEBGL_ANIMATION_ENABLED:
         animation_products.append(PRODUCT)
     if velocity_enabled and LIVE_RADAR_WEBGL_VELOCITY_ANIMATION_ENABLED:
         animation_products.extend(sorted(VELOCITY_PRODUCTS))
+    if level3_enabled and LIVE_RADAR_WEBGL_LEVEL3_ANIMATION_ENABLED:
+        animation_products.extend(sorted(LEVEL3_PRODUCTS))
     return {
         "enabled": enabled,
         "animation_enabled": bool(
@@ -228,7 +239,7 @@ def resolve_artifact(
 
 def _encoding(product: str, product_cfg: dict) -> dict:
     product_id = _product_key(product)
-    if product_id == PRODUCT:
+    if product_id in REFLECTIVITY_PRODUCTS:
         return {
             "code_bytes": 1,
             "missing_code": MISSING_CODE,

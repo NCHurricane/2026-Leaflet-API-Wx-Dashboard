@@ -55,7 +55,7 @@ from config.radar_config import (
     live_radar_target_frames,
     normalize_live_radar_lookback_hours,
 )
-from radar.webgl_artifact import prune_artifacts, write_artifact
+from radar.webgl_artifact import SUPPORTED_PRODUCTS, prune_artifacts, write_artifact
 from workers._freshness import is_cache_fresh, mark_run_complete
 
 _CACHE_ROOT = Path(__file__).resolve().parent.parent / "cache"
@@ -1422,11 +1422,13 @@ def _publish_webgl_artifact(
     sweep: int,
     product_cfg: dict,
 ) -> Path | None:
-    """Publish an enabled Level II WebGL artifact without affecting PNG success."""
+    """Publish an enabled Radar WebGL artifact without affecting PNG success."""
     product_key = {
         "REF": "L2_REF",
         "VEL": "L2_VEL",
         "SRV": "L2_SRV",
+        "N0B": "L3_N0B",
+        "N0G": "L3_N0G",
     }.get(str(product_code).upper())
     if product_key is None:
         return None
@@ -1785,7 +1787,7 @@ def _render_site_product(
                     available_elevations=available_elevations,
                     selected_elevation=selected_elevation,
                 )
-                if product_key in {"L2_REF", "L2_VEL", "L2_SRV"}:
+                if product_key in SUPPORTED_PRODUCTS:
                     prune_artifacts(
                         _CACHE_ROOT,
                         site,
@@ -1903,7 +1905,7 @@ def _render_site_product(
                     print(f"  FRAME TOTAL: {t_frame_total*1000:.1f}ms")
                     profile_first_frame = False
 
-                if product_key in {"L2_REF", "L2_VEL", "L2_SRV"}:
+                if product_key in SUPPORTED_PRODUCTS:
                     prune_artifacts(
                         _CACHE_ROOT,
                         site,
@@ -2096,7 +2098,7 @@ def _render_site_l2_products(
                     available_elevations=result["available_elevations"],
                     selected_elevation=result["selected_elevation"],
                 )
-                if product_key in {"L2_REF", "L2_VEL", "L2_SRV"}:
+                if product_key in SUPPORTED_PRODUCTS:
                     prune_artifacts(
                         _CACHE_ROOT,
                         site,

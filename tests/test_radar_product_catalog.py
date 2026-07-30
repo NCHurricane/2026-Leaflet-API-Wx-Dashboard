@@ -36,6 +36,68 @@ from workers.radar_live_worker import (
 
 
 class RadarProductCatalogTests(unittest.TestCase):
+    @patch("radar.radar_nodd_utils._list_objects_for_prefix")
+    def test_level3_latest_probe_starts_near_window_end(self, list_prefix):
+        end_dt = datetime(2026, 7, 29, 12, tzinfo=timezone.utc)
+        start_dt = end_dt - timedelta(hours=6)
+        newest = "MHX_N0B_2026_07_29_11_58_00"
+        list_prefix.return_value = [newest]
+
+        keys = radar_nodd_utils.list_nexrad_files(
+            object(),
+            "Level 3",
+            "KMHX",
+            "N0B",
+            start_dt,
+            end_dt,
+            latest_only=True,
+        )
+
+        self.assertEqual(keys, [newest])
+        self.assertEqual(
+            list_prefix.call_args.kwargs["start_after"],
+            "MHX_N0B_2026_07_29_10_00_00",
+        )
+        self.assertEqual(
+            list_prefix.call_args.kwargs["ttl_seconds"],
+            radar_nodd_utils.LATEST_LISTING_CACHE_TTL_SECONDS,
+        )
+
+    @patch("radar.radar_nodd_utils._list_objects_for_prefix", return_value=[])
+    def test_latest_listing_uses_short_cache_without_changing_archive_cache(
+        self, list_prefix
+    ):
+        end_dt = datetime(2026, 7, 29, 12, tzinfo=timezone.utc)
+        start_dt = end_dt - timedelta(hours=1)
+
+        radar_nodd_utils.list_nexrad_files(
+            object(),
+            "Level 2",
+            "KMHX",
+            "REF",
+            start_dt,
+            end_dt,
+            latest_only=True,
+        )
+        self.assertEqual(
+            list_prefix.call_args.kwargs["ttl_seconds"],
+            radar_nodd_utils.LATEST_LISTING_CACHE_TTL_SECONDS,
+        )
+
+        list_prefix.reset_mock()
+        radar_nodd_utils.list_nexrad_files(
+            object(),
+            "Level 2",
+            "KMHX",
+            "REF",
+            start_dt,
+            end_dt,
+        )
+        self.assertEqual(
+            list_prefix.call_args.kwargs["ttl_seconds"],
+            radar_nodd_utils.ARCHIVE_LISTING_CACHE_TTL_SECONDS,
+        )
+
     @patch("radar.radar_nodd_utils._enforce_cache_size")
     @patch("radar.radar_nodd_utils.list_nexrad_files")
     @patch("radar.radar_nodd_utils.get_s3_client")
@@ -184,7 +246,15 @@ class RadarProductCatalogTests(unittest.TestCase):
         self.assertTrue(data["history_filling"])
 
     @patch(
+        "services.radar_service._radar_live_latest_still_refreshing",
+        return_value=False,
+    )
+    @patch(
         "services.radar_service._radar_live_render_still_filling",
+        return_value=False,
+    )
+    @patch(
+        "services.radar_service._radar_live_refresh_latest_in_background",
         return_value=False,
     )
     @patch("services.radar_service._radar_live_render_in_background", return_value=False)
@@ -195,7 +265,9 @@ class RadarProductCatalogTests(unittest.TestCase):
         list_frames,
         render_on_demand,
         render_background,
+        refresh_latest,
         _render_still_filling,
+        _latest_still_refreshing,
     ):
         now = datetime.now(timezone.utc)
         frames = [
@@ -215,12 +287,59 @@ class RadarProductCatalogTests(unittest.TestCase):
         )
 
         render_on_demand.assert_not_called()
-        render_background.assert_called_once_with(
-            "KMHX", "L2_REF", "0.5", None, 0.5, urgent=False
-        )
+        render_background.assert_not_called()
+        refresh_latest.assert_not_called()
         self.assertEqual(data["frames"], frames)
         self.assertTrue(data["coverage_complete"])
         self.assertFalse(data["refreshing"])
+        self.assertFalse(data["history_filling"])
+
+    @patch(
+        "services.radar_service._radar_live_latest_still_refreshing",
+        return_value=False,
+    )
+    @patch(
+        "services.radar_service._radar_live_render_still_filling",
+        return_value=False,
+    )
+    @patch(
+        "services.radar_service._radar_live_refresh_latest_in_background",
+        return_value=True,
+    )
+    @patch("services.radar_service._radar_live_render_in_background")
+    @patch("cache.overlay_cache_utils.radar_list_frames")
+    def test_refresh_requests_latest_only_when_history_is_complete(
+        self,
+        list_frames,
+        render_background,
+        refresh_latest,
+        _render_still_filling,
+        _latest_still_refreshing,
+    ):
+        now = datetime.now(timezone.utc)
+        frames = [
+            {
+                "frame_key": f"frame-{index}",
+                "timestamp": (now - timedelta(minutes=29 - index * 12)).isoformat(),
+            }
+            for index in range(3)
+        ]
+        list_frames.return_value = frames
+
+        data = get_radar_live_frames_data(
+            site="KMHX",
+            product="L2_REF",
+            elevation="0.5",
+            hours=0.5,
+            refresh=True,
+        )
+
+        render_background.assert_not_called()
+        refresh_latest.assert_called_once_with(
+            "KMHX", "L2_REF", "0.5", None, 0.5
+        )
+        self.assertTrue(data["latest_refreshing"])
+        self.assertTrue(data["refreshing"])
         self.assertFalse(data["history_filling"])
 
     def test_supported_live_products_have_required_metadata(self):

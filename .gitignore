@@ -99,6 +99,8 @@ docs/perf/*
 !docs/perf/2026-07-26-radar-phase7/**
 !docs/perf/2026-07-29-radar-phase8/
 !docs/perf/2026-07-29-radar-phase8/**
+!docs/perf/2026-07-29-radar-phase8-level3/
+!docs/perf/2026-07-29-radar-phase8-level3/**
 !tests/
 tests/*
 !tests/*

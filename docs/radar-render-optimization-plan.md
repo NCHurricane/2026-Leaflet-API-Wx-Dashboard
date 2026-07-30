@@ -559,6 +559,47 @@ golden rows pass with the family enabled in scratch. This first family is
 closed. Evidence is in
 `docs/perf/2026-07-29-radar-phase8-velocity/`.
 
+**Second-family implementation status (2026-07-29): complete and
+browser-accepted.** `L3_N0B` and `L3_N0G` use the product-scoped artifact `v2`
+path behind separate default-off Level III activation and animation switches.
+N0B reuses the exact one-byte reflectivity encoding; N0G uses two-byte velocity
+codes and a 512-entry palette. Their representative artifacts are 1,328,499
+and 1,732,297 bytes, with four-texture windows of about 5.07 and 6.61 MiB.
+Maximum value reconstruction error is zero for N0B and 0.001633 mph for N0G.
+
+Five fresh-process KGSP samples keep first-PNG p50/p95 regressions below the
+5% ceiling: N0B is -1.71%/-7.00% and N0G is +1.29%/+2.26%. Artifact creation
+is 15.336/15.571 ms p50/p95 for N0B and 16.982/17.705 ms for N0G.
+Control/candidate PNG hashes are byte-identical. Focused validation passes 85
+tests plus 42 subtests, five JavaScript tests pass, and all eight permanent PNG
+golden rows pass. Full pytest passes 310 tests plus 42 subtests and retains
+only two pre-existing Workspace assertions.
+
+Codex in-app browser acceptance passes on `/radar` and `/workspace` for both
+products: PNG remains authoritative below the threshold and while warming,
+WebGL activates at high zoom, four-texture playback preserves frame order, an
+N0B-to-N0G change cancels the old identity, and disabling the family keeps
+high-zoom playback PNG-only with no WebGL canvas. Evidence is in
+`docs/perf/2026-07-29-radar-phase8-level3/`. This second family and Radar render
+optimization Phase 8 are closed.
+
+**Post-Phase freshness correction (2026-07-29): complete and
+browser-accepted.** This does not change artifact generation or WebGL
+rendering. `refresh=true` activates a separate selected-resource,
+latest-only coordinator job at a 60-second cadence with a 180-second lease.
+It renders at most one newest unprocessed frame; incomplete lookback history
+retains the existing five-minute bounded backfill. Latest NODD listings use an
+isolated 30-second cache, while archive/history listings retain 120 seconds.
+The shared client performs bounded three-second follow-up manifest polls for
+at most 60 seconds and preserves the current scrubber identity and playback.
+The target is no more than roughly two minutes from S3 publication to an
+active scrubber. Focused validation passes 38 tests plus 42 subtests and six
+JavaScript tests. Full pytest passes 315 tests plus 42 subtests with only the
+two known stale Workspace assertions. A read-only live KSFX/N0B latest-source
+probe returned the current key in 0.25 seconds. User-owned browser acceptance
+then passed with sooner Level II and Level III updates at two different radar
+sites, satisfying the remaining arrival-timing gate.
+
 All-product WebGL conversion, PNG retirement, and server-rendered tiles remain
 outside this plan. Any of those requires a new approved migration plan and
 retains PNG fallback until its own closure gate.
@@ -573,8 +614,8 @@ retains PNG fallback until its own closure gate.
    browser gates.
 4. The separately authorized L2 Velocity/SRV family is closed after all eight
    golden rows passed.
-5. Authorize each later Phase 8 product family separately; do not infer
-   approval for L3 N0B/N0G or all-product conversion.
+5. The separately authorized L3 N0B/N0G family is closed after its automated,
+   golden, and both-page browser gates passed. Phase 8 is complete.
 6. After every phase, run the complete PNG golden matrix, focused Radar tests, full
    pytest, `py_compile`, JavaScript syntax checks if frontend files changed, and
    `git diff --check`.

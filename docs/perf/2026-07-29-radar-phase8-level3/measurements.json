@@ -1,0 +1,75 @@
+{
+  "browser_acceptance": {
+    "pages": [
+      "/radar",
+      "/workspace"
+    ],
+    "passed": [
+      "n0b_static_activation",
+      "n0g_static_activation",
+      "n0b_four_texture_animation",
+      "n0g_four_texture_animation",
+      "product_change_cancellation",
+      "flag_off_png_only"
+    ],
+    "status": "passed",
+    "test_fixture": "current-time aliases of permanent Phase 0 PNGs and candidate artifacts in ignored runtime cache"
+  },
+  "focused_validation": {
+    "javascript_tests_passed": 5,
+    "pytest_passed": 85,
+    "unittest_subtests_passed": 42
+  },
+  "full_validation": {
+    "pre_existing_failures": 2,
+    "pytest_passed": 310,
+    "unittest_subtests_passed": 42
+  },
+  "golden_matrix": {
+    "permanent_rows_passed": 8,
+    "status": "passed"
+  },
+  "phase": 8,
+  "product_family": [
+    "L3_N0B",
+    "L3_N0G"
+  ],
+  "status": "complete",
+  "webgl_window": {
+    "max_concurrent_loads": 2,
+    "max_textures": 4,
+    "min_forward_textures": 2
+  },
+  "benchmarks": {
+    "L3_N0B": {
+      "artifact_bytes": 1328499,
+      "artifact_p50_ms": 15.336,
+      "artifact_p95_ms": 15.571,
+      "candidate_total_p50_ms": 2215.835,
+      "candidate_total_p95_ms": 2243.371,
+      "control_total_p50_ms": 2254.490,
+      "control_total_p95_ms": 2412.133,
+      "p50_regression_percent": -1.71,
+      "p95_regression_percent": -7.00,
+      "png_sha256": "e48da975dd9babec3e377ffffe92eba573970255cac3bc3adf6d5958964dc8f6",
+      "quantization_max_error": 0.0,
+      "representative_gpu_bytes": 5313996,
+      "representative_gpu_mib": 5.07
+    },
+    "L3_N0G": {
+      "artifact_bytes": 1732297,
+      "artifact_p50_ms": 16.982,
+      "artifact_p95_ms": 17.705,
+      "candidate_total_p50_ms": 1529.814,
+      "candidate_total_p95_ms": 1556.063,
+      "control_total_p50_ms": 1510.356,
+      "control_total_p95_ms": 1521.616,
+      "p50_regression_percent": 1.29,
+      "p95_regression_percent": 2.26,
+      "png_sha256": "81a81db9374d83330e92fefabfef029ff259ad6ee6ca32102940b36f84b7d203",
+      "quantization_max_error": 0.00163319,
+      "representative_gpu_bytes": 6929188,
+      "representative_gpu_mib": 6.61
+    }
+  }
+}

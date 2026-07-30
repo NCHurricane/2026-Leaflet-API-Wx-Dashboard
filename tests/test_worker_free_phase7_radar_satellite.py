@@ -62,6 +62,42 @@ def test_incomplete_radar_history_bypasses_normal_refresh_cadence(monkeypatch):
     assert kwargs["min_success_interval_seconds"] == 0.0
 
 
+def test_selected_radar_latest_refresh_is_bounded_and_latest_only(monkeypatch):
+    coordinator = Mock()
+    coordinator.activate_presence_job.return_value = Mock(status="queued")
+    render = Mock(return_value=1)
+    monkeypatch.setattr(
+        radar_service, "get_refresh_coordinator", lambda: coordinator
+    )
+    monkeypatch.setattr(radar_service, "_radar_live_render_on_demand", render)
+
+    assert radar_service._radar_live_refresh_latest_in_background(
+        "KMHX",
+        "L3_N0B",
+        "auto",
+        lookback_hours=1,
+    )
+
+    kwargs = coordinator.activate_presence_job.call_args.kwargs
+    assert kwargs["key"][0] == "radar-live-latest"
+    assert kwargs["interval_seconds"] == 60
+    assert kwargs["lease_seconds"] == 180
+    assert kwargs["min_success_interval_seconds"] == 60
+
+    assert kwargs["function"]() == 1
+    render.assert_called_once_with(
+        "KMHX",
+        "L3_N0B",
+        latest_only=True,
+        backfill_history=False,
+        newest_first=True,
+        max_render_frames=1,
+        elevation="auto",
+        motion=None,
+        lookback_hours=1,
+    )
+
+
 def test_succeeded_radar_job_is_not_reported_as_still_filling(monkeypatch):
     coordinator = Mock()
     coordinator.describe.return_value = {"status": "succeeded"}
