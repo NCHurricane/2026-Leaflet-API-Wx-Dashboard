@@ -327,8 +327,12 @@ Current checkpoint:
   capped at one frame. The correction requests `hours + 1` hourly frames, so
   the default one-hour view receives a bounded two-frame loop. The page
   cachebuster is `satellite-page.js?v=20260731f`. A live corrected-window probe
-  returned chronological 19Z and 20Z frames for all four products; animation
-  re-smoke is pending.
+  returned chronological 19Z and 20Z frames for all four products. The
+  corrected user-owned re-smoke generated and played a three-hour Channel 13
+  animation. The user accepted this representative shared-path result without
+  separately looping Channels 02, 07, and 09; those three products had already
+  passed current-frame rendering. GMGSI animation acceptance passed and Phase
+  3 is closed.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -342,8 +346,6 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- GK2A Phases 0-2 are closed. GMGSI Phase 3 implementation and live backend
-  proof are complete; re-smoke animation for all four GMGSI products after the
-  two-frame default-budget correction before closing the phase. No authorized
-  Radar render-optimization work remains.
+- GK2A Phases 0-2 and GMGSI Phase 3 are closed. No authorized Satellite
+  platform-expansion or Radar render-optimization work remains.
 ```

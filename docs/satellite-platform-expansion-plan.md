@@ -104,8 +104,8 @@ Add its regular lon/lat NetCDF path and four direct products (visible,
 shortwave IR, longwave IR, and water vapor) behind an independent platform and
 render version. Do not mix GMGSI parsing or cadence into GK2A phases.
 
-Implementation status 2026-07-31: complete; user-owned browser acceptance is
-pending.
+Implementation status 2026-07-31: complete; user-owned browser acceptance
+passed. Phase 3 is closed.
 
 - Adds anonymous hourly discovery/download from `noaa-gmgsi-pds` through a
   separate `aws_gmgsi` provider and exposes only `Channel02`, `Channel07`,
@@ -135,4 +135,9 @@ loop. The correction includes the frame at the start of the lookback interval
 (`hours + 1`), giving the default one-hour selection two frames while retaining
 the same bounded hourly cadence. `satellite-page.js?v=20260731f` carries the
 cachebuster. A live corrected-window probe returned chronological 19Z and 20Z
-frames for all four products. Animation re-smoke remains pending.
+frames for all four products. The corrected user-owned re-smoke generated and
+played a three-hour Channel 13 animation. Because all four products had already
+rendered their current frames and use the same GMGSI catalog/playback path, the
+user accepted that representative animation result without separately looping
+Channels 02, 07, and 09. GMGSI animation acceptance passed and Phase 3 is
+closed.

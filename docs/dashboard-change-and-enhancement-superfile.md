@@ -188,9 +188,12 @@ to PNG-only behavior.
    The first user-owned page acceptance rendered the current frame for all four
    products but exposed a one-frame default catalog budget, so animation could
    not start. Global now requests `hours + 1` hourly frames, giving the default
-   one-hour view a bounded two-frame loop. Animation re-smoke remains pending.
-   A live default-window probe returned chronological 19Z and 20Z frames for
-   all four GMGSI products.
+   one-hour view a bounded two-frame loop. A live default-window probe returned
+   chronological 19Z and 20Z frames for all four GMGSI products. The corrected
+   user-owned re-smoke generated and played a three-hour Channel 13 animation.
+   The user accepted this representative shared-path result without separately
+   looping Channels 02, 07, and 09; all four current frames had already
+   rendered. GMGSI animation acceptance passed and Phase 3 is closed.
 
 ## Current State
 
@@ -2413,7 +2416,11 @@ Current international-satellite product direction:
     one-hour catalog capped at one frame. The Global budget now includes the
     interval-start frame (`hours + 1`) so the default view has a two-frame
     animation. A live corrected-window probe returned chronological 19Z and
-    20Z frames for all four products. Animation re-smoke remains pending.
+    20Z frames for all four products. The corrected user-owned re-smoke
+    generated and played a three-hour Channel 13 animation. The user accepted
+    this representative shared-path result without separately looping Channels
+    02, 07, and 09; all four current frames had already rendered. GMGSI
+    animation acceptance passed and Phase 3 is closed.
 
 #### Meteosat-9 — native SEVIRI `.nat` validation completed 2026-07-02
 
