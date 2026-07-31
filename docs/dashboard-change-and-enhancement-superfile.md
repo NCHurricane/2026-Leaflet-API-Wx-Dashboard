@@ -199,8 +199,8 @@ to PNG-only behavior.
 
 ### Next current-dashboard phase — stabilization acceptance
 
-This is the next recommended phase, but it is not yet authorized or started.
-It adds no products and no Archive UI work.
+This phase was authorized on 2026-07-31 and is in progress. It adds no products
+and no Archive UI work.
 
 1. Reconcile the historical pending browser notes against later accepted smoke
    evidence; do not restore the retired Phases 25-27 checklist wholesale.
@@ -216,6 +216,17 @@ It adds no products and no Archive UI work.
 4. Convert any observed failure into a page-scoped correction and re-smoke only
    that surface. If the gate passes, record a new accepted current-dashboard
    baseline before selecting backlog or workspace-expansion work.
+
+Workspace acceptance passed 2026-07-31. The tabbed legend tray and independent
+map-versus-national-rail filters passed as implemented. Projected Arrival is now
+visible only when both a qualifying alert polygon and radar site are selected;
+the alert remains its data source. Alert refresh reconciliation checks both
+viewport and nationwide payloads and gives Workspace one missed-refresh grace,
+so a transient feed omission cannot clear an active projection. The user drew
+an arrival polygon, observed three updates including two new-alert notices, and
+confirmed that the selected alert, polygon, tools, and ability to redraw all
+remained intact. JavaScript syntax, diff checks, and 15 focused tests pass.
+Water post-baseline UI acceptance is next.
 
 ## Current State
 

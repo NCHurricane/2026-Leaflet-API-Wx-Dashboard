@@ -7,7 +7,7 @@ import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
 import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260726a';
-import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260729b';
+import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260731a';
 import { createRadarEngine } from '../radar/radar-engine.js?v=20260729b';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 
@@ -283,6 +283,7 @@ async function initialize() {
     let currentWarnings = [];
     let warningRailFilter = 'all';
     let selectedAlertId = '';
+    let projectedArrivalFeature = null;
     let currentLsrReports = [];
     let lsrRailFilter = 'all';
 
@@ -301,8 +302,9 @@ async function initialize() {
         syncSelectedWarningCard();
     }
 
-    function hideProjectedArrival() {
+    function hideProjectedArrival({ preserveAlert = false } = {}) {
         const group = byId('workspace-projected-arrival-group');
+        if (!preserveAlert) projectedArrivalFeature = null;
         tools.setSelectedAlert(null);
         tools.clear();
         group.hidden = true;
@@ -316,15 +318,29 @@ async function initialize() {
             && ['Polygon', 'MultiPolygon'].includes(geometryType);
     }
 
+    function syncProjectedArrivalVisibility() {
+        const hasRadarSite = byId('workspace-radar-enabled').checked
+            && Boolean(radarSelection().site);
+        if (!hasRadarSite || !supportsProjectedArrival(projectedArrivalFeature)) {
+            hideProjectedArrival({ preserveAlert: true });
+            return false;
+        }
+        const props = projectedArrivalFeature.properties || {};
+        tools.setSelectedAlert(projectedArrivalFeature);
+        const group = byId('workspace-projected-arrival-group');
+        group.hidden = false;
+        group.open = true;
+        byId('workspace-projected-arrival-alert').textContent = [props.event, props.areaDesc].filter(Boolean).join(' — ');
+        return true;
+    }
+
     function selectAlert(feature, options = { maxZoom: 9 }) {
         const props = feature?.properties || {};
         clearSelectedAlert();
+        let projectedArrivalReady = false;
         if (supportsProjectedArrival(feature)) {
-            tools.setSelectedAlert(feature);
-            const group = byId('workspace-projected-arrival-group');
-            group.hidden = false;
-            group.open = true;
-            byId('workspace-projected-arrival-alert').textContent = [props.event, props.areaDesc].filter(Boolean).join(' — ');
+            projectedArrivalFeature = feature;
+            projectedArrivalReady = syncProjectedArrivalVisibility();
         } else {
             hideProjectedArrival();
         }
@@ -335,8 +351,10 @@ async function initialize() {
         detail.open(feature);
         status.setMessage(!hasPolygon
             ? `${props.event || 'Alert'} selected; polygon unavailable.`
-            : supportsProjectedArrival(feature)
+            : projectedArrivalReady
             ? `${props.event || 'Alert'} selected for the Projected Arrival Tool.`
+            : supportsProjectedArrival(feature)
+            ? `${props.event || 'Alert'} selected; select a radar site to use Projected Arrival.`
             : `${props.event || 'Alert'} selected.`);
     }
 
@@ -476,6 +494,7 @@ async function initialize() {
     alertsEngine = createAlertsEngine({
         api, mapCore, legend: alertsLegend, lsrLegend, status,
         railScope: 'national',
+        selectedAlertMissingGraceRefreshes: 1,
         subdueWatches: true,
         alertPaneZIndex: 440,
         onAlertCount(count) { byId('workspace-alert-count').textContent = String(count); },
@@ -586,6 +605,7 @@ async function initialize() {
             radarEngine.setInspectorVisible(false);
         }
         syncAlertTooltipSuppression();
+        syncProjectedArrivalVisibility();
     }
 
     resetWorkspaceState = () => {

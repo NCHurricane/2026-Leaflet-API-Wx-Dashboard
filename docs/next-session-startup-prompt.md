@@ -227,6 +227,14 @@ Current checkpoint:
 - JavaScript syntax, ten focused Alerts/Workspace tests, and diff checks pass
   for these interaction fixes. The broader Workspace file retains its
   unrelated stale `WORKSPACE_REGION_BOUNDS` assertion.
+- Current-dashboard stabilization Workspace acceptance passed 2026-07-31. The
+  tabbed legend tray and independent map-versus-national-rail filters passed.
+  Projected Arrival now requires both a qualifying selected alert and a radar
+  site while retaining the alert as its source. Workspace reconciles the
+  selected alert against viewport plus nationwide feeds and tolerates one
+  missed refresh. The user-drawn projection survived three updates and two
+  new-alert notifications and remained redrawable without reselecting the
+  alert. JavaScript syntax, diff checks, and 15 focused tests pass.
 - All Uvicorn sessions were intentionally stopped. Restart the current API
   before making runtime or browser claims.
 - Satellite platform expansion Phase 0 is implemented for GK2A Full Disk
@@ -348,11 +356,11 @@ Guardrails:
 Next step:
 - GK2A Phases 0-2 and GMGSI Phase 3 are closed, and their completed plan is
   archived. Do not start Satellite Archive UI work. Reconcile the current-
-  dashboard browser/parity gates through the proposed bounded stabilization
+  dashboard browser/parity gates through the authorized bounded stabilization
   acceptance phase in the superfile before selecting another implementation
-  phase. Its focused surfaces are Workspace, the Water post-baseline UI,
-  Tropical's full workflow, the final GOES GeoColor white-point check, and a
-  shallow representative regression sweep of the other current pages. This
-  phase is not yet authorized or started. No authorized Satellite platform-
-  expansion or Radar render-optimization work remains.
+  phase. Workspace acceptance is complete; Water post-baseline UI acceptance
+  is next, followed by Tropical's full workflow, the final GOES GeoColor white-
+  point check, and a shallow representative regression sweep of the other
+  current pages. No authorized Satellite platform-expansion or Radar render-
+  optimization work remains.
 ```

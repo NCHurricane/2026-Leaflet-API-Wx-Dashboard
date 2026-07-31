@@ -46,7 +46,7 @@ def test_workspace_preserves_projected_arrival_without_speed_estimator():
     assert 'data-sidebar-panel="tools"' not in page
     assert "function _activateStormTrackDragProjection" in tools
     assert "_radarCal" not in tools
-    assert "function hideProjectedArrival()" in app
+    assert "function hideProjectedArrival({ preserveAlert = false } = {})" in app
     assert "const PROJECTED_ARRIVAL_EVENTS = new Set([" in app
     assert "'Tornado Warning'," in app
     assert "'Severe Thunderstorm Warning'," in app
@@ -54,6 +54,13 @@ def test_workspace_preserves_projected_arrival_without_speed_estimator():
     assert "'Special Weather Statement'," in app
     assert "function supportsProjectedArrival(feature)" in app
     assert "['Polygon', 'MultiPolygon'].includes(geometryType)" in app
+    assert "let projectedArrivalFeature = null;" in app
+    assert "function syncProjectedArrivalVisibility()" in app
+    assert "Boolean(radarSelection().site)" in app
+    assert "hideProjectedArrival({ preserveAlert: true });" in app
+    assert "projectedArrivalFeature = feature;" in app
+    assert "projectedArrivalReady = syncProjectedArrivalVisibility();" in app
+    assert "select a radar site to use Projected Arrival" in app
     assert "if (supportsProjectedArrival(feature))" in app
     assert "group.hidden = false" in app
     assert "group.open = true" in app
@@ -229,7 +236,7 @@ def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets(
     assert "radar-engine.js?v=20260729b" in radar_app
     assert "radar-engine.js?v=20260729b" in workspace_app
     assert "radar-page.js?v=20260729b" in radar_page
-    assert "workspace-app.js?v=20260729e" in workspace_page
+    assert "workspace-app.js?v=20260731b" in workspace_page
 
 
 def test_radar_scrubbers_hold_on_the_newest_frame():
@@ -310,6 +317,10 @@ def test_workspace_selected_alert_overlay_is_independent_of_polygon_filters():
     assert "Selected alert" not in engine
     assert "alerts-selected-legend-area" not in engine
     assert "reconcileSelectedAlert: true" in engine
+    assert "selectedAlertMissingGraceRefreshes: 1" in app
+    assert "const selectedAlertMissingGraceRefreshes" in engine
+    assert "selectedAlertMissingRefreshes <= selectedAlertMissingGraceRefreshes" in engine
+    assert "[...railAlertBaseFeatures, ...fullBaseFeatures]" in engine
     assert "options.onClose?.(closedMode)" in detail
     assert "alerts-selected-legend-section" in engine
     assert ".alerts-warning-card.is-selected" in styles

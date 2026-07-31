@@ -112,6 +112,10 @@ async function writeLiveAlertCache(api, paths, payloads) {
 export function createAlertsEngine(options) {
     const { api, mapCore, legend, lsrLegend = null, status, onAlertCount, onLsrCount, onWarnings, onRenderedAlerts, onDetail, onNewAlert, onLsrDetail, onLsrDetailClose, shouldHandleAlertClick } = options;
     const railScope = options.railScope === 'national' ? 'national' : 'rendered';
+    const selectedAlertMissingGraceRefreshes = Math.max(
+        0,
+        Math.trunc(Number(options.selectedAlertMissingGraceRefreshes) || 0),
+    );
     const subdueWatches = options.subdueWatches === true;
     const alertTooltipMinZoom = Number.isFinite(Number(options.alertTooltipMinZoom))
         ? Number(options.alertTooltipMinZoom) : 10;
@@ -155,6 +159,7 @@ export function createAlertsEngine(options) {
     let archiveSequence = 0;
     let knownAlertIds = null;
     let selectedAlert = null;
+    let selectedAlertMissingRefreshes = 0;
     let selectedLsrId = '';
 
     function featureId(feature) {
@@ -277,6 +282,7 @@ export function createAlertsEngine(options) {
     function clearSelectedAlert(notifyRemoved = false) {
         const removed = selectedAlert;
         selectedAlert = null;
+        selectedAlertMissingRefreshes = 0;
         selectedAlertLayer = replaceLayer(selectedAlertLayer, null);
         renderLegend();
         if (removed && notifyRemoved) options.onSelectedAlertRemoved?.(removed);
@@ -288,6 +294,7 @@ export function createAlertsEngine(options) {
             return false;
         }
         selectedAlert = feature;
+        selectedAlertMissingRefreshes = 0;
         renderSelectedAlert();
         renderLegend();
         return true;
@@ -298,10 +305,13 @@ export function createAlertsEngine(options) {
         const selectedId = featureId(selectedAlert);
         const replacement = features.find((feature) => featureId(feature) === selectedId);
         if (!replacement) {
+            selectedAlertMissingRefreshes += 1;
+            if (selectedAlertMissingRefreshes <= selectedAlertMissingGraceRefreshes) return;
             clearSelectedAlert(true);
             return;
         }
         selectedAlert = replacement;
+        selectedAlertMissingRefreshes = 0;
         renderSelectedAlert();
         renderLegend();
     }
@@ -448,7 +458,9 @@ export function createAlertsEngine(options) {
                 alertCacheReady = true;
                 renderAlerts();
                 if (applyOptions.reconcileSelectedAlert === true) {
-                    reconcileSelectedAlert(railScope === 'national' ? railAlertBaseFeatures : fullBaseFeatures);
+                    reconcileSelectedAlert(railScope === 'national'
+                        ? [...railAlertBaseFeatures, ...fullBaseFeatures]
+                        : fullBaseFeatures);
                 }
                 const hasNotificationPayload = railScope !== 'national' || Boolean(nationalRail);
                 if (hasNotificationPayload) {
