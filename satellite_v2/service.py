@@ -574,14 +574,14 @@ def resolve_tile(
     x: int,
     y: int,
     allow_render: bool = True,
+    render_neighbors: bool = True,
     frame_override: dict[str, Any] | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Resolve a cached tile or render the requested tile before returning.
 
-    On a render miss, neighbor warming is submitted asynchronously. Therefore
-    ``supertile_rendered`` remains the work completed before this response
-    (normally zero), while ``supertile_submitted`` reports newly queued
-    neighbors and ``supertile_skipped`` reports neighbors already in flight.
+    On a render miss, neighbor warming is submitted asynchronously unless
+    ``render_neighbors`` is false. Explicit viewport prefetch uses that opt-out
+    because it already queues the required coordinates with its own bounds.
     """
     started = time.perf_counter()
     sat_key = normalize_sat_id(sat_id)
@@ -712,7 +712,12 @@ def resolve_tile(
         path, render_stats = future.result()
         supertile_submitted = 0
         supertile_skipped_in_flight = 0
-        for neighbor_x, neighbor_y in _live_supertile_coords(int(z), int(x), int(y))[1:]:
+        neighbor_coords = (
+            _live_supertile_coords(int(z), int(x), int(y))[1:]
+            if render_neighbors
+            else []
+        )
+        for neighbor_x, neighbor_y in neighbor_coords:
             neighbor_target = tile_path(
                 cache_root, sat_key, sector_key, channel_key, frame_key,
                 int(z), neighbor_x, neighbor_y,
@@ -733,7 +738,11 @@ def resolve_tile(
                 supertile_submitted += 1
             else:
                 supertile_skipped_in_flight += 1
-        render_stats["supertile_radius"] = int(SATELLITE_V2_LIVE_SUPERTILE_RADIUS or 0)
+        render_stats["supertile_radius"] = (
+            int(SATELLITE_V2_LIVE_SUPERTILE_RADIUS or 0)
+            if render_neighbors
+            else 0
+        )
         render_stats["supertile_submitted"] = supertile_submitted
         render_stats["supertile_skipped"] = supertile_skipped_in_flight
         render_elapsed = int((time.perf_counter() - render_start) * 1000)

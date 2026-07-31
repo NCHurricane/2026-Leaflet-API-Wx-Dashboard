@@ -39,8 +39,7 @@ z9 did not interrupt the scrubber, and the new z9 frames also loaded quickly.
 
 ## Phase 1 — GK2A direct-channel expansion
 
-Status: implemented after explicit approval; user-owned browser acceptance is
-pending.
+Status: closed.
 
 - Added calibrated direct visible/near-IR products `Channel01`, `Channel02`,
   `Channel03`, and `Channel05`.
@@ -55,22 +54,48 @@ pending.
   proof tile in 0.182 seconds, and peaked at about 735.5 MiB working set.
 - Current live sources from every added calibrated family rendered nonblank,
   plausibly oriented proof PNGs.
-- The focused gate passes 68 tests. The full-suite run has 320 passing tests
-  plus 42 passing subtests; only the two known stale Workspace assertions
-  fail.
+- The focused gate passes 68 tests. The latest full-suite run has 321 passing
+  tests plus 42 passing subtests; the two known stale Workspace assertions and
+  one unrelated concurrent shared-border-default assertion fail.
 
-Browser acceptance must confirm the ten-product filter and sample Channel 02,
-Channel 07 Fire, both water-vapor products, and Channel 14. With playback
-active, zoom to z9 and confirm the scrubber continues while new tiles fill.
-Channel 02 deserves particular attention because every native source is
-roughly 451 MiB and a multi-frame history can require several large downloads.
-Do not close Phase 1 or enter Phase 2 until this browser gate passes.
+User-owned default-zoom acceptance passed 2026-07-29. The first Channel 02 z8
+test exposed two shared animator defects: a fractional Leaflet zoom such as
+`7.5` could reach the integer-only tile route as a 422, and retained invisible
+frame layers could request historical live tiles during a zoom before the
+selected newest frame finished. The correction now snaps/sanitizes Satellite
+zooms to integers and detaches inactive pooled layers at zoom start. A focused
+correction gate passes 27 tests and JavaScript syntax checks. Codex browser
+regression on a 12-frame GOES-19 loop reached z8 with only the selected newest
+frame attached, 16 integer-z8 tile requests, and no fractional URLs. The
+user-owned GK2A Channel 02 z8/playback re-smoke then passed: no fractional-zoom
+422s recurred, the newest frame generated first, and playback continued.
+Phase 1 is closed.
 
 ## Phase 2 — GK2A composites
 
-Enter only after the direct channels they require pass. Reuse existing composite
-recipes only where AMI spectral mappings are physically valid and prove each
-result before UI exposure.
+**Status:** closed 2026-07-31.
+
+- Exposes only the six existing recipes whose source bands map physically to
+  AMI: `GeoColor`, `GeoColorBlkMar`, `TrueColor`, `NaturalColor`,
+  `DayCloudPhase`, and `DaySnowFog`.
+- Keeps recipes needing unmapped AMI bands hidden, including Fire Temperature,
+  Air Mass, Day Land Cloud/Fire, Nighttime Microphysics, Dust, Ash, and SO2.
+- Uses the existing multi-channel provider intersection so a composite frame is
+  advertised only when every required source band has the same timestamp.
+- Restores the existing GeoColor Black Marble recipe by pointing its loader to
+  the tracked `BlackMarble_2016_3km_geo.png`; the former `.tif` target never
+  existed in repository history.
+- Isolates the expanded product set under `products-ami2`; GOES, Himawari, and
+  Meteosat render namespaces are unchanged.
+- Synthetic AMI render proofs for all six recipes, common-timestamp discovery,
+  capability-boundary coverage, JavaScript syntax, and the focused Satellite
+  gate pass. No live API or browser claim is made because the listener was not
+  running during final validation.
+
+User-owned browser acceptance passed 2026-07-31. All six new products rendered
+quickly. GeoColor Black Marble animation passed without flicker or blinking
+between frames, and neither the API terminal nor browser console reported
+errors. Phase 2 is closed.
 
 ## Phase 3 — GMGSI global mosaic
 

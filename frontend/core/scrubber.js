@@ -10,11 +10,13 @@ export function createScrubber(containerEl, options = {}) {
     const onFrame = options.onFrame || (() => {});
     const onPlayingChange = options.onPlayingChange || (() => {});
     const holdAtEnd = options.holdAtEnd === true;
+    const awaitFrameOnPlay = options.awaitFrameOnPlay === true;
 
     let frames = [];
     let currentIndex = 0;
     let playing = false;
     let playTimer = null;
+    let playGeneration = 0;
     let speedIndex = 1;
 
     containerEl.innerHTML = [
@@ -66,34 +68,41 @@ export function createScrubber(containerEl, options = {}) {
         if (!frames.length) return;
         currentIndex = Math.max(0, Math.min(frames.length - 1, index));
         updateUI();
-        onFrame(frames[currentIndex], currentIndex);
+        return onFrame(frames[currentIndex], currentIndex);
     }
 
     function stopPlay() {
         const wasPlaying = playing;
+        playGeneration += 1;
         if (playTimer) { clearTimeout(playTimer); playTimer = null; }
         playing = false;
         if (els.play) els.play.textContent = '▶';
         if (wasPlaying) onPlayingChange(false);
     }
 
-    function tick() {
+    async function tick() {
         if (!playing || !frames.length) return;
+        const generation = playGeneration;
         const next = currentIndex + 1;
+        let delay = interval();
         if (next >= frames.length) {
-            goTo(0);
-            playTimer = setTimeout(tick, holdAtEnd ? interval() : interval() * LOOP_HOLD_MULTIPLIER);
+            const result = goTo(0);
+            if (awaitFrameOnPlay) await Promise.resolve(result);
+            delay = holdAtEnd ? interval() : interval() * LOOP_HOLD_MULTIPLIER;
         } else {
-            goTo(next);
-            const delay = holdAtEnd && next === frames.length - 1
+            const result = goTo(next);
+            if (awaitFrameOnPlay) await Promise.resolve(result);
+            delay = holdAtEnd && next === frames.length - 1
                 ? interval() * LOOP_HOLD_MULTIPLIER
                 : interval();
-            playTimer = setTimeout(tick, delay);
         }
+        if (!playing || generation !== playGeneration) return;
+        playTimer = setTimeout(tick, delay);
     }
 
     function startPlay() {
         if (playing || frames.length < 2) return;
+        playGeneration += 1;
         playing = true;
         if (els.play) els.play.textContent = '⏸';
         onPlayingChange(true);

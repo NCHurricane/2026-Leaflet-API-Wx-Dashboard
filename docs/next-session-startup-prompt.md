@@ -246,9 +246,69 @@ Current checkpoint:
   largest proof, Channel 02, read a 473,301,589-byte native source into a
   bounded 7333 x 7333 raster in 5.538 seconds, rendered its proof tile in
   0.182 seconds, and peaked near 735.5 MiB working set. The focused gate passes
-  68 tests. The full-suite run has 320 passing tests plus 42 passing subtests;
-  only the two known stale Workspace assertions fail. Browser acceptance is
-  still pending, so Phase 1 is not closed.
+  68 tests. The latest full-suite run has 321 passing tests plus 42 passing
+  subtests; the two known stale Workspace assertions and one unrelated
+  concurrent shared-border-default assertion fail.
+- User-owned GK2A Phase 1 default-zoom acceptance passed. The first Channel 02
+  z8 test exposed shared Satellite animator defects: fractional zoom `7.5`
+  reached the integer tile route as a 422, and invisible retained frame layers
+  began historical live renders during the zoom. The correction enforces
+  integer Satellite zooms and detaches inactive pooled layers at zoom start so
+  the selected newest frame renders first. The correction-focused gate passes
+  27 tests and JavaScript syntax checks. A Codex browser regression on a
+  12-frame GOES-19 loop reached z8 with only the selected newest frame
+  attached, 16 integer-z8 tile requests, and zero fractional URLs. The
+  user-owned GK2A Channel 02 z8/playback re-smoke then passed with no recurring
+  fractional-zoom 422s, newest-frame-first generation, and continuous
+  playback. Phase 1 is closed.
+- GK2A Phase 2 composites are implemented and closed. The selector exposes only
+  `GeoColor`, `GeoColorBlkMar`,
+  `TrueColor`, `NaturalColor`, `DayCloudPhase`, and `DaySnowFog`; recipes that
+  require unmapped AMI bands remain hidden. Composite discovery intersects all
+  required bands at one timestamp, and GK2A alone advances to
+  `products-ami2`. The existing Black Marble recipe now loads the tracked PNG
+  instead of a `.tif` filename that never existed. Synthetic AMI proofs for all
+  six recipes, capability/common-time tests, JavaScript syntax, and the focused
+  Satellite gate pass. User-owned browser acceptance passed for all six new
+  products: renders loaded quickly, GeoColor Black Marble animation had no
+  flicker or inter-frame blinking, and the API terminal and browser console
+  remained error-free. Phase 2 is closed.
+- A later Meteosat-12 Channel 13 North Africa smoke exposed a separate shared
+  Satellite playback queue defect. Play advanced every second without waiting
+  for the next frame, while invisible pooled layers could also issue live tile
+  requests. Meteosat then serialized the accumulated work behind the
+  process-wide heavyweight-render slot; Ctrl+C began graceful shutdown while
+  already-started work continued, making its logs appear to resume in a burst.
+  A first correction that waited for an entire frame was rejected after the
+  user correctly noted that it defeated the intended pipelined warm-up. The
+  current bounded correction keeps normal cadence for warmed frames, gates a
+  cold playback advance only until its first visible tile, detaches inactive
+  Leaflet layers, and makes the explicit viewport prefetch generate at most two
+  frames ahead and one behind with two concurrent requests. Prefetch requests
+  disable redundant server-side supertile neighbor fanout. A 2026-07-31
+  first-frame re-smoke then exposed request-thread starvation before Play:
+  the current FCI source completed after about 83 seconds and several PNGs
+  finished, but their `FileResponse` bodies could not acquire another AnyIO
+  worker because synchronous tile routes had filled the pool waiting on queued
+  renders. The current correction reads the completed PNG inside the finishing
+  route, reduces Leaflet's retained tile buffer from four to one, disables
+  redundant neighbor fanout for UI tile requests, and admits live prefetch only
+  after the current layer has produced its first visible tile. The subsequent
+  user smoke confirmed fast current-frame and playback generation, but exposed
+  a blink between fully generated frames on both Meteosat-12 Full Disk and
+  GOES-19 CONUS. History showed that the 5 ms crossfade was intact but its
+  old-layer-underneath contract had been removed when all inactive layers were
+  detached after every swap. The correction restores the historical behavior
+  of retaining completed frame layers at opacity zero, without restoring broad
+  hidden-frame priming. The first re-smoke showed why completion matters: an
+  incomplete Meteosat layer stayed active while a visibility-change catalog
+  refresh discovered and selected a newer frame, filling the shared render
+  queue and blocking later satellite selections. Incomplete layers are now
+  detached, and catalog auto-update waits until the selected frame has a
+  visible tile. Zoom-start cleanup and bounded live prefetch are unchanged.
+  JavaScript syntax and 20 focused Satellite tests pass. The user-owned
+  two-platform render/no-flash playback smoke passed; render speed and
+  crossfade behavior are restored.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -262,11 +322,7 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- Run user-owned GK2A Phase 1 browser acceptance. Confirm the ten-product
-  filter, then sample Channel 02, Channel 07 Fire, both water-vapor products,
-  and Channel 14. While playback is active, zoom to z9 and confirm the
-  scrubber continues while new tiles fill. Pay particular attention to
-  Channel 02 first-frame/history load because each native frame is roughly
-  451 MiB. Stop for explicit approval before Phase 2 composites; GMGSI remains
-  a later separate phase. No authorized Radar render-optimization work remains.
+- GK2A Phases 0-2 are closed. GMGSI remains the separate Phase 3 and requires
+  explicit authorization before implementation. No authorized Radar
+  render-optimization work remains.
 ```

@@ -174,6 +174,9 @@ if (typeof window !== 'undefined' && typeof window.mapViewportLog !== 'function'
 export function createMapCore(element, options = {}) {
     const leaflet = window.L;
     if (!leaflet) throw new Error('Leaflet failed to load.');
+    const tileOverlapCssPx = 1 / Math.max(1, Number(window.devicePixelRatio) || 1);
+    element.classList.add('core-tile-seam-overlap');
+    element.style.setProperty('--core-tile-overlap', `${tileOverlapCssPx}px`);
     const map = leaflet.map(element, { minZoom: 2, maxBounds: [[-85, -360], [85, 360]] });
     let baseLayer = null;
     let statePayloadPromise = null;

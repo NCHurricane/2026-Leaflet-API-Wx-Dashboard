@@ -299,6 +299,46 @@ def test_submit_tile_render_deduplicates_in_flight_target(tmp_path, monkeypatch)
     assert service._IN_FLIGHT_TILE_RENDERS == {}
 
 
+def test_resolve_tile_can_skip_neighbor_fanout_for_explicit_prefetch(
+    tmp_path, monkeypatch
+):
+    submitted = []
+
+    def fake_submit(target, **_kwargs):
+        submitted.append(target)
+        future = Future()
+        future.set_result((target, {"cache_status": "miss"}))
+        return future, True
+
+    monkeypatch.setattr(service, "_submit_tile_render", fake_submit)
+    monkeypatch.setattr(
+        service,
+        "_catalog_frame_for_tile",
+        lambda *_args: {"frame_key": "frame-a"},
+    )
+    monkeypatch.setattr(
+        service,
+        "_live_supertile_coords",
+        lambda *_args: pytest.fail("neighbor planning should be skipped"),
+    )
+
+    _, stats = service.resolve_tile(
+        tmp_path,
+        "goes19",
+        "CONUS",
+        "Channel13",
+        "frame-a",
+        7,
+        1,
+        2,
+        render_neighbors=False,
+    )
+
+    assert len(submitted) == 1
+    assert stats["supertile_radius"] == 0
+    assert stats["supertile_submitted"] == 0
+
+
 def test_renderer_batches_fci_channels_from_shared_chunk_directory(tmp_path, monkeypatch):
     source_files = {
         channel: tmp_path / f"FCI-1C-RRAD-FDHSI-CHK-BODY-{channel}.nc"

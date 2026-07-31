@@ -8,12 +8,14 @@ import time
 from unittest.mock import Mock
 
 import requests
+from starlette.responses import Response
 
 from config.satellite_v2_config import SATELLITE_V2_RAPID_WORKER_ZOOMS
 from radar import radar_chunks_utils
 from satellite_v2 import providers, service
 from satellite_v2.models import SourceFrame
 from services import radar_service
+from routes import satellite_v2 as satellite_routes
 
 
 class _PrefixPaginator:
@@ -315,9 +317,45 @@ def test_satellite_page_surfaces_cached_provider_capability_state():
     assert "catalog.capability_status !== 'available'" in script
     assert "catalog?.capability_message" in script
     assert "'goes19:Meso1': 'goes-meso-current'" in script
-    assert "counts[String(effectiveTileZoom(frame))]" in animator
-    assert "index === center || frameHasCachedTiles(frames[index])" in animator
+    assert "const visibleLayers = new Set([currentLayer, previousLayer]" in animator
+    assert "if (shouldRetainLayers()" in animator
+    assert "&& layerReadyForSwap(layer, map.getZoom()))" in animator
+    assert "hotFrameIndexes" not in animator
     assert "client_id" in (
         root / "frontend/pages/satellite/satellite-engine.js"
     ).read_text("utf-8")
-    assert "satellite-page.js?v=20260729b" in page
+    assert "satellite-page.js?v=20260731d" in page
+
+
+def test_satellite_png_response_does_not_require_deferred_file_thread(
+    tmp_path, monkeypatch
+):
+    tile = tmp_path / "tile.png"
+    content = service._PNG_SIGNATURE + b"finished-tile"
+    tile.write_bytes(content)
+    monkeypatch.setattr(
+        satellite_routes.satellite_v2_service,
+        "resolve_tile",
+        lambda **_kwargs: (
+            tile,
+            {
+                "cache_status": "hit",
+                "sat_id": "goes19",
+                "sector": "CONUS",
+                "channel": "Channel13",
+            },
+        ),
+    )
+
+    response = satellite_routes.get_satellite_v2_tile(
+        z=7,
+        x=1,
+        y=2,
+        sat_id="goes19",
+        sector="CONUS",
+        channel="Channel13",
+        frame_key="frame-a",
+    )
+
+    assert isinstance(response, Response)
+    assert response.body == content

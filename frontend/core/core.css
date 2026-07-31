@@ -282,6 +282,15 @@ button:hover { border-color: var(--core-accent); }
     min-height: 0;
     overflow: hidden;
 }
+/* Cover Chrome compositor hairlines when 256px Leaflet raster tiles land on
+   fractional device pixels. Map Core supplies one physical pixel of overlap;
+   the 1px fallback also covers cached older modules. Geographic tile positions
+   and hit testing remain unchanged. */
+.leaflet-container img.leaflet-tile {
+    width: calc(256px + var(--core-tile-overlap, 1px)) !important;
+    height: calc(256px + var(--core-tile-overlap, 1px)) !important;
+    mix-blend-mode: normal;
+}
 .core-map-legend {
     position: absolute;
     z-index: 640;

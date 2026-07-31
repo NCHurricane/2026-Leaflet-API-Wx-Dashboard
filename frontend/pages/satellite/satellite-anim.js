@@ -1,5 +1,5 @@
-// Satellite tile-layer animator: per-frame Leaflet tile layers with a pooled
-// hot-frame window, ready-gated swaps, progressive redraw retries, tile-error
+// Satellite tile-layer animator: per-frame Leaflet tile layers with pooled
+// reuse, ready-gated swaps, progressive redraw retries, tile-error
 // backoff, and viewport tile prefetch. Ported from the shell's satellite
 // animation machinery; this page is always in "animate" mode, so the shell's
 // scrub-mode conditionals collapse to the enabled() gate.
@@ -7,14 +7,13 @@
 const LAYER_PANE = 'satellite-overlays';
 const CROSSFADE_MS = 5;
 const TILE_READY_TIMEOUT_MS = 15000;
-const HOT_FRAME_RADIUS = 3;
 const PROGRESSIVE_REDRAW_DELAYS_MS = [2500];
 const RETAIN_LAYER_LIMIT = 72;
-const PREFETCH_AHEAD_FRAMES = 8;
-const PREFETCH_BEHIND_FRAMES = 2;
+const PREFETCH_AHEAD_FRAMES = 2;
+const PREFETCH_BEHIND_FRAMES = 1;
 const PREFETCH_MAX_CONCURRENT = 2;
 const PREFETCH_MAX_TILES_PER_FRAME = 32;
-const PREFETCH_MAX_QUEUE_TILES = 180;
+const PREFETCH_MAX_QUEUE_TILES = 96;
 const PREFETCH_TILE_BUFFER = 1;
 const PREFETCH_DEBOUNCE_MS = 220;
 const PREFETCH_RETRY_AFTER_MS = 20000;
@@ -69,12 +68,14 @@ export function createSatelliteAnimator({
     function tileTemplate(frameKey, options = {}) {
         const { satId, sector, channel } = getSelection();
         const renderLive = options?.renderLive !== false;
+        const renderNeighbors = options?.renderNeighbors === true;
         const params = new URLSearchParams({
             sat_id: satId,
             sector,
             channel,
             frame_key: String(frameKey || ''),
             render_live: renderLive ? '1' : '0',
+            render_neighbors: renderNeighbors ? '1' : '0',
             rv: String(getCatalog()?.render_version || 'products'),
             t: String(tileRefreshToken || 0),
         });
@@ -94,17 +95,19 @@ export function createSatelliteAnimator({
 
     function frameMaxNativeZoom(frame) {
         const configuredZoom = Number(frame?.max_native_zoom ?? getCatalog()?.max_native_zoom);
-        if (Number.isFinite(configuredZoom)) return configuredZoom;
+        if (Number.isFinite(configuredZoom)) return Math.max(0, Math.round(configuredZoom));
         const zooms = Array.isArray(frame?.available_zooms)
             ? frame.available_zooms.map(Number).filter(Number.isFinite)
             : [];
-        if (zooms.length) return Math.max(...zooms);
+        if (zooms.length) return Math.max(0, Math.round(Math.max(...zooms)));
         const counts = frame?.tile_counts || {};
         const countZooms = Object.entries(counts)
             .filter(([, count]) => Number(count) > 0)
             .map(([zoom]) => Number(zoom))
             .filter(Number.isFinite);
-        return countZooms.length ? Math.max(...countZooms) : null;
+        return countZooms.length
+            ? Math.max(0, Math.round(Math.max(...countZooms)))
+            : null;
     }
 
     function minNativeZoomForSector() {
@@ -165,6 +168,11 @@ export function createSatelliteAnimator({
         if (!enabled || activeLayer !== layer) return;
         if (!layerHasAnyLoadedTileForZoom(layer, map.getZoom())) return;
         onFrameVisible?.(frameKey);
+        const prefetchKey = `${frameKey}|${Math.round(map.getZoom())}`;
+        if (layer._satPrefetchVisibleKey !== prefetchKey) {
+            layer._satPrefetchVisibleKey = prefetchKey;
+            schedulePrefetch();
+        }
     }
 
     function setLayerZIndex(layer, active = false) {
@@ -191,7 +199,7 @@ export function createSatelliteAnimator({
                 opacity,
                 updateWhenIdle: false,
                 updateWhenZooming: false,
-                keepBuffer: 4,
+                keepBuffer: 1,
                 crossOrigin: true,
             });
             layer.on('tileerror', () => {
@@ -219,60 +227,24 @@ export function createSatelliteAnimator({
         return frames.length > 0 && frames.length <= RETAIN_LAYER_LIMIT;
     }
 
-    function frameHasCachedTiles(frame) {
-        const counts = frame?.tile_counts || {};
-        return Number(counts[String(effectiveTileZoom(frame))] || 0) > 0;
-    }
-
-    function hotFrameIndexes(activeIndex = frameIndex) {
-        const count = frames.length;
-        const indexes = new Set();
-        if (!count) return indexes;
-        const center = Math.max(0, Math.min(count - 1, Number(activeIndex) || 0));
-        const radius = Math.max(0, Math.min(HOT_FRAME_RADIUS, count - 1));
-        if (count <= radius * 2 + 1) {
-            for (let idx = 0; idx < count; idx += 1) {
-                if (idx === center || frameHasCachedTiles(frames[idx])) {
-                    indexes.add(idx);
-                }
-            }
-            return indexes;
-        }
-        for (let offset = -radius; offset <= radius; offset += 1) {
-            const index = (center + offset + count) % count;
-            if (index === center || frameHasCachedTiles(frames[index])) {
-                indexes.add(index);
-            }
-        }
-        return indexes;
-    }
-
-    function refreshHotFrameWindow(activeIndex = frameIndex, keepLayers = new Set()) {
-        if (!frames.length || !enabled) return;
-        const active = Math.max(0, Math.min(frames.length - 1, Number(activeIndex) || 0));
-        const hotLayers = new Set(keepLayers);
-        hotFrameIndexes(active).forEach((idx) => {
-            const frameKey = frames[idx]?.frame_key || '';
-            if (!frameKey) return;
-            const layer = getOrCreateLayer(frameKey);
-            if (!map.hasLayer(layer)) layer.addTo(map);
-            layer.setOpacity(idx === active ? opacity : 0);
-            setLayerZIndex(layer, idx === active);
-            hotLayers.add(layer);
-        });
+    function hideInactiveLayers(currentLayer, previousLayer = null) {
+        const visibleLayers = new Set([currentLayer, previousLayer].filter(Boolean));
         layerPool.forEach((layer) => {
-            if (!layer || hotLayers.has(layer)) return;
-            if (shouldRetainLayers() && map.hasLayer(layer)) {
+            if (!layer || visibleLayers.has(layer)) return;
+            // Preserve the original blink-free animation contract for a
+            // completed frame: retain it underneath at opacity 0 so a later
+            // crossfade never has to rebuild its tile DOM. Incomplete layers
+            // are detached so abandoned renders cannot keep filling the queue.
+            // Zoom startup still detaches every inactive layer.
+            if (shouldRetainLayers()
+                && map.hasLayer(layer)
+                && layerReadyForSwap(layer, map.getZoom())) {
                 layer.setOpacity(0);
                 setLayerZIndex(layer, false);
                 return;
             }
             if (map.hasLayer(layer)) map.removeLayer(layer);
         });
-    }
-
-    function hideInactiveLayers(currentLayer, previousLayer = null) {
-        refreshHotFrameWindow(frameIndex, new Set([currentLayer, previousLayer].filter(Boolean)));
     }
 
     // ── Progressive redraw retries ──────────────────────────────────────────
@@ -381,9 +353,36 @@ export function createSatelliteAnimator({
         });
     }
 
+    async function waitForLayerVisible(layer, zoomLevel, seq, timeoutMs = TILE_READY_TIMEOUT_MS) {
+        if (!layer || layerHasAnyLoadedTileForZoom(layer, zoomLevel)) return true;
+        return new Promise((resolve) => {
+            let settled = false;
+            let timeoutId = null;
+            const finish = (ready) => {
+                if (settled) return;
+                settled = true;
+                layer.off('tileload', onTileLoad);
+                clearTimeout(timeoutId);
+                resolve(ready);
+            };
+            const onTileLoad = () => {
+                if (layerHasAnyLoadedTileForZoom(layer, zoomLevel)) finish(true);
+            };
+            timeoutId = setTimeout(() => {
+                finish(layerHasAnyLoadedTileForZoom(layer, zoomLevel));
+            }, timeoutMs);
+            if (!canApplyFrame(seq)) {
+                finish(false);
+                return;
+            }
+            layer.on('tileload', onTileLoad);
+        });
+    }
+
     async function showFrame(index, options = {}) {
         if (!frames.length || !enabled) return false;
         const waitForTiles = options?.waitForTiles === true;
+        const waitForVisibleTile = options?.waitForVisibleTile === true;
         const forceReloadSameLayer = options?.forceReloadSameLayer === true;
         const requestedTileTimeoutMs = Number(options?.tileTimeoutMs);
         const tileTimeoutMs = Number.isFinite(requestedTileTimeoutMs)
@@ -403,7 +402,6 @@ export function createSatelliteAnimator({
             activeLayer = nextLayer;
             frameIndex = clamped;
             scheduleProgressiveRedraws(nextLayer, frameKey);
-            schedulePrefetch();
             reportFrameVisible(nextLayer, frameKey);
         };
 
@@ -424,9 +422,12 @@ export function createSatelliteAnimator({
         setLayerZIndex(nextLayer, true);
         hideInactiveLayers(nextLayer, prevLayer);
 
-        const ready = waitForTiles
-            ? await waitForLayerReady(nextLayer, targetZoom, seq, tileTimeoutMs)
-            : true;
+        let ready = true;
+        if (waitForTiles) {
+            ready = await waitForLayerReady(nextLayer, targetZoom, seq, tileTimeoutMs);
+        } else if (waitForVisibleTile) {
+            ready = await waitForLayerVisible(nextLayer, targetZoom, seq, tileTimeoutMs);
+        }
         if (!ready || swapToken !== pendingSwapToken || !canApplyFrame(seq)) {
             if (!prevLayer && ready === false && layerHasAnyLoadedTileForZoom(nextLayer, targetZoom)
                 && swapToken === pendingSwapToken && canApplyFrame(seq)) {
@@ -540,17 +541,18 @@ export function createSatelliteAnimator({
             const zoomLevel = effectiveTileZoom(frame);
             for (const coord of viewportTileCoords(zoomLevel)) {
                 if (prefetchQueue.length >= PREFETCH_MAX_QUEUE_TILES) return;
-                // Prefetch skips live rendering: cached tiles only, so playback
-                // warm-up never triggers heavy on-demand renders.
-                const url = tileUrlForCoords(frameKey, zoomLevel, coord.tileX, coord.tileY, { renderLive: false });
+                // Warm only a bounded frame window. Each viewport coordinate
+                // is explicit, so server-side neighbor fanout is redundant.
+                const url = tileUrlForCoords(
+                    frameKey,
+                    zoomLevel,
+                    coord.tileX,
+                    coord.tileY,
+                    { renderLive: true, renderNeighbors: false },
+                );
                 const lastSeenMs = Number(prefetchSeenUrls.get(url));
                 if (queuedUrls.has(url) || (Number.isFinite(lastSeenMs) && nowMs - lastSeenMs < PREFETCH_RETRY_AFTER_MS)) continue;
                 queuedUrls.add(url);
-                prefetchSeenUrls.set(url, nowMs);
-                if (prefetchSeenUrls.size > PREFETCH_SEEN_LIMIT) {
-                    const oldestUrl = prefetchSeenUrls.keys().next().value;
-                    if (oldestUrl) prefetchSeenUrls.delete(oldestUrl);
-                }
                 prefetchQueue.push({ url });
             }
         }
@@ -562,6 +564,11 @@ export function createSatelliteAnimator({
         const { signal } = prefetchController;
         while (prefetchActive < PREFETCH_MAX_CONCURRENT && prefetchQueue.length) {
             const item = prefetchQueue.shift();
+            prefetchSeenUrls.set(item.url, Date.now());
+            if (prefetchSeenUrls.size > PREFETCH_SEEN_LIMIT) {
+                const oldestUrl = prefetchSeenUrls.keys().next().value;
+                if (oldestUrl) prefetchSeenUrls.delete(oldestUrl);
+            }
             prefetchActive += 1;
             fetch(item.url, { cache: 'force-cache', signal })
                 .then((response) => (response.ok ? response.blob() : null))
@@ -579,6 +586,9 @@ export function createSatelliteAnimator({
             cancelPrefetch();
             return;
         }
+        // Current-frame delivery always wins. Neighboring live work begins
+        // only after the active layer has produced a visible tile.
+        if (!activeLayer || !layerHasAnyLoadedTileForZoom(activeLayer, map.getZoom())) return;
         const contextKey = currentPrefetchContextKey();
         if (!contextKey) return;
         if (contextKey !== prefetchContextKey) {
@@ -586,6 +596,10 @@ export function createSatelliteAnimator({
             prefetchContextKey = contextKey;
         }
         if (prefetchTimer) clearTimeout(prefetchTimer);
+        // Playback can move faster than a cold frame renders. Replace queued
+        // work with the newest bounded window; at most two active fetches from
+        // the prior window are allowed to finish.
+        prefetchQueue = [];
         const seq = prefetchSeq;
         prefetchTimer = setTimeout(() => {
             prefetchTimer = null;
@@ -597,6 +611,19 @@ export function createSatelliteAnimator({
     // ── Lifecycle ───────────────────────────────────────────────────────────
     function cancelPendingSwap() {
         pendingSwapToken += 1;
+    }
+
+    function prepareForZoom() {
+        cancelPendingSwap();
+        cancelProgressiveRedraws();
+        cancelPrefetch();
+        // Retained invisible layers are useful at one zoom, but leaving them
+        // attached makes Leaflet request live tiles for historical frames
+        // during every zoom. Keep only the selected frame attached so it is
+        // always generated first at the new integer zoom.
+        layerPool.forEach((layer) => {
+            if (layer !== activeLayer && map.hasLayer(layer)) map.removeLayer(layer);
+        });
     }
 
     function invalidate() {
@@ -627,9 +654,9 @@ export function createSatelliteAnimator({
         },
         getFrameIndex: () => frameIndex,
         showFrame,
-        primeLayers: (activeIndex) => refreshHotFrameWindow(activeIndex),
         schedulePrefetch,
         cancelPendingSwap,
+        prepareForZoom,
         invalidate,
         clearPool,
         bumpTileRefreshToken() {

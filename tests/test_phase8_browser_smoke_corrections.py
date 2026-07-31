@@ -64,10 +64,59 @@ def test_satellite_ready_requires_a_visible_tile_event() -> None:
     )
 
     assert "updateState: false" in page
-    assert "onFrameVisible()" in page
+    assert "onFrameVisible(frameKey)" in page
     assert "layer.on('tileload', () => reportFrameVisible(layer, frameKey))" in animator
     assert "activeLayer !== layer" in animator
     assert "displayed ? 'Ready'" not in page
+
+
+def test_satellite_zoom_keeps_integer_tiles_and_newest_frame_priority() -> None:
+    page = (ROOT / "frontend/pages/satellite/satellite-page.js").read_text(
+        encoding="utf-8"
+    )
+    animator = (ROOT / "frontend/pages/satellite/satellite-anim.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "mapCore.map.options.zoomSnap = 1;" in page
+    assert "mapCore.map.options.zoomDelta = 1;" in page
+    assert "animator.prepareForZoom();" in page
+    assert "Math.max(0, Math.round(configuredZoom))" in animator
+    assert "function prepareForZoom()" in animator
+    assert (
+        "if (layer !== activeLayer && map.hasLayer(layer)) map.removeLayer(layer);"
+        in animator
+    )
+
+
+def test_satellite_playback_retains_mounted_layers_with_bounded_live_prefetch() -> None:
+    page = (ROOT / "frontend/pages/satellite/satellite-page.js").read_text(
+        encoding="utf-8"
+    )
+    animator = (ROOT / "frontend/pages/satellite/satellite-anim.js").read_text(
+        encoding="utf-8"
+    )
+    assert "awaitFrameOnPlay: true" in page
+    assert "waitForVisibleTile: scrubber.isPlaying()" in page
+    assert "waitForLayerVisible" in animator
+    assert "layer.on('tileload', onTileLoad);" in animator
+    assert "waitForTiles: scrubber.isPlaying()" not in page
+    assert "const PREFETCH_AHEAD_FRAMES = 2;" in animator
+    assert "const PREFETCH_BEHIND_FRAMES = 1;" in animator
+    assert "{ renderLive: true, renderNeighbors: false }" in animator
+    assert "prefetchQueue = [];" in animator
+    assert "const renderNeighbors = options?.renderNeighbors === true;" in animator
+    assert "keepBuffer: 1" in animator
+    assert "Current-frame delivery always wins" in animator
+    assert "visibleFrameKey = String(frameKey || '')" in page
+    assert "visibleFrameKey !== selectedFrameKey" in page
+    assert "if (shouldRetainLayers()" in animator
+    assert "&& map.hasLayer(layer)" in animator
+    assert "&& layerReadyForSwap(layer, map.getZoom()))" in animator
+    assert "layer.setOpacity(0);" in animator
+    assert "setLayerZIndex(layer, false);" in animator
+    assert "if (map.hasLayer(layer)) map.removeLayer(layer);" in animator
+    assert "hotFrameIndexes" not in animator
 
 
 def test_fresh_satellite_catalog_is_chronological_with_newest_last(
@@ -146,6 +195,6 @@ def test_all_pages_receive_the_shared_timestamp_state_assets() -> None:
         page_dir = ROOT / "frontend/pages" / page_name
         markup = (page_dir / f"{page_name}.html").read_text(encoding="utf-8")
         script = (page_dir / entry_name).read_text(encoding="utf-8")
-        assert "core.css?v=20260725e" in markup
+        assert "core.css?v=20260730b" in markup
         assert f"/frontend/pages/{page_name}/{entry_name}?v=" in markup
         assert "status.js?v=20260725e" in script

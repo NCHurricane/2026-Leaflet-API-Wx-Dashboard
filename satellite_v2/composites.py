@@ -437,7 +437,7 @@ def _geocolor(
 @lru_cache(maxsize=1)
 def _load_black_marble_image() -> np.ndarray:
     path = Path(__file__).resolve().parent.parent / \
-        "img" / "BlackMarble_2016_3km_geo.tif"
+        "img" / "BlackMarble_2016_3km_geo.png"
     if not path.exists():
         raise FileNotFoundError(f"Black Marble background not found: {path}")
     with Image.open(path) as image:

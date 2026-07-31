@@ -2,7 +2,7 @@ import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
 import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
-import { createScrubber } from '../../core/scrubber.js';
+import { createScrubber } from '../../core/scrubber.js?v=20260730b';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
@@ -13,7 +13,7 @@ import {
     formatFrameLabel,
     frameIndexForReload,
 } from './satellite-engine.js?v=20260729a';
-import { createSatelliteAnimator } from './satellite-anim.js?v=20260725e';
+import { createSatelliteAnimator } from './satellite-anim.js?v=20260731c';
 
 const byId = (id) => document.getElementById(id);
 const SELECT_CHAIN_MESSAGE = 'Pick a satellite, sector, and product to load imagery.';
@@ -22,6 +22,7 @@ const FRAME_REQUEST_MAX = 360;
 const LOOKBACK_RELOAD_DEBOUNCE_MS = 250;
 const AUTO_UPDATE_INTERVAL_MS = 5 * 60 * 1000; // matches the shell's satellite cadence
 const INITIAL_TILE_READY_TIMEOUT_MS = 45000;
+const PLAYBACK_FIRST_TILE_TIMEOUT_MS = 120000;
 const SATELLITE_CLIENT_ID = globalThis.crypto?.randomUUID?.()
     || `satellite-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -49,6 +50,8 @@ const PLATFORM_CHANNELS = {
         'Channel07', 'Channel07Fire',
         'Channel08RAMSDIS', 'Channel09RAMSDIS',
         'Channel13', 'Channel14',
+        'GeoColor', 'GeoColorBlkMar', 'TrueColor', 'NaturalColor',
+        'DayCloudPhase', 'DaySnowFog',
     ]),
     himawari9: null,
     meteosat12: new Set(['Channel01', 'Channel06', ...METEOSAT_CHANNELS]),
@@ -295,6 +298,10 @@ async function initialize() {
         basemap: 'Dark',
         onResetView: () => resetSatelliteState(),
     });
+    // Satellite tile routes use integer XYZ zooms. Keep wheel/pinch behavior
+    // snapped even if a browser gesture reports an intermediate half zoom.
+    mapCore.map.options.zoomSnap = 1;
+    mapCore.map.options.zoomDelta = 1;
     const legend = createLegendHost(byId('satellite-legend'), { align: 'left' });
     const status = createStatusReporter({
         globalTimestamp: byId('global-timestamp'),
@@ -307,12 +314,14 @@ async function initialize() {
     const engine = createSatelliteEngine({ api, clientId: SATELLITE_CLIENT_ID });
 
     let catalog = null;
+    let visibleFrameKey = '';
     const animator = createSatelliteAnimator({
         mapCore,
         apiUrl: api.apiUrl,
         getSelection: activeSelection,
         getCatalog: () => catalog,
-        onFrameVisible() {
+        onFrameVisible(frameKey) {
+            visibleFrameKey = String(frameKey || '');
             status.setDataState('Ready', 'fresh');
         },
     });
@@ -326,8 +335,20 @@ async function initialize() {
     const scrubberBar = byId('satellite-scrubber-bar');
     const scrubber = createScrubber(byId('satellite-bottom-scrubber'), {
         holdAtEnd: true,
-        onFrame(frame, index) {
-            void showFrame(index);
+        awaitFrameOnPlay: true,
+        async onFrame(frame, index) {
+            const shown = await showFrame(index, {
+                waitForVisibleTile: scrubber.isPlaying(),
+                tileTimeoutMs: PLAYBACK_FIRST_TILE_TIMEOUT_MS,
+            });
+            if (!shown && scrubber.isPlaying()) {
+                scrubber.pause();
+                status.setMessage(
+                    'Playback paused because the next frame produced no visible tiles.',
+                    'error',
+                );
+            }
+            return shown;
         },
     });
 
@@ -385,6 +406,7 @@ async function initialize() {
         }
         frames = [];
         catalog = null;
+        visibleFrameKey = '';
         animator.clearPool();
         animator.setFrames([]);
         scrubber.setFrames([], { silent: true });
@@ -417,6 +439,7 @@ async function initialize() {
         if (loadController) loadController.abort();
         loadController = new AbortController();
         const { signal } = loadController;
+        visibleFrameKey = '';
         animator.invalidate();
         void updateLegend();
         const requestWindow = currentFrameRequestWindow();
@@ -509,6 +532,11 @@ async function initialize() {
         if (document.hidden || autoUpdateInFlight || !frames.length) return;
         const { satId, sector, channel } = activeSelection();
         if (!satId || !sector || !channel) return;
+        const selectedFrameKey = String(frames[scrubber.getIndex()]?.frame_key || '');
+        // Do not replace a cold initial frame before it reaches the map. A
+        // visibility-change refresh used to abandon that render and enqueue a
+        // newly discovered frame behind it, starving every later selection.
+        if (!selectedFrameKey || visibleFrameKey !== selectedFrameKey) return;
         autoUpdateInFlight = true;
         const token = loadToken;
         const previousKeys = new Set(frames.map((frame) => String(frame?.frame_key || '')).filter(Boolean));
@@ -672,7 +700,7 @@ async function initialize() {
         if (!frames.length) return;
         resumePlayAfterZoom = scrubber.isPlaying();
         scrubber.pause();
-        animator.cancelPendingSwap();
+        animator.prepareForZoom();
     });
     mapCore.map.on('zoomend', () => {
         if (!frames.length) return;

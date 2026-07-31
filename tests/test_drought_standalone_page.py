@@ -82,6 +82,27 @@ def test_country_borders_repeat_across_wrapped_worlds():
     assert "leaflet.featureGroup(countryLayers)" in map_core
 
 
+def test_shared_map_tiles_overlap_and_cache_bust():
+    map_core = (
+        Path(BASE_DIR) / "frontend" / "core" / "map-core.js"
+    ).read_text(encoding="utf-8")
+    core_css = (
+        Path(BASE_DIR) / "frontend" / "core" / "core.css"
+    ).read_text(encoding="utf-8")
+
+    assert "1 / Math.max(1, Number(window.devicePixelRatio) || 1)" in map_core
+    assert "core-tile-seam-overlap" in map_core
+    assert "--core-tile-overlap" in map_core
+    assert ".leaflet-container img.leaflet-tile" in core_css
+    assert "calc(256px + var(--core-tile-overlap, 1px))" in core_css
+    assert "mix-blend-mode: normal" in core_css
+
+    for page_path in (Path(BASE_DIR) / "frontend" / "pages").glob("*/*.html"):
+        page = page_path.read_text(encoding="utf-8")
+        if "/frontend/core/core.css" in page:
+            assert "/frontend/core/core.css?v=20260730b" in page
+
+
 def test_drought_sidebar_uses_accessible_mounted_tab_panels():
     page = (
         Path(BASE_DIR) / "frontend" / "pages" / "drought" / "drought.html"

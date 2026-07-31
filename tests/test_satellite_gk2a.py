@@ -8,10 +8,24 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from satellite_v2 import ami_nc, provider_gk2a, providers, renderer
+from config.satellite_v2_config import (
+    ami_supported_products,
+    satellite_v2_render_version_for_satellite,
+)
+from satellite_v2 import ami_nc, composites, provider_gk2a, providers, renderer
 
 
-def test_gk2a_exposes_only_proven_longwave_ir_products():
+GK2A_COMPOSITES = (
+    "GeoColor",
+    "GeoColorBlkMar",
+    "TrueColor",
+    "NaturalColor",
+    "DayCloudPhase",
+    "DaySnowFog",
+)
+
+
+def test_gk2a_exposes_only_proven_products():
     root = Path(__file__).resolve().parents[1]
     page = (root / "frontend/pages/satellite/satellite.html").read_text("utf-8")
     script = (root / "frontend/pages/satellite/satellite-page.js").read_text("utf-8")
@@ -26,8 +40,87 @@ def test_gk2a_exposes_only_proven_longwave_ir_products():
     assert "'Channel07', 'Channel07Fire'" in script
     assert "'Channel08RAMSDIS', 'Channel09RAMSDIS'" in script
     assert "'Channel13', 'Channel14'" in script
+    assert "'GeoColor', 'GeoColorBlkMar', 'TrueColor', 'NaturalColor'" in script
+    assert "'DayCloudPhase', 'DaySnowFog'" in script
     assert "'gk2a:FullDisk': 'asia-pacific'" in script
     assert "gk2a: 'KMA via NOAA'" in engine
+
+
+def test_gk2a_ami_capability_filter_includes_only_valid_composites():
+    supported = set(ami_supported_products())
+
+    assert supported == {
+        "Channel01",
+        "Channel02",
+        "Channel03",
+        "Channel05",
+        "Channel07",
+        "Channel07Fire",
+        "Channel08RAMSDIS",
+        "Channel09RAMSDIS",
+        "Channel13",
+        "Channel14",
+        *GK2A_COMPOSITES,
+    }
+    assert satellite_v2_render_version_for_satellite("gk2a") == "products-ami2"
+    assert satellite_v2_render_version_for_satellite("goes19") == "products-v6"
+
+
+@pytest.mark.parametrize("product_key", GK2A_COMPOSITES)
+def test_gk2a_valid_composite_recipe_renders_finite_rgb(product_key):
+    y, x = np.mgrid[0:8, 0:8].astype(np.float32)
+    channels = {
+        "Channel01": 0.08 + x * 0.025,
+        "Channel02": 0.12 + y * 0.035,
+        "Channel03": 0.18 + (x + y) * 0.018,
+        "Channel05": 0.10 + x * 0.045,
+        "Channel07": 276.0 + x * 0.8,
+        "Channel13": 220.0 + y * 7.0,
+    }
+    lon_grid = np.linspace(100.0, 155.0, 64, dtype=np.float32).reshape(8, 8)
+    lat_grid = np.linspace(-25.0, 35.0, 64, dtype=np.float32).reshape(8, 8)
+
+    rgb = composites.render_composite_rgb(
+        product_key,
+        channels,
+        lon_grid=lon_grid,
+        lat_grid=lat_grid,
+        instrument="AMI",
+        observation_time=datetime(2026, 7, 29, 6, tzinfo=timezone.utc),
+        satellite_longitude=128.2,
+        satellite_height_km=35_785.863,
+    )
+
+    assert rgb.shape == (8, 8, 3)
+    assert np.isfinite(rgb).all()
+    assert 0.0 <= float(rgb.min()) <= float(rgb.max()) <= 1.0
+    assert float(np.ptp(rgb)) > 0.05
+
+
+def test_gk2a_composite_catalog_requires_common_channel_timestamp(monkeypatch):
+    prefix = "AMI/L1B/FD/202607/29/18/"
+    keys = [
+        (prefix + f"gk2a_ami_le1b_{channel}_fd020ge_202607291800.nc", 100)
+        for channel in ("vi004", "vi006", "vi008", "sw038", "ir105")
+    ]
+    keys.append(
+        (prefix + "gk2a_ami_le1b_vi006_fd005ge_202607291810.nc", 100)
+    )
+    monkeypatch.setattr(provider_gk2a, "_iter_hour_prefixes", lambda _hours: [prefix])
+    monkeypatch.setattr(provider_gk2a, "_list_prefix_objects", lambda _prefix: keys)
+
+    frames = provider_gk2a.list_recent_frames(
+        "gk2a", "FULLDISK", "GeoColor", hours=1, max_frames=12
+    )
+
+    assert [frame.frame_key for frame in frames] == ["20260729T180000Z"]
+    assert set(frames[0].source_keys) == {
+        "Channel01",
+        "Channel02",
+        "Channel03",
+        "Channel07",
+        "Channel13",
+    }
 
 
 def test_gk2a_provider_lists_only_requested_channel(monkeypatch):

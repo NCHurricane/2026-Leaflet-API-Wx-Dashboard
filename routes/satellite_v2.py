@@ -1,7 +1,7 @@
 """Satellite v2 API routes."""
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 
 from app_core.paths import CACHE_ROOT
 from config.satellite_v2_config import (
@@ -114,6 +114,7 @@ def get_satellite_v2_tile(
     channel: str,
     frame_key: str,
     render_live: bool = True,
+    render_neighbors: bool = True,
 ):
     try:
         tile_file, tile_stats = satellite_v2_service.resolve_tile(
@@ -126,6 +127,7 @@ def get_satellite_v2_tile(
             x=x,
             y=y,
             allow_render=render_live,
+            render_neighbors=render_neighbors,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -170,7 +172,16 @@ def get_satellite_v2_tile(
             status_code=404, detail="Satellite tile could not be generated."
         )
 
-    response = FileResponse(tile_file, media_type="image/png")
+    try:
+        tile_content = tile_file.read_bytes()
+    except OSError as exc:
+        raise HTTPException(
+            status_code=404, detail="Satellite tile could not be read."
+        ) from exc
+    # FileResponse performs another threadpool read after this synchronous
+    # route returns. A cold tile burst can occupy every request worker with
+    # render waits, starving an already-rendered PNG before it reaches Leaflet.
+    response = Response(content=tile_content, media_type="image/png")
     response.headers["X-Satellite-V2-Cache"] = cache_status.upper()
     response.headers["X-Satellite-V2-Provider"] = str(
         tile_stats.get("provider") or "aws"

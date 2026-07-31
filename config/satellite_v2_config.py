@@ -830,7 +830,7 @@ SATELLITE_V2_CACHE_NAMESPACE = "satellite"
 # These versions retain the filled-image opacity invalidation and advance each
 # platform past Channel02 tiles rendered with the former 0.90 white point.
 SATELLITE_V2_RENDER_VERSION = "products-v6"
-SATELLITE_V2_RENDER_VERSION_GK2A = "products-ami1"
+SATELLITE_V2_RENDER_VERSION_GK2A = "products-ami2"
 SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi4"
 # fci4 also retains the Meteosat-12 east-west mirror invalidation from fci1.
 SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci4"
