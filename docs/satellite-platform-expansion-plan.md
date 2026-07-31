@@ -127,3 +127,12 @@ pending.
   default and two stale Workspace assertions; one coordinator timing failure
   from the full run passed immediately in isolation. No API/browser claim is
   made.
+
+The first user-owned page acceptance on 2026-07-31 confirmed that all four
+current frames render, but exposed a catalog-budget defect: the hourly Global
+path capped a one-hour request at one frame, so the scrubber had no animation
+loop. The correction includes the frame at the start of the lookback interval
+(`hours + 1`), giving the default one-hour selection two frames while retaining
+the same bounded hourly cadence. `satellite-page.js?v=20260731f` carries the
+cachebuster. A live corrected-window probe returned chronological 19Z and 20Z
+frames for all four products. Animation re-smoke remains pending.

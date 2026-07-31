@@ -144,7 +144,7 @@ function setLookbackHours(hours) {
 }
 
 // Frame budget scales with the sector's scan cadence (Meso ~1 min,
-// CONUS ~5 min, FullDisk ~10 min).
+// CONUS ~5 min, FullDisk ~10 min, GMGSI Global ~60 min).
 function maxFramesForRequest(hours) {
     const sector = activeSector().toUpperCase();
     const safeHours = Math.max(1, Math.min(LOOKBACK_HOURS_MAX, Math.round(Number(hours) || 1)));
@@ -155,7 +155,9 @@ function maxFramesForRequest(hours) {
         return Math.min(FRAME_REQUEST_MAX, safeHours * 6);
     }
     if (sector === 'GLOBAL') {
-        return Math.min(FRAME_REQUEST_MAX, safeHours);
+        // Include the frame at the start of the lookback interval so the
+        // default one-hour window has a two-frame animation.
+        return Math.min(FRAME_REQUEST_MAX, safeHours + 1);
     }
     return Math.min(FRAME_REQUEST_MAX, safeHours * 12);
 }

@@ -322,6 +322,13 @@ Current checkpoint:
   tests plus 42 passing subtests; its three stable unrelated failures remain,
   and a transient coordinator timing failure passed immediately in isolation.
   No API/browser claim is made.
+- The first user-owned GMGSI page acceptance rendered the current frame for all
+  four products but could not animate because the one-hour Global request was
+  capped at one frame. The correction requests `hours + 1` hourly frames, so
+  the default one-hour view receives a bounded two-frame loop. The page
+  cachebuster is `satellite-page.js?v=20260731f`. A live corrected-window probe
+  returned chronological 19Z and 20Z frames for all four products; animation
+  re-smoke is pending.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -336,7 +343,7 @@ Guardrails:
 
 Next step:
 - GK2A Phases 0-2 are closed. GMGSI Phase 3 implementation and live backend
-  proof are complete; run the user-owned Satellite-page browser acceptance for
-  all four GMGSI products before closing the phase. No authorized Radar
-  render-optimization work remains.
+  proof are complete; re-smoke animation for all four GMGSI products after the
+  two-frame default-budget correction before closing the phase. No authorized
+  Radar render-optimization work remains.
 ```

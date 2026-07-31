@@ -185,7 +185,12 @@ to PNG-only behavior.
    The four direct visible, shortwave IR, water-vapor, and longwave IR products
    pass current NOAA listing/download/nonblank-render proofs. Ruff,
    compilation, JavaScript syntax, and the 63-test focused Satellite gate pass;
-   user-owned browser acceptance remains pending.
+   The first user-owned page acceptance rendered the current frame for all four
+   products but exposed a one-frame default catalog budget, so animation could
+   not start. Global now requests `hours + 1` hourly frames, giving the default
+   one-hour view a bounded two-frame loop. Animation re-smoke remains pending.
+   A live default-window probe returned chronological 19Z and 20Z frames for
+   all four GMGSI products.
 
 ## Current State
 
@@ -2404,7 +2409,11 @@ Current international-satellite product direction:
     Satellite tests pass. The full suite has 336 passing tests plus 42 passing
     subtests and retains only the three stable unrelated failures after a
     transient coordinator timing failure passed in isolation. User-owned
-    browser acceptance remains pending.
+    browser acceptance rendered every current frame but found the default
+    one-hour catalog capped at one frame. The Global budget now includes the
+    interval-start frame (`hours + 1`) so the default view has a two-frame
+    animation. A live corrected-window probe returned chronological 19Z and
+    20Z frames for all four products. Animation re-smoke remains pending.
 
 #### Meteosat-9 — native SEVIRI `.nat` validation completed 2026-07-02
 

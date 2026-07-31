@@ -62,28 +62,47 @@ def test_gmgsi_platform_and_frontend_are_separately_bounded() -> None:
     assert 'data-satellite-sector="Global"' in page
     assert "gmgsi: new Set(['Channel02', 'Channel07', 'Channel09RAMSDIS', 'Channel13'])" in script
     assert "'gmgsi:Global': 'global'" in script
+    assert "return Math.min(FRAME_REQUEST_MAX, safeHours + 1);" in script
     assert "gmgsi: 'GMGSI Global Mosaic'" in engine
+    assert "satellite-page.js?v=20260731f" in page
 
 
 def test_gmgsi_provider_lists_the_hourly_product(monkeypatch) -> None:
-    prefix = "GMGSI_LW/2026/07/31/20/"
-    key = (
-        prefix
+    prior_prefix = "GMGSI_LW/2026/07/31/19/"
+    current_prefix = "GMGSI_LW/2026/07/31/20/"
+    prior_key = (
+        prior_prefix
+        + "GLOBCOMPLIR_v3r0_blend_s202607311900000_"
+        "e202607311909599_c202607311935012.nc"
+    )
+    current_key = (
+        current_prefix
         + "GLOBCOMPLIR_v3r0_blend_s202607312000000_"
         "e202607312009599_c202607312035012.nc"
     )
     monkeypatch.setattr(
-        provider_gmgsi, "_iter_hour_prefixes", lambda product, hours: [prefix]
+        provider_gmgsi,
+        "_iter_hour_prefixes",
+        lambda product, hours: [current_prefix, prior_prefix],
     )
     monkeypatch.setattr(
-        provider_gmgsi, "_list_prefix_objects", lambda listed: [(key, 7_374_067)]
+        provider_gmgsi,
+        "_list_prefix_objects",
+        lambda listed: [
+            (current_key, 7_374_067)
+            if listed == current_prefix
+            else (prior_key, 7_300_000)
+        ],
     )
     frames = provider_gmgsi.list_recent_frames(
-        "gmgsi", "GLOBAL", "Channel13", hours=1, max_frames=4
+        "gmgsi", "GLOBAL", "Channel13", hours=1, max_frames=2
     )
-    assert [frame.frame_key for frame in frames] == ["20260731T200000Z"]
-    assert frames[0].source_keys == {"Channel13": key}
-    assert frames[0].file_sizes == {"Channel13": 7_374_067}
+    assert [frame.frame_key for frame in frames] == [
+        "20260731T190000Z",
+        "20260731T200000Z",
+    ]
+    assert frames[-1].source_keys == {"Channel13": current_key}
+    assert frames[-1].file_sizes == {"Channel13": 7_374_067}
 
 
 def test_gmgsi_provider_downloads_to_the_independent_source_cache(
