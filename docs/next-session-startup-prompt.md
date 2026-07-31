@@ -9,7 +9,7 @@ Read first:
 - docs/token-saver-maybe.md
 - docs/dashboard-change-and-enhancement-superfile.md
 - docs/worker-free-render-plan.md, Phase 8 completion summary only
-- docs/satellite-platform-expansion-plan.md
+- docs/archive/satellite-platform-expansion-plan.md
 - git status
 
 Current checkpoint:
@@ -346,6 +346,13 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- GK2A Phases 0-2 and GMGSI Phase 3 are closed. No authorized Satellite
-  platform-expansion or Radar render-optimization work remains.
+- GK2A Phases 0-2 and GMGSI Phase 3 are closed, and their completed plan is
+  archived. Do not start Satellite Archive UI work. Reconcile the current-
+  dashboard browser/parity gates through the proposed bounded stabilization
+  acceptance phase in the superfile before selecting another implementation
+  phase. Its focused surfaces are Workspace, the Water post-baseline UI,
+  Tropical's full workflow, the final GOES GeoColor white-point check, and a
+  shallow representative regression sweep of the other current pages. This
+  phase is not yet authorized or started. No authorized Satellite platform-
+  expansion or Radar render-optimization work remains.
 ```

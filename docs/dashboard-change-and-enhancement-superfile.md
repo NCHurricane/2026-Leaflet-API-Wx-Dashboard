@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-29 (Task-scheduler-free rendering Phases 0-8 are closed.
+Last updated: 2026-07-31 (Task-scheduler-free rendering Phases 0-8 are closed.
 The zero-task browser matrix and optional-warmer enabled/disabled acceptance
 passed. Radar render optimization Phases 1-7 are implemented and
 golden-validated; the Phase 1-2 browser acceptance passed and the backend-only
@@ -25,15 +25,18 @@ Keep separate:
 - `docs/patterns.md` for coding and implementation patterns.
 - `docs/refactor-baseline.md` for the original pre-refactor baseline.
 - `docs/next-session-startup-prompt.md` for the short current handoff.
-- `docs/phases-25-27-manual-smoke-checklist.md` for the deferred consolidated
-  browser gate after the no-intermediate-smoke Phase 25-27 execution.
+- The former Phases 25-27 manual smoke checklist was intentionally retired on
+  2026-07-25 after the user-owned whole-system smoke passed. Do not restore it
+  as an active gate; use the current stabilization scope below.
 - `docs/archive/satellite-render-optimization-plan.md` for historical Satellite
   optimization execution detail.
+- `docs/archive/satellite-platform-expansion-plan.md` for the completed GK2A +
+  GMGSI platform-expansion track.
 - `docs/radar-render-optimization-plan.md` for the active Radar latency plan.
 - `docs/satellite-radar-render-pipeline-files.md` for the shared pipeline file
   reference; its Radar section is active and its Satellite section is historical.
 
-## Active Tracks (2026-07-26)
+## Active Tracks (2026-07-31)
 
 Track numbers preserve the existing roadmap grouping. Track 3 Radar render
 optimization Phases 3-5 are closed with byte-identical golden output,
@@ -49,12 +52,11 @@ to PNG-only behavior.
    this file (section below). Phases 18-24 are complete and user-confirmed.
    Phases 25-27 are complete and statically validated. `/workspace` composes
    Alerts and Radar engine APIs, owns the preserved arrival/speed tools, and
-   replaces the deleted legacy shell/monolith. Run the consolidated browser
-   checklist before expanding the workspace with additional product engines.
-   The standalone Water shell/layout follow-up is complete and user-smoked.
-   Its later detail-panel, Region, legend, and sidebar-style follow-ups are
-   implemented and statically validated but still need browser re-smoke;
-   optional Water enhancements remain deferred.
+   replaces the deleted legacy shell/monolith. The former consolidated browser
+   checklist was retired after the 2026-07-25 whole-system smoke passed. Before
+   expanding the workspace or adding product features, run the bounded current-
+   dashboard stabilization gate below to reconcile later page-specific changes
+   and historical pending notes.
 2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
    `docs/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
@@ -131,10 +133,10 @@ to PNG-only behavior.
 4. Satellite render pipeline latency optimization — complete through Phase 5
    and archived. Optional Phase 6 warp threading is deferred unless later
    real-run profiling and explicit approval reopen it.
-5. GK2A + GMGSI new platforms — active under
-   `docs/satellite-platform-expansion-plan.md`. Phase 0 implemented the bounded
-   GK2A Full Disk Channel 13 live-on-demand proof in the migrated standalone
-   Satellite page and passed user-owned browser acceptance. Phase 1 is
+5. GK2A + GMGSI new platforms — closed under
+   `docs/archive/satellite-platform-expansion-plan.md`. Phase 0 implemented the
+   bounded GK2A Full Disk Channel 13 live-on-demand proof in the migrated
+   standalone Satellite page and passed user-owned browser acceptance. Phase 1 is
    implemented after explicit approval with ten filtered direct products
    spanning visible/near-IR, shortwave IR, water vapor, and longwave IR; it
    exposes no composites. Live source renders pass for every added family. The
@@ -194,6 +196,26 @@ to PNG-only behavior.
    The user accepted this representative shared-path result without separately
    looping Channels 02, 07, and 09; all four current frames had already
    rendered. GMGSI animation acceptance passed and Phase 3 is closed.
+
+### Next current-dashboard phase — stabilization acceptance
+
+This is the next recommended phase, but it is not yet authorized or started.
+It adds no products and no Archive UI work.
+
+1. Reconcile the historical pending browser notes against later accepted smoke
+   evidence; do not restore the retired Phases 25-27 checklist wholesale.
+2. Run focused user-owned browser acceptance only where closure is not explicit:
+   the Workspace tabbed legend/map-versus-rail behavior and Projected Arrival
+   interactions; Water Region/legend/draggable-detail follow-ups; Tropical
+   Live/Archive/System-inspector workflow; and the final GOES GeoColor white-
+   point visual check.
+3. Run a shallow regression sweep on the remaining standalone routes: load one
+   representative current product, change one map/style control, and confirm
+   status/legend updates without console errors. Satellite provider acceptance
+   is already closed; do not exercise or implement placeholder Archive panels.
+4. Convert any observed failure into a page-scoped correction and re-smoke only
+   that surface. If the gate passes, record a new accepted current-dashboard
+   baseline before selecting backlog or workspace-expansion work.
 
 ## Current State
 
@@ -824,8 +846,8 @@ Important retained rules:
 - `frontend/pages/tropical/tropical-app.js` composes those modules with the core
   map, navigation, sidebar, status, and legend utilities. The old Tropical UI,
   bridge, state, event wiring, and `js/tropical-*` modules are removed from the
-  combined workspace. Static/automated validation passed on 2026-07-19; browser
-  parity smoke is deferred to the consolidated end-of-Phases-25-27 checklist.
+  combined workspace. Static/automated validation passed on 2026-07-19; a later
+  corrected Tropical re-smoke completed the 2026-07-25 whole-system acceptance.
   Normal page loads, basin changes, Refresh actions, basin overlay/vector reads,
   and storm-detail reads now consume the latest worker-written disk cache without
   polling NHC; the scheduled Tropical worker remains the update owner, while an
@@ -1276,7 +1298,7 @@ found it.
   tests (11 passed with the Drought regression set), an unresolved
   internal-helper scan, legacy-reference searches, and `git diff --check`. Per the user's
   multi-phase authorization, no additional browser smoke was run at this
-  boundary; it is deferred to the consolidated Phase 27 checklist. The
+  boundary; later whole-system acceptance closed the retired Phase 27 gate. The
   standalone page uses the Option 1A core map/sidebar/legend/status/scrubber
   shell plus a dedicated active-warning rail. Preserved behavior includes the
   complete alert-category selector with TOR/SVR/FFW subtype filters; viewport-
@@ -1373,8 +1395,8 @@ found it.
   shared collapse controls, compact page-scoped rows, and hidden-empty startup.
   The Tropical Archive Advisory/Best Track scrubber is anchored to the bottom
   of the map viewport after the right-inspector layout refactor.
-  Tropical browser parity remains
-  on the consolidated end-of-Phases-25-27 checklist.
+  A later corrected Tropical re-smoke completed the 2026-07-25 whole-system
+  acceptance; the former consolidated checklist was then retired.
   Water station selection now opens River, Coastal, and NDBC details in a
   draggable map-level panel matching the Alerts detail interaction; the former
   Leaflet popup path is removed. The shared Region selector is restored in the
@@ -1549,8 +1571,9 @@ found it.
   passed (23 focused tests). The final repository-wide suite reached 58 passed
   with the same five unrelated Radar expectation failures already recorded
   above; Phase 27 did not modify those Radar backend/config behaviors. Browser
-  proof and the focused follow-up smoke are recorded in
-  `docs/phases-25-27-manual-smoke-checklist.md`.
+  proof and focused follow-up history are summarized in this superfile and the
+  archived `docs/archive/next-session-startup-prompt-2026-07-24-phase8.md`; the
+  former manual checklist was retired after whole-system acceptance.
 
 Definition of done (mechanically checkable): each product route loads only
 third-party libraries plus `frontend/core/* + frontend/pages/{product}/*`;
@@ -2352,8 +2375,8 @@ Current international-satellite product direction:
   sector, product, and frame count. Prefer the live-on-demand version first
   because it needs less orchestration and cannot warm stale or wrong storm
   locations.
-- GK2A + GMGSI expansion is now tracked in
-  `docs/satellite-platform-expansion-plan.md`.
+- GK2A + GMGSI expansion is complete under the archived
+  `docs/archive/satellite-platform-expansion-plan.md`.
   - GK2A Phase 0 adds the public `noaa-gk2a-pds` AMI Full Disk Channel 13 path:
     10-minute discovery, atomic source download, packed-pixel quality masking,
     file-coefficient brightness-temperature calibration, native GEOS

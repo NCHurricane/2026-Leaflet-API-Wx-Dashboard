@@ -1,6 +1,9 @@
-# Satellite Platform Expansion Plan
+# Satellite Platform Expansion Plan — Completed
 
-Prepared 2026-07-29. This is the active plan for the GK2A + GMGSI track.
+Prepared 2026-07-29 and archived 2026-07-31 after GK2A Phases 0-2 and GMGSI
+Phase 3 passed their acceptance gates. This plan is historical; new Satellite
+work requires a separately approved plan. Satellite Archive UI work was not
+part of this track and remains deferred.
 
 ## Contracts
 
