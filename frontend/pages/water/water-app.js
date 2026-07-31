@@ -137,16 +137,8 @@ function _waterMarkerStyle(status) {
     }
 }
 
-function _waterLegendHtml() {
-    const rows = [
-        ['Major', 'major'],
-        ['Moderate ', 'moderate'],
-        ['Minor', 'minor'],
-        ['Action Stage', 'action'],
-        ['No Flood / Unknown', 'normal'],
-        ['Coastal Gauge', 'coastal'],
-        ['NDBC Buoy', 'buoy'],
-    ].map(([label, status]) => {
+function _waterLegendItems(items) {
+    return items.map(([label, status]) => {
         const style = _waterMarkerStyle(status);
         const shadow = status === 'coastal'
             ? 'box-shadow:0 0 0 1px #0f766e;'
@@ -155,11 +147,42 @@ function _waterLegendHtml() {
             : '';
         return `<div class="legend-item"><span class="legend-swatch" style="background:${style.fill};border-color:${style.stroke};border-radius:50%;${shadow}"></span><span class="legend-text">${label}</span></div>`;
     }).join('');
+}
+
+function _waterLegendHtml() {
+    const networks = _selectedWaterNetworks();
+    if (!networks.length) return '';
+    const sections = [];
+    if (networks.includes('river')) {
+        const minFloodRank = WATER_FLOOD_RANKS[_waterFloodFilter] || 0;
+        const riverLegendItems = [
+            ['Major', 'major'],
+            ['Moderate', 'moderate'],
+            ['Minor', 'minor'],
+            ['Action Stage', 'action'],
+            ['No Flood / Unknown', 'normal'],
+        ].filter(([, status]) => _waterFloodFilter === 'all' || _waterFloodRank(status) >= minFloodRank);
+        const riverItems = _waterLegendItems(riverLegendItems);
+        sections.push(`<section class="water-legend-section">
+            <div class="water-legend-section-title">River Flood Stage</div>
+            <div class="water-legend-row water-legend-river">${riverItems}</div>
+        </section>`);
+    }
+    const otherItems = [];
+    if (networks.includes('coastal')) otherItems.push(['Coastal Gauge', 'coastal']);
+    if (networks.includes('buoy')) otherItems.push(['NDBC Buoy', 'buoy']);
+    if (otherItems.length) {
+        sections.push(`<section class="water-legend-section">
+            <div class="water-legend-section-title">Other Networks</div>
+            <div class="water-legend-row water-legend-other">${_waterLegendItems(otherItems)}</div>
+        </section>`);
+    }
+    const networkCount = networks.length;
     return `<div class="core-legend-header">
             <span class="core-legend-provider">NOAA</span>
             <div class="core-legend-heading"><div class="core-legend-title">Water Observations</div></div>
-            <span class="core-legend-meta">3 networks</span>
-        </div><div class="core-legend-body"><div class="legend-flow">${rows}</div></div>`;
+            <span class="core-legend-meta">${networkCount} network${networkCount === 1 ? '' : 's'}</span>
+        </div><div class="core-legend-body"><div class="water-legend-sections">${sections.join('')}</div></div>`;
 }
 
 function _selectedWaterNetworks() {
@@ -545,12 +568,17 @@ async function initialize() {
         mapCore.fitRegion(regionSelect.value);
         _scheduleWaterReload(0);
     });
-    document.querySelectorAll('.weather-water-network-filter input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener('change', () => { _updateWaterFloodPillsVisibility(); void _loadWaterStations({ force: true }); }));
+    document.querySelectorAll('.weather-water-network-filter input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener('change', () => {
+        _updateWaterFloodPillsVisibility();
+        setLegend(_waterLegendHtml());
+        void _loadWaterStations({ force: true });
+    }));
     byId('weather-water-flood-filters').addEventListener('click', (event) => {
         const pill = event.target.closest('.wx-water-flood-pill');
         if (!pill) return;
         _waterFloodFilter = pill.dataset.flood || 'all';
         document.querySelectorAll('.wx-water-flood-pill').forEach((item) => item.setAttribute('aria-selected', String(item === pill)));
+        setLegend(_waterLegendHtml());
         _renderWaterStations(_waterStations);
         if (_waterFloodFilter !== 'all') _setWaterStatus(`Flood filter: ${_applyWaterFloodFilter(_waterStations).length} of ${_waterStations.length} river gauges shown.`);
     });

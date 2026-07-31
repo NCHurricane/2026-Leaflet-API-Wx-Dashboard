@@ -358,8 +358,8 @@ Next step:
   archived. Do not start Satellite Archive UI work. Reconcile the current-
   dashboard browser/parity gates through the authorized bounded stabilization
   acceptance phase in the superfile before selecting another implementation
-  phase. Workspace acceptance is complete; Water post-baseline UI acceptance
-  is next, followed by Tropical's full workflow, the final GOES GeoColor white-
+  phase. Workspace and Water post-baseline acceptance are complete. Tropical's
+  full workflow is next, followed by the final GOES GeoColor white-
   point check, and a shallow representative regression sweep of the other
   current pages. No authorized Satellite platform-expansion or Radar render-
   optimization work remains.

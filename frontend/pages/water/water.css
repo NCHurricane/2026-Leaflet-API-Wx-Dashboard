@@ -4994,9 +4994,24 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
 .wx-water-flood-pill[aria-selected="true"] { border-color: #38bdf8; color: #e0f2fe; background: #075985; }
 .leaflet-pane.leaflet-water-markers-pane { z-index: 470; }
 .water-legend .core-legend-body { padding: 10px 14px 12px; }
-.water-legend .legend-flow { gap: 5px 12px; }
+.water-legend-sections { display: grid; gap: 10px; }
+.water-legend-section { display: grid; gap: 5px; }
+.water-legend-section-title {
+    color: #8fb3d9;
+    font-size: .62rem;
+    font-weight: 850;
+    letter-spacing: .06em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+.water-legend-row { display: grid; gap: 5px 14px; align-items: center; }
+.water-legend-river { grid-template-columns: repeat(5, minmax(0, auto)); }
+.water-legend-other { grid-template-columns: repeat(2, minmax(0, auto)); justify-content: start; }
 .water-legend .legend-item { display: inline-flex; align-items: center; gap: 5px; }
 .water-legend .legend-text { font-size: .72rem; font-weight: 700; line-height: 1.15; }
+@media (max-width: 720px) {
+    .water-legend-river { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .water-detail {
     position: absolute;
     z-index: 1200;

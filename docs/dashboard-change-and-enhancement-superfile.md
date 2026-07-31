@@ -226,7 +226,15 @@ so a transient feed omission cannot clear an active projection. The user drew
 an arrival polygon, observed three updates including two new-alert notices, and
 confirmed that the selected alert, polygon, tools, and ability to redraw all
 remained intact. JavaScript syntax, diff checks, and 15 focused tests pass.
-Water post-baseline UI acceptance is next.
+Water post-baseline UI acceptance passed 2026-07-31. Region placement, default
+CONUS behavior, map refit/reload, and detail close on region change passed.
+The Water legend now separates `River Flood Stage` from `Other Networks` and
+tracks River, Coastal, and NDBC network toggles; it hides when all networks are
+off. Its river swatches also track the Minimum Flood Stage pills while Coastal
+and NDBC remain unaffected. The user confirmed both dynamic legend behaviors
+in browser smoke. The draggable station-detail panel passed opening, header
+dragging, continued usability, and close behavior through its button, Escape,
+Clear, and map navigation. Tropical full-workflow acceptance is next.
 
 ## Current State
 
@@ -1954,8 +1962,10 @@ and loading with no errors before the later UI follow-ups described below.
   Action, or default no-flood/not-given.
 - Coastal and NDBC stations have distinct marker styles and render in the
   dedicated `water-markers` Leaflet pane.
-- The Water legend uses the shared collapsible core legend header/body shell and
-  retains all river-stage, coastal-gauge, and NDBC-buoy categories.
+- The Water legend uses the shared collapsible core legend header/body shell.
+  Labeled `River Flood Stage` and `Other Networks` rows track the active River,
+  Coastal, and NDBC network controls, and the river row tracks the active
+  Minimum Flood Stage threshold.
 - A shared Region selector lives in the pinned sidebar header, defaults to
   CONUS, refits the map, closes selected-station detail, and reloads the new
   viewport immediately.

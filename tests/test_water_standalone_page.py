@@ -56,6 +56,25 @@ def test_water_legend_uses_refactored_core_shell():
     assert 'class="core-legend-body"' in app
 
 
+def test_water_legend_tracks_selected_networks_and_groups_categories():
+    app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "water" / "water-app.js"
+    ).read_text(encoding="utf-8")
+    styles = (
+        Path(BASE_DIR) / "frontend" / "pages" / "water" / "water.css"
+    ).read_text(encoding="utf-8")
+
+    assert "const networks = _selectedWaterNetworks();" in app
+    assert "if (!networks.length) return '';" in app
+    assert "setLegend(_waterLegendHtml());" in app
+    assert "WATER_FLOOD_RANKS[_waterFloodFilter]" in app
+    assert "_waterFloodRank(status) >= minFloodRank" in app
+    assert "River Flood Stage" in app
+    assert "Other Networks" in app
+    assert "water-legend-river" in styles
+    assert "water-legend-other" in styles
+
+
 def test_water_station_details_use_map_modal_not_leaflet_popups():
     page = (
         Path(BASE_DIR) / "frontend" / "pages" / "water" / "water.html"
