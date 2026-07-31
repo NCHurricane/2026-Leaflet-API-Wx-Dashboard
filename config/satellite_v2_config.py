@@ -670,6 +670,7 @@ SATELLITE_V2_PRODUCTS: dict[str, SatelliteV2Product] = _build_product_registry()
 
 SATELLITE_V2_SUPPORTED_SATELLITES = {
     "gk2a",
+    "gmgsi",
     "goes18",
     "goes19",
     "himawari9",
@@ -816,7 +817,7 @@ def fci_supported_products() -> tuple[str, ...]:
     return tuple(supported)
 
 SATELLITE_V2_SUPPORTED_SECTORS = {
-    "CONUS", "FULLDISK", "MESO1", "MESO2", "RSS", "JAPAN", "TARGET",
+    "CONUS", "FULLDISK", "GLOBAL", "MESO1", "MESO2", "RSS", "JAPAN", "TARGET",
 }
 
 SATELLITE_V2_DEFAULT_SAT_ID = "goes19"
@@ -831,6 +832,7 @@ SATELLITE_V2_CACHE_NAMESPACE = "satellite"
 # platform past Channel02 tiles rendered with the former 0.90 white point.
 SATELLITE_V2_RENDER_VERSION = "products-v6"
 SATELLITE_V2_RENDER_VERSION_GK2A = "products-ami2"
+SATELLITE_V2_RENDER_VERSION_GMGSI = "products-gmgsi1"
 SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi4"
 # fci4 also retains the Meteosat-12 east-west mirror invalidation from fci1.
 SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci4"
@@ -846,6 +848,8 @@ def satellite_v2_render_version_for_satellite(sat_id: str | None) -> str:
     sat_key = str(sat_id or "").strip().lower()
     if sat_key == "gk2a":
         return SATELLITE_V2_RENDER_VERSION_GK2A
+    if sat_key == "gmgsi":
+        return SATELLITE_V2_RENDER_VERSION_GMGSI
     if sat_key == "himawari9":
         return SATELLITE_V2_RENDER_VERSION_HIMAWARI
     if sat_key == "meteosat12":
@@ -991,6 +995,7 @@ SATELLITE_V2_FCI_MAX_GRID = _env_int(
 SATELLITE_V2_SECTOR_BOUNDS = {
     "CONUS": {"west": -140.0, "south": 20.0, "east": -55.0, "north": 55.0},
     "FULLDISK": {"west": -180.0, "south": -80.0, "east": 20.0, "north": 80.0},
+    "GLOBAL": {"west": -180.0, "south": -72.75, "east": 180.0, "north": 72.75},
     "MESO1": {"west": -115.0, "south": 25.0, "east": -75.0, "north": 50.0},
     "MESO2": {"west": -105.0, "south": 20.0, "east": -65.0, "north": 45.0},
 }
@@ -1066,7 +1071,7 @@ def max_native_zoom_for_product(sector: str, channel_key: str) -> int:
     # Frontend/request ceiling; live rendering and narrow rapid warming decide
     # what is generated ahead of time.
     sector_key = normalize_sector(sector)
-    if sector_key == "FULLDISK":
+    if sector_key in {"FULLDISK", "GLOBAL"}:
         return SATELLITE_V2_MAX_NATIVE_ZOOM_FULLDISK
     if sector_key in {"MESO1", "MESO2"}:
         return SATELLITE_V2_MAX_NATIVE_ZOOM_MESO
@@ -1075,7 +1080,7 @@ def max_native_zoom_for_product(sector: str, channel_key: str) -> int:
 
 def zooms_for_sector(sector: str) -> tuple[int, ...]:
     sector_key = normalize_sector(sector)
-    if sector_key == "FULLDISK":
+    if sector_key in {"FULLDISK", "GLOBAL"}:
         return tuple(
             range(
                 min(SATELLITE_V2_FULLDISK_ZOOMS),

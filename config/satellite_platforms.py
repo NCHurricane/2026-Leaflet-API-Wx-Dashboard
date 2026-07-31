@@ -9,6 +9,7 @@ from __future__ import annotations
 # Provider type constants
 PROVIDER_AWS_GOES = "aws_goes"
 PROVIDER_AWS_GK2A = "aws_gk2a"
+PROVIDER_AWS_GMGSI = "aws_gmgsi"
 PROVIDER_AWS_HIMAWARI = "aws_himawari"
 PROVIDER_EUMETSAT = "eumetsat"
 
@@ -54,6 +55,16 @@ SATELLITE_PLATFORMS: dict[str, dict] = {
         "sectors": ["FULLDISK"],
         "default_sector": "FULLDISK",
         "lon_0": 128.2,
+        "implemented": True,
+    },
+    "gmgsi": {
+        "label": "GMGSI Global Mosaic",
+        "short_label": "GMGSI",
+        "instrument": "Multi-satellite mosaic",
+        "provider": PROVIDER_AWS_GMGSI,
+        "sectors": ["GLOBAL"],
+        "default_sector": "GLOBAL",
+        "lon_0": 0.0,
         "implemented": True,
     },
     "meteosat12": {

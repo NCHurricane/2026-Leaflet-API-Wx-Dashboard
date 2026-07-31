@@ -12,7 +12,7 @@ import {
     createSatelliteEngine,
     formatFrameLabel,
     frameIndexForReload,
-} from './satellite-engine.js?v=20260729a';
+} from './satellite-engine.js?v=20260731a';
 import { createSatelliteAnimator } from './satellite-anim.js?v=20260731c';
 
 const byId = (id) => document.getElementById(id);
@@ -31,6 +31,7 @@ const PLATFORM_SECTORS = {
     goes18:     ['FullDisk', 'CONUS', 'Meso1', 'Meso2'],
     goes19:     ['FullDisk', 'CONUS', 'Meso1', 'Meso2'],
     gk2a:       ['FullDisk'],
+    gmgsi:      ['Global'],
     himawari9:  ['FullDisk', 'Japan', 'Target'],
     meteosat12: ['FullDisk'],
     meteosat9:  ['FullDisk'],
@@ -53,6 +54,7 @@ const PLATFORM_CHANNELS = {
         'GeoColor', 'GeoColorBlkMar', 'TrueColor', 'NaturalColor',
         'DayCloudPhase', 'DaySnowFog',
     ]),
+    gmgsi: new Set(['Channel02', 'Channel07', 'Channel09RAMSDIS', 'Channel13']),
     himawari9: null,
     meteosat12: new Set(['Channel01', 'Channel06', ...METEOSAT_CHANNELS]),
     meteosat9: new Set(METEOSAT_CHANNELS),
@@ -63,7 +65,7 @@ const PLATFORM_CHANNELS = {
 const GOES_ONLY_CHANNELS = new Set(['AerosolDetection', 'AerosolOpticalDepth', 'FireRadiativePower']);
 const isGoesPlatform = (satId) => satId === 'goes18' || satId === 'goes19';
 
-const IMPLEMENTED_SATELLITES = new Set(['goes18', 'goes19', 'gk2a', 'himawari9', 'meteosat12', 'meteosat9', 'meteosat11']);
+const IMPLEMENTED_SATELLITES = new Set(['goes18', 'goes19', 'gk2a', 'gmgsi', 'himawari9', 'meteosat12', 'meteosat9', 'meteosat11']);
 
 const AUTO_VIEW_PRESETS = {
     'goes18:FullDisk': 'goes-west-full-disk',
@@ -75,6 +77,7 @@ const AUTO_VIEW_PRESETS = {
     'goes19:Meso1': 'goes-meso-current',
     'goes19:Meso2': 'goes-meso-current',
     'gk2a:FullDisk': 'asia-pacific',
+    'gmgsi:Global': 'global',
     'himawari9:FullDisk': 'west-pacific',
     'himawari9:Japan': 'himawari-japan',
     'himawari9:Target': 'west-pacific',
@@ -95,6 +98,7 @@ const NAMED_VIEW_PRESETS = {
     // Curated center/zoom framings (see setActiveViewPreset): container-independent,
     // so these platforms open to the same view on every screen. Captured hand-picked.
     'asia-pacific': { center: [5.0, 128.2], zoom: 3, platforms: new Set(['gk2a']) },
+    global: { center: [0.0, 0.0], zoom: 2, platforms: new Set(['gmgsi']) },
     'west-pacific': { center: [14.82, 163.95], zoom: 4, platforms: new Set(['himawari9']) },
     'europe-africa': { center: [22.8, 18.22], zoom: 4, platforms: new Set(['meteosat12']) },
     'indian-ocean': { center: [7.25, 101.71], zoom: 5, platforms: new Set(['meteosat9']) },
@@ -149,6 +153,9 @@ function maxFramesForRequest(hours) {
     }
     if (sector === 'FULLDISK') {
         return Math.min(FRAME_REQUEST_MAX, safeHours * 6);
+    }
+    if (sector === 'GLOBAL') {
+        return Math.min(FRAME_REQUEST_MAX, safeHours);
     }
     return Math.min(FRAME_REQUEST_MAX, safeHours * 12);
 }

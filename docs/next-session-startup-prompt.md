@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date prepared: 2026-07-29
+Date updated: 2026-07-31
 
 ```text
 Continue dashboard work in F:\Python\dashboard_2026.
@@ -309,6 +309,19 @@ Current checkpoint:
   JavaScript syntax and 20 focused Satellite tests pass. The user-owned
   two-platform render/no-flash playback smoke passed; render speed and
   crossfade behavior are restored.
+- GMGSI Phase 3 is implemented after explicit authorization. A separate
+  anonymous `aws_gmgsi` provider lists hourly `noaa-gmgsi-pds` frames for the
+  `gmgsi/GLOBAL` platform, and the standalone selector exposes only visible,
+  shortwave IR, water vapor, and longwave IR. The dedicated 4,999 x 3,000
+  NetCDF loader handles the Date Line wrap, coordinate-derived Web Mercator
+  grid, nonzero quality flags, visible display scaling, and mode-A IR/WV
+  count-to-Kelvin conversion. Tiles are isolated under `products-gmgsi1`.
+- A current live listing/download/nonblank-render proof passed for all four
+  products at `20260731T200000Z`. Ruff, Python compilation, JavaScript syntax,
+  and the 63-test focused Satellite gate pass. The full suite has 336 passing
+  tests plus 42 passing subtests; its three stable unrelated failures remain,
+  and a transient coordinator timing failure passed immediately in isolation.
+  No API/browser claim is made.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -322,7 +335,8 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- GK2A Phases 0-2 are closed. GMGSI remains the separate Phase 3 and requires
-  explicit authorization before implementation. No authorized Radar
+- GK2A Phases 0-2 are closed. GMGSI Phase 3 implementation and live backend
+  proof are complete; run the user-owned Satellite-page browser acceptance for
+  all four GMGSI products before closing the phase. No authorized Radar
   render-optimization work remains.
 ```

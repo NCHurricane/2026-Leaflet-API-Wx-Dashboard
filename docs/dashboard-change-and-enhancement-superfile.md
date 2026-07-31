@@ -180,7 +180,12 @@ to PNG-only behavior.
    catalog auto-update cannot replace the selected frame until that frame has
    produced a visible tile. Zoom-start cleanup and bounded live prefetch remain.
    JavaScript syntax and 20 focused Satellite tests pass. The user-owned
-   two-platform render/no-flash smoke passed. GMGSI is not started.
+   two-platform render/no-flash smoke passed. GMGSI Phase 3 is implemented on
+   its own hourly `gmgsi/GLOBAL` provider path and `products-gmgsi1` namespace.
+   The four direct visible, shortwave IR, water-vapor, and longwave IR products
+   pass current NOAA listing/download/nonblank-render proofs. Ruff,
+   compilation, JavaScript syntax, and the 63-test focused Satellite gate pass;
+   user-owned browser acceptance remains pending.
 
 ## Current State
 
@@ -2387,9 +2392,19 @@ Current international-satellite product direction:
     focused Satellite gate pass. User-owned browser acceptance passed for all
     six products: fast renders, no GeoColor Black Marble animation flicker or
     inter-frame blinking, and no API-terminal or browser-console errors.
-  - NOAA GMGSI (`noaa-gmgsi-pds`) remains a later, separate hourly global
-    mosaic phase. Its regular lon/lat grid and four direct products must not be
-    folded into the GK2A instrument path.
+  - NOAA GMGSI Phase 3 is implemented separately from GK2A. The anonymous
+    `noaa-gmgsi-pds` provider lists one hourly global frame and exposes only
+    visible (`Channel02`), shortwave IR (`Channel07`), water vapor
+    (`Channel09RAMSDIS`), and longwave IR (`Channel13`) under `gmgsi/GLOBAL`.
+    Its dedicated loader handles the 4,999 x 3,000 coordinate grid, Date Line
+    wrap, quality mask, visible scaling, and mode-A IR/WV count-to-Kelvin
+    conversion. Tiles use the independent `products-gmgsi1` namespace. A
+    current `20260731T200000Z` listing/download/nonblank-render proof passes for
+    all four products. Ruff, compilation, JavaScript syntax, and 63 focused
+    Satellite tests pass. The full suite has 336 passing tests plus 42 passing
+    subtests and retains only the three stable unrelated failures after a
+    transient coordinator timing failure passed in isolation. User-owned
+    browser acceptance remains pending.
 
 #### Meteosat-9 — native SEVIRI `.nat` validation completed 2026-07-02
 

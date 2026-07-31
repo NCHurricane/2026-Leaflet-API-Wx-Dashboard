@@ -66,6 +66,8 @@
                             role="tab" aria-selected="false" data-satellite-sat="goes19">GOES-19</button>
                         <button id="satellite-subtab-gk2a" class="satellite-subtab-button" type="button"
                             role="tab" aria-selected="false" data-satellite-sat="gk2a">GK2A</button>
+                        <button id="satellite-subtab-gmgsi" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sat="gmgsi">GMGSI</button>
                         <button id="satellite-subtab-himawari9" class="satellite-subtab-button" type="button"
                             role="tab" aria-selected="false" data-satellite-sat="himawari9">Himawari-9</button>
                         <button id="satellite-subtab-meteosat12" class="satellite-subtab-button" type="button"
@@ -80,6 +82,7 @@
                         <option value="goes19">GOES-19 (East)</option>
                         <option value="goes18">GOES-18 (West)</option>
                         <option value="gk2a">GK2A (Asia-Pacific)</option>
+                        <option value="gmgsi">GMGSI (Global Mosaic)</option>
                         <option value="himawari9">Himawari-9 (West Pacific)</option>
                         <option value="meteosat12">Meteosat-12 (Europe/Africa)</option>
                         <option value="meteosat9">Meteosat-9 (Indian Ocean)</option>
@@ -106,6 +109,9 @@
                         <button id="satellite-sector-target" class="satellite-subtab-button" type="button"
                             role="tab" aria-selected="false" data-satellite-sector="Target"
                             style="display:none;">Target Area</button>
+                        <button id="satellite-sector-global" class="satellite-subtab-button" type="button"
+                            role="tab" aria-selected="false" data-satellite-sector="Global"
+                            style="display:none;">Global</button>
                     </div>
                     <select id="satellite-sector" class="satellite-native-control" aria-hidden="true" tabindex="-1">
                         <option value="" selected>— Select Sector —</option>
@@ -116,6 +122,7 @@
                         <option value="RSS">Rapid Scan</option>
                         <option value="Japan">Japan</option>
                         <option value="Target">Target Area</option>
+                        <option value="Global">Global</option>
                     </select>
                     </div>
 
@@ -127,6 +134,7 @@
                             <option value="southeast-us">Southeast US</option>
                             <option value="goes-west-full-disk">GOES-West Full Disk</option>
                             <option value="asia-pacific">Asia-Pacific</option>
+                            <option value="global">Global Mosaic</option>
                             <option value="west-pacific">West Pacific</option>
                             <option value="europe-africa">Europe/Africa</option>
                             <option value="indian-ocean">Indian Ocean</option>
@@ -252,6 +260,6 @@
     </main>
 
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/satellite/satellite-page.js?v=20260731d"></script>
+    <script type="module" src="/frontend/pages/satellite/satellite-page.js?v=20260731e"></script>
 </body>
 </html>

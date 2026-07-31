@@ -103,3 +103,27 @@ Treat GMGSI as a separate hourly global mosaic, not as another AMI instrument.
 Add its regular lon/lat NetCDF path and four direct products (visible,
 shortwave IR, longwave IR, and water vapor) behind an independent platform and
 render version. Do not mix GMGSI parsing or cadence into GK2A phases.
+
+Implementation status 2026-07-31: complete; user-owned browser acceptance is
+pending.
+
+- Adds anonymous hourly discovery/download from `noaa-gmgsi-pds` through a
+  separate `aws_gmgsi` provider and exposes only `Channel02`, `Channel07`,
+  `Channel09RAMSDIS`, and `Channel13` on the `gmgsi/GLOBAL` platform path.
+- Adds a dedicated NetCDF loader for the 4,999 x 3,000 global grid. It sorts the
+  International Date Line wrap, derives the regular Web Mercator affine from
+  the published lon/lat coordinates, masks nonzero `dqf`, scales visible
+  display counts to 0-1, and converts the operational IR/WV mode-A counts to
+  Kelvin.
+- Isolates tiles under `products-gmgsi1`; no GK2A, GOES, Himawari, or Meteosat
+  render namespace or cadence changes.
+- A current live provider/download/render proof passed for all four products at
+  `20260731T200000Z`; object sizes were 7,293,164 bytes (visible), 7,399,384
+  bytes (shortwave IR), 3,451,446 bytes (water vapor), and 7,374,067 bytes
+  (longwave IR). Each proof tile was nonblank and visually inspected.
+- Ruff, Python compilation, JavaScript syntax, and the 63-test focused
+  Satellite gate pass. The full suite has 336 passing tests plus 42 passing
+  subtests. Its three stable failures remain the unrelated shared-border
+  default and two stale Workspace assertions; one coordinator timing failure
+  from the full run passed immediately in isolation. No API/browser claim is
+  made.
