@@ -460,14 +460,23 @@ an overlay drawer on narrower viewports and invalidate the Leaflet map after
 open/close layout changes.
 
 For Tropical Live filtering, fetch the worker-cached World summary once and
-filter storms locally for the selected basin set. World is exclusive with the
-regional multi-select pills, and the final regional deselection falls back to
-World. Basin outlook reads need their own response sequence so rapid pill
+filter storms locally for the selected basin. World, ATL, E PAC, and C PAC are
+single-select views: choosing a pill replaces the prior selection, re-clicking
+the active pill is a no-op, and the selection is never empty. Basin outlook
+reads need their own response sequence so rapid pill
 changes cannot render an older selection. Never auto-select the first storm;
 preserve an explicitly selected storm only while its basin remains visible.
 Render lightweight active-system overview markers from the same summary so
-combined basin views do not require eager storm-detail requests; load the full
+basin views do not require eager storm-detail requests; load the full
 cone/track/radii package only after explicit storm selection.
+
+Tropical Archive advisory warming is server-side and bounded. Load the selected
+advisory in the foreground, then warm a five-frame neighborhood. Upgrade to a
+full-storm warm only when Play expresses user intent. Run one missing advisory
+at a time through the shared NHC provider budget, skip immutable cache hits,
+publish JSON atomically, and coalesce rapid browser scrub actions to the latest
+requested frame. Keep only the displayed advisory in the browser; expose cache
+progress through a lightweight status read.
 
 Water follows the same boundary with a single page entry module: viewport-aware
 station requests, flood filtering, markers, and the station detail panel remain

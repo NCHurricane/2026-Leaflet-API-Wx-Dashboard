@@ -6,10 +6,12 @@ from services.tropical_service import (
     get_tropical_archive_advisory_data,
     get_tropical_archive_catalog_data,
     get_tropical_archive_storm_data,
+    get_tropical_archive_warm_status_data,
     get_tropical_basin_feeds_data,
     get_tropical_storm_data,
     get_tropical_storms_data,
     get_tropical_summary_data,
+    start_tropical_archive_warm_data,
 )
 
 router = APIRouter()
@@ -62,3 +64,21 @@ def get_tropical_archive_storm(atcf_id: str):
 @router.get("/api/tropical/archive/storm/{atcf_id}/advisory/{step}")
 def get_tropical_archive_advisory(atcf_id: str, step: str):
     return get_tropical_archive_advisory_data(atcf_id=atcf_id, step=step)
+
+
+@router.post("/api/tropical/archive/storm/{atcf_id}/warm")
+def start_tropical_archive_warm(
+    atcf_id: str,
+    mode: str = "window",
+    anchor: str | None = None,
+):
+    return start_tropical_archive_warm_data(
+        atcf_id=atcf_id,
+        mode=mode,
+        anchor=anchor,
+    )
+
+
+@router.get("/api/tropical/archive/storm/{atcf_id}/warm")
+def get_tropical_archive_warm_status(atcf_id: str):
+    return get_tropical_archive_warm_status_data(atcf_id=atcf_id)

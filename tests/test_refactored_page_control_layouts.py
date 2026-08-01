@@ -99,7 +99,7 @@ def test_surface_cached_gradient_does_not_depend_on_marker_rows():
 
 
 def test_shared_border_defaults_enable_state_only():
-    for page in ("surface", "alerts", "radar", "satellite", "spc", "rtma", "mrms", "drought", "wpc", "water", "workspace", "tropical"):
+    for page in ("surface", "alerts", "radar", "spc", "rtma", "mrms", "drought", "wpc", "water", "workspace"):
         html = page_text(page)
         state = re.search(r'<input[^>]*data-map-overlay="states"[^>]*>', html).group()
         county = re.search(r'<input[^>]*data-map-overlay="counties"[^>]*>', html).group()
@@ -109,6 +109,18 @@ def test_shared_border_defaults_enable_state_only():
         assert "checked" not in country
         graticule = re.search(r'<input[^>]*(?:data-map-overlay="graticule"|id="weather-tropical-graticule")[^>]*>', html).group()
         assert "checked" not in graticule
+
+
+def test_global_view_pages_border_defaults_enable_country_only():
+    for page in ("satellite", "tropical"):
+        html = page_text(page)
+        state = re.search(r'<input[^>]*data-map-overlay="states"[^>]*>', html).group()
+        county = re.search(r'<input[^>]*data-map-overlay="counties"[^>]*>', html).group()
+        country = re.search(r'<input[^>]*data-map-overlay="countries"[^>]*>', html).group()
+
+        assert "checked" not in state
+        assert "checked" not in county
+        assert "checked" in country
 
 
 def test_archive_sliders_use_exact_requested_steps():

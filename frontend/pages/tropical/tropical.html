@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260730b">
-    <link rel="stylesheet" href="/frontend/pages/tropical/tropical.css?v=20260719i">
+    <link rel="stylesheet" href="/frontend/pages/tropical/tropical.css?v=20260731a">
 </head>
 <body>
     <header class="core-header"><div class="core-brand">NCHURRICANE</div><nav id="product-nav" class="core-nav" aria-label="Weather products"></nav></header>
@@ -55,7 +55,7 @@
                 </section>
                 <section id="tropical-panel-archive" class="core-sidebar-panel" role="tabpanel" data-sidebar-panel="archive" hidden>
                     <div class="wx-archive-controls"><div class="wx-archive-field"><label for="wx-archive-basin">Basin</label><select id="wx-archive-basin"><option value="AL">Atlantic</option></select></div><div class="wx-archive-field"><label for="wx-archive-season">Season</label><select id="wx-archive-season"></select></div></div>
-                    <div id="wx-archive-card-list" class="wx-tropical-card-list"></div><div id="wx-archive-status" class="wx-archive-status">Select a basin and season to browse past storms.</div>
+                    <div id="wx-archive-card-list" class="wx-tropical-card-list"></div><div id="wx-archive-status" class="wx-archive-status">Select a basin and season to browse past storms.</div><div id="wx-archive-warm-status" class="wx-archive-warm-status" role="status" aria-live="polite" hidden></div>
                 </section>
                 <section id="tropical-panel-settings" class="core-sidebar-panel core-settings-panel" role="tabpanel" data-sidebar-panel="settings" hidden>
                     <div class="core-field"><label for="tropical-basemap">Basemap</label><select id="tropical-basemap">Dark<option>Dark</option><option>Light</option><option>Hydro</option><option>Voyager</option><option>USGS</option><option>USGSTopo</option><option>Satellite</option></select></div>
@@ -75,7 +75,7 @@
                         <input id="tropical-city-font-size" type="range" min="0.4" max="1.2" step="0.05" value="0.6">
                     </div>
                     </div>
-                    <div class="core-settings-section"><h2>Map Overlays</h2><div class="tropical-checks core-check-list"><label class="core-check-row"><span>Lat/Lon Grid</span><input id="weather-tropical-graticule" type="checkbox"></label><label class="core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox" checked></label><label class="core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox"></label><label class="core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label></div></div>
+                    <div class="core-settings-section"><h2>Map Overlays</h2><div class="tropical-checks core-check-list"><label class="core-check-row"><span>Lat/Lon Grid</span><input id="weather-tropical-graticule" type="checkbox"></label><label class="core-check-row"><span>State Borders</span><input data-map-overlay="states" type="checkbox"></label><label class="core-check-row"><span>Country Borders</span><input data-map-overlay="countries" type="checkbox" checked></label><label class="core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label></div></div>
                 </section>
             </div>
             <div class="core-sidebar-footer"><div id="weather-tropical-status" class="core-message" aria-live="polite"></div><button id="weather-refresh-tropical" type="button">Refresh</button></div>
@@ -100,8 +100,8 @@
         </aside>
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script src="/frontend/pages/tropical/tropical-engine.js?v=20260723b"></script>
-    <script src="/frontend/pages/tropical/tropical-controller.js?v=20260723a"></script>
-    <script type="module" src="/frontend/pages/tropical/tropical-app.js?v=20260725e"></script>
+    <script src="/frontend/pages/tropical/tropical-engine.js?v=20260731a"></script>
+    <script src="/frontend/pages/tropical/tropical-controller.js?v=20260731d"></script>
+    <script type="module" src="/frontend/pages/tropical/tropical-app.js?v=20260731b"></script>
 </body>
 </html>

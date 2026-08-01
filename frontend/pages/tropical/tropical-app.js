@@ -41,6 +41,8 @@ let _tropicalOutlookIssuedTime = null;
 let _scrubberPlaybackSpeedIndex = 2;
 let _selectedTropicalBasins = new Set(['WORLD']);
 let _tropicalBasinFeedSeq = 0;
+let _tropicalArchiveWarmPollTimer = null;
+let _tropicalArchiveWarmPollSeq = 0;
 
 const SCRUBBER_PLAYBACK_SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3, 4];
 const REGION_FIT_BOTTOM_PADDING_PX = 120;
@@ -233,6 +235,45 @@ function _wireLiveBasinPills() {
         button.addEventListener('click', () => _selectLiveBasin(button.dataset.liveBasin));
     });
     _syncLiveBasinPills();
+}
+
+let _tropicalWorkflowMode = 'live';
+
+function _wireTropicalWorkflowTabs() {
+    byId('tropical-sidebar-tabs').addEventListener('core:sidebar-tab-change', (event) => {
+        const tab = event.detail?.tab;
+        if (!['live', 'archive'].includes(tab) || tab === _tropicalWorkflowMode) return;
+        _tropicalWorkflowMode = tab;
+        _stopArchiveScrubPlay();
+        _clearTropicalLayer();
+        _clearArchiveFixHighlight();
+        _closeTropicalDetail();
+        _closeOutlookDetail();
+        _activeTropicalStorm = null;
+        setLegend('');
+
+        if (tab === 'archive') {
+            const liveSelect = byId('weather-tropical-system');
+            if (liveSelect) liveSelect.value = '';
+            _clearActiveSystemsOverview();
+            _clearTropicalOutlookLayer();
+            _setTropicalHubMode('overview');
+            _setTropicalMapViewMode('none');
+            _renderTropicalSummary(null);
+            _highlightSelectedTropicalCard();
+            void _tropicalEngine?.loadArchiveCatalog();
+            return;
+        }
+
+        _stopTropicalArchiveWarmPolling({ hide: true });
+        _tropicalArchiveSelectedId = null;
+        _tropicalArchiveStormId = null;
+        _tropicalPageController.resetArchiveScrubber();
+        _highlightTropicalArchiveCard();
+        _setTropicalDetailSectionsVisible(true);
+        _fitTropicalBasinExtent();
+        void _tropicalEngine?.loadStorms();
+    });
 }
 
 const _TROPICAL_BASIN_NAMES = { AL: 'Atlantic', EP: 'Eastern Pacific', CP: 'Central Pacific' };
@@ -1220,6 +1261,97 @@ function _setTropicalArchiveStatus(message) {
     if (el) el.textContent = message || '';
 }
 
+function _renderTropicalArchiveWarmStatus(payload) {
+    const el = byId('wx-archive-warm-status');
+    if (!el) return;
+    const total = Number(payload?.total || 0);
+    if (!total) {
+        el.hidden = true;
+        el.textContent = '';
+        return;
+    }
+    const cached = Math.max(0, Math.min(total, Number(payload?.cached || 0)));
+    const full = payload?.mode === 'full';
+    if (payload?.complete) {
+        el.textContent = `${full ? 'Advisories' : 'Nearby advisories'} ready: ${cached}/${total}`;
+        el.dataset.state = 'ready';
+    } else if (['queued', 'running', 'idle'].includes(payload?.status)) {
+        el.textContent = `Warming ${full ? 'advisories' : 'nearby advisories'}: ${cached}/${total}`;
+        el.dataset.state = 'warming';
+    } else {
+        el.textContent = `Advisory warming paused: ${cached}/${total}`;
+        el.dataset.state = 'paused';
+    }
+    el.hidden = false;
+}
+
+function _stopTropicalArchiveWarmPolling({ hide = false } = {}) {
+    _tropicalArchiveWarmPollSeq += 1;
+    if (_tropicalArchiveWarmPollTimer) clearTimeout(_tropicalArchiveWarmPollTimer);
+    _tropicalArchiveWarmPollTimer = null;
+    if (hide) _renderTropicalArchiveWarmStatus(null);
+}
+
+function _renderTropicalArchiveWarmUnavailable() {
+    const el = byId('wx-archive-warm-status');
+    if (!el) return;
+    el.textContent = 'Advisory warming unavailable';
+    el.dataset.state = 'paused';
+    el.hidden = false;
+}
+
+async function _pollTropicalArchiveWarm(stormId, pollSeq) {
+    try {
+        const resp = await fetch(
+            apiUrl(`/api/tropical/archive/storm/${encodeURIComponent(stormId)}/warm`),
+            { cache: 'no-store' },
+        );
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const payload = await resp.json();
+        if (pollSeq !== _tropicalArchiveWarmPollSeq || stormId !== _tropicalArchiveStormId) return;
+        _renderTropicalArchiveWarmStatus(payload);
+        if (!payload.complete && ['queued', 'running', 'idle'].includes(payload.status)) {
+            _tropicalArchiveWarmPollTimer = setTimeout(
+                () => void _pollTropicalArchiveWarm(stormId, pollSeq),
+                2000,
+            );
+        }
+    } catch (error) {
+        if (pollSeq !== _tropicalArchiveWarmPollSeq) return;
+        _renderTropicalArchiveWarmUnavailable();
+        console.warn('[tropical-archive] Warm status unavailable:', error);
+    }
+}
+
+async function _startTropicalArchiveWarm(mode, anchor) {
+    const stormId = String(_tropicalArchiveStormId || '').trim().toUpperCase();
+    if (!stormId) return;
+    _stopTropicalArchiveWarmPolling();
+    const pollSeq = _tropicalArchiveWarmPollSeq;
+    const params = new URLSearchParams({ mode });
+    if (anchor) params.set('anchor', anchor);
+    try {
+        const resp = await fetch(
+            apiUrl(`/api/tropical/archive/storm/${encodeURIComponent(stormId)}/warm?${params.toString()}`),
+            { method: 'POST', cache: 'no-store' },
+        );
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const payload = await resp.json();
+        if (pollSeq !== _tropicalArchiveWarmPollSeq || stormId !== _tropicalArchiveStormId) return;
+        _renderTropicalArchiveWarmStatus(payload);
+        if (!payload.complete) {
+            _tropicalArchiveWarmPollTimer = setTimeout(
+                () => void _pollTropicalArchiveWarm(stormId, pollSeq),
+                1000,
+            );
+        }
+    } catch (error) {
+        if (pollSeq !== _tropicalArchiveWarmPollSeq) return;
+        _renderTropicalArchiveWarmUnavailable();
+        console.warn('[tropical-archive] Warm request unavailable:', error);
+    }
+}
+
 // Summarize a whole best-track history (no advisory snapshot exists) into the
 // System inspector header + metric grid. Track table is rendered by the caller.
 function _renderTropicalArchiveSummaryHead(data, head, summary) {
@@ -1265,7 +1397,9 @@ function _zoomTropicalArchiveToTrack(data) {
 
 function _selectTropicalArchiveStorm(atcfId) {
     if (!atcfId) return;
+    _stopTropicalArchiveWarmPolling({ hide: true });
     _tropicalArchiveSelectedId = atcfId;
+    _tropicalArchiveStormId = atcfId;
     _highlightTropicalArchiveCard();
     _closeTropicalDetail();
     _closeOutlookDetail();
@@ -1393,6 +1527,7 @@ function configureProductModules() {
         loadArchiveFix: _loadArchiveFix, openGraphicDetail: _openTropicalGraphicDetail,
         openProductDetail: _openTropicalProductDetail, selectArchiveStorm: _selectTropicalArchiveStorm,
         selectStorm: _selectTropicalStormCard, setArchiveStatus: _setTropicalArchiveStatus,
+        startArchiveWarm: _startTropicalArchiveWarm,
         setStatus: _setTropicalStatus, setTimeoutFn: (callback, delay) => setTimeout(callback, delay), windClass: _tropicalWindClass,
     });
     _tropicalPageController.wireArchiveControls();
@@ -1417,6 +1552,7 @@ function configureProductModules() {
         prepareArchiveAdvisoryMode: (items) => _tropicalPageController.setArchiveAdvisoryMode(items),
         prepareArchiveBestTrackMode: () => _tropicalPageController.setArchiveBestTrackMode(),
         prepareArchiveStorm: (data, atcfId) => { _stopArchiveScrubPlay(); _clearArchiveFixHighlight(); _tropicalArchiveStormBase = data; _tropicalArchiveStormId = atcfId; _tropicalArchiveStormName = data.storm?.name || atcfId; _tropicalPageController.setArchiveFixes(data.gis_layers?.best_track_points?.geojson?.features || []); },
+        startArchiveWarm: _startTropicalArchiveWarm,
         renderOutlookLegend: _renderTropicalOutlookLegend,
         renderLayerLegend: (toggles) => { const active = _TROPICAL_LAYER_LEGENDS.find(([key]) => toggles[key]); if (active) active[1](); else if (_activeTropicalStorm) _renderTropicalLegend(); },
         renderLiveStormDetail: (data, options) => { _renderTropicalSummary(data); _renderTropicalFloater(data.stormId); _highlightSelectedTropicalCard(); _tropicalEngine.setLayerToggles({ cone: true, forecast_points: true, forecast_track: false }); _renderTropicalLayer(data, options); _renderTropicalLegend(); if (options.zoomToLatest) _zoomTropicalToLatest(data); },
@@ -1443,6 +1579,7 @@ async function initialize() {
     configureProductModules();
     _wireLiveAccordions();
     _wireLiveBasinPills();
+    _wireTropicalWorkflowTabs();
     const defaults = await loadDefaultSettings().catch(() => ({}));
     const cityDefaults = defaults?.global?.cityLabels || {};
     byId('weather-tropical-system').addEventListener('change', () => { _closeTropicalDetail(); void _tropicalEngine.loadStormDetail(_activeTropicalSystemId(), { fitBounds: false, zoomToLatest: true }); });

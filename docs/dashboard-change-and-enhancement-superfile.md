@@ -234,7 +234,26 @@ off. Its river swatches also track the Minimum Flood Stage pills while Coastal
 and NDBC remain unaffected. The user confirmed both dynamic legend behaviors
 in browser smoke. The draggable station-detail panel passed opening, header
 dragging, continued usability, and close behavior through its button, Escape,
-Clear, and map navigation. Tropical full-workflow acceptance is next.
+Clear, and map navigation. Tropical full-workflow acceptance is in progress.
+
+Tropical Live startup and basin-filter acceptance passed 2026-07-31. Live
+defaults to World, and World, ATL, E PAC, and C PAC are independent
+single-select views: choosing one replaces the prior selection, and one basin
+is always active. Country Borders is now the only border overlay enabled on
+Tropical startup; the user confirmed the corrected default. Live System
+selection and inspector acceptance passed using an active Eastern Pacific
+storm: selection opened the inspector, closing and reopening preserved the
+same system, and switching to an out-of-basin view cleared the selection.
+Archive workflow acceptance also passed. Entering Archive clears Live storm,
+overview, outlook, legend, and inspector state. Advisory requests are
+serialized and rapid manual scrub actions coalesce to the latest requested
+frame; Best Track remains local and immediately scrubbable. Selecting an
+advisory-capable archived storm warms a five-frame server cache window after
+the first foreground advisory loads. Pressing Play upgrades the same
+deduplicated job to sequential full-storm warming through the shared NHC
+provider budget, with atomic advisory publication and visible progress. The
+user confirmed manual Advisory and Best Track scrubbing, playback, and both
+warm-path corrections. Tropical full-workflow acceptance is complete.
 
 ## Current State
 
@@ -874,7 +893,7 @@ Important retained rules:
   Settings tab again exposes the shared Cities controls (Off/US/World, zoom-aware
   density, and font size) after they were restored from the pre-refactor UI.
   The left sidebar is now `LIVE | ARCHIVE | SETTINGS`. Live defaults to World,
-  supports mutually exclusive World or any combination of ATL/E PAC/C PAC,
+  provides independent single-select World, ATL, E PAC, and C PAC views,
   filters one cached World storm summary locally, and loads only the selected
   cached outlook feeds with stale-response protection. Active Systems and
   Tropical Outlooks are independent collapsible panels, both open by default;
@@ -890,7 +909,7 @@ Important retained rules:
   The refactor's startup blockers were corrected by restoring the scrubber
   playback-speed formatter and the standalone map container sizing; the page
   now initializes and renders its Leaflet map. Full Tropical workflow smoke is
-  still pending.
+  accepted as described in the current stabilization section above.
   The focused boundary suite passed 14 tests. The repository-wide suite reached
   49 passed with five unrelated Radar expectation failures in
   `test_radar_product_catalog.py` and `test_radar_storm_attributes_service.py`;

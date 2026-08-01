@@ -19,6 +19,8 @@
     let archiveAdvisoryIndex = 0;
     let archiveFixIndex = 0;
     let archivePlaying = false;
+    let archiveScrubLoading = false;
+    let archiveScrubPending = null;
     let archiveSpeedIndex = DEFAULT_ARCHIVE_SPEED_INDEX;
     let activeDetail = null;
     let floaterControlsWired = false;
@@ -646,12 +648,37 @@
 
     function setArchiveScrubMode(mode) {
         if (mode === archiveMode) return;
+        if (archiveScrubLoading) return;
         if (mode === 'advisory' && !archiveAdvisories.length) return;
         if (mode === 'besttrack' && !archiveFixes.length) return;
         stopArchiveScrubPlay();
         archiveMode = mode;
-        setArchiveScrubIndex(0);
-        loadArchiveScrubIndex(0, { fit: false, initial: true });
+        void requestArchiveScrubIndex(0, { fit: false, initial: true });
+    }
+
+    async function requestArchiveScrubIndex(index, options = {}) {
+        if (archiveMode === 'advisory' && archiveScrubLoading) {
+            archiveScrubPending = { index, options };
+            return false;
+        }
+        const guardedAdvisoryLoad = archiveMode === 'advisory';
+        if (guardedAdvisoryLoad) archiveScrubLoading = true;
+        setArchiveScrubIndex(index);
+        renderArchiveScrubberBar();
+        try {
+            await loadArchiveScrubIndex(index, options);
+            return true;
+        } finally {
+            if (guardedAdvisoryLoad) {
+                archiveScrubLoading = false;
+                const pending = archiveScrubPending;
+                archiveScrubPending = null;
+                renderArchiveScrubberBar();
+                if (pending && pending.index !== archiveScrubIndex()) {
+                    void requestArchiveScrubIndex(pending.index, pending.options);
+                }
+            }
+        }
     }
 
     function renderArchiveScrubberBar() {
@@ -670,6 +697,7 @@
         if (slider) {
             slider.max = String(total - 1);
             slider.value = String(index);
+            slider.disabled = false;
         }
 
         const label = byId('adv-scrub-label');
@@ -685,10 +713,16 @@
             }
         }
 
+        const loadingAdvisory = archiveMode === 'advisory' && archiveScrubLoading;
         byId('adv-scrub-prev')?.toggleAttribute('disabled', index <= 0);
         byId('adv-scrub-first')?.toggleAttribute('disabled', index <= 0);
         byId('adv-scrub-next')?.toggleAttribute('disabled', index >= total - 1);
         byId('adv-scrub-last')?.toggleAttribute('disabled', index >= total - 1);
+        byId('adv-scrub-play')?.toggleAttribute('disabled', (loadingAdvisory && !archivePlaying) || total < 2);
+        byId('adv-scrub-mode')?.querySelectorAll('[data-scrub-mode]').forEach((button) => {
+            button.disabled = archiveScrubLoading;
+        });
+        bar.setAttribute('aria-busy', String(loadingAdvisory));
         updateArchiveScrubSpeedUi();
         renderArchiveScrubModeToggle();
     }
@@ -714,6 +748,11 @@
         if (archivePlaying) return;
         const total = archiveScrubCount();
         if (total < 2) return;
+        if (archiveMode === 'advisory') {
+            requirePageContext().startArchiveWarm(
+                'full', archiveAdvisories[archiveAdvisoryIndex]
+            );
+        }
         if (archiveScrubIndex() >= total - 1) setArchiveScrubIndex(0);
 
         archivePlaying = true;
@@ -728,8 +767,8 @@
             setTimeout(resolve, milliseconds);
         });
         while (archivePlaying && archiveScrubIndex() < archiveScrubCount() - 1) {
-            setArchiveScrubIndex(archiveScrubIndex() + 1);
-            await loadArchiveScrubIndex(archiveScrubIndex(), { fit: false });
+            const loaded = await requestArchiveScrubIndex(archiveScrubIndex() + 1, { fit: false });
+            if (!loaded) break;
             if (!archivePlaying) break;
             await sleep(archiveScrubDelay());
         }
@@ -740,10 +779,10 @@
         stopArchiveScrubPlay();
         const total = archiveScrubCount();
         if (!total) return;
-        const next = Math.max(0, Math.min(total - 1, archiveScrubIndex() + delta));
-        if (next === archiveScrubIndex()) return;
-        setArchiveScrubIndex(next);
-        loadArchiveScrubIndex(next, { fit: false });
+        const current = archiveScrubPending?.index ?? archiveScrubIndex();
+        const next = Math.max(0, Math.min(total - 1, current + delta));
+        if (next === current) return;
+        void requestArchiveScrubIndex(next, { fit: false });
     }
 
     function jumpArchiveScrub(index) {
@@ -751,21 +790,25 @@
         const total = archiveScrubCount();
         if (!total) return;
         const next = Math.max(0, Math.min(total - 1, Number(index) || 0));
-        if (next === archiveScrubIndex()) return;
-        setArchiveScrubIndex(next);
-        loadArchiveScrubIndex(next, { fit: false });
+        const current = archiveScrubPending?.index ?? archiveScrubIndex();
+        if (next === current) return;
+        void requestArchiveScrubIndex(next, { fit: false });
     }
 
     function setArchiveAdvisoryMode(advisories) {
         archiveAdvisories = Array.isArray(advisories) ? advisories : [];
         archiveMode = 'advisory';
         archiveAdvisoryIndex = 0;
+        archiveScrubLoading = false;
+        archiveScrubPending = null;
     }
 
     function setArchiveBestTrackMode() {
         archiveAdvisories = [];
         archiveMode = 'besttrack';
         archiveFixIndex = 0;
+        archiveScrubLoading = false;
+        archiveScrubPending = null;
     }
 
     function setArchiveFixes(fixes) {
@@ -778,6 +821,8 @@
         archiveMode = 'advisory';
         archiveAdvisoryIndex = 0;
         archiveFixIndex = 0;
+        archiveScrubLoading = false;
+        archiveScrubPending = null;
         hideArchiveScrubberBar();
     }
 

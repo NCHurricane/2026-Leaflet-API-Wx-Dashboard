@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -61,6 +62,8 @@ _GIS_ARCHIVE_BASE = "https://www.nhc.noaa.gov/gis/forecast/archive/"
 _ARCHIVE_RESULTS_URL = "https://www.nhc.noaa.gov/gis/archive_forecast_results.php?id={id}&year={year}"
 _SYNOPTIC_HHMM = {"0000", "0600", "1200", "1800"}
 _CYCLONE_STATUS = {"HU", "TS", "TD", "SS", "SD"}
+_ADVISORY_CACHE_LOCKS_GUARD = threading.Lock()
+_ADVISORY_CACHE_LOCKS: dict[tuple[str, str], threading.Lock] = {}
 
 # HURDAT2 2-letter status codes → short STORMTYPE codes the frontend classifier
 # (_tropicalCategoryKey in frontend/pages/tropical/tropical-app.js) understands on best-track features,
@@ -901,17 +904,26 @@ def get_advisory_payload(atcf_id: str, step: str, force: bool = False) -> dict[s
     if not re.fullmatch(r"\d+[A-Z]?", step):
         return None
     cache = STORMS_DIR / sid / "advisories" / f"{step}.json"
-    if cache.is_file() and not force:
-        try:
-            return json.loads(cache.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            pass
-    payload = build_advisory_payload(sid, step)
-    if payload is None:
-        return None
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    return payload
+    with _ADVISORY_CACHE_LOCKS_GUARD:
+        advisory_lock = _ADVISORY_CACHE_LOCKS.setdefault(
+            (sid, step), threading.Lock()
+        )
+    with advisory_lock:
+        if cache.is_file() and not force:
+            try:
+                return json.loads(cache.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                pass
+        payload = build_advisory_payload(sid, step)
+        if payload is None:
+            return None
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        temporary = cache.with_suffix(cache.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
+        temporary.replace(cache)
+        return payload
 
 
 # ── Worker entry ────────────────────────────────────────────────────────────

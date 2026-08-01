@@ -376,6 +376,7 @@
                         fit: true,
                         initial: true,
                     });
+                    context.startArchiveWarm('window', data.advisories[0]);
                     return;
                 }
 

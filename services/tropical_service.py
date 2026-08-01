@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import json
+import threading
 import time as _time
 from typing import Any
 
@@ -32,6 +33,10 @@ _TROPICAL_SUMMARY_CACHE = _TROPICAL_CACHE_DIR / "summary.json"
 _TROPICAL_ARCHIVE_DIR = _TROPICAL_CACHE_DIR / "archive"
 _TROPICAL_ARCHIVE_CATALOG = _TROPICAL_ARCHIVE_DIR / "catalog" / "seasons.json"
 _TROPICAL_ARCHIVE_STORMS_DIR = _TROPICAL_ARCHIVE_DIR / "storms"
+_TROPICAL_ARCHIVE_WARM_PROVIDER = "tropical-archive-warm"
+_TROPICAL_ARCHIVE_WARM_WINDOW = 5
+_TROPICAL_ARCHIVE_WARM_LOCK = threading.RLock()
+_TROPICAL_ARCHIVE_WARM_TARGETS: dict[str, dict[str, object]] = {}
 
 
 def _run_tropical_worker_once(
@@ -737,7 +742,14 @@ def get_tropical_archive_advisory_data(atcf_id: str, step: str) -> dict:
     try:
         from workers.tropical_archive_worker import get_advisory_payload
 
-        payload = get_advisory_payload(sid, stp)
+        advisory_cache = (
+            _TROPICAL_ARCHIVE_STORMS_DIR / sid / "advisories" / f"{stp}.json"
+        )
+        if advisory_cache.is_file():
+            payload = get_advisory_payload(sid, stp)
+        else:
+            with get_refresh_coordinator().provider_budget("nhc"):
+                payload = get_advisory_payload(sid, stp)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Advisory build failed: {exc}")
     if payload is None:
@@ -745,3 +757,178 @@ def get_tropical_archive_advisory_data(atcf_id: str, step: str) -> dict:
             status_code=404, detail=f"No archived advisory: {sid} #{stp}"
         )
     return payload
+
+
+def _tropical_archive_warm_key(sid: str) -> tuple[str, ...]:
+    return ("tropical", "archive-advisory-warm", sid)
+
+
+def _tropical_archive_advisory_steps(sid: str) -> list[str]:
+    storm_cache = _TROPICAL_ARCHIVE_STORMS_DIR / sid / "storm.json"
+    payload = _read_tropical_archive_cache(storm_cache)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"No archived storm: {sid}")
+    return [
+        str(step).strip().upper()
+        for step in payload.get("advisories") or []
+        if str(step).strip()
+    ]
+
+
+def _tropical_archive_window_steps(
+    steps: list[str], anchor: str | None
+) -> list[str]:
+    if not steps:
+        return []
+    anchor_step = str(anchor or "").strip().upper()
+    anchor_index = steps.index(anchor_step) if anchor_step in steps else 0
+    indices: list[int] = []
+    # Adjacent frames warm before the displayed anchor, avoiding duplicate cold
+    # work with the foreground request that opens the selected storm.
+    radius = 1
+    while len(indices) < min(_TROPICAL_ARCHIVE_WARM_WINDOW - 1, len(steps) - 1):
+        for offset in (radius, -radius):
+            index = anchor_index + offset
+            if 0 <= index < len(steps) and index not in indices:
+                indices.append(index)
+            if len(indices) >= min(
+                _TROPICAL_ARCHIVE_WARM_WINDOW - 1, len(steps) - 1
+            ):
+                break
+        radius += 1
+    indices.append(anchor_index)
+    return [steps[index] for index in indices]
+
+
+def _tropical_archive_target_steps(
+    steps: list[str], *, full: bool, anchor: str | None
+) -> list[str]:
+    window = _tropical_archive_window_steps(steps, anchor)
+    if not full:
+        return window
+    return window + [step for step in steps if step not in window]
+
+
+def _tropical_archive_advisory_is_cached(sid: str, step: str) -> bool:
+    return (
+        _TROPICAL_ARCHIVE_STORMS_DIR / sid / "advisories" / f"{step}.json"
+    ).is_file()
+
+
+def _tropical_archive_warm_status(sid: str) -> dict[str, object]:
+    steps = _tropical_archive_advisory_steps(sid)
+    with _TROPICAL_ARCHIVE_WARM_LOCK:
+        target = dict(_TROPICAL_ARCHIVE_WARM_TARGETS.get(sid) or {})
+    full = bool(target.get("full"))
+    anchor = str(target.get("anchor") or (steps[0] if steps else ""))
+    targets = _tropical_archive_target_steps(steps, full=full, anchor=anchor)
+    cached = sum(
+        1 for step in targets if _tropical_archive_advisory_is_cached(sid, step)
+    )
+    total = len(targets)
+    state = get_refresh_coordinator().describe(_tropical_archive_warm_key(sid)) or {}
+    complete = total == 0 or cached >= total
+    status = "complete" if complete else str(state.get("status") or "idle")
+    return {
+        "status": status,
+        "storm_id": sid,
+        "mode": "full" if full else "window",
+        "cached": cached,
+        "total": total,
+        "complete": complete,
+        "retry_after_seconds": state.get("retry_after_seconds"),
+        "error_type": state.get("error_type"),
+    }
+
+
+def _run_tropical_archive_warm(sid: str) -> dict[str, object]:
+    from workers.tropical_archive_worker import get_advisory_payload
+
+    coordinator = get_refresh_coordinator()
+    while True:
+        steps = _tropical_archive_advisory_steps(sid)
+        with _TROPICAL_ARCHIVE_WARM_LOCK:
+            target = dict(_TROPICAL_ARCHIVE_WARM_TARGETS.get(sid) or {})
+        targets = _tropical_archive_target_steps(
+            steps,
+            full=bool(target.get("full")),
+            anchor=str(target.get("anchor") or (steps[0] if steps else "")),
+        )
+        for step in targets:
+            if _tropical_archive_advisory_is_cached(sid, step):
+                continue
+            with coordinator.provider_budget("nhc"):
+                payload = get_advisory_payload(sid, step)
+            if payload is None:
+                raise RuntimeError(f"Archive advisory unavailable: {sid} #{step}")
+            # Yield between frames so a foreground scrub request waiting on the
+            # same provider budget can take the next slot.
+            _time.sleep(0.1)
+
+        with _TROPICAL_ARCHIVE_WARM_LOCK:
+            upgraded_to_full = bool(
+                (_TROPICAL_ARCHIVE_WARM_TARGETS.get(sid) or {}).get("full")
+            )
+        if upgraded_to_full and len(targets) < len(steps):
+            continue
+        status = _tropical_archive_warm_status(sid)
+        return {
+            **status,
+            "source_timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+
+def start_tropical_archive_warm_data(
+    atcf_id: str,
+    mode: str = "window",
+    anchor: str | None = None,
+) -> dict[str, object]:
+    import re
+
+    sid = atcf_id.strip().upper()
+    requested_mode = str(mode or "window").strip().lower()
+    if not re.fullmatch(r"(AL|EP|CP)[0-9]{2}[0-9]{4}", sid):
+        raise HTTPException(status_code=400, detail="Invalid archive storm id.")
+    if requested_mode not in {"window", "full"}:
+        raise HTTPException(status_code=400, detail="Invalid archive warm mode.")
+    steps = _tropical_archive_advisory_steps(sid)
+    anchor_step = str(anchor or (steps[0] if steps else "")).strip().upper()
+    if steps and anchor_step not in steps:
+        raise HTTPException(status_code=400, detail="Invalid archive warm anchor.")
+
+    with _TROPICAL_ARCHIVE_WARM_LOCK:
+        target = _TROPICAL_ARCHIVE_WARM_TARGETS.setdefault(
+            sid,
+            {"full": False, "anchor": anchor_step},
+        )
+        target["anchor"] = anchor_step
+        if requested_mode == "full":
+            target["full"] = True
+
+    status = _tropical_archive_warm_status(sid)
+    if status["complete"]:
+        return status
+    coordinator = get_refresh_coordinator()
+    submission = coordinator.submit(
+        key=_tropical_archive_warm_key(sid),
+        provider=_TROPICAL_ARCHIVE_WARM_PROVIDER,
+        function=lambda: _run_tropical_archive_warm(sid),
+        lease_seconds=15 * 60,
+    )
+    response = _tropical_archive_warm_status(sid)
+    if submission.status not in {"queued", "running"} and not response["complete"]:
+        response["status"] = submission.status
+    return {
+        **response,
+        "accepted": submission.accepted,
+        "submission_status": submission.status,
+    }
+
+
+def get_tropical_archive_warm_status_data(atcf_id: str) -> dict[str, object]:
+    import re
+
+    sid = atcf_id.strip().upper()
+    if not re.fullmatch(r"(AL|EP|CP)[0-9]{2}[0-9]{4}", sid):
+        raise HTTPException(status_code=400, detail="Invalid archive storm id.")
+    return _tropical_archive_warm_status(sid)

@@ -358,8 +358,12 @@ Next step:
   archived. Do not start Satellite Archive UI work. Reconcile the current-
   dashboard browser/parity gates through the authorized bounded stabilization
   acceptance phase in the superfile before selecting another implementation
-  phase. Workspace and Water post-baseline acceptance are complete. Tropical's
-  full workflow is next, followed by the final GOES GeoColor white-
+  phase. Workspace and Water post-baseline acceptance are complete. Tropical
+  Live startup, single-select basin filtering, and country-only border default
+  passed. Live System selection/inspector behavior also passed with an active
+  Eastern Pacific storm. Archive Advisory/Best Track scrub, playback,
+  Live-to-Archive clearing, and bounded five-frame/full-on-Play server warming
+  passed; Tropical full-workflow acceptance is complete. The final GOES GeoColor white-
   point check, and a shallow representative regression sweep of the other
   current pages. No authorized Satellite platform-expansion or Radar render-
   optimization work remains.

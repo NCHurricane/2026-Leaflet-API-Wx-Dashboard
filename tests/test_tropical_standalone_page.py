@@ -66,6 +66,63 @@ def test_tropical_live_filter_does_not_auto_select_first_storm():
     assert "featuredStormId" not in engine
 
 
+def test_tropical_live_basin_pills_are_single_select():
+    app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "tropical" / "tropical-app.js"
+    ).read_text(encoding="utf-8")
+
+    assert "_selectedTropicalBasins = new Set([basin]);" in app
+    assert "_selectedTropicalBasins.size === 1" in app
+    assert "_selectedTropicalBasins.has(basin)" in app
+
+
+def test_tropical_archive_tab_clears_live_map_context():
+    app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "tropical" / "tropical-app.js"
+    ).read_text(encoding="utf-8")
+
+    assert "core:sidebar-tab-change" in app
+    assert "if (tab === 'archive')" in app
+    assert "_clearActiveSystemsOverview();" in app
+    assert "_clearTropicalOutlookLayer();" in app
+    assert "_setTropicalMapViewMode('none');" in app
+
+
+def test_tropical_advisory_scrubber_serializes_source_reads():
+    controller = (
+        Path(BASE_DIR) / "frontend" / "pages" / "tropical" / "tropical-controller.js"
+    ).read_text(encoding="utf-8")
+
+    assert "archiveScrubLoading" in controller
+    assert "archiveScrubPending = { index, options };" in controller
+    assert "async function requestArchiveScrubIndex" in controller
+    assert "if (archiveMode === 'advisory' && archiveScrubLoading)" in controller
+    assert "slider.disabled = false;" in controller
+    assert "pending.index !== archiveScrubIndex()" in controller
+    assert "byId('adv-scrub-slider')?.addEventListener('input'" in controller
+
+
+def test_tropical_archive_warming_is_bounded_and_progressive():
+    page = (
+        Path(BASE_DIR) / "frontend" / "pages" / "tropical" / "tropical.html"
+    ).read_text(encoding="utf-8")
+    app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "tropical" / "tropical-app.js"
+    ).read_text(encoding="utf-8")
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "tropical" / "tropical-engine.js"
+    ).read_text(encoding="utf-8")
+    controller = (
+        Path(BASE_DIR) / "frontend" / "pages" / "tropical" / "tropical-controller.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'id="wx-archive-warm-status"' in page
+    assert "_startTropicalArchiveWarm" in app
+    assert "Warm status unavailable" in app
+    assert "context.startArchiveWarm('window', data.advisories[0]);" in engine
+    assert "startArchiveWarm(\n                'full'" in controller
+
+
 def test_tropical_legend_uses_refactored_core_shell():
     page = (
         Path(BASE_DIR) / "frontend" / "pages" / "tropical" / "tropical.html"
