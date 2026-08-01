@@ -383,7 +383,11 @@ Next step:
   `alerts-page.js?v=20260731b`, and `workspace-app.js?v=20260731c`. Eight Alerts
   tests, two focused Workspace tests, Ruff, and JS syntax checks pass. The user
   confirmed the shared Alerts/Workspace startup-notification re-smoke passed;
-  Alerts shallow regression acceptance is complete. Continue the sweep with
-  Radar. No authorized Satellite platform-expansion or Radar render-
-  optimization work remains.
+  Alerts shallow regression acceptance is complete. Radar, SPC, RTMA, MRMS,
+  Drought, and WPC then passed their representative current-product,
+  map/style-control, status/legend, and no-console-error smokes. Current
+  Dashboard Stabilization Acceptance is complete, establishing the accepted
+  2026-07-31 current-dashboard baseline. Do not begin backlog, Workspace
+  expansion, Archive, Satellite platform-expansion, or Radar render-
+  optimization work without a new explicit phase authorization.
 ```

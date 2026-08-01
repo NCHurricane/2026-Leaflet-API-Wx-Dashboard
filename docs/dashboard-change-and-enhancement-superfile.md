@@ -197,10 +197,10 @@ to PNG-only behavior.
    looping Channels 02, 07, and 09; all four current frames had already
    rendered. GMGSI animation acceptance passed and Phase 3 is closed.
 
-### Next current-dashboard phase — stabilization acceptance
+### Completed current-dashboard phase — stabilization acceptance
 
-This phase was authorized on 2026-07-31 and is in progress. It adds no products
-and no Archive UI work.
+This phase was authorized and completed on 2026-07-31. It added no products and
+no Archive UI work.
 
 1. Reconcile the historical pending browser notes against later accepted smoke
    evidence; do not restore the retired Phases 25-27 checklist wholesale.
@@ -233,6 +233,13 @@ Shallow regression progress (2026-07-31):
   Alerts/Workspace path. Two broader Workspace assertions remain stale against
   already-accepted region/watch-control changes and are unrelated. Alerts
   shallow regression acceptance is complete.
+- Radar, SPC, RTMA, MRMS, Drought, and WPC each passed the representative
+  current-product, map/style-control, status/legend, and no-console-error smoke.
+
+The focused Workspace, Water, Tropical, and GOES GeoColor gates plus the full
+shallow standalone-page sweep are complete. This establishes the accepted
+current-dashboard baseline as of 2026-07-31. Select any subsequent backlog,
+workspace expansion, or Archive work as a separately authorized phase.
 
 Workspace acceptance passed 2026-07-31. The tabbed legend tray and independent
 map-versus-national-rail filters passed as implemented. Projected Arrival is now
