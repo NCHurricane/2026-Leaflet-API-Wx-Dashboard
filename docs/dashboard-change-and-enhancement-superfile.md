@@ -217,6 +217,23 @@ and no Archive UI work.
    that surface. If the gate passes, record a new accepted current-dashboard
    baseline before selecting backlog or workspace-expansion work.
 
+Shallow regression progress (2026-07-31):
+
+- Surface passed its representative current-data, control, status, and legend
+  smoke.
+- Alerts passed except that Alerts and Workspace replayed already-active alerts
+  as "New Alert" notifications during startup. The shared Alerts engine now
+  records its startup time, requires an unseen alert's issuance time to be
+  later than that boundary, and retains a session-wide union of seen IDs so
+  filtered or viewport refreshes cannot replay earlier alerts. Existing alerts
+  still render normally. Cachebusters are `alerts-engine.js?v=20260731b`,
+  `alerts-page.js?v=20260731b`, and `workspace-app.js?v=20260731c`. Eight Alerts
+  tests, two focused Workspace tests, Ruff, and JavaScript syntax checks pass;
+  the user confirmed the startup-notification re-smoke passed on the shared
+  Alerts/Workspace path. Two broader Workspace assertions remain stale against
+  already-accepted region/watch-control changes and are unrelated. Alerts
+  shallow regression acceptance is complete.
+
 Workspace acceptance passed 2026-07-31. The tabbed legend tray and independent
 map-versus-national-rail filters passed as implemented. Projected Arrival is now
 visible only when both a qualifying alert polygon and radar site are selected;

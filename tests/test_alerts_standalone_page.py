@@ -73,6 +73,17 @@ def test_alerts_cache_rejects_generations_older_than_latest_seen():
     assert "if (!isCurrentAlertPayload(freshPayloads)) return;" in engine
 
 
+def test_new_alert_notifications_ignore_pre_start_and_previously_seen_alerts():
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+
+    assert "const notificationStartedAtMs = Date.now();" in engine
+    assert "issuedAfterNotificationStart(feature)" in engine
+    assert "issuedMs > notificationStartedAtMs" in engine
+    assert "new Set([...(knownAlertIds || []), ...nextIds])" in engine
+
+
 def test_severe_alert_pulse_is_stroke_only_and_zoom_aware():
     engine = (
         Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"

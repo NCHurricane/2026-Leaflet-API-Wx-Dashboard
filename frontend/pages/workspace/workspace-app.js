@@ -7,7 +7,7 @@ import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
 import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260726a';
-import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260731a';
+import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260731b';
 import { createRadarEngine } from '../radar/radar-engine.js?v=20260729b';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 

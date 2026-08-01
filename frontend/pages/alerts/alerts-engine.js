@@ -158,6 +158,7 @@ export function createAlertsEngine(options) {
     let lsrSequence = 0;
     let archiveSequence = 0;
     let knownAlertIds = null;
+    const notificationStartedAtMs = Date.now();
     let selectedAlert = null;
     let selectedAlertMissingRefreshes = 0;
     let selectedLsrId = '';
@@ -165,6 +166,14 @@ export function createAlertsEngine(options) {
     function featureId(feature) {
         const props = feature?.properties || {};
         return String(feature?.id || `${props.event || ''}|${props.sent || ''}|${props.areaDesc || ''}`);
+    }
+
+    function issuedAfterNotificationStart(feature) {
+        const props = feature?.properties || {};
+        const issuedMs = Date.parse(
+            props.sent || props.effective || props.onset || props.issued || '',
+        );
+        return Number.isFinite(issuedMs) && issuedMs > notificationStartedAtMs;
     }
 
     function lsrFeatureId(feature) {
@@ -467,9 +476,12 @@ export function createAlertsEngine(options) {
                     const notificationFeatures = railScope === 'national' ? railAlertBaseFeatures : renderedAlerts;
                     const nextIds = new Set(notificationFeatures.map(featureId));
                     if (knownAlertIds && applyOptions.notifyNewAlerts !== false) notificationFeatures.forEach((feature) => {
-                        if (!knownAlertIds.has(featureId(feature))) onNewAlert?.(feature);
+                        if (
+                            !knownAlertIds.has(featureId(feature))
+                            && issuedAfterNotificationStart(feature)
+                        ) onNewAlert?.(feature);
                     });
-                    knownAlertIds = nextIds;
+                    knownAlertIds = new Set([...(knownAlertIds || []), ...nextIds]);
                 }
                 const updated = mapPayload?._updated || new Date().toISOString();
                 status.setDataInfo({ timestamp: updated, provider: 'NWS / IEM', source: mapPayload?._source || 'alerts cache' });

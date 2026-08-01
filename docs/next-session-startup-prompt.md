@@ -375,6 +375,15 @@ Next step:
   The GOES namespace is `products-v8`; 21 focused tests plus Ruff pass. The
   user accepted the final GOES-18 RealEarth comparison, closing the shared
   GOES-18/19 GeoColor visual gate. Next, run the shallow representative
-  regression sweep of the other current pages. No authorized Satellite
-  platform-expansion or Radar render-optimization work remains.
+  regression sweep of the other current pages. Surface passed. Alerts otherwise
+  passed, but startup replayed already-active alerts as new on both Alerts and
+  Workspace. The shared engine now gates unseen IDs by issuance time after
+  engine startup and retains all IDs seen during the session; updated
+  cachebusters are `alerts-engine.js?v=20260731b`,
+  `alerts-page.js?v=20260731b`, and `workspace-app.js?v=20260731c`. Eight Alerts
+  tests, two focused Workspace tests, Ruff, and JS syntax checks pass. The user
+  confirmed the shared Alerts/Workspace startup-notification re-smoke passed;
+  Alerts shallow regression acceptance is complete. Continue the sweep with
+  Radar. No authorized Satellite platform-expansion or Radar render-
+  optimization work remains.
 ```
