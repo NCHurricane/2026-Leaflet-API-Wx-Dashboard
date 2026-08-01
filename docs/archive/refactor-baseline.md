@@ -1,5 +1,8 @@
 # Refactor Baseline
 
+Archived 2026-07-31 after the refactor and current-dashboard stabilization
+acceptance completed. Retained as the original pre-refactor snapshot.
+
 Generated: 2026-06-13
 
 This baseline records the current backend and frontend wiring before any Phase 2

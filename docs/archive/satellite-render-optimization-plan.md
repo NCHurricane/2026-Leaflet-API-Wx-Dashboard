@@ -2,8 +2,8 @@
 
 Prepared 2026-07-11; execution ran 2026-07-22 and completed through Phase 5.
 Phase 6 remains deferred unless later profiling and explicit approval reopen
-it. Companion to `docs/satellite-radar-render-pipeline-files.md` (the shared
-pipeline reference, now active for Radar). Scope is `satellite_v2` only; radar
+it. Companion to `docs/archive/satellite-radar-render-pipeline-files.md` (the
+historical shared pipeline reference). Scope is `satellite_v2` only; radar
 is explicitly out of scope for Phases 0–6 (the Phase 0 harness methodology is
 reused by the dedicated Radar plan).
 

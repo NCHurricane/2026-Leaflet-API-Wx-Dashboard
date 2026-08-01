@@ -8,7 +8,7 @@ Continue dashboard work in F:\Python\dashboard_2026.
 Read first:
 - docs/token-saver-maybe.md
 - docs/dashboard-change-and-enhancement-superfile.md
-- docs/worker-free-render-plan.md, Phase 8 completion summary only
+- docs/archive/worker-free-render-plan.md, Phase 8 completion summary only
 - docs/archive/satellite-platform-expansion-plan.md
 - git status
 

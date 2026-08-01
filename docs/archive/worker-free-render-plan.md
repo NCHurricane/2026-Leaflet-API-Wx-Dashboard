@@ -1,5 +1,8 @@
 # Task-Scheduler-Free Refresh and Rendering Plan
 
+Archived 2026-07-31 after Phases 0-8 and the current-dashboard stabilization
+acceptance completed. Current operational contracts live in `docs/architecture.md`.
+
 ## Status and objective
 
 This plan defines the path to a dashboard that requires **zero Windows Task Scheduler jobs** while retaining access to the full product catalog.

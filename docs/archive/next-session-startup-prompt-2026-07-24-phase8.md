@@ -9,7 +9,7 @@ Continue dashboard enhancement work in F:\Python\dashboard_2026.
 
 Read first:
 - docs/dashboard-change-and-enhancement-superfile.md
-- docs/worker-free-render-plan.md, Phase 8 only
+- docs/archive/worker-free-render-plan.md, Phase 8 only
 - docs/phases-25-27-manual-smoke-checklist.md only when checking the older gate
 - docs/architecture.md or docs/patterns.md only when the next change crosses
   those boundaries
@@ -24,8 +24,8 @@ Mandatory session-start directive:
 - Do not start, investigate, benchmark, or implement Radar optimization Phase 0
   as an alternative track in this session. Worker-free Phase 8 goes first
   unless the user explicitly changes the priority.
-- Do not read `docs/radar-render-optimization-plan.md` or
-  `docs/satellite-radar-render-pipeline-files.md` at startup unless the user
+- Do not read `docs/archive/radar-render-optimization-plan.md` or
+  `docs/archive/satellite-radar-render-pipeline-files.md` at startup unless the user
   explicitly redirects the session to Radar.
 
 Current checkpoint:

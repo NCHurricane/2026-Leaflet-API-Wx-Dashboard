@@ -1,5 +1,9 @@
 # Frontend True Split Stage 2 — Phase 18 Core API Inventory
 
+Archived 2026-07-31 after completion of the Frontend True Split and current-
+dashboard stabilization acceptance. Retained as the historical migration
+contract.
+
 Status: completed 2026-07-16. This is the interface contract for Phases 19-27
 of the Frontend True Split and Severe Weather Workspace track.
 

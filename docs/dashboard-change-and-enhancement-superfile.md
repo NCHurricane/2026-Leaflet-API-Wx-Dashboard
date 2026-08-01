@@ -23,7 +23,7 @@ Keep separate:
 
 - `docs/architecture.md` for durable system architecture.
 - `docs/patterns.md` for coding and implementation patterns.
-- `docs/refactor-baseline.md` for the original pre-refactor baseline.
+- `docs/archive/refactor-baseline.md` for the original pre-refactor baseline.
 - `docs/next-session-startup-prompt.md` for the short current handoff.
 - The former Phases 25-27 manual smoke checklist was intentionally retired on
   2026-07-25 after the user-owned whole-system smoke passed. Do not restore it
@@ -32,9 +32,10 @@ Keep separate:
   optimization execution detail.
 - `docs/archive/satellite-platform-expansion-plan.md` for the completed GK2A +
   GMGSI platform-expansion track.
-- `docs/radar-render-optimization-plan.md` for the active Radar latency plan.
-- `docs/satellite-radar-render-pipeline-files.md` for the shared pipeline file
-  reference; its Radar section is active and its Satellite section is historical.
+- `docs/archive/radar-render-optimization-plan.md` for the completed Radar
+  latency track.
+- `docs/archive/satellite-radar-render-pipeline-files.md` for the historical
+  shared pipeline file reference.
 
 ## Active Tracks (2026-07-31)
 
@@ -54,11 +55,10 @@ to PNG-only behavior.
    Alerts and Radar engine APIs, owns the preserved arrival/speed tools, and
    replaces the deleted legacy shell/monolith. The former consolidated browser
    checklist was retired after the 2026-07-25 whole-system smoke passed. Before
-   expanding the workspace or adding product features, run the bounded current-
-   dashboard stabilization gate below to reconcile later page-specific changes
-   and historical pending notes.
+   The bounded current-dashboard stabilization gate completed on 2026-07-31;
+   future Workspace expansion or product features require a new phase.
 2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
-   `docs/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
+   `docs/archive/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
    recorded, and the remediated live-NWS warm pass reused 471/471 alerts. It
    completed in 0.504 seconds total and 0.082 seconds after the response, so
@@ -112,7 +112,7 @@ to PNG-only behavior.
    Its focused automated gate, whole-system browser smoke, and optional-warmer
    enabled/disabled acceptance pass. Phase 8 is closed.
 3. Radar render pipeline latency optimization — execution-grade plan prepared
-   in `docs/radar-render-optimization-plan.md`. Phase 0 is complete. Phase 1
+   in `docs/archive/radar-render-optimization-plan.md`. Phase 0 is complete. Phase 1
    returns one newest frame before the existing keyed background fill; its
    focused, benchmark, golden, and browser gates pass. Phase 2 reusable pools
    also pass automated/golden validation and browser acceptance on `/radar`
@@ -1059,7 +1059,7 @@ shippable, so an interrupted session still leaves the repo better than it
 found it.
 
 - Phase 18: **COMPLETE 2026-07-16.** Core API inventory and interface contract
-  are in `docs/frontend-stage2-core-api-inventory.md`. The audit found 578
+  are in `docs/archive/frontend-stage2-core-api-inventory.md`. The audit found 578
   injected entries / 390 unique names, defined the `core/*`, page, engine, and
   workspace boundaries, and identified the cross-product scrubber coupling
   that must not survive migration.
@@ -3026,8 +3026,8 @@ GeoColor opacity work).
 Completed track 3 (see Active Tracks). Status: Phase 0 committed at `a6f5f83`,
 Phase 1 at `fc534ba`, Phase 2 at `8ee3a4b`, Phase 3 at `29b83b6`, Phase 4 at `39de302`, and Phase 5 at `168510f`. The archived standalone
 execution plan is `docs/archive/satellite-render-optimization-plan.md` (prepared
-2026-07-11). The shared file reference is active again at
-`docs/satellite-radar-render-pipeline-files.md` for the new Radar track. The
+2026-07-11). The shared file reference is archived at
+`docs/archive/satellite-radar-render-pipeline-files.md`. The
 archived Satellite plan retains its benchmark CLI, golden matrix, and phase
 decisions; this superfile carries the durable final status.
 
@@ -3074,9 +3074,10 @@ decisions; this superfile carries the durable final status.
 
 ### Radar render pipeline latency optimization — registered 2026-07-22
 
-Active as Track 3 (see Active Tracks). The execution plan is
-`docs/radar-render-optimization-plan.md`; the active pipeline map is
-`docs/satellite-radar-render-pipeline-files.md`. Phases 0-5 are complete.
+Completed as Track 3 (see Active Tracks). The execution plan is archived at
+`docs/archive/radar-render-optimization-plan.md`; the historical pipeline map
+is `docs/archive/satellite-radar-render-pipeline-files.md`. Phases 0-8 and the
+post-phase freshness correction are complete.
 Phase 1 includes three-site user-owned browser acceptance, and Phase 2 includes
 `/radar` and `/workspace` browser acceptance. Phases 3-5 are backend-only and
 golden-validated. Future WebGL work is additive and cannot replace PNG

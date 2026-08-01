@@ -1,7 +1,10 @@
 # Radar Render Pipeline — Latency Optimization Plan
 
+Archived 2026-07-31 after Phases 0-8, the post-phase freshness correction, and
+current-dashboard stabilization acceptance completed.
+
 Prepared 2026-07-22. Companion to
-`docs/satellite-radar-render-pipeline-files.md` (shared pipeline reference).
+`docs/archive/satellite-radar-render-pipeline-files.md` (shared pipeline reference).
 Scope is the domestic NEXRAD live-cache path only. International providers,
 Radar UI redesign, shared legend adoption, and the compatibility-only IEM tile
 routes are out of scope. Phases 0-5 optimize the existing PNG workflow.

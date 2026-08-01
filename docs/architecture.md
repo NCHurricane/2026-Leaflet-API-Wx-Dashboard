@@ -59,7 +59,7 @@ Product-page architecture (migration completed in Phase 27):
   `/mrms`, `/rtma`, `/drought`, `/tropical`, `/wpc`, `/water`, and `/workspace`.
   `/weather.html` 307-redirects to `/workspace`.
 - The Stage 2 frontend interface contract is recorded in
-  `docs/frontend-stage2-core-api-inventory.md`. It prohibits a replacement
+  `docs/archive/frontend-stage2-core-api-inventory.md`. It prohibits a replacement
   global context: pages import narrow `core/*` capabilities, engines own
   product data/layers, and the workspace composes engine APIs without loading
   sibling page controllers.
