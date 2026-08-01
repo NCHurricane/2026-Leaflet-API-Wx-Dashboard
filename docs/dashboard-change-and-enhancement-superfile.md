@@ -253,7 +253,11 @@ the first foreground advisory loads. Pressing Play upgrades the same
 deduplicated job to sequential full-storm warming through the shared NHC
 provider budget, with atomic advisory publication and visible progress. The
 user confirmed manual Advisory and Best Track scrubbing, playback, and both
-warm-path corrections. Tropical full-workflow acceptance is complete.
+warm-path corrections. Archive entry now clears the prior Live timestamp;
+Advisory frames use normalized NHC issuance time and Best Track frames use each
+fix's UTC `DTG`, updating the global timestamp while scrubbing. The user
+confirmed both historical timestamp paths. Tropical full-workflow acceptance
+is complete.
 
 ## Current State
 

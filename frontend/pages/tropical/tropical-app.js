@@ -253,6 +253,7 @@ function _wireTropicalWorkflowTabs() {
         setLegend('');
 
         if (tab === 'archive') {
+            status.clear();
             const liveSelect = byId('weather-tropical-system');
             if (liveSelect) liveSelect.value = '';
             _clearActiveSystemsOverview();
@@ -1458,6 +1459,18 @@ function _formatFixDTG(dtg) {
     return `${mon} ${Number(s.slice(6, 8))}, ${s.slice(0, 4)} · ${s.slice(8, 10)}Z`;
 }
 
+function _archiveFixTimestamp(feature) {
+    const value = String(feature?.properties?.DTG || '').trim();
+    if (!/^\d{10}(?:\d{2})?$/.test(value)) return null;
+    const year = Number(value.slice(0, 4));
+    const month = Number(value.slice(4, 6));
+    const day = Number(value.slice(6, 8));
+    const hour = Number(value.slice(8, 10));
+    const minute = value.length >= 12 ? Number(value.slice(10, 12)) : 0;
+    const timestamp = new Date(Date.UTC(year, month - 1, day, hour, minute));
+    return Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : null;
+}
+
 function _clearArchiveFixHighlight() {
     if (_tropicalFixMarker && map.hasLayer(_tropicalFixMarker)) map.removeLayer(_tropicalFixMarker);
     _tropicalFixMarker = null;
@@ -1499,8 +1512,9 @@ function _loadArchiveFix(index, options = {}) {
     _renderTropicalLegend();
     _renderArchiveScrubberBar();
 
-    _setReliability('tropical', 'Best Track — HURDAT2', 'NOAA NHC', base.updated || Date.now());
-    _setTimestampSource('tropical', 'Best Track — HURDAT2', base.updated || Date.now());
+    const fixTimestamp = _archiveFixTimestamp(feature);
+    _setReliability('tropical', 'Best Track — HURDAT2', 'NOAA NHC', fixTimestamp);
+    _setTimestampSource('tropical', 'Best Track — HURDAT2', fixTimestamp);
     _setTropicalArchiveStatus(`${_tropicalArchiveStormName || ''} — Fix ${index + 1}/${fixes.length}`);
 }
 
@@ -1568,7 +1582,7 @@ function configureProductModules() {
         setTimeoutFn: (callback, delay) => setTimeout(callback, delay),
         syncLayerPills: (keys, toggles) => keys.forEach((key) => { const input = byId('wx-tropical-inspector-layers')?.querySelector(`[data-tc-layer="${key}"]`); if (input) input.checked = !!toggles[key]; }),
         updateLiveStormMetadata: (data) => { const updated = data.updated || Date.now(); _setReliability('tropical', 'Tropical Cyclones', 'NOAA NHC', updated); _setTimestampSource('tropical', 'NHC Public Advisory', updated); },
-        updateArchiveAdvisoryMetadata: (advisory, step, atcfId) => { const label = `Advisory ${advisory.advisoryStep || step}`; const updated = advisory.updated || Date.now(); _setReliability('tropical', `${label} — NHC Archive`, 'NOAA NHC', updated); _setTimestampSource('tropical', `${label} — NHC Archive`, updated); _setTropicalArchiveStatus(`${_tropicalArchiveStormName || atcfId} — ${label}`); },
+        updateArchiveAdvisoryMetadata: (advisory, step, atcfId) => { const label = `Advisory ${advisory.advisoryStep || step}`; const issuedAt = advisory.issued_at || null; _setReliability('tropical', `${label} — NHC Archive`, 'NOAA NHC', issuedAt); _setTimestampSource('tropical', `${label} — NHC Archive`, issuedAt); _setTropicalArchiveStatus(`${_tropicalArchiveStormName || atcfId} — ${label}`); },
         updateArchiveStormMetadata: (data) => _setViewerTimestamp(data.updated || Date.now()),
         regionFitBottomPaddingPx: REGION_FIT_BOTTOM_PADDING_PX, watchWarningEvent: (code) => _TROPICAL_WW_EVENT[code], windClass: _tropicalWindClass, escapeHtml,
     });

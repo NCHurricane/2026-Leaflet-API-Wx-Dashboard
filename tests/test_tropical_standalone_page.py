@@ -123,6 +123,18 @@ def test_tropical_archive_warming_is_bounded_and_progressive():
     assert "startArchiveWarm(\n                'full'" in controller
 
 
+def test_tropical_archive_global_timestamp_uses_product_time():
+    app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "tropical" / "tropical-app.js"
+    ).read_text(encoding="utf-8")
+
+    assert "status.clear();" in app
+    assert "function _archiveFixTimestamp(feature)" in app
+    assert "feature?.properties?.DTG" in app
+    assert "const issuedAt = advisory.issued_at || null;" in app
+    assert "base.updated || Date.now()" not in app
+
+
 def test_tropical_legend_uses_refactored_core_shell():
     page = (
         Path(BASE_DIR) / "frontend" / "pages" / "tropical" / "tropical.html"

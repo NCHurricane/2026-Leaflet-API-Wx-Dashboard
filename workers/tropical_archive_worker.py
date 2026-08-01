@@ -23,7 +23,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Add project root to path for both module and direct execution
@@ -695,6 +695,50 @@ _ADVISORY_TEXT_KINDS = (
 _ISSUED_RE = re.compile(
     r"\d{3,4}\s+(?:AM|PM)\s+[A-Z]{2,4}\s+[A-Z]{3}\s+[A-Z]{3}\s+\d{1,2}\s+\d{4}", re.I
 )
+_ARCHIVE_TIMEZONE_OFFSETS = {
+    "AST": -4,
+    "ADT": -3,
+    "EST": -5,
+    "EDT": -4,
+    "CST": -6,
+    "CDT": -5,
+    "MST": -7,
+    "MDT": -6,
+    "PST": -8,
+    "PDT": -7,
+    "HST": -10,
+    "HDT": -9,
+    "UTC": 0,
+    "GMT": 0,
+}
+
+
+def parse_archive_issued_iso(value: object) -> str | None:
+    """Normalize an NHC archive issuance line to an offset-aware ISO timestamp."""
+    match = re.fullmatch(
+        r"(?P<hm>\d{3,4})\s+(?P<ampm>AM|PM)\s+(?P<zone>[A-Z]{2,4})\s+"
+        r"[A-Z]{3}\s+(?P<month>[A-Z]{3})\s+(?P<day>\d{1,2})\s+(?P<year>\d{4})",
+        str(value or "").strip(),
+        re.I,
+    )
+    if not match:
+        return None
+    zone = match.group("zone").upper()
+    offset_hours = _ARCHIVE_TIMEZONE_OFFSETS.get(zone)
+    if offset_hours is None:
+        return None
+    hm = match.group("hm").zfill(4)
+    try:
+        local = datetime.strptime(
+            f"{hm} {match.group('ampm')} {match.group('month')} "
+            f"{match.group('day')} {match.group('year')}",
+            "%I%M %p %b %d %Y",
+        )
+    except ValueError:
+        return None
+    return local.replace(
+        tzinfo=timezone(timedelta(hours=offset_hours))
+    ).isoformat()
 
 
 def _advisory_step_key(step: str) -> tuple[int, str]:
@@ -884,6 +928,7 @@ def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
         "advisoryNum": num,
         "intermediate": bool(suffix),
         "issued": issued,
+        "issued_at": parse_archive_issued_iso(issued),
         "advisory": advisory,
         "track": track,
         "products": products,

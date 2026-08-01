@@ -740,7 +740,10 @@ def get_tropical_archive_advisory_data(atcf_id: str, step: str) -> dict:
         raise HTTPException(status_code=400, detail="Invalid advisory step.")
 
     try:
-        from workers.tropical_archive_worker import get_advisory_payload
+        from workers.tropical_archive_worker import (
+            get_advisory_payload,
+            parse_archive_issued_iso,
+        )
 
         advisory_cache = (
             _TROPICAL_ARCHIVE_STORMS_DIR / sid / "advisories" / f"{stp}.json"
@@ -756,6 +759,10 @@ def get_tropical_archive_advisory_data(atcf_id: str, step: str) -> dict:
         raise HTTPException(
             status_code=404, detail=f"No archived advisory: {sid} #{stp}"
         )
+    if not payload.get("issued_at"):
+        issued_at = parse_archive_issued_iso(payload.get("issued"))
+        if issued_at:
+            payload = {**payload, "issued_at": issued_at}
     return payload
 
 

@@ -363,7 +363,9 @@ Next step:
   passed. Live System selection/inspector behavior also passed with an active
   Eastern Pacific storm. Archive Advisory/Best Track scrub, playback,
   Live-to-Archive clearing, and bounded five-frame/full-on-Play server warming
-  passed; Tropical full-workflow acceptance is complete. The final GOES GeoColor white-
+  passed. Archive Advisory issuance and Best Track `DTG` now drive the global
+  timestamp and passed browser smoke; Tropical full-workflow acceptance is
+  complete. The final GOES GeoColor white-
   point check, and a shallow representative regression sweep of the other
   current pages. No authorized Satellite platform-expansion or Radar render-
   optimization work remains.

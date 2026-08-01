@@ -239,3 +239,34 @@ def test_archive_advisory_cache_is_atomic_and_deduplicates_concurrent_reads(
     ]
     assert cache.exists()
     assert not cache.with_suffix(".json.tmp").exists()
+
+
+def test_archive_advisory_issuance_normalizes_to_offset_aware_iso():
+    assert tropical_archive_worker.parse_archive_issued_iso(
+        "500 PM AST Sun Aug 20 2023"
+    ) == "2023-08-20T17:00:00-04:00"
+    assert tropical_archive_worker.parse_archive_issued_iso(
+        "1100 AM HST Tue Jul 29 2025"
+    ) == "2025-07-29T11:00:00-10:00"
+
+
+def test_cached_archive_advisory_response_adds_authoritative_issuance(
+    tmp_path,
+    monkeypatch,
+):
+    storms_dir = tmp_path / "storms"
+    cache = storms_dir / "AL082023" / "advisories" / "001.json"
+    _write_old_json(cache, {"issued": "500 PM AST Sun Aug 20 2023"})
+    monkeypatch.setattr(tropical_service, "_TROPICAL_ARCHIVE_STORMS_DIR", storms_dir)
+    monkeypatch.setattr(
+        tropical_archive_worker,
+        "get_advisory_payload",
+        lambda _sid, _step: {"issued": "500 PM AST Sun Aug 20 2023"},
+    )
+
+    payload = tropical_service.get_tropical_archive_advisory_data(
+        "AL082023",
+        "001",
+    )
+
+    assert payload["issued_at"] == "2023-08-20T17:00:00-04:00"
