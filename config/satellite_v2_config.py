@@ -828,9 +828,10 @@ SATELLITE_V2_DEFAULT_MAX_FRAMES = 360
 
 SATELLITE_V2_PROVIDER = "aws"
 SATELLITE_V2_CACHE_NAMESPACE = "satellite"
-# These versions retain the filled-image opacity invalidation and advance each
-# platform past Channel02 tiles rendered with the former 0.90 white point.
-SATELLITE_V2_RENDER_VERSION = "products-v6"
+# These versions retain the filled-image opacity and white-point invalidations;
+# the GOES/default namespace also includes the low-sun Rayleigh taper and ABI
+# daytime midtone lift.
+SATELLITE_V2_RENDER_VERSION = "products-v8"
 SATELLITE_V2_RENDER_VERSION_GK2A = "products-ami2"
 SATELLITE_V2_RENDER_VERSION_GMGSI = "products-gmgsi1"
 SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi4"

@@ -208,7 +208,7 @@ and no Archive UI work.
    the Workspace tabbed legend/map-versus-rail behavior and Projected Arrival
    interactions; Water Region/legend/draggable-detail follow-ups; Tropical
    Live/Archive/System-inspector workflow; and the final GOES GeoColor white-
-   point visual check.
+   point/low-sun/midtone visual check.
 3. Run a shallow regression sweep on the remaining standalone routes: load one
    representative current product, change one map/style control, and confirm
    status/legend updates without console errors. Satellite provider acceptance
@@ -1928,8 +1928,28 @@ Completed display updates (2026-07-16):
   and a GeoColor-only display white point (`0.85`) after the CIRA stretch. The
   latter raises the product into the full display luminance range without
   changing the deep-ocean black point or affecting nighttime RGB/other
-  products. User confirmed the corrected hues; final browser confirmation of
-  the last white-point lift is pending.
+  products. User confirmed the corrected hues, and the 2026-07-31 RealEarth
+  comparison confirmed the final white-point lift.
+- Low-sun follow-up (2026-07-31): a RealEarth comparison confirmed that the
+  daytime cloud brightness and `0.85` white point match closely, but exposed
+  crushed shadow detail over the late-day Northeast. Solar geometry confirmed
+  that this area still had full daytime blend weight; the bounded Rayleigh
+  estimate, not the 80-95 degree day/night blend, caused the darkening.
+  Rayleigh correction now remains full through 60 degrees solar zenith and
+  smoothsteps to zero by 85 degrees. The white point and day/night blend are
+  unchanged.
+- A same-frame GOES-18 follow-up showed that the ABI daytime midtones remained
+  darker than RealEarth, especially for thin clouds approaching the eastern
+  transition. ABI GeoColor now applies a mild `0.85` midtone gamma after the
+  existing white-point transform. Zero and full-white endpoints are preserved,
+  and non-ABI satellite recipes are unchanged. The GOES/default render
+  namespace is `products-v8`; focused validation passes 21 GeoColor/GK2A tests
+  plus Ruff.
+  A cached 2026-07-31 22:36 UTC Northeast tile probe reduced near-black pixels
+  from 67.1% to 22.5%. On the 2026-08-01 01:56 UTC GOES-18 cyclone tile, the
+  ABI-only midtone lift raised mean luminance from 0.516 to 0.568 without moving
+  the black/white endpoints. The user confirmed the final GOES-18 RealEarth
+  comparison passed; the shared GOES-18/19 GeoColor visual gate is complete.
 - Filled satellite imagery now renders with PNG alpha 255 and Leaflet layer
   opacity 1.0. Pixels outside valid coverage remain transparent. Sparse
   analytical products retain product-owned transparency: ADP uses
@@ -2877,10 +2897,17 @@ Rayleigh correction left the result flatter than the NOAA/CIRA reference.
   and applies the CIRA log stretch. Solar geometry owns the day/night mask;
   surface brightness is used only as a legacy fallback for sources without
   frame-time metadata.
+- The 2026-07-31 low-sun refinement keeps that correction at full strength
+  through 60 degrees solar zenith, then smoothsteps it to zero by 85 degrees
+  so the compact estimate does not crush late-day shadow detail before the
+  separate 80-95 degree day/night transition.
 - A GeoColor-only `0.85` display white point and `1.08` saturation adjustment
   finish the daytime RGB. Both `GeoColor` and `GeoColorBlkMar` share this path.
   The Black Marble background remains an internal RGB input, not a basemap
   layer.
+- ABI GeoColor additionally applies a mild `0.85` midtone gamma after the
+  white-point transform. It preserves black and full white while recovering
+  thin-cloud detail; non-ABI platform recipes are unchanged.
 - Filled RGB/scalar satellite products use alpha 255. ADP/AOD/FRP retain
   specialized sparse-overlay transparency, and invalid/off-disk pixels stay
   alpha 0. The main dashboard and the retained standalone satellite JS path
@@ -2889,8 +2916,8 @@ Rayleigh correction left the result flatter than the NOAA/CIRA reference.
 - Focused validation: 13 satellite tests pass (GeoColor geometry/stretch/tone,
   timestamp parsing, scalar reflectance, and filled-vs-sparse opacity), plus
   Ruff, Python compilation, and `node --check` for both satellite viewer paths.
-  Browser visual proof is user-owned; corrected colors and opacity are
-  user-confirmed, while the final white-point lift awaits confirmation.
+  Browser visual proof is user-owned; corrected colors, opacity, daytime white
+  point, low-sun behavior, and ABI midtones are user-confirmed.
 
 #### GOES aerosol and fire products: ADP, AOD, FRP — added 2026-07-16
 

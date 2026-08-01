@@ -365,8 +365,16 @@ Next step:
   Live-to-Archive clearing, and bounded five-frame/full-on-Play server warming
   passed. Archive Advisory issuance and Best Track `DTG` now drive the global
   timestamp and passed browser smoke; Tropical full-workflow acceptance is
-  complete. The final GOES GeoColor white-
-  point check, and a shallow representative regression sweep of the other
-  current pages. No authorized Satellite platform-expansion or Radar render-
-  optimization work remains.
+  complete. The GOES GeoColor comparison confirmed the daytime cloud/white-
+  point match and exposed low-sun shadow crushing from the bounded Rayleigh
+  estimate. The correction now remains full through 60 degrees solar zenith
+  and smoothsteps to zero by 85 degrees. A GOES-18 follow-up then exposed
+  darker ABI daytime midtones and lost thin-cloud detail near the transition;
+  an ABI-only `0.85` midtone gamma now follows the unchanged `0.85` white-point
+  transform. Black/full-white endpoints and non-ABI recipes are unchanged.
+  The GOES namespace is `products-v8`; 21 focused tests plus Ruff pass. The
+  user accepted the final GOES-18 RealEarth comparison, closing the shared
+  GOES-18/19 GeoColor visual gate. Next, run the shallow representative
+  regression sweep of the other current pages. No authorized Satellite
+  platform-expansion or Radar render-optimization work remains.
 ```

@@ -7,6 +7,8 @@ import xarray as xr
 
 from satellite_v2.composites import (
     _geocolor_display_tone,
+    _geocolor_day_rgb,
+    _rayleigh_correction_weight,
     _rayleigh_correct_reflectance,
     _satellite_local_vectors,
     _solar_day_weight,
@@ -38,6 +40,30 @@ class GeoColorRecipeTests(unittest.TestCase):
             np.array([[[0.0, 0.5, 1.0]]], dtype=np.float32),
             atol=1e-6,
         )
+
+    def test_abi_display_tone_lifts_midtones_without_moving_endpoints(self):
+        rgb = np.array([[[0.0, 0.425, 0.85]]], dtype=np.float32)
+
+        result = _geocolor_display_tone(rgb, midtone_gamma=0.85)
+
+        self.assertEqual(float(result[0, 0, 0]), 0.0)
+        self.assertGreater(float(result[0, 0, 1]), 0.5)
+        self.assertEqual(float(result[0, 0, 2]), 1.0)
+
+    def test_geocolor_midtone_lift_is_abi_only(self):
+        channels = {
+            channel: np.full((1, 1), 0.20, dtype=np.float32)
+            for channel in ("Channel01", "Channel02", "Channel03")
+        }
+
+        abi, _ = _geocolor_day_rgb(
+            channels, None, None, None, None, None, "ABI"
+        )
+        non_abi, _ = _geocolor_day_rgb(
+            channels, None, None, None, None, None, "AMI"
+        )
+
+        self.assertTrue(np.all(abi > non_abi))
 
     def test_day_weight_uses_solar_position_not_surface_brightness(self):
         lon = np.array([[-75.0]], dtype=np.float32)
@@ -73,6 +99,17 @@ class GeoColorRecipeTests(unittest.TestCase):
 
         self.assertLess(float(blue[0, 0]), float(red[0, 0]))
         self.assertLess(float(red[0, 0]), float(near_ir[0, 0]))
+
+    def test_rayleigh_correction_tapers_through_low_sun_angles(self):
+        solar_zenith = np.array([45.0, 60.0, 72.5, 85.0, 90.0])
+        sun_up = np.cos(np.deg2rad(solar_zenith)).astype(np.float32)
+
+        result = _rayleigh_correction_weight(sun_up)
+
+        np.testing.assert_allclose(result[:2], np.ones(2), atol=1e-6)
+        self.assertGreater(float(result[2]), 0.0)
+        self.assertLess(float(result[2]), 1.0)
+        np.testing.assert_allclose(result[3:], np.zeros(2), atol=1e-6)
 
     def test_goes_observation_time_prefers_dataset_metadata(self):
         dataset = xr.Dataset(

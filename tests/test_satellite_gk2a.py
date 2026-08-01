@@ -63,7 +63,7 @@ def test_gk2a_ami_capability_filter_includes_only_valid_composites():
         *GK2A_COMPOSITES,
     }
     assert satellite_v2_render_version_for_satellite("gk2a") == "products-ami2"
-    assert satellite_v2_render_version_for_satellite("goes19") == "products-v6"
+    assert satellite_v2_render_version_for_satellite("goes19") == "products-v8"
 
 
 @pytest.mark.parametrize("product_key", GK2A_COMPOSITES)

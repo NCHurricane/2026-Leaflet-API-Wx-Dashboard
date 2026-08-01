@@ -25,6 +25,7 @@ _CIRA_VISIBLE_BLACK_POINT = 0.0223
 _CIRA_VISIBLE_LOG_ROOT = np.log10(_CIRA_VISIBLE_BLACK_POINT)
 _CIRA_VISIBLE_DENOMINATOR = (1.0 - _CIRA_VISIBLE_LOG_ROOT) * 0.75
 _GEOCOLOR_DISPLAY_WHITE_POINT = 0.85
+_ABI_GEOCOLOR_DISPLAY_GAMMA = 0.85
 
 # ABI molecular optical depths used by the corrected-reflectance (CREFL)
 # algorithm for its 0.47, 0.64, and 0.86 micron bands.  The compact
@@ -36,6 +37,8 @@ _ABI_RAYLEIGH_OPTICAL_DEPTH = {
     "Channel03": 0.015845,
 }
 _ABI_RAYLEIGH_CORRECTION_STRENGTH = 0.55
+_ABI_RAYLEIGH_FULL_CORRECTION_SZA = 60.0
+_ABI_RAYLEIGH_ZERO_CORRECTION_SZA = 85.0
 _EARTH_EQUATORIAL_RADIUS_KM = 6378.137
 
 # EUMETSAT publishes its own stretch windows for SEVIRI/FCI RGB recipes
@@ -134,13 +137,19 @@ def _boost_saturation(rgb: np.ndarray, amount: float = 1.1) -> np.ndarray:
     return np.clip(luma[:, :, np.newaxis] + amount * (rgb - luma[:, :, np.newaxis]), 0.0, 1.0).astype(np.float32)
 
 
-def _geocolor_display_tone(rgb: np.ndarray) -> np.ndarray:
+def _geocolor_display_tone(
+    rgb: np.ndarray,
+    midtone_gamma: float = 1.0,
+) -> np.ndarray:
     """Lift CIRA-stretched GeoColor into the full display luminance range."""
-    return np.clip(
+    toned = np.clip(
         np.asarray(rgb, dtype=np.float32) / _GEOCOLOR_DISPLAY_WHITE_POINT,
         0.0,
         1.0,
-    ).astype(np.float32)
+    )
+    if midtone_gamma != 1.0:
+        toned = np.power(toned, float(midtone_gamma))
+    return toned.astype(np.float32)
 
 
 def _as_utc(observation_time: datetime) -> datetime:
@@ -274,13 +283,10 @@ def _rayleigh_correct_reflectance(
         / (mu_sun + mu_view)
     )
 
-    # Fade the correction from full strength at 70 degrees solar zenith to
-    # zero at the terminator, where the single-scattering approximation is
-    # least stable and the product is transitioning into the night recipe.
-    correction_weight = np.clip(sun_up / np.cos(np.deg2rad(70.0)), 0.0, 1.0)
-    correction_weight = correction_weight * correction_weight * (
-        3.0 - 2.0 * correction_weight
-    )
+    # Preserve the daytime correction while tapering it through low sun
+    # angles, where the compact single-scattering estimate otherwise crushes
+    # shadow detail before the product reaches its day/night transition.
+    correction_weight = _rayleigh_correction_weight(sun_up)
     corrected = (
         data
         - _ABI_RAYLEIGH_CORRECTION_STRENGTH
@@ -288,6 +294,13 @@ def _rayleigh_correct_reflectance(
         * correction_weight
     )
     return np.clip(corrected, 0.0, 1.6).astype(np.float32)
+
+
+def _rayleigh_correction_weight(sun_up: np.ndarray) -> np.ndarray:
+    full_edge = np.cos(np.deg2rad(_ABI_RAYLEIGH_FULL_CORRECTION_SZA))
+    zero_edge = np.cos(np.deg2rad(_ABI_RAYLEIGH_ZERO_CORRECTION_SZA))
+    weight = np.clip((sun_up - zero_edge) / (full_edge - zero_edge), 0.0, 1.0)
+    return (weight * weight * (3.0 - 2.0 * weight)).astype(np.float32)
 
 
 def _solar_day_weight(
@@ -367,7 +380,12 @@ def _geocolor_day_rgb(
         cira_visible_stretch(green),
         cira_visible_stretch(blue),
     )
-    toned = _geocolor_display_tone(stretched)
+    display_gamma = (
+        _ABI_GEOCOLOR_DISPLAY_GAMMA
+        if str(instrument or "").upper() == "ABI"
+        else 1.0
+    )
+    toned = _geocolor_display_tone(stretched, midtone_gamma=display_gamma)
     return _boost_saturation(toned, amount=1.08), solar_up
 
 
