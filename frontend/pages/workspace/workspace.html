@@ -7,7 +7,8 @@
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260730b">
-    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260729c">
+    <link rel="stylesheet" href="/frontend/pages/spc/spc.css?v=20260801a">
+    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260801b">
 </head>
 <body>
     <header class="core-header">
@@ -155,7 +156,41 @@
                             </div>
                         </div>
                     </details>
-                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>SPC</h2><span>Planned</span></summary><div class="workspace-group-body"><p>SPC engine composition placeholder.</p></div></details>
+                    <details id="workspace-spc-group" class="workspace-group workspace-layer-group">
+                        <summary class="workspace-group-summary">
+                            <div class="workspace-title-count"><h2>SPC</h2><span id="workspace-spc-count">0</span></div>
+                            <label class="workspace-layer-toggle" title="Show SPC products">
+                                <span class="core-visually-hidden">Show SPC products</span>
+                                <input id="workspace-spc-enabled" type="checkbox">
+                                <span aria-hidden="true"></span>
+                            </label>
+                        </summary>
+                        <div id="workspace-spc-controls" class="workspace-group-body is-disabled">
+                            <div class="workspace-eyebrow">Day 1 Convective Outlook</div>
+                            <div id="workspace-spc-outlooks" class="workspace-pills workspace-pills-wrap" role="group" aria-label="SPC Day 1 outlook product">
+                                <button type="button" data-spc-hazard="cat" aria-pressed="false" disabled>CAT</button>
+                                <button type="button" data-spc-hazard="torn" aria-pressed="false" disabled>TOR</button>
+                                <button type="button" data-spc-hazard="wind" aria-pressed="false" disabled>Wind</button>
+                                <button type="button" data-spc-hazard="hail" aria-pressed="false" disabled>Hail</button>
+                            </div>
+                            <label class="wx-check-row"><span>Active Mesoscale Discussions</span><input id="workspace-spc-mds" type="checkbox" disabled></label>
+                            <div class="workspace-eyebrow">Active Watches</div>
+                            <div class="spc-dual-row">
+                                <span class="spc-dual-label">TOR</span>
+                                <label><input type="checkbox" data-spc-watch-type="tor" data-spc-watch-mode="polygon" disabled>Polygon</label>
+                                <label><input type="checkbox" data-spc-watch-type="tor" data-spc-watch-mode="counties" disabled>Counties</label>
+                            </div>
+                            <div class="spc-dual-row">
+                                <span class="spc-dual-label">SVR</span>
+                                <label><input type="checkbox" data-spc-watch-type="svr" data-spc-watch-mode="polygon" disabled>Polygon</label>
+                                <label><input type="checkbox" data-spc-watch-type="svr" data-spc-watch-mode="counties" disabled>Counties</label>
+                            </div>
+                            <div class="core-adjustment workspace-opacity-control">
+                                <label id="workspace-spc-fill-opacity-label" for="workspace-spc-fill-opacity">SPC Fill Opacity (0.5)</label>
+                                <input id="workspace-spc-fill-opacity" type="range" min="0.1" max="1" step="0.05" value="0.5" disabled>
+                            </div>
+                        </div>
+                    </details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>Satellite</h2><span>Planned</span></summary><div class="workspace-group-body"><p>Satellite engine composition placeholder.</p></div></details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>RTMA</h2><span>Planned</span></summary><div class="workspace-group-body"><p>RTMA engine composition placeholder.</p></div></details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>MRMS</h2><span>Planned</span></summary><div class="workspace-group-body"><p>MRMS engine composition placeholder.</p></div></details>
@@ -207,6 +242,7 @@
                             <button id="workspace-storm-track-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="storm-tracks" aria-controls="workspace-storm-track-legend" hidden>Storm Tracks</button>
                             <button id="workspace-alerts-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="alerts" aria-controls="workspace-alerts-legend" hidden>Alerts</button>
                             <button id="workspace-lsr-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="storm-reports" aria-controls="workspace-lsr-legend" hidden>Storm Reports</button>
+                            <button id="workspace-spc-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="spc" aria-controls="workspace-spc-legend" hidden>SPC</button>
                         </div>
                         <button class="core-legend-collapse" type="button" aria-expanded="true" aria-label="Collapse legends" title="Collapse legends"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </div>
@@ -215,6 +251,7 @@
                         <section id="workspace-storm-track-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="storm-tracks" aria-labelledby="workspace-storm-track-legend-tab" hidden></section>
                         <section id="workspace-alerts-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="alerts" aria-labelledby="workspace-alerts-legend-tab" hidden></section>
                         <section id="workspace-lsr-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="storm-reports" aria-labelledby="workspace-lsr-legend-tab" hidden></section>
+                        <section id="workspace-spc-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="spc" aria-labelledby="workspace-spc-legend-tab" hidden></section>
                     </div>
                 </div>
             </div>
@@ -251,6 +288,6 @@
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
     <script src="/frontend/lib/tz-lookup/tz.js?v=6.1.25"></script>
-    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260731c"></script>
+    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260801b"></script>
 </body>
 </html>

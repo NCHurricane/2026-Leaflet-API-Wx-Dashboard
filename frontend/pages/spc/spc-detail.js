@@ -166,7 +166,7 @@ function outlookImpactsHtml(rows, clickedRisk) {
     </div>`;
 }
 
-function buildOutlookHtml(feat, context) {
+export function buildSpcOutlookDetailHtml(feat, context) {
     const p = feat?.properties || {};
     const detail = context?.detail || {};
     const day = Number(context?.day || 1);
@@ -227,7 +227,7 @@ function buildOutlookHtml(feat, context) {
     ].join('');
 }
 
-function buildTextHtml(feat) {
+export function buildSpcTextDetailHtml(feat) {
     const p = feat?.properties || {};
     const baseEvent = p.event || 'SPC Product';
     const isWatch = /(?:tornado|severe thunderstorm)\s+watch/i.test(String(p.watch_type || baseEvent || ''));
@@ -275,6 +275,24 @@ function buildTextHtml(feat) {
     ].join('');
 }
 
+export function wireSpcDetailContent(root, { close, zoom } = {}) {
+    root.querySelector('.spc-detail-close')?.addEventListener('click', () => close?.());
+    root.querySelector('[data-spc-zoom]')?.addEventListener('click', () => zoom?.());
+    root.querySelectorAll('[data-spc-outlook-tab]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const key = button.getAttribute('data-spc-outlook-tab') || 'outlook';
+            root.querySelectorAll('[data-spc-outlook-tab]').forEach((tabButton) => {
+                const isActive = tabButton.getAttribute('data-spc-outlook-tab') === key;
+                tabButton.classList.toggle('is-active', isActive);
+                tabButton.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+            root.querySelectorAll('[data-spc-outlook-panel]').forEach((tabPanel) => {
+                tabPanel.hidden = tabPanel.getAttribute('data-spc-outlook-panel') !== key;
+            });
+        });
+    });
+}
+
 export function createSpcDetailPanel(host, mapCore, { zoomToFeature } = {}) {
     const map = mapCore.map;
     let panel = null;
@@ -305,22 +323,11 @@ export function createSpcDetailPanel(host, mapCore, { zoomToFeature } = {}) {
     }
 
     function wirePanel() {
-        panel.querySelector('.spc-detail-close')?.addEventListener('click', close);
-        panel.querySelector('[data-spc-zoom]')?.addEventListener('click', () => {
-            if (activeFeature) zoomToFeature?.(activeFeature);
-        });
-        panel.querySelectorAll('[data-spc-outlook-tab]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const key = button.getAttribute('data-spc-outlook-tab') || 'outlook';
-                panel.querySelectorAll('[data-spc-outlook-tab]').forEach((tabButton) => {
-                    const isActive = tabButton.getAttribute('data-spc-outlook-tab') === key;
-                    tabButton.classList.toggle('is-active', isActive);
-                    tabButton.setAttribute('aria-selected', isActive ? 'true' : 'false');
-                });
-                panel.querySelectorAll('[data-spc-outlook-panel]').forEach((tabPanel) => {
-                    tabPanel.hidden = tabPanel.getAttribute('data-spc-outlook-panel') !== key;
-                });
-            });
+        wireSpcDetailContent(panel, {
+            close,
+            zoom() {
+                if (activeFeature) zoomToFeature?.(activeFeature);
+            },
         });
         // Keep map interactions from bleeding through the panel.
         ['pointerdown', 'dblclick', 'wheel'].forEach((type) => {
@@ -347,11 +354,11 @@ export function createSpcDetailPanel(host, mapCore, { zoomToFeature } = {}) {
     return Object.freeze({
         openOutlook(latlng, feat, context) {
             if (!latlng || !feat) return;
-            open(latlng, feat, buildOutlookHtml(feat, context));
+            open(latlng, feat, buildSpcOutlookDetailHtml(feat, context));
         },
         openText(latlng, feat) {
             if (!latlng || !feat) return;
-            open(latlng, feat, buildTextHtml(feat));
+            open(latlng, feat, buildSpcTextDetailHtml(feat));
         },
         close,
         destroy: close,

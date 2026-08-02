@@ -102,7 +102,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert 'id="workspace-radar-scrubber-bar"' in page
     assert 'id="workspace-radar-bottom-scrubber"' in page
     assert all(f'<h2>{label}</h2>' in page for label in ['SPC', 'Satellite', 'RTMA', 'MRMS', 'WPC', 'Water'])
-    assert page.count('workspace-layer-group workspace-placeholder') == 6
+    assert page.count('workspace-layer-group workspace-placeholder') == 5
     assert page.count('workspace-group workspace-layer-group" open') == 1
     assert 'id="workspace-right-rail"' in page
     assert 'id="workspace-warning-section"' in page
@@ -169,7 +169,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "legendTray.legend('alerts')" in app
     assert "legendTray.markReady()" in app
     assert 'class="workspace-legend-tabs" role="tablist"' in page
-    assert page.count('class="workspace-legend-tab"') == 4
+    assert page.count('class="workspace-legend-tab"') == 5
     assert "fa-chevron-down" in page
     assert "panel.classList.toggle('is-collapsed', !isOpen)" in app
     assert "elevation: '0.5'" in app
@@ -194,6 +194,80 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "subdueWatches: true" in app
     assert 'class="is-active" type="button" data-hours="1"' in page
     assert 'class="is-active" type="button" data-hours="24"' not in page
+
+
+def test_workspace_spc_phase1_is_curated_default_off_and_page_capable():
+    root = Path(BASE_DIR) / "frontend" / "pages"
+    page = (root / "workspace" / "workspace.html").read_text(encoding="utf-8")
+    app = (root / "workspace" / "workspace-app.js").read_text(encoding="utf-8")
+    styles = (root / "workspace" / "workspace.css").read_text(encoding="utf-8")
+    carousel = (root / "workspace" / "workspace-detail-carousel.js").read_text(
+        encoding="utf-8"
+    )
+    renderer = (root / "spc" / "spc-render.js").read_text(encoding="utf-8")
+    spc_detail = (root / "spc" / "spc-detail.js").read_text(encoding="utf-8")
+    alert_detail = (root / "alerts" / "alerts-detail.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'id="workspace-spc-enabled" type="checkbox"' in page
+    assert 'id="workspace-spc-enabled" type="checkbox" checked' not in page
+    assert 'id="workspace-spc-controls" class="workspace-group-body is-disabled"' in page
+    assert page.count("data-spc-hazard=") == 4
+    assert all(
+        f'data-spc-hazard="{hazard}" aria-pressed="false" disabled' in page
+        for hazard in ["cat", "torn", "wind", "hail"]
+    )
+    assert 'data-spc-hazard="cat" aria-pressed="false" disabled>CAT</button>' in page
+    assert 'data-spc-hazard="torn" aria-pressed="false" disabled>TOR</button>' in page
+    assert 'data-spc-hazard="wind" aria-pressed="false" disabled>Wind</button>' in page
+    assert 'data-spc-hazard="hail" aria-pressed="false" disabled>Hail</button>' in page
+    assert 'id="workspace-spc-mds" type="checkbox" disabled' in page
+    assert page.count('data-spc-watch-type="tor"') == 2
+    assert page.count('data-spc-watch-type="svr"') == 2
+    assert page.count('data-spc-watch-mode="polygon"') == 2
+    assert page.count('data-spc-watch-mode="counties"') == 2
+    assert '<span class="spc-dual-label">TOR</span>' in page
+    assert '<span class="spc-dual-label">SVR</span>' in page
+    assert 'id="workspace-spc-fill-opacity" type="range" min="0.1" max="1" step="0.05" value="0.5" disabled' in page
+    assert "workspace-spc-stroke-opacity" not in page
+    assert "workspace-control-note" not in page
+    assert 'id="workspace-spc-legend-tab"' in page
+    assert 'id="workspace-spc-legend"' in page
+    assert "day: 1" in app
+    assert "const cigHazard = CIG_OVERLAY_BY_HAZARD[baseHazard]" in app
+    assert "reportsEnabled: false" in app
+    assert "mdsEnabled: byId('workspace-spc-mds').checked" in app
+    assert "watchesEnabled: watchLayers.length > 0" in app
+    assert "if (peer !== input) peer.checked = false" in app
+    assert "tasks.push(refreshSpc({ keepDetail: true }))" in app
+    assert "const WORKSPACE_SPC_STROKE_OPACITY = 0.1" in app
+    assert "spcRenderer.setStrokeOpacity(WORKSPACE_SPC_STROKE_OPACITY)" in app
+    assert "workspace-spc-stroke-opacity" not in app
+    assert "Significant-threat hatching is paired automatically" in app
+    assert "#workspace-spc-legend .spc-legend-item" in styles
+    assert (
+        "#workspace-spc-legend .spc-legend-flow {\n"
+        "    display: grid;\n"
+        "    grid-template-columns: repeat(5, minmax(0, 1fr))"
+    ) in styles
+    assert "background: rgba(17, 31, 53, .78)" in styles
+    assert ".workspace-spc-legend-note" in styles
+    assert ".workspace-control-note" not in styles
+
+    assert "onDetailPages(latlng, pages)" in app
+    assert "detail.hide();" in app
+    assert "createWorkspaceDetailCarousel" in app
+    assert "detailPagesAtPoint" in renderer
+    assert "seenWatches" in renderer
+    assert "seenMds" in renderer
+    assert "buildSpcOutlookDetailHtml" in spc_detail
+    assert "buildSpcTextDetailHtml" in spc_detail
+    assert "wireSpcDetailContent" in spc_detail
+    assert "workspace-context-dots" in carousel
+    assert "ArrowLeft" in carousel and "ArrowRight" in carousel
+    assert "touchstart" in carousel and "touchend" in carousel
+    assert "hide() { close({ notify: false }); }" in alert_detail
 
 
 def test_all_product_pages_use_vendored_leaflet():
@@ -236,7 +310,7 @@ def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets(
     assert "radar-engine.js?v=20260729b" in radar_app
     assert "radar-engine.js?v=20260729b" in workspace_app
     assert "radar-page.js?v=20260729b" in radar_page
-    assert "workspace-app.js?v=20260731c" in workspace_page
+    assert "workspace-app.js?v=20260801b" in workspace_page
 
 
 def test_radar_scrubbers_hold_on_the_newest_frame():

@@ -115,12 +115,12 @@ function installDrag(root, handle) {
 export function createAlertDetail(root, options = {}) {
     let mode = '';
     const initialTop = Math.max(0, Number(options.initialTop) || 12);
-    function close() {
+    function close({ notify = true } = {}) {
         const closedMode = mode;
         mode = '';
         root.replaceChildren();
         root.hidden = true;
-        if (closedMode) options.onClose?.(closedMode);
+        if (notify && closedMode) options.onClose?.(closedMode);
     }
     function position(color, textColor = color) {
         root.style.setProperty('--alert-color', color);
@@ -176,6 +176,7 @@ export function createAlertDetail(root, options = {}) {
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
     return Object.freeze({
         close,
+        hide() { close({ notify: false }); },
         closeAlert() { if (mode === 'alert') close(); },
         closeLsr() { if (mode === 'lsr') close(); },
         open, openLsr,

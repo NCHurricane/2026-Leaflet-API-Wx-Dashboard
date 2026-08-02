@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-07-31 (Task-scheduler-free rendering Phases 0-8 are closed.
+Last updated: 2026-08-01 (Task-scheduler-free rendering Phases 0-8 are closed.
 The zero-task browser matrix and optional-warmer enabled/disabled acceptance
 passed. Radar render optimization Phases 1-7 are implemented and
 golden-validated; the Phase 1-2 browser acceptance passed and the backend-only
@@ -12,7 +12,10 @@ default-off four-texture L2 Reflectivity animation; its automated, golden, and
 two-page browser gates pass. Phase 7 is closed. Both separately authorized
 Phase 8 core-product families—L2 Velocity/SRV and L3 N0B/N0G—are
 browser-accepted, pass all eight permanent PNG golden rows, and are closed.
-Radar render optimization Phase 8 is complete.)
+Radar render optimization Phase 8 is complete. Workspace expansion Phase 1
+adds curated Day 1 SPC composition; its functional user-owned browser gate
+passed, with a presentation-only re-smoke open for the final control/legend
+tweaks.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -37,7 +40,7 @@ Keep separate:
 - `docs/archive/satellite-radar-render-pipeline-files.md` for the historical
   shared pipeline file reference.
 
-## Active Tracks (2026-07-31)
+## Active Tracks (2026-08-01)
 
 Track numbers preserve the existing roadmap grouping. Track 3 Radar render
 optimization Phases 3-5 are closed with byte-identical golden output,
@@ -54,9 +57,11 @@ to PNG-only behavior.
    Phases 25-27 are complete and statically validated. `/workspace` composes
    Alerts and Radar engine APIs, owns the preserved arrival/speed tools, and
    replaces the deleted legacy shell/monolith. The former consolidated browser
-   checklist was retired after the 2026-07-25 whole-system smoke passed. Before
-   The bounded current-dashboard stabilization gate completed on 2026-07-31;
-   future Workspace expansion or product features require a new phase.
+   checklist was retired after the 2026-07-25 whole-system smoke passed. The
+   bounded current-dashboard stabilization gate completed on 2026-07-31.
+   Workspace expansion Phase 1 was authorized on 2026-08-01 and is implemented
+   for curated SPC products. Its functional user-owned browser gate passed;
+   the final presentation-only re-smoke remains open.
 2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
    `docs/archive/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
@@ -282,6 +287,43 @@ Advisory frames use normalized NHC issuance time and Best Track frames use each
 fix's UTC `DTG`, updating the global timestamp while scrubbing. The user
 confirmed both historical timestamp paths. Tropical full-workflow acceptance
 is complete.
+
+### Workspace expansion Phase 1 — curated SPC composition
+
+Authorized and implemented 2026-08-01. User-owned functional browser acceptance
+passed; a presentation-only re-smoke remains open for the final control and
+legend refinements.
+
+- SPC is off and collapsed by default. The Workspace exposes only Day 1
+  Categorical, Tornado, Wind, and Hail outlooks. Tornado/Wind/Hail selections
+  automatically include the applicable CIG significant-threat overlay.
+- Active Mesoscale Discussions and active Tornado/Severe Thunderstorm Watches
+  can render simultaneously with the selected outlook. Each watch type retains
+  the standalone polygon-versus-counties mutual exclusion.
+- Workspace-only presentation uses `CAT`, `TOR`, `Wind`, and `Hail` outlook
+  pills plus `TOR`/`SVR` watch labels. Fill opacity defaults to `0.5`; stroke
+  opacity is fixed at `0.1` with no stroke slider. The SPC legend uses the
+  Workspace Radar legend's swatch/card treatment in a five-column flow, and the
+  automatic CIG-pairing note lives below the legend entries instead of in the
+  controls.
+- Days 2-8, Fire Weather, SPC Storm Reports, and SPC Archive behavior are not
+  part of this phase. Existing Workspace Local Storm Reports remain unchanged.
+- The Workspace reuses the standalone SPC engine, renderer, outlook/impacts
+  detail, and MD/watch text-detail behavior. A Workspace-local reusable context
+  carousel collects overlapping SPC features at the clicked location, opens
+  the clicked feature first, and provides dots, previous/next buttons,
+  Left/Right keyboard navigation, and touch swiping. Alert selections and the
+  Projected Arrival state remain preserved while an SPC page is visible.
+- Focused automated validation passes 43 tests: 15 Workspace tests plus 28
+  browser-regression/Alerts/layout tests. JavaScript syntax and diff
+  checks pass. The full Workspace file retains its two known stale assertions
+  against removed `WORKSPACE_REGION_BOUNDS` and the removed aggregate watch
+  pill; those failures are unrelated to Phase 1.
+- Functional browser gate passed: SPC initially off, the Day 1 outlook/CIG,
+  MD, watch, simultaneous-overlay, detail, and overlap-carousel paths work as
+  intended, and disabling SPC preserves Alert/Radar/Projected Arrival behavior.
+  Re-smoke the final Workspace-only opacity defaults, shortened labels, hidden
+  stroke control, and Radar-style SPC legend before closing Phase 1.
 
 ## Current State
 

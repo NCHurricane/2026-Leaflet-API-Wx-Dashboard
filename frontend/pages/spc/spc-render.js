@@ -6,6 +6,7 @@ import {
     SPC_REPORT_COLORS,
     SPC_REPORT_FA_ICON,
     cigIntensity,
+    convectiveLabel,
     featureIsCig,
     highestFeatureAtPoint,
     isCigOverlayHazard,
@@ -72,7 +73,7 @@ function ensureCigPatternDefs(svgRoot) {
     }
 }
 
-export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail } = {}) {
+export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail, onDetailPages } = {}) {
     const leaflet = mapCore.leaflet;
     const map = mapCore.map;
     let layerGroup = null;
@@ -188,7 +189,89 @@ export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail } = {
         layer.bindTooltip(text, { sticky: true, opacity: 0.9, className: 'spc-hover-tip' });
     }
 
-    function buildOutlookLayer(payload, outlookByHazard, effectiveDay) {
+    function textFeatureKey(feature, kind) {
+        const props = feature?.properties || {};
+        return `${kind}:${String(
+            props.watch_number || props.id || feature?.id || props.event || props.sent || '',
+        )}`;
+    }
+
+    function featureContainsPoint(feature, latlng) {
+        return Boolean(highestFeatureAtPoint([feature], latlng, () => 0));
+    }
+
+    function detailPagesAtPoint(bundle, latlng, preferredKey) {
+        const outlookByHazard = new Map(
+            (bundle.outlooks || []).map((payload) => [payload.hazard, payload.geojson]),
+        );
+        const pages = [];
+        (bundle.outlooks || []).forEach((payload) => {
+            if (isFireHazard(payload.hazard) || isCigOverlayHazard(payload.hazard)) return;
+            const feature = highestFeatureAtPoint(
+                (payload.geojson?.features || []).filter((candidate) => nonZeroDn(candidate) && !featureIsCig(candidate)),
+                latlng,
+                (candidate) => Number(candidate?.properties?.DN ?? candidate?.properties?.dn ?? 0),
+            );
+            if (!feature) return;
+            const significantHazard = CIG_OVERLAY_BY_HAZARD[payload.hazard];
+            const significantGeojson = outlookByHazard.get(significantHazard);
+            const significantFeature = highestFeatureAtPoint(
+                significantGeojson?.features || [], latlng, cigIntensity,
+            );
+            pages.push({
+                kind: 'outlook',
+                key: `outlook:${payload.hazard}`,
+                label: `Day ${bundle.effectiveDay} ${convectiveLabel(payload.hazard, bundle.effectiveDay)}`,
+                feature,
+                context: {
+                    day: bundle.effectiveDay,
+                    hazard: payload.hazard,
+                    detail: payload.geojson?._outlook_detail || {},
+                    significantFeature,
+                },
+            });
+        });
+
+        const seenWatches = new Set();
+        (bundle.watches?.features || []).forEach((feature) => {
+            if (!featureContainsPoint(feature, latlng)) return;
+            const key = textFeatureKey(feature, 'watch');
+            if (seenWatches.has(key)) return;
+            seenWatches.add(key);
+            const props = feature?.properties || {};
+            const watchNumber = props.watch_number ? ` #${Number(props.watch_number) || props.watch_number}` : '';
+            pages.push({
+                kind: 'text', key,
+                label: `${props.watch_type || props.event || 'Watch'}${watchNumber}`,
+                feature,
+            });
+        });
+
+        const seenMds = new Set();
+        (bundle.mds?.features || []).forEach((feature) => {
+            if (!featureContainsPoint(feature, latlng)) return;
+            const key = textFeatureKey(feature, 'md');
+            if (seenMds.has(key)) return;
+            seenMds.add(key);
+            const props = feature?.properties || {};
+            pages.push({
+                kind: 'text', key,
+                label: props.short_label || props.event || 'Mesoscale Discussion',
+                feature,
+            });
+        });
+
+        const preferredIndex = pages.findIndex((page) => page.key === preferredKey);
+        if (preferredIndex > 0) pages.unshift(...pages.splice(preferredIndex, 1));
+        return pages;
+    }
+
+    function openDetailPages(bundle, latlng, preferredKey) {
+        const pages = detailPagesAtPoint(bundle, latlng, preferredKey);
+        if (pages.length) onDetailPages?.(latlng, pages);
+    }
+
+    function buildOutlookLayer(payload, outlookByHazard, effectiveDay, bundle) {
         const { hazard, geojson } = payload;
         const fire = isFireHazard(hazard);
         const cigOverlay = isCigOverlayHazard(hazard);
@@ -256,6 +339,10 @@ export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail } = {
                             );
                         }
 
+                        if (onDetailPages) {
+                            openDetailPages(bundle, clickLatLng, `outlook:${modalHazard}`);
+                            return;
+                        }
                         onOutlookDetail?.(clickLatLng, modalFeature, {
                             day: effectiveDay,
                             hazard: modalHazard,
@@ -284,7 +371,7 @@ export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail } = {
         );
 
         (bundle.outlooks || []).forEach((payload) => {
-            group.addLayer(buildOutlookLayer(payload, outlookByHazard, bundle.effectiveDay));
+            group.addLayer(buildOutlookLayer(payload, outlookByHazard, bundle.effectiveDay, bundle));
         });
 
         if (bundle.reports?.features?.length) {
@@ -298,7 +385,10 @@ export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail } = {
             group.addLayer(leaflet.geoJSON(bundle.watches, {
                 style: watchStyle,
                 onEachFeature: (feat, layer) => {
-                    layer.on('click', (evt) => onTextDetail?.(evt?.latlng, feat));
+                    layer.on('click', (evt) => {
+                        if (onDetailPages) openDetailPages(bundle, evt?.latlng, textFeatureKey(feat, 'watch'));
+                        else onTextDetail?.(evt?.latlng, feat);
+                    });
                     bindHoverTooltip(layer, String(
                         feat?.properties?.short_label || feat?.properties?.event || 'Watch',
                     ));
@@ -310,7 +400,10 @@ export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail } = {
             group.addLayer(leaflet.geoJSON(bundle.mds, {
                 style: mdStyle,
                 onEachFeature: (feat, layer) => {
-                    layer.on('click', (evt) => onTextDetail?.(evt?.latlng, feat));
+                    layer.on('click', (evt) => {
+                        if (onDetailPages) openDetailPages(bundle, evt?.latlng, textFeatureKey(feat, 'md'));
+                        else onTextDetail?.(evt?.latlng, feat);
+                    });
                     bindHoverTooltip(layer, String(
                         feat?.properties?.short_label || feat?.properties?.event || 'MD',
                     ));

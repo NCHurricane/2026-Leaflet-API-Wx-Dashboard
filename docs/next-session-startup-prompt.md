@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date updated: 2026-07-31
+Date updated: 2026-08-01
 
 ```text
 Continue dashboard work in F:\Python\dashboard_2026.
@@ -341,6 +341,25 @@ Current checkpoint:
   separately looping Channels 02, 07, and 09; those three products had already
   passed current-frame rendering. GMGSI animation acceptance passed and Phase
   3 is closed.
+- Workspace expansion Phase 1 is implemented for curated SPC composition. Its
+  functional user-owned browser gate passed. SPC is off/collapsed by default and
+  exposes only Day 1 Categorical, Tornado, Wind, and Hail outlooks, with
+  applicable CIG overlays paired automatically; active MDs and Tornado/SVR
+  watches in polygon or counties mode can display simultaneously.
+- Workspace-only controls label those outlooks `CAT`, `TOR`, `Wind`, and
+  `Hail`, and watch rows `TOR`/`SVR`. Fill opacity defaults to `0.5`; stroke is
+  fixed at `0.1` without a slider. SPC legend entries use the Radar legend card
+  treatment in five columns, with the automatic CIG-pairing note below them.
+- Days 2-8, Fire Weather, SPC Storm Reports, and Archive behavior are excluded.
+  Clicking an SPC polygon reuses the standalone detail content inside a new
+  Workspace-local paged context carousel. Overlapping SPC features become
+  pages with dots, buttons, keyboard navigation, and touch swiping. The clicked
+  feature opens first, and showing SPC detail preserves Alert/Projected Arrival
+  selection state.
+- Focused validation passes 43 tests: 15 Workspace tests plus 28 regression,
+  Alerts, and layout tests. JavaScript syntax and diff checks pass. The full
+  Workspace file retains only
+  its two known stale assertions against removed region/watch-control markup.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -354,40 +373,9 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- GK2A Phases 0-2 and GMGSI Phase 3 are closed, and their completed plan is
-  archived. Do not start Satellite Archive UI work. Reconcile the current-
-  dashboard browser/parity gates through the authorized bounded stabilization
-  acceptance phase in the superfile before selecting another implementation
-  phase. Workspace and Water post-baseline acceptance are complete. Tropical
-  Live startup, single-select basin filtering, and country-only border default
-  passed. Live System selection/inspector behavior also passed with an active
-  Eastern Pacific storm. Archive Advisory/Best Track scrub, playback,
-  Live-to-Archive clearing, and bounded five-frame/full-on-Play server warming
-  passed. Archive Advisory issuance and Best Track `DTG` now drive the global
-  timestamp and passed browser smoke; Tropical full-workflow acceptance is
-  complete. The GOES GeoColor comparison confirmed the daytime cloud/white-
-  point match and exposed low-sun shadow crushing from the bounded Rayleigh
-  estimate. The correction now remains full through 60 degrees solar zenith
-  and smoothsteps to zero by 85 degrees. A GOES-18 follow-up then exposed
-  darker ABI daytime midtones and lost thin-cloud detail near the transition;
-  an ABI-only `0.85` midtone gamma now follows the unchanged `0.85` white-point
-  transform. Black/full-white endpoints and non-ABI recipes are unchanged.
-  The GOES namespace is `products-v8`; 21 focused tests plus Ruff pass. The
-  user accepted the final GOES-18 RealEarth comparison, closing the shared
-  GOES-18/19 GeoColor visual gate. Next, run the shallow representative
-  regression sweep of the other current pages. Surface passed. Alerts otherwise
-  passed, but startup replayed already-active alerts as new on both Alerts and
-  Workspace. The shared engine now gates unseen IDs by issuance time after
-  engine startup and retains all IDs seen during the session; updated
-  cachebusters are `alerts-engine.js?v=20260731b`,
-  `alerts-page.js?v=20260731b`, and `workspace-app.js?v=20260731c`. Eight Alerts
-  tests, two focused Workspace tests, Ruff, and JS syntax checks pass. The user
-  confirmed the shared Alerts/Workspace startup-notification re-smoke passed;
-  Alerts shallow regression acceptance is complete. Radar, SPC, RTMA, MRMS,
-  Drought, and WPC then passed their representative current-product,
-  map/style-control, status/legend, and no-console-error smokes. Current
-  Dashboard Stabilization Acceptance is complete, establishing the accepted
-  2026-07-31 current-dashboard baseline. Do not begin backlog, Workspace
-  expansion, Archive, Satellite platform-expansion, or Radar render-
-  optimization work without a new explicit phase authorization.
+- Re-smoke the final Phase 1 `/workspace` presentation refinements: confirm the
+  `0.5` fill and fixed `0.1` stroke defaults, absent stroke slider, shortened
+  outlook/watch labels, and Radar-style SPC legend with its CIG note. Do not
+  expand the carousel to other products or begin Workspace Phase 2 until this
+  presentation check passes and a new phase is explicitly authorized.
 ```

@@ -17,10 +17,12 @@ workspace is `frontend/pages/workspace/workspace.html`, served at `/workspace`;
 Active root pages and their JS in this checkout:
 
 - `index.html` — main landing page for the dashboard
-- `/workspace` — Stage 2 composition page. It imports the Alerts and Radar
-  engines (never their page controllers), combines active warnings/LSRs with
-  live radar, and owns the Projected Arrival Tool in
-  `frontend/pages/workspace/workspace-tools.js`.
+- `/workspace` — Stage 2 composition page. It imports the Alerts, Radar, and
+  curated Day 1 SPC engines/renderers (never their page controllers), combines
+  active warnings/LSRs, live radar, SPC outlooks/MDs/watches, and owns the
+  Projected Arrival Tool in `frontend/pages/workspace/workspace-tools.js`.
+  Overlapping SPC features use the Workspace-local paged context carousel;
+  other product details remain on their existing paths pending a later gate.
 - `/drought` — first true Stage 2 standalone page, served from
   `frontend/pages/drought/drought.html`; it loads ES modules from
   `frontend/core/` and its own directory and does not load `js/weather.js`.

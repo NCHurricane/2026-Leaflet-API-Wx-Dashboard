@@ -9,11 +9,16 @@ import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS,
 import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260726a';
 import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260731b';
 import { createRadarEngine } from '../radar/radar-engine.js?v=20260729b';
+import { buildSpcOutlookDetailHtml, buildSpcTextDetailHtml, wireSpcDetailContent } from '../spc/spc-detail.js?v=20260801a';
+import { CIG_OVERLAY_BY_HAZARD, createSpcEngine } from '../spc/spc-engine.js?v=20260801a';
+import { createSpcRenderer } from '../spc/spc-render.js?v=20260801a';
+import { createWorkspaceDetailCarousel } from './workspace-detail-carousel.js?v=20260801a';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 
 const byId = (id) => document.getElementById(id);
 const AUTO_UPDATE_MS = 30_000;
 const NEW_ALERT_NOTICE_MS = 15_000;
+const WORKSPACE_SPC_STROKE_OPACITY = 0.1;
 const NEW_ALERT_EVENTS = new Set([
     'Tornado Warning', 'Tornado Watch',
     'Severe Thunderstorm Warning', 'Severe Thunderstorm Watch',
@@ -212,13 +217,22 @@ async function initialize() {
     });
     const legendTray = createTabbedLegendTray(
         byId('workspace-legends'),
-        ['radar', 'storm-tracks', 'alerts', 'storm-reports'],
+        ['radar', 'storm-tracks', 'alerts', 'storm-reports', 'spc'],
         'alerts',
     );
     const alertsLegend = legendTray.legend('alerts');
     const lsrLegend = legendTray.legend('storm-reports');
     const radarLegend = legendTray.legend('radar');
     const stormTrackLegend = legendTray.legend('storm-tracks');
+    const spcLegendSource = legendTray.legend('spc');
+    const spcLegend = Object.freeze({
+        clear: () => spcLegendSource.clear(),
+        setHtml(html) {
+            spcLegendSource.setHtml(html
+                ? `${html}<p class="workspace-spc-legend-note">Significant-threat hatching is paired automatically with TOR, Wind, and Hail.</p>`
+                : '');
+        },
+    });
     let alertsEngine = null;
     const detail = createAlertDetail(byId('workspace-detail'), {
         initialTop: 70,
@@ -230,6 +244,27 @@ async function initialize() {
     });
     mapCore.leaflet.DomEvent.disableClickPropagation(byId('workspace-detail'));
     mapCore.leaflet.DomEvent.disableScrollPropagation(byId('workspace-detail'));
+    let spcDetailCarousel = null;
+    const spcRenderer = createSpcRenderer(mapCore, {
+        onDetailPages(latlng, pages) {
+            detail.hide();
+            spcDetailCarousel.open(latlng, pages.map((page) => ({
+                label: page.label,
+                feature: page.feature,
+                html: page.kind === 'outlook'
+                    ? buildSpcOutlookDetailHtml(page.feature, page.context)
+                    : buildSpcTextDetailHtml(page.feature),
+                wire: wireSpcDetailContent,
+            })));
+        },
+    });
+    spcDetailCarousel = createWorkspaceDetailCarousel(byId('workspace-map').parentElement, mapCore, {
+        zoomToFeature: (feature) => spcRenderer.zoomToFeature(feature),
+    });
+    const spcEngine = createSpcEngine({
+        api, renderer: spcRenderer, legend: spcLegend, status,
+        onCount(count) { byId('workspace-spc-count').textContent = String(count); },
+    });
     const tools = createWorkspaceTools({
         map: mapCore.map, leaflet: mapCore.leaflet, apiUrl: api.apiUrl,
         setStatus: (message) => status.setMessage(message),
@@ -336,6 +371,7 @@ async function initialize() {
 
     function selectAlert(feature, options = { maxZoom: 9 }) {
         const props = feature?.properties || {};
+        spcDetailCarousel.close();
         clearSelectedAlert();
         let projectedArrivalReady = false;
         if (supportsProjectedArrival(feature)) {
@@ -503,7 +539,7 @@ async function initialize() {
         onWarnings: renderWarnings,
         onLsrReports: renderLsrReports,
         onDetail: selectAlert,
-        onLsrDetail(feature) { clearSelectedAlert(); detail.openLsr(feature); },
+        onLsrDetail(feature) { spcDetailCarousel.close(); clearSelectedAlert(); detail.openLsr(feature); },
         onLsrDetailClose: detail.closeLsr,
         onNewAlert: showNewAlert,
         onSelectedAlertRemoved(feature) {
@@ -608,6 +644,68 @@ async function initialize() {
         syncProjectedArrivalVisibility();
     }
 
+    function spcSelection() {
+        const baseHazard = byId('workspace-spc-outlooks').querySelector('.is-active')?.dataset.spcHazard || '';
+        const hazards = baseHazard ? [baseHazard] : [];
+        const cigHazard = CIG_OVERLAY_BY_HAZARD[baseHazard];
+        if (cigHazard) hazards.push(cigHazard);
+        const watchLayers = [...byId('workspace-spc-controls').querySelectorAll('[data-spc-watch-type]:checked')]
+            .map((input) => ({ type: input.dataset.spcWatchType, mode: input.dataset.spcWatchMode }));
+        return {
+            day: 1,
+            fireDay: 1,
+            hazards,
+            supplemental: {
+                reportsEnabled: false,
+                reportsDays: [],
+                reportTypes: [],
+                mdsEnabled: byId('workspace-spc-mds').checked,
+                watchesEnabled: watchLayers.length > 0,
+                watchLayers,
+            },
+        };
+    }
+
+    function hasSpcSelection(selection = spcSelection()) {
+        return selection.hazards.length > 0
+            || selection.supplemental.mdsEnabled
+            || selection.supplemental.watchesEnabled;
+    }
+
+    function syncSpcControls() {
+        const enabled = byId('workspace-spc-enabled').checked;
+        const controls = byId('workspace-spc-controls');
+        controls.classList.toggle('is-disabled', !enabled);
+        controls.querySelectorAll('button, input').forEach((control) => { control.disabled = !enabled; });
+    }
+
+    function resetSpcState() {
+        byId('workspace-spc-enabled').checked = false;
+        byId('workspace-spc-outlooks').querySelectorAll('[data-spc-hazard]').forEach((button) => {
+            button.classList.remove('is-active');
+            button.setAttribute('aria-pressed', 'false');
+        });
+        byId('workspace-spc-controls').querySelectorAll('input[type="checkbox"]').forEach((input) => {
+            input.checked = false;
+        });
+        spcEngine.clear();
+        spcDetailCarousel.close();
+        syncSpcControls();
+    }
+
+    async function refreshSpc({ keepDetail = false } = {}) {
+        if (!byId('workspace-spc-enabled').checked) return;
+        if (!keepDetail) spcDetailCarousel.close();
+        const selection = spcSelection();
+        if (!hasSpcSelection(selection)) {
+            spcEngine.clear();
+            spcDetailCarousel.close();
+            status.setMessage('Select a Day 1 SPC outlook, active discussion, or watch layer.');
+            return;
+        }
+        await spcEngine.load(selection);
+    }
+
     resetWorkspaceState = () => {
         regionSelect.value = 'CONUS';
         alertsEngine.clearLsrSelection();
@@ -617,6 +715,7 @@ async function initialize() {
         setActiveRadarLevel('Level 2');
         radarEngine.syncHighlights('');
         radarEngine.clear();
+        resetSpcState();
         syncRadarControls();
         if (byId('workspace-radar-enabled').checked && byId('workspace-radar-sites').checked) {
             radarEngine.showSiteLegend();
@@ -650,10 +749,11 @@ async function initialize() {
             if (byId('workspace-radar-sites').checked) radarEngine.showSiteLegend();
         }
     }
-    async function refreshAll(options = {}) { await Promise.all([refreshAlerts(options), refreshRadar()]); }
+    async function refreshAll(options = {}) { await Promise.all([refreshAlerts(options), refreshRadar(), refreshSpc()]); }
     async function autoRefreshLiveLayers() {
         const tasks = [refreshAlerts({ silent: true, refresh: true })];
         if (byId('workspace-radar-enabled').checked && radarSelection().site) tasks.push(radarEngine.loadFrames({ refresh: true }));
+        if (byId('workspace-spc-enabled').checked && hasSpcSelection()) tasks.push(refreshSpc({ keepDetail: true }));
         await Promise.allSettled(tasks);
     }
 
@@ -672,6 +772,46 @@ async function initialize() {
         byId(controlsId).classList.toggle('is-disabled', !enabled);
         byId(controlsId).querySelectorAll('button').forEach((button) => { button.disabled = !enabled; });
     };
+    byId('workspace-spc-enabled').addEventListener('change', () => {
+        syncSpcControls();
+        if (!byId('workspace-spc-enabled').checked) {
+            spcEngine.clear();
+            spcDetailCarousel.close();
+            status.setMessage('SPC layers disabled.');
+            return;
+        }
+        void refreshSpc();
+    });
+    byId('workspace-spc-outlooks').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-spc-hazard]');
+        if (!button || button.disabled) return;
+        const activate = !button.classList.contains('is-active');
+        byId('workspace-spc-outlooks').querySelectorAll('[data-spc-hazard]').forEach((item) => {
+            const active = activate && item === button;
+            item.classList.toggle('is-active', active);
+            item.setAttribute('aria-pressed', String(active));
+        });
+        void refreshSpc();
+    });
+    byId('workspace-spc-mds').addEventListener('change', () => void refreshSpc());
+    byId('workspace-spc-controls').querySelectorAll('[data-spc-watch-type]').forEach((input) => {
+        input.addEventListener('change', () => {
+            if (input.checked) {
+                byId('workspace-spc-controls')
+                    .querySelectorAll(`[data-spc-watch-type="${input.dataset.spcWatchType}"]`)
+                    .forEach((peer) => { if (peer !== input) peer.checked = false; });
+            }
+            void refreshSpc();
+        });
+    });
+    const updateSpcFillOpacity = () => {
+        const fill = Number(byId('workspace-spc-fill-opacity').value);
+        spcRenderer.setFillOpacity(fill);
+        byId('workspace-spc-fill-opacity-label').textContent = `SPC Fill Opacity (${fill.toFixed(2).replace(/\.?0+$/, '')})`;
+    };
+    spcRenderer.setStrokeOpacity(WORKSPACE_SPC_STROKE_OPACITY);
+    byId('workspace-spc-fill-opacity').addEventListener('input', updateSpcFillOpacity);
+    updateSpcFillOpacity();
     byId('workspace-alerts-enabled').addEventListener('change', () => {
         syncLayerToggle('workspace-alerts-enabled', 'workspace-alert-all-filter');
         syncLayerToggle('workspace-alerts-enabled', 'workspace-warning-filters');
@@ -862,7 +1002,10 @@ async function initialize() {
         if (input.checked) void mapCore.setOverlayVisible(input.dataset.mapOverlay, true);
     });
     mapCore.map.on('movestart zoomstart', detail.closeLsr);
-    mapCore.map.on('moveend', () => void refreshAlerts({ silent: true, notifyNewAlerts: false, refreshFeeds: false }));
+    mapCore.map.on('moveend', () => {
+        spcEngine.refreshWatchesLegend();
+        void refreshAlerts({ silent: true, notifyNewAlerts: false, refreshFeeds: false });
+    });
 
     syncLayerToggle('workspace-alerts-enabled', 'workspace-alert-all-filter');
     syncLayerToggle('workspace-alerts-enabled', 'workspace-warning-filters');
@@ -871,6 +1014,7 @@ async function initialize() {
     byId('workspace-lsr-hours').classList.add('is-disabled');
     byId('workspace-lsr-hours').querySelectorAll('button').forEach((button) => { button.disabled = true; });
     syncRadarControls();
+    syncSpcControls();
     syncRightRailVisibility();
     syncAutoUpdate();
 
@@ -881,6 +1025,8 @@ async function initialize() {
         clearInterval(autoUpdateTimer);
         mapCore.map.off('zoomend', updateCityControlLabels);
         radarScrubber.destroy();
+        spcDetailCarousel.destroy();
+        spcEngine.destroy();
     }, { once: true });
 }
 
