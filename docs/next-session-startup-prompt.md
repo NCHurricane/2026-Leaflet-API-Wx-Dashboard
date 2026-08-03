@@ -360,6 +360,37 @@ Current checkpoint:
   Alerts, and layout tests. JavaScript syntax and diff checks pass. The full
   Workspace file retains only
   its two known stale assertions against removed region/watch-control markup.
+- The final Phase 1 presentation re-smoke passed and Phase 1 is closed.
+- Workspace expansion Phase 2 is implemented for curated Satellite composition.
+  Satellite is off/collapsed by default and reuses the shared Satellite engine
+  and animator without importing the standalone page controller.
+- The control chain uses GOES-19/GOES-18 platform pills, then CONUS/AK/HI/PR
+  region pills, then a compact Product dropdown. AK/HI/PR use Full Disk source
+  data internally without exposing a Full Disk option. The redundant View
+  dropdown is removed; Satellite region pills select imagery sources without
+  changing the current viewport, selected alert, or Radar state. The Workspace
+  Region dropdown and Home own recentering/reset, with PR framing capped at z9.
+- Products are GeoColor, clean IR, water vapor, shortwave IR/fire, and visible;
+  opacity defaults to `0.7`. Explicit pane order is Satellite `330`, SPC `400`,
+  Radar `410`, boundaries `420`, and Alerts `430+`.
+- Phase 2 loads bounded one-hour Satellite history: up to 12 CONUS or six Full
+  Disk frames. The existing bottom scrubber is one Workspace timeline. Satellite
+  drives it when Radar has no frames; when both are active, Radar timestamps are
+  the master clock and each step displays the newest Satellite scan at or before
+  that Radar time. Repeated Satellite frames are intentional; future imagery is
+  never borrowed to fill an earlier Radar step. Tile prefetch/readiness uses the
+  shared Satellite animator.
+- Transient refresh failures retain the current Satellite history. Satellite
+  refresh remains limited to five minutes inside Workspace's 30-second loop;
+  live-edge selection advances while an existing scrubbed frame is preserved.
+  Archive remains on `/satellite`.
+- Region changes and Home reset clear Satellite state. Turning Satellite off
+  removes its imagery and tabbed legend without clearing Radar, Alerts, SPC, or
+  Projected Arrival state.
+- JavaScript syntax, diff checks, one Node time-join unit, and 36 focused
+  Workspace/browser/layout Pytest checks pass with the two documented stale
+  Workspace assertions excluded. No browser or live-render success is claimed
+  yet.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -373,9 +404,12 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- Re-smoke the final Phase 1 `/workspace` presentation refinements: confirm the
-  `0.5` fill and fixed `0.1` stroke defaults, absent stroke slider, shortened
-  outlook/watch labels, and Radar-style SPC legend with its CIG note. Do not
-  expand the carousel to other products or begin Workspace Phase 2 until this
-  presentation check passes and a new phase is explicitly authorized.
+- User-smoke Workspace Phase 2: confirm Satellite starts off with disabled
+  controls; platform-to-region pills; hidden internal Full Disk routing for
+  AK/HI/PR; viewport/alert/Radar preservation when selecting a Satellite sector;
+  each curated product's one-hour history, legend, and Satellite-only
+  playback; Radar-master playback without future Satellite matching; opacity;
+  five-minute refresh retention; Satellite < SPC < Radar < Alerts stacking; and
+  Satellite-off/Region/Home cleanup. Do not begin RTMA composition until this
+  gate passes and the next phase is explicitly authorized.
 ```

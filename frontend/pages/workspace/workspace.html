@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260730b">
     <link rel="stylesheet" href="/frontend/pages/spc/spc.css?v=20260801a">
-    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260801b">
+    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260802b">
 </head>
 <body>
     <header class="core-header">
@@ -191,7 +191,53 @@
                             </div>
                         </div>
                     </details>
-                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>Satellite</h2><span>Planned</span></summary><div class="workspace-group-body"><p>Satellite engine composition placeholder.</p></div></details>
+                    <details id="workspace-satellite-group" class="workspace-group workspace-layer-group">
+                        <summary class="workspace-group-summary">
+                            <div class="workspace-title-count"><h2>Satellite</h2><span id="workspace-satellite-count">0</span></div>
+                            <label class="workspace-layer-toggle" title="Show satellite imagery">
+                                <span class="core-visually-hidden">Show satellite imagery</span>
+                                <input id="workspace-satellite-enabled" type="checkbox">
+                                <span aria-hidden="true"></span>
+                            </label>
+                        </summary>
+                        <div id="workspace-satellite-controls" class="workspace-group-body is-disabled" hidden>
+                            <div class="workspace-eyebrow">Satellite</div>
+                            <div id="workspace-satellite-platform-pills" class="satellite-subtabs" role="tablist" aria-label="Satellite platform">
+                                <button class="satellite-subtab-button" type="button" role="tab" aria-selected="false" data-workspace-satellite-platform="goes19" disabled>GOES-19</button>
+                                <button class="satellite-subtab-button" type="button" role="tab" aria-selected="false" data-workspace-satellite-platform="goes18" disabled>GOES-18</button>
+                            </div>
+                            <select id="workspace-satellite-platform" class="satellite-native-control" aria-hidden="true" tabindex="-1" disabled>
+                                <option value="">Select satellite</option>
+                                <option value="goes19">GOES-19 (East)</option>
+                                <option value="goes18">GOES-18 (West)</option>
+                            </select>
+                            <div id="workspace-satellite-sector-stage" hidden>
+                                <div class="workspace-eyebrow">Sector</div>
+                                <div id="workspace-satellite-sector-pills" class="satellite-subtabs workspace-satellite-sector-pills" role="tablist" aria-label="Satellite region">
+                                    <button class="satellite-subtab-button" type="button" role="tab" aria-selected="false" data-workspace-satellite-region="CONUS" disabled>CONUS</button>
+                                    <button class="satellite-subtab-button" type="button" role="tab" aria-selected="false" data-workspace-satellite-region="AK" disabled>AK</button>
+                                    <button class="satellite-subtab-button" type="button" role="tab" aria-selected="false" data-workspace-satellite-region="HI" disabled>HI</button>
+                                    <button class="satellite-subtab-button" type="button" role="tab" aria-selected="false" data-workspace-satellite-region="PR" disabled>PR</button>
+                                </div>
+                            </div>
+                            <select id="workspace-satellite-sector" class="satellite-native-control" aria-hidden="true" tabindex="-1" disabled>
+                                <option value="">Select sector</option>
+                                <option value="CONUS">CONUS</option>
+                                <option value="AK">Alaska</option>
+                                <option value="HI">Hawaii</option>
+                                <option value="PR">Puerto Rico</option>
+                            </select>
+                            <div id="workspace-satellite-product-stage" hidden>
+                                <label for="workspace-satellite-product">Product</label>
+                                <select id="workspace-satellite-product" disabled><option value="">Select product</option></select>
+                            </div>
+                            <div class="core-adjustment workspace-opacity-control">
+                                <label id="workspace-satellite-opacity-label" for="workspace-satellite-opacity">Satellite Opacity (0.7)</label>
+                                <input id="workspace-satellite-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled>
+                            </div>
+                            <p class="workspace-layer-note">One-hour Satellite history uses the shared Workspace timeline. Radar timestamps lead when both layers are active.</p>
+                        </div>
+                    </details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>RTMA</h2><span>Planned</span></summary><div class="workspace-group-body"><p>RTMA engine composition placeholder.</p></div></details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>MRMS</h2><span>Planned</span></summary><div class="workspace-group-body"><p>MRMS engine composition placeholder.</p></div></details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>WPC</h2><span>Planned</span></summary><div class="workspace-group-body"><p>WPC engine composition placeholder.</p></div></details>
@@ -243,6 +289,7 @@
                             <button id="workspace-alerts-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="alerts" aria-controls="workspace-alerts-legend" hidden>Alerts</button>
                             <button id="workspace-lsr-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="storm-reports" aria-controls="workspace-lsr-legend" hidden>Storm Reports</button>
                             <button id="workspace-spc-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="spc" aria-controls="workspace-spc-legend" hidden>SPC</button>
+                            <button id="workspace-satellite-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="satellite" aria-controls="workspace-satellite-legend" hidden>Satellite</button>
                         </div>
                         <button class="core-legend-collapse" type="button" aria-expanded="true" aria-label="Collapse legends" title="Collapse legends"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </div>
@@ -252,6 +299,7 @@
                         <section id="workspace-alerts-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="alerts" aria-labelledby="workspace-alerts-legend-tab" hidden></section>
                         <section id="workspace-lsr-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="storm-reports" aria-labelledby="workspace-lsr-legend-tab" hidden></section>
                         <section id="workspace-spc-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="spc" aria-labelledby="workspace-spc-legend-tab" hidden></section>
+                        <section id="workspace-satellite-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="satellite" aria-labelledby="workspace-satellite-legend-tab" hidden></section>
                     </div>
                 </div>
             </div>
@@ -288,6 +336,6 @@
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
     <script src="/frontend/lib/tz-lookup/tz.js?v=6.1.25"></script>
-    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260801b"></script>
+    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260802f"></script>
 </body>
 </html>

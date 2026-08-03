@@ -73,7 +73,12 @@ function ensureCigPatternDefs(svgRoot) {
     }
 }
 
-export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail, onDetailPages } = {}) {
+export function createSpcRenderer(mapCore, {
+    onOutlookDetail,
+    onTextDetail,
+    onDetailPages,
+    paneName = 'overlayPane',
+} = {}) {
     const leaflet = mapCore.leaflet;
     const map = mapCore.map;
     let layerGroup = null;
@@ -168,9 +173,10 @@ export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail, onDe
                 iconAnchor: [8, 8],
                 popupAnchor: [0, -10],
             });
-            return leaflet.marker(latlng, { icon });
+            return leaflet.marker(latlng, { icon, pane: paneName });
         }
         return leaflet.circleMarker(latlng, {
+            pane: paneName,
             radius: 5, color: '#08111d', weight: 1, fillColor: color, fillOpacity: 0.95, opacity: 1,
         });
     }
@@ -279,6 +285,7 @@ export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail, onDe
         const styleFn = cigOverlay ? probCigStyle : styleFnFor(hazard);
 
         const geoLayer = leaflet.geoJSON(geojson, {
+            pane: paneName,
             style: styleFn,
             filter: (feat) => {
                 if (fire) return nonZeroDn(feat);
@@ -376,6 +383,7 @@ export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail, onDe
 
         if (bundle.reports?.features?.length) {
             group.addLayer(leaflet.geoJSON(bundle.reports, {
+                pane: paneName,
                 pointToLayer: (feat, latlng) => reportMarker(feat, latlng),
                 onEachFeature: (feat, layer) => layer.bindPopup(reportPopup(feat)),
             }));
@@ -383,6 +391,7 @@ export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail, onDe
 
         if (bundle.watches?.features?.length) {
             group.addLayer(leaflet.geoJSON(bundle.watches, {
+                pane: paneName,
                 style: watchStyle,
                 onEachFeature: (feat, layer) => {
                     layer.on('click', (evt) => {
@@ -398,6 +407,7 @@ export function createSpcRenderer(mapCore, { onOutlookDetail, onTextDetail, onDe
 
         if (bundle.mds?.features?.length) {
             group.addLayer(leaflet.geoJSON(bundle.mds, {
+                pane: paneName,
                 style: mdStyle,
                 onEachFeature: (feat, layer) => {
                     layer.on('click', (evt) => {

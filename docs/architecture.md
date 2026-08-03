@@ -11,18 +11,26 @@ workspace is `frontend/pages/workspace/workspace.html`, served at `/workspace`;
 `/weather.html` is now a compatibility redirect.
 
 - Vector GeoJSON overlays (alerts, SPC)
+- Newest-frame Satellite XYZ raster overlay composed below SPC and Radar; the
+  Workspace pane order is Satellite 330, SPC 400, Radar 410, boundaries 420,
+  and Alerts 430+
 - Pre-rendered raster overlays + frame-locked value points (RTMA)
 - Radar live overlays from cache-first per-site/per-product PNG streams
 
 Active root pages and their JS in this checkout:
 
 - `index.html` — main landing page for the dashboard
-- `/workspace` — Stage 2 composition page. It imports the Alerts, Radar, and
-  curated Day 1 SPC engines/renderers (never their page controllers), combines
-  active warnings/LSRs, live radar, SPC outlooks/MDs/watches, and owns the
-  Projected Arrival Tool in `frontend/pages/workspace/workspace-tools.js`.
+- `/workspace` — Stage 2 composition page. It imports the Alerts, Radar,
+  curated Day 1 SPC, and bounded one-hour Satellite engines/renderers
+  (never their page controllers), combines active warnings/LSRs, live radar,
+  SPC outlooks/MDs/watches, and optional GOES imagery, and owns the Projected
+  Arrival Tool in `frontend/pages/workspace/workspace-tools.js`.
   Overlapping SPC features use the Workspace-local paged context carousel;
-  other product details remain on their existing paths pending a later gate.
+  one shared bottom timeline animates Satellite alone or uses Radar timestamps
+  as the master clock when both raster layers are active. Satellite sector pills
+  select imagery sources without changing the Workspace viewport; Region and
+  Home own recentering/reset. Satellite Archive and other product details remain
+  on their existing paths pending a later gate.
 - `/drought` — first true Stage 2 standalone page, served from
   `frontend/pages/drought/drought.html`; it loads ES modules from
   `frontend/core/` and its own directory and does not load `js/weather.js`.

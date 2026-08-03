@@ -5299,6 +5299,14 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
     overflow-wrap: anywhere;
 }
 .workspace-legend-content .core-legend-body { padding: 0 15px; }
+.workspace-legend-content .satellite-legend-items { display: flex; flex-direction: column; gap: 4px; }
+.workspace-legend-content .satellite-legend-item { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 8px; }
+.workspace-legend-content .satellite-legend-swatch { width: 18px; height: 18px; border: 1px solid rgba(255, 255, 255, .32); border-radius: 3px; }
+.workspace-legend-content .satellite-legend-colorbar-row { display: flex; align-items: stretch; gap: 10px; }
+.workspace-legend-content .satellite-legend-leading-swatch { display: flex; flex: 0 0 auto; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; }
+.workspace-legend-content .satellite-legend-leading-label,
+.workspace-legend-content .satellite-legend-axis { color: var(--core-muted); font-size: .62rem; }
+.workspace-legend-content .satellite-legend-colorbar-main { flex: 1 1 auto; min-width: 0; }
 .workspace-legend-content .alerts-legend-label { margin: 0 0 6px; color: #91a4b8; font-size: .62rem; font-weight: 800; letter-spacing: .06em; }
 .workspace-legend-content .core-legend-categories { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
 .workspace-legend-content .core-legend-category { width: 100%; max-width: 300px; padding: 6px 7px; }
@@ -5348,6 +5356,19 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
     font-size: .61rem;
     line-height: 1.35;
 }
+
+.workspace-layer-note {
+    margin: 0;
+    color: var(--core-muted);
+    font-size: .66rem;
+    line-height: 1.35;
+}
+
+#workspace-satellite-controls[hidden],
+#workspace-satellite-sector-stage[hidden],
+#workspace-satellite-product-stage[hidden] { display: none; }
+#workspace-satellite-sector-pills { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#workspace-satellite-controls .satellite-subtab-button:disabled { cursor: not-allowed; opacity: .48; }
 
 .workspace-context-carousel.spc-detail { z-index: 1200; overflow: hidden; }
 .workspace-context-views { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; }

@@ -202,7 +202,9 @@ export function createRadarEngine(options) {
         onFrames, onFrameIndex, onSitePicked, onMessage, onStormTrackLegend } = options;
     const { leaflet, map } = mapCore;
     const radarPane = map.createPane('radar-overlays');
-    radarPane.style.zIndex = '210';
+    // Workspace composition order: Satellite (330) < SPC (400) < Radar (410)
+    // < boundaries (420) < Alerts (430+). Standalone Radar is unchanged visually.
+    radarPane.style.zIndex = '410';
     radarPane.style.pointerEvents = 'none';
     const sitesPane = map.createPane('radar-sites');
     sitesPane.style.zIndex = '460';

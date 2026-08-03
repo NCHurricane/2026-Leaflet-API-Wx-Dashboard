@@ -19,8 +19,10 @@ def test_workspace_composes_engines_without_page_controllers():
 
     assert "../alerts/alerts-engine.js" in app
     assert "../radar/radar-engine.js" in app
+    assert "./workspace-satellite.js" in app
     assert "alerts-page.js" not in app
     assert "radar-page.js" not in app
+    assert "satellite-page.js" not in app
     assert "js/weather.js" not in app
 
 
@@ -102,7 +104,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert 'id="workspace-radar-scrubber-bar"' in page
     assert 'id="workspace-radar-bottom-scrubber"' in page
     assert all(f'<h2>{label}</h2>' in page for label in ['SPC', 'Satellite', 'RTMA', 'MRMS', 'WPC', 'Water'])
-    assert page.count('workspace-layer-group workspace-placeholder') == 5
+    assert page.count('workspace-layer-group workspace-placeholder') == 4
     assert page.count('workspace-group workspace-layer-group" open') == 1
     assert 'id="workspace-right-rail"' in page
     assert 'id="workspace-warning-section"' in page
@@ -169,7 +171,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "legendTray.legend('alerts')" in app
     assert "legendTray.markReady()" in app
     assert 'class="workspace-legend-tabs" role="tablist"' in page
-    assert page.count('class="workspace-legend-tab"') == 5
+    assert page.count('class="workspace-legend-tab"') == 6
     assert "fa-chevron-down" in page
     assert "panel.classList.toggle('is-collapsed', !isOpen)" in app
     assert "elevation: '0.5'" in app
@@ -270,6 +272,94 @@ def test_workspace_spc_phase1_is_curated_default_off_and_page_capable():
     assert "hide() { close({ notify: false }); }" in alert_detail
 
 
+def test_workspace_satellite_phase2_is_curated_default_off_and_uses_shared_timeline():
+    root = Path(BASE_DIR) / "frontend" / "pages"
+    page = (root / "workspace" / "workspace.html").read_text(encoding="utf-8")
+    app = (root / "workspace" / "workspace-app.js").read_text(encoding="utf-8")
+    satellite = (root / "workspace" / "workspace-satellite.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'id="workspace-satellite-enabled" type="checkbox"' in page
+    assert 'id="workspace-satellite-enabled" type="checkbox" checked' not in page
+    assert (
+        'id="workspace-satellite-controls" class="workspace-group-body is-disabled" hidden'
+        in page
+    )
+    assert page.count("data-workspace-satellite-platform=") == 2
+    assert 'data-workspace-satellite-platform="goes19" disabled>GOES-19</button>' in page
+    assert 'data-workspace-satellite-platform="goes18" disabled>GOES-18</button>' in page
+    assert 'id="workspace-satellite-sector-stage" hidden' in page
+    assert page.count("data-workspace-satellite-region=") == 4
+    assert all(
+        f'data-workspace-satellite-region="{region}" disabled>{region}</button>'
+        in page
+        for region in ["CONUS", "AK", "HI", "PR"]
+    )
+    assert ">Full Disk</button>" not in page
+    assert 'id="workspace-satellite-product-stage" hidden' in page
+    assert 'id="workspace-satellite-product" disabled' in page
+    assert "workspace-satellite-view" not in page
+    assert "One-hour Satellite history uses the shared Workspace timeline" in page
+    assert 'id="workspace-satellite-legend-tab"' in page
+    assert 'id="workspace-satellite-legend"' in page
+
+    assert "createWorkspaceSatellite" in app
+    assert "workspaceSatellite.refresh({ refresh: true, auto: true })" in app
+    assert "workspaceSatellite.reset()" in app
+    assert "workspaceSatellite.destroy()" in app
+    assert "String(region || '').toUpperCase() === 'PR'" in app
+    assert "mapCore.map.getZoom() > 9" in app
+    assert "mapCore.map.setZoom(9" in app
+    assert "../satellite/satellite-engine.js" in satellite
+    assert "../satellite/satellite-anim.js" in satellite
+    assert "satellite-page.js" not in satellite
+    assert "maxFramesForSector(expectedSelection.sector)" in satellite
+    assert "return String(sector || '').toUpperCase() === 'CONUS' ? 12 : 6" in satellite
+    assert "hours: 1" in satellite
+    assert "AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000" in satellite
+    assert "CONUS: 'CONUS'" in satellite
+    assert "AK: 'FullDisk'" in satellite
+    assert "HI: 'FullDisk'" in satellite
+    assert "PR: 'FullDisk'" in satellite
+    assert "syncPillGroup(platformPills, 'workspace-satellite-platform'" in satellite
+    assert "syncPillGroup(sectorPills, 'workspace-satellite-region'" in satellite
+    assert "bindPillGroup(platformPills, 'workspace-satellite-platform'" in satellite
+    assert "bindPillGroup(sectorPills, 'workspace-satellite-region'" in satellite
+    assert "getAttribute(`data-${dataAttribute}`)" in satellite
+    assert "onRegionSelected" not in satellite
+    assert "onRegionSelected(region)" not in app
+    assert "['GeoColor', 'GeoColor']" in satellite
+    assert "['Channel13', 'Clean IR']" in satellite
+    assert "['Channel09RAMSDIS', 'Water Vapor']" in satellite
+    assert "['Channel07Fire', 'Shortwave IR / Fire']" in satellite
+    assert "['Channel02', 'Visible']" in satellite
+    assert "animator.prepareForZoom()" in satellite
+    assert "satelliteFrameIndexAtOrBefore" in satellite
+    assert "showFrameForTimestamp" in satellite
+    assert "awaitFrameOnPlay: true" in app
+    assert "radarTimelineFrames.length" in app
+    assert "workspaceSatellite.showFrameForTimestamp(frame?.timestamp" in app
+    assert "workspaceSatellite.showFrameAt(index" in app
+
+
+def test_workspace_overlay_order_is_satellite_then_spc_then_radar_then_alerts():
+    root = Path(BASE_DIR) / "frontend" / "pages"
+    app = (root / "workspace" / "workspace-app.js").read_text(encoding="utf-8")
+    satellite = (root / "satellite" / "satellite-anim.js").read_text(
+        encoding="utf-8"
+    )
+    spc = (root / "spc" / "spc-render.js").read_text(encoding="utf-8")
+    radar = (root / "radar" / "radar-engine.js").read_text(encoding="utf-8")
+
+    assert "pane.style.zIndex = '330'" in satellite
+    assert "spcPane.style.zIndex = '400'" in app
+    assert "paneName: 'workspace-spc-overlays'" in app
+    assert "pane: paneName" in spc
+    assert "radarPane.style.zIndex = '410'" in radar
+    assert "alertPaneZIndex: 440" in app
+
+
 def test_all_product_pages_use_vendored_leaflet():
     page_root = Path(BASE_DIR) / "frontend" / "pages"
     pages = list(page_root.rglob("*.html"))
@@ -308,9 +398,10 @@ def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets(
     assert "data?.latest_refreshing" in engine
     assert "latestPollAttempt < LATEST_REFRESH_POLL_LIMIT" in engine
     assert "radar-engine.js?v=20260729b" in radar_app
-    assert "radar-engine.js?v=20260729b" in workspace_app
+    assert "radar-engine.js?v=20260802a" in workspace_app
     assert "radar-page.js?v=20260729b" in radar_page
-    assert "workspace-app.js?v=20260801b" in workspace_page
+    assert "workspace-satellite.js?v=20260802e" in workspace_app
+    assert "workspace-app.js?v=20260802f" in workspace_page
 
 
 def test_radar_scrubbers_hold_on_the_newest_frame():

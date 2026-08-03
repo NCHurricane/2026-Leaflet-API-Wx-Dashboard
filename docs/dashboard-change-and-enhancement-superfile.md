@@ -13,9 +13,9 @@ two-page browser gates pass. Phase 7 is closed. Both separately authorized
 Phase 8 core-product families—L2 Velocity/SRV and L3 N0B/N0G—are
 browser-accepted, pass all eight permanent PNG golden rows, and are closed.
 Radar render optimization Phase 8 is complete. Workspace expansion Phase 1
-adds curated Day 1 SPC composition; its functional user-owned browser gate
-passed, with a presentation-only re-smoke open for the final control/legend
-tweaks.)
+adds curated Day 1 SPC composition and is user-accepted. Phase 2 adds a bounded
+one-hour GOES Satellite overlay with shared Workspace playback and is
+implemented with browser acceptance pending.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -59,9 +59,10 @@ to PNG-only behavior.
    replaces the deleted legacy shell/monolith. The former consolidated browser
    checklist was retired after the 2026-07-25 whole-system smoke passed. The
    bounded current-dashboard stabilization gate completed on 2026-07-31.
-   Workspace expansion Phase 1 was authorized on 2026-08-01 and is implemented
-   for curated SPC products. Its functional user-owned browser gate passed;
-   the final presentation-only re-smoke remains open.
+   Workspace expansion Phase 1 was authorized on 2026-08-01 and completed for
+   curated SPC products. Phase 2 is implemented for a curated one-hour GOES
+   Satellite overlay with shared Workspace playback; its user-owned browser
+   gate remains open.
 2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
    `docs/archive/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
@@ -290,9 +291,8 @@ is complete.
 
 ### Workspace expansion Phase 1 — curated SPC composition
 
-Authorized and implemented 2026-08-01. User-owned functional browser acceptance
-passed; a presentation-only re-smoke remains open for the final control and
-legend refinements.
+Authorized, implemented, and closed 2026-08-01. The functional browser gate and
+final presentation re-smoke both passed.
 
 - SPC is off and collapsed by default. The Workspace exposes only Day 1
   Categorical, Tornado, Wind, and Hail outlooks. Tornado/Wind/Hail selections
@@ -322,8 +322,50 @@ legend refinements.
 - Functional browser gate passed: SPC initially off, the Day 1 outlook/CIG,
   MD, watch, simultaneous-overlay, detail, and overlap-carousel paths work as
   intended, and disabling SPC preserves Alert/Radar/Projected Arrival behavior.
-  Re-smoke the final Workspace-only opacity defaults, shortened labels, hidden
-  stroke control, and Radar-style SPC legend before closing Phase 1.
+  The final re-smoke also passed for Workspace-only opacity defaults, shortened
+  labels, hidden stroke control, and the Radar-style SPC legend. Phase 1 is
+  closed.
+
+### Workspace expansion Phase 2 — curated Satellite composition
+
+Authorized and implemented 2026-08-01. Automated validation passes; user-owned
+browser acceptance remains open.
+
+- Satellite is off and collapsed by default. The Workspace imports the shared
+  Satellite engine and animator, never the standalone page controller. The
+  explicit pane order is Satellite `330`, SPC `400`, Radar `410`, boundaries
+  `420`, and Alerts `430+`.
+- The bounded severe-weather set is GOES-19 and GOES-18 plus CONUS, AK, HI,
+  and PR region pills. AK/HI/PR use the required Full Disk source internally,
+  but Full Disk is not exposed as a Workspace option. PR framing is capped at
+  z9. Platform changes clear Region/Product; Region changes clear Product.
+- The redundant View dropdown remains removed. Satellite region pills are
+  source selectors rather than viewport controls. They preserve the current
+  center, zoom, selected alert, and Radar state; the Workspace Region dropdown
+  and Home control own deliberate recentering/reset. Products remain a compact
+  dropdown: GeoColor, clean IR, water vapor, shortwave IR/fire, and visible.
+  Satellite opacity defaults to `0.7`.
+- This phase requests bounded one-hour history: up to 12 CONUS frames or six
+  Full Disk frames. The existing bottom scrubber is a single Workspace timeline:
+  Satellite drives it when Radar has no frames; when both layers have frames,
+  Radar is the master clock and Satellite displays the newest scan at or before
+  each Radar timestamp. Repeated Satellite frames across faster Radar steps are
+  intentional, and a missing prior Satellite frame is never replaced by future
+  imagery. The shared animator prefetches adjacent tiles and playback waits for
+  the first visible Satellite tile when advancing to a different Satellite scan.
+- Transient refresh failures retain the current history. The shared 30-second
+  Workspace refresh loop admits Satellite catalog refresh no more than every
+  five minutes; live-edge playback advances while a scrubbed historical frame is
+  preserved when it remains in the refreshed catalog. Satellite Archive remains
+  on the standalone `/satellite` page.
+- Region changes and Home reset disable Satellite and clear dependent state.
+  Turning the layer off removes imagery and its tabbed legend without changing
+  Radar, Alerts, SPC, or Projected Arrival state.
+- JavaScript syntax, diff checks, one Node time-join unit, and 36 focused
+  Workspace/browser/layout Pytest checks pass when the two documented stale
+  Workspace assertions are excluded. Those
+  assertions still target removed `WORKSPACE_REGION_BOUNDS` and the removed
+  aggregate watch pill and were not changed for Phase 2.
 
 ## Current State
 
