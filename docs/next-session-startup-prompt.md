@@ -361,7 +361,8 @@ Current checkpoint:
   Workspace file retains only
   its two known stale assertions against removed region/watch-control markup.
 - The final Phase 1 presentation re-smoke passed and Phase 1 is closed.
-- Workspace expansion Phase 2 is implemented for curated Satellite composition.
+- Workspace expansion Phase 2 is implemented, user-accepted, and closed for
+  curated Satellite composition.
   Satellite is off/collapsed by default and reuses the shared Satellite engine
   and animator without importing the standalone page controller.
 - The control chain uses GOES-19/GOES-18 platform pills, then CONUS/AK/HI/PR
@@ -389,8 +390,13 @@ Current checkpoint:
   Projected Arrival state.
 - JavaScript syntax, diff checks, one Node time-join unit, and 36 focused
   Workspace/browser/layout Pytest checks pass with the two documented stale
-  Workspace assertions excluded. No browser or live-render success is claimed
-  yet.
+  Workspace assertions excluded.
+- User-owned browser acceptance passed on 2026-08-02 for default-off controls,
+  platform/source-sector selection, hidden Full Disk routing, all curated
+  products, one-hour Satellite-only playback, Radar-master time matching,
+  opacity and refresh retention, Satellite < SPC < Radar < Alerts stacking,
+  viewport/alert/Radar preservation on source-sector changes, and
+  Satellite-off/Region/Home cleanup. Phase 2 is closed.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -404,12 +410,6 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- User-smoke Workspace Phase 2: confirm Satellite starts off with disabled
-  controls; platform-to-region pills; hidden internal Full Disk routing for
-  AK/HI/PR; viewport/alert/Radar preservation when selecting a Satellite sector;
-  each curated product's one-hour history, legend, and Satellite-only
-  playback; Radar-master playback without future Satellite matching; opacity;
-  five-minute refresh retention; Satellite < SPC < Radar < Alerts stacking; and
-  Satellite-off/Region/Home cleanup. Do not begin RTMA composition until this
-  gate passes and the next phase is explicitly authorized.
+- Workspace expansion Phase 2 is closed. RTMA is the next composition product,
+  but do not begin it until the user explicitly authorizes that phase.
 ```

@@ -15,7 +15,7 @@ browser-accepted, pass all eight permanent PNG golden rows, and are closed.
 Radar render optimization Phase 8 is complete. Workspace expansion Phase 1
 adds curated Day 1 SPC composition and is user-accepted. Phase 2 adds a bounded
 one-hour GOES Satellite overlay with shared Workspace playback and is
-implemented with browser acceptance pending.)
+user-accepted and closed.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -60,9 +60,9 @@ to PNG-only behavior.
    checklist was retired after the 2026-07-25 whole-system smoke passed. The
    bounded current-dashboard stabilization gate completed on 2026-07-31.
    Workspace expansion Phase 1 was authorized on 2026-08-01 and completed for
-   curated SPC products. Phase 2 is implemented for a curated one-hour GOES
+   curated SPC products. Phase 2 is complete for a curated one-hour GOES
    Satellite overlay with shared Workspace playback; its user-owned browser
-   gate remains open.
+   gate passed on 2026-08-02.
 2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
    `docs/archive/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
@@ -328,8 +328,8 @@ final presentation re-smoke both passed.
 
 ### Workspace expansion Phase 2 — curated Satellite composition
 
-Authorized and implemented 2026-08-01. Automated validation passes; user-owned
-browser acceptance remains open.
+Authorized and implemented 2026-08-01. Automated validation and user-owned
+browser acceptance pass; Phase 2 closed 2026-08-02.
 
 - Satellite is off and collapsed by default. The Workspace imports the shared
   Satellite engine and animator, never the standalone page controller. The
@@ -366,6 +366,12 @@ browser acceptance remains open.
   Workspace assertions are excluded. Those
   assertions still target removed `WORKSPACE_REGION_BOUNDS` and the removed
   aggregate watch pill and were not changed for Phase 2.
+- User-owned browser acceptance passed for default-off controls, platform and
+  source-sector selection, hidden Full Disk routing, all curated products,
+  one-hour Satellite-only playback, Radar-master time matching, opacity and
+  refresh retention, Satellite < SPC < Radar < Alerts stacking, viewport/alert/
+  Radar preservation on source-sector changes, and Satellite-off/Region/Home
+  cleanup. Phase 2 is closed.
 
 ## Current State
 
