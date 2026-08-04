@@ -1,9 +1,14 @@
 import {
     createMrmsEngine,
     formatValidTimeLabel,
+    timestampMs,
 } from '../mrms/mrms-engine.js?v=20260802a';
+import { workspaceFrameIndexAtOrBefore } from './workspace-timeline.js?v=20260803b';
 
 const AUTO_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
+const HISTORY_POLL_INTERVAL_MS = 5_000;
+const LOOKBACK_HOURS = 1;
+const FRAME_CAP = 64;
 
 export const WORKSPACE_MRMS_PRODUCTS = Object.freeze([
     { value: 'rotation', label: 'Rotation Track', product: 'RotationTrack_LL_30min' },
@@ -24,6 +29,7 @@ export function createWorkspaceMrms({
     getRegion,
     paneName,
     elements,
+    onFrames = null,
 }) {
     const {
         enabledInput,
@@ -37,10 +43,76 @@ export function createWorkspaceMrms({
     let activeProduct = '';
     let lastAutoRefreshMs = 0;
     let refreshPending = false;
+    let timelineFrames = [];
+    let visibleFrameIndex = -1;
+    let visibleFrameIdentity = '';
+    let historyToken = 0;
+    let historyPollTimer = null;
 
     const productConfig = () => PRODUCT_BY_VALUE.get(activeProduct) || null;
     const hasSelection = () => Boolean(productConfig());
     const supportsCurrentRegion = () => String(getRegion() || '').toUpperCase() === 'CONUS';
+
+    function frameIdentity(frame) {
+        return `${frame?.frame_key || frame?.source_data_key || ''}|${frame?.timestamp || ''}`;
+    }
+
+    function emitFrames(options = {}) {
+        onFrames?.(timelineFrames.map((frame) => ({
+            ...frame,
+            label: formatValidTimeLabel(timestampMs(frame.timestamp)),
+        })), options);
+    }
+
+    function clearHistory() {
+        historyToken += 1;
+        clearTimeout(historyPollTimer);
+        historyPollTimer = null;
+        timelineFrames = [];
+        visibleFrameIndex = -1;
+        visibleFrameIdentity = '';
+        emitFrames();
+    }
+
+    function mergeFrames(nextFrames, { replace = false } = {}) {
+        const combined = replace ? nextFrames : [...timelineFrames, ...nextFrames];
+        timelineFrames = [...new Map(combined.map((frame) => [frameIdentity(frame), frame])).values()]
+            .sort((left, right) => timestampMs(left.timestamp) - timestampMs(right.timestamp))
+            .slice(-FRAME_CAP);
+    }
+
+    function scheduleHistoryPoll(token) {
+        clearTimeout(historyPollTimer);
+        historyPollTimer = setTimeout(async () => {
+            historyPollTimer = null;
+            await syncHistory({ token });
+        }, HISTORY_POLL_INTERVAL_MS);
+    }
+
+    async function syncHistory({ reset = false, token = historyToken } = {}) {
+        const selected = productConfig();
+        if (!enabledInput.checked || !selected || !supportsCurrentRegion() || token !== historyToken) return false;
+        try {
+            const batch = reset
+                ? await engine.loadFrames(selected.product, LOOKBACK_HOURS)
+                : await engine.fetchNewFrames(selected.product, LOOKBACK_HOURS, timelineFrames);
+            if (!batch || token !== historyToken) return false;
+            mergeFrames(batch.frames || [], { replace: reset });
+            refreshPending = Boolean(batch.refreshing);
+            emitFrames(reset && timelineFrames.length ? { index: timelineFrames.length - 1 } : {});
+            if (refreshPending) scheduleHistoryPoll(token);
+            return refreshPending;
+        } catch (error) {
+            if (token === historyToken) console.warn('[workspace MRMS] history load failed', error);
+            return false;
+        }
+    }
+
+    function startHistory() {
+        clearHistory();
+        const token = historyToken;
+        void syncHistory({ reset: true, token });
+    }
 
     function syncControls() {
         const enabled = enabledInput.checked;
@@ -65,6 +137,10 @@ export function createWorkspaceMrms({
         const nowMs = Date.now();
         if (auto && !refreshPending && nowMs - lastAutoRefreshMs < AUTO_REFRESH_INTERVAL_MS) return false;
         lastAutoRefreshMs = nowMs;
+        if (auto && timelineFrames.length) {
+            void syncHistory({ token: historyToken });
+            return true;
+        }
         const selected = productConfig();
         const result = await engine.loadLatest(selected.product);
         refreshPending = Boolean(result?.refreshing);
@@ -80,11 +156,13 @@ export function createWorkspaceMrms({
             result.stale ? 'error' : 'success',
         );
         status.setDataState?.(result.stale ? 'Stale data' : 'Ready', result.stale ? 'stale' : 'fresh');
+        if (timelineFrames.length) void syncHistory({ token: historyToken });
         return true;
     }
 
     function clear({ message = '' } = {}) {
         refreshPending = false;
+        clearHistory();
         engine.clear();
         if (message) status.setMessage(message);
     }
@@ -104,14 +182,14 @@ export function createWorkspaceMrms({
             status.setMessage('MRMS Workspace products are available for CONUS only.', 'error');
             return;
         }
-        if (hasSelection()) await refresh();
+        if (hasSelection() && await refresh()) startHistory();
     }
 
     enabledInput.addEventListener('change', () => {
         if (!enabledInput.checked) clear({ message: 'MRMS layer disabled.' });
         else if (!supportsCurrentRegion()) status.setMessage('MRMS Workspace products are available for CONUS only.', 'error');
         else if (!hasSelection()) status.setMessage('Select an MRMS field.');
-        else void refresh();
+        else void refresh().then((loaded) => { if (loaded) startHistory(); });
         syncControls();
     }, { signal: lifecycle.signal });
 
@@ -121,7 +199,7 @@ export function createWorkspaceMrms({
         activeProduct = button.dataset.mrmsProduct;
         clear();
         syncControls();
-        void refresh();
+        void refresh().then((loaded) => { if (loaded) startHistory(); });
     }, { signal: lifecycle.signal });
 
     opacityInput.addEventListener('input', () => {
@@ -133,14 +211,42 @@ export function createWorkspaceMrms({
     engine.setOpacity(opacityInput.value);
     syncControls();
 
+    async function showFrameAt(index, { force = false } = {}) {
+        if (!enabledInput.checked || !timelineFrames.length) return false;
+        const safeIndex = Math.max(0, Math.min(timelineFrames.length - 1, Number(index) || 0));
+        const nextIdentity = frameIdentity(timelineFrames[safeIndex]);
+        if (!force && nextIdentity === visibleFrameIdentity) return true;
+        visibleFrameIndex = safeIndex;
+        visibleFrameIdentity = nextIdentity;
+        const rendered = await engine.renderFrame(timelineFrames[safeIndex]);
+        if (!rendered) visibleFrameIdentity = '';
+        if (rendered) engine.prefetchFrames(timelineFrames, safeIndex);
+        return rendered;
+    }
+
+    function showFrameForTimestamp(timestamp) {
+        const index = workspaceFrameIndexAtOrBefore(timelineFrames, timestamp);
+        if (index < 0) {
+            visibleFrameIndex = -1;
+            visibleFrameIdentity = '';
+            engine.clear();
+            return Promise.resolve(false);
+        }
+        return showFrameAt(index);
+    }
+
     return Object.freeze({
         refresh,
         reset,
         setRegion,
         isEnabled: () => enabledInput.checked,
         hasSelection,
+        getFrames: () => [...timelineFrames],
+        showFrameAt,
+        showFrameForTimestamp,
         destroy() {
             lifecycle.abort();
+            clearHistory();
             engine.destroy();
         },
     });

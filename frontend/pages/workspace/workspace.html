@@ -271,7 +271,7 @@
                                 <label id="workspace-rtma-opacity-label" for="workspace-rtma-opacity">RTMA Opacity (0.7)</label>
                                 <input id="workspace-rtma-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled>
                             </div>
-                            <p class="workspace-layer-note">CONUS-only latest RTMA-RU analysis stays live and is not added to the Radar/Satellite timeline.</p>
+                            <p class="workspace-layer-note">CONUS-only RTMA-RU analysis follows the shared rolling one-hour timeline.</p>
                         </div>
                     </details>
                     <details id="workspace-mrms-group" class="workspace-group workspace-layer-group">
@@ -297,7 +297,7 @@
                                 <label id="workspace-mrms-opacity-label" for="workspace-mrms-opacity">MRMS Opacity (0.7)</label>
                                 <input id="workspace-mrms-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled>
                             </div>
-                            <p class="workspace-layer-note">CONUS-only latest MRMS guidance stays live and is not added to the Radar/Satellite timeline.</p>
+                            <p class="workspace-layer-note">CONUS-only MRMS guidance follows the shared rolling one-hour timeline.</p>
                         </div>
                     </details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>WPC</h2><span>Planned</span></summary><div class="workspace-group-body"><p>WPC engine composition placeholder.</p></div></details>
@@ -400,6 +400,6 @@
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
     <script src="/frontend/lib/tz-lookup/tz.js?v=6.1.25"></script>
-    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260803c"></script>
+    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260803e"></script>
 </body>
 </html>

@@ -3,11 +3,21 @@ import test from 'node:test';
 
 test('workspace RTMA panes wait for image load before replacing the visible layer', async () => {
     globalThis.window = { location: { protocol: 'http:', hostname: 'localhost', port: '8000' } };
+    globalThis.Image = class {
+        set src(_value) { setImmediate(() => this.onload?.()); }
+    };
     const { createRtmaEngine } = await import('../frontend/pages/rtma/rtma-engine.js');
     const layers = new Set();
     const overlays = [];
     const requests = [];
     const map = {
+        getZoom: () => 7,
+        getBounds: () => ({
+            getSouth: () => 20,
+            getWest: () => -130,
+            getNorth: () => 55,
+            getEast: () => -60,
+        }),
         hasLayer: (layer) => layers.has(layer),
         removeLayer: (layer) => layers.delete(layer),
     };
@@ -80,6 +90,14 @@ test('workspace RTMA panes wait for image load before replacing the visible laye
     overlays[1].trigger('load');
     assert.equal(layers.has(overlays[0]), false);
     assert.equal(layers.has(overlays[1]), true);
+
+    await engine.renderFrame({
+        ...selection,
+        frame_key: '20260802_1215',
+        source_data_key: 'frame-history',
+        timestamp: '2026-08-02T12:15:00Z',
+    });
+    assert.equal(requests.length, 3, 'historical gradient-only rendering skips the points request');
 
     engine.clear();
     assert.equal(layers.size, 0);
@@ -171,4 +189,14 @@ test('workspace RTMA values use their pane without requesting the gradient', asy
     assert.equal(markerOptions.length, 2, 'paired wind uses one replacement composite marker');
     assert.match(markerOptions[1].icon.html, /data-arrow-tail="value-bottom"/);
     assert.match(markerOptions[1].icon.html, /transform="rotate\(225 0 0\)"/);
+
+    await engine.renderFrame({
+        region: 'CONUS', stream: 'rtma_rapid_update', product: 'wind_speed',
+        frame_key: '20260802_1200', source_data_key: 'wind-source', timestamp: '2026-08-02T12:00:00Z',
+    }, { secondaryFrame: {
+        region: 'CONUS', stream: 'rtma_rapid_update', product: 'wind_direction',
+        frame_key: '20260802_1200', source_data_key: 'wind-source', timestamp: '2026-08-02T12:00:00Z',
+    } });
+    assert.equal(markerOptions.length, 3, 'historical wind speed and direction render as one composite marker');
+    assert.match(markerOptions[2].icon.html, /transform="rotate\(225 0 0\)"/);
 });

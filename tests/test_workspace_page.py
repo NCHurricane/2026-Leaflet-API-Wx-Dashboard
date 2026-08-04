@@ -363,9 +363,10 @@ def test_workspace_satellite_phase2_is_curated_default_off_and_uses_shared_timel
     assert "satelliteFrameIndexAtOrBefore" in satellite
     assert "showFrameForTimestamp" in satellite
     assert "awaitFrameOnPlay: true" in app
-    assert "radarTimelineFrames.length" in app
-    assert "workspaceSatellite.showFrameForTimestamp(frame?.timestamp" in app
-    assert "workspaceSatellite.showFrameAt(index" in app
+    assert "workspaceTimelineFrameSets = { radar: [], mrms: [], satellite: [], rtma: [] }" in app
+    assert "selectWorkspaceTimelineSource(workspaceTimelineFrameSets)" in app
+    assert "workspaceSatellite.showFrameForTimestamp(timestamp" in app
+    assert "workspaceSatellite.showFrameAt(safeIndex" in app
 
 
 def test_workspace_overlay_order_places_rtma_gradient_below_borders_and_values_above():
@@ -393,7 +394,7 @@ def test_workspace_overlay_order_places_rtma_gradient_below_borders_and_values_a
     assert "alertPaneZIndex: 440" in app
 
 
-def test_workspace_rtma_phase3_is_curated_default_off_and_live_only():
+def test_workspace_rtma_is_curated_default_off_and_uses_shared_timeline():
     root = Path(BASE_DIR) / "frontend" / "pages"
     page = (root / "workspace" / "workspace.html").read_text(encoding="utf-8")
     app = (root / "workspace" / "workspace-app.js").read_text(encoding="utf-8")
@@ -416,7 +417,7 @@ def test_workspace_rtma_phase3_is_curated_default_off_and_live_only():
     assert 'class="is-active" type="button" data-rtma-mode="values" aria-pressed="true" disabled>Values</button>' in page
     assert 'data-rtma-mode="gradient" aria-pressed="false" disabled>Gradient</button>' in page
     assert 'id="workspace-rtma-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled' in page
-    assert "CONUS-only latest RTMA-RU analysis stays live" in page
+    assert "CONUS-only RTMA-RU analysis follows the shared rolling one-hour timeline" in page
     assert 'id="workspace-rtma-legend-tab"' in page
     assert 'id="workspace-rtma-legend"' in page
 
@@ -438,7 +439,12 @@ def test_workspace_rtma_phase3_is_curated_default_off_and_live_only():
     assert "{ value: 'wind_gust', label: 'Wind Gust', product: 'wind_gust' }" in rtma
     assert "{ value: 'visibility', label: 'Visibility', product: 'visibility' }" in rtma
     assert "temperature_change_24h" not in rtma
-    assert "loadFrames" not in rtma
+    assert "const SOURCE_LOOKBACK_HOURS = 2" in rtma
+    assert "workspaceFrameWindowWithPredecessor" in rtma
+    assert "engine.loadFrames(primarySelection, SOURCE_LOOKBACK_HOURS)" in rtma
+    assert "engine.fetchNewFrames" in rtma
+    assert "showFrameForTimestamp" in rtma
+    assert "matchingSecondaryFrame" in rtma
     assert "loadLatest(selection())" in rtma
     assert "showValues = true" in rtma
     assert "showGradient = false" in rtma
@@ -497,11 +503,11 @@ def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets(
     assert "radar-engine.js?v=20260729b" in radar_app
     assert "radar-engine.js?v=20260802a" in workspace_app
     assert "radar-page.js?v=20260729b" in radar_page
-    assert "workspace-satellite.js?v=20260802e" in workspace_app
-    assert "workspace-app.js?v=20260803c" in workspace_page
+    assert "workspace-satellite.js?v=20260803a" in workspace_app
+    assert "workspace-app.js?v=20260803e" in workspace_page
 
 
-def test_workspace_mrms_phase4_is_curated_default_off_and_live_only():
+def test_workspace_mrms_is_curated_default_off_and_uses_shared_timeline():
     root = Path(BASE_DIR) / "frontend" / "pages"
     page = (root / "workspace" / "workspace.html").read_text(encoding="utf-8")
     app = (root / "workspace" / "workspace-app.js").read_text(encoding="utf-8")
@@ -519,7 +525,7 @@ def test_workspace_mrms_phase4_is_curated_default_off_and_live_only():
     assert 'data-mrms-product="precip_type"' in page
     assert 'data-mrms-product="base_reflectivity"' in page
     assert 'id="workspace-mrms-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled' in page
-    assert "CONUS-only latest MRMS guidance stays live" in page
+    assert "CONUS-only MRMS guidance follows the shared rolling one-hour timeline" in page
     assert 'id="workspace-mrms-legend-tab"' in page
     assert 'id="workspace-mrms-legend"' in page
 
@@ -540,7 +546,9 @@ def test_workspace_mrms_phase4_is_curated_default_off_and_live_only():
     assert "PrecipFlag" in mrms
     assert "Refl_BaseQC" in mrms
     assert "loadLatest(selected.product)" in mrms
-    assert "loadFrames" not in mrms
+    assert "engine.loadFrames(selected.product, LOOKBACK_HOURS)" in mrms
+    assert "engine.fetchNewFrames" in mrms
+    assert "showFrameForTimestamp" in mrms
     assert "supportsCurrentRegion" in mrms
     assert "paneName = ''" in engine
     assert "pendingOverlay" in engine

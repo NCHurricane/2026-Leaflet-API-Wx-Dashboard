@@ -700,9 +700,12 @@ export function createRtmaEngine({
 
     // Pre-rendered overlay + points in parallel; points-only when the frame's
     // PNG is not yet cached (never triggers server-side GRIB parsing).
-    async function fetchFramePayload(frame) {
+    async function fetchFramePayload(frame, { includePoints = showValues } = {}) {
         const { region, stream, product } = frame;
-        const cacheKey = `${region}|${stream}|${product}|${frame.source_data_key || frame.frame_key}|${viewportKey()}`;
+        const cacheKey = [
+            region, stream, product, frame.source_data_key || frame.frame_key,
+            viewportKey(), includePoints ? 'points' : 'image',
+        ].join('|');
         const existing = frameCache.get(cacheKey);
         if (existing) return existing;
 
@@ -715,7 +718,9 @@ export function createRtmaEngine({
                         + `&stream=${encodeURIComponent(stream)}&product=${encodeURIComponent(product)}`
                         + `&frame_key=${encodeURIComponent(frame.frame_key)}`,
                     ),
-                    fetchPoints(selection, frame.source_data_key).catch(() => null),
+                    includePoints
+                        ? fetchPoints(selection, frame.source_data_key).catch(() => null)
+                        : Promise.resolve(null),
                 ]);
                 const payload = {
                     overlay: {
@@ -738,20 +743,27 @@ export function createRtmaEngine({
             }
         }
 
-        const pointsData = await fetchPoints(selection, frame.source_data_key);
+        const pointsData = includePoints
+            ? await fetchPoints(selection, frame.source_data_key)
+            : null;
         const payload = { overlay: null, points: pointsData, fromPrerender: false };
         frameCache.set(cacheKey, payload);
         return payload;
     }
 
-    async function renderFrame(frame) {
+    async function renderFrame(frame, { secondaryFrame = undefined } = {}) {
         const seq = ++renderSeq;
-        const payload = await fetchFramePayload(frame);
-        if (seq !== renderSeq) return;
+        const [payload, secondaryPayload] = await Promise.all([
+            fetchFramePayload(frame, { includePoints: showValues }),
+            secondaryFrame
+                ? fetchFramePayload(secondaryFrame, { includePoints: true }).catch(() => null)
+                : Promise.resolve(null),
+        ]);
+        if (seq !== renderSeq) return false;
         const data = payload.overlay || payload.points || {};
         const pointsData = payload.points;
 
-        if (payload.overlay?.image_url && Array.isArray(payload.overlay.bounds)) {
+        if (showGradient && payload.overlay?.image_url && Array.isArray(payload.overlay.bounds)) {
             // Preload before swapping so the new overlay is never transparent.
             await new Promise((resolve) => {
                 const img = new Image();
@@ -759,7 +771,7 @@ export function createRtmaEngine({
                 img.onerror = resolve;
                 img.src = api.apiUrl(payload.overlay.image_url);
             });
-            if (seq !== renderSeq) return;
+            if (seq !== renderSeq) return false;
             setGradientFromImage(payload.overlay.image_url, payload.overlay.bounds);
         } else {
             clearGradientLayer();
@@ -769,6 +781,12 @@ export function createRtmaEngine({
         primaryUnits = pointsData?.units || '';
         primaryProduct = frame.product;
         primaryLabel = pointsData?.full_name || data?.full_name || frame.product;
+        if (secondaryFrame !== undefined) {
+            const secondaryData = secondaryPayload?.points;
+            secondaryPoints = Array.isArray(secondaryData?.points) ? secondaryData.points : [];
+            secondaryUnits = secondaryData?.units || '';
+            secondaryLabel = secondaryData?.full_name || secondaryFrame?.product || '';
+        }
         renderPoints();
 
         legend.setHtml(rtmaLegendHtml(pointsData || data));
@@ -781,6 +799,7 @@ export function createRtmaEngine({
             source: title,
         });
         status.setMessage(`RTMA ${title} (${renderNote}) ${formatValidTimeLabel(tsMs)}.`);
+        return true;
     }
 
     // Browser-cache prefetch of upcoming frame PNGs (fire-and-forget).

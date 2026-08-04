@@ -403,9 +403,9 @@ Current checkpoint:
   Winds, Wind Gust, and Visibility; Winds combines speed values and direction
   barbs. Values and Gradient are independent pills. A new field defaults to
   Values on and Gradient off; density and gradient opacity remain adjustable.
-- RTMA stays latest-only and never joins the Radar/Satellite timeline. Selected
-  refresh runs on the 15-minute RTMA-RU cadence with 30-second follow-up reads
-  only while coordinator refresh is pending. Pane order is Satellite `330`,
+- RTMA-RU now contributes the selected field's rolling one-hour history to the
+  shared Workspace scrubber. Refresh remains on its 15-minute cadence with
+  five-second history polling while pending. Pane order is Satellite `330`,
   RTMA Gradient `350`, SPC `400`, Radar `410`, boundaries `420`, RTMA Values
   `425`, and Alerts `430+`.
 - RTMA-RU is CONUS-only. AK/HI/PR clear its imagery and expose the limitation;
@@ -450,9 +450,9 @@ Current checkpoint:
   Rotation Track, Instant MESH, 30-minute MESH, 30-minute Lightning
   Probability, Surface Precipitation Type, and Base Reflectivity QC; opacity
   defaults to `0.7`.
-- MRMS stays latest-only and never joins the Radar/Satellite timeline. Selected
-  refresh runs on the natural two-minute cadence with 30-second follow-up reads
-  only while coordinator refresh is pending. Its pane is `375`, above RTMA
+- MRMS now contributes the selected product's rolling one-hour history to the
+  shared Workspace scrubber. Refresh remains on its natural two-minute cadence
+  with five-second history polling while pending. Its pane is `375`, above RTMA
   Gradient `350` and below SPC `400`, Radar `410`, boundaries `420`, RTMA Values
   `425`, and Alerts `430+`.
 - MRMS is CONUS-only. AK/HI/PR clear it and expose the limitation; returning to
@@ -469,8 +469,30 @@ Current checkpoint:
   winter-event composition, followed by Base Reflectivity QC through the
   existing `Refl_BaseQC` path. JavaScript syntax, its Node check, 20 focused
   Workspace tests with the two known stale assertions excluded, and a live
-  latest-overlay/PNG probe for each added product pass. They await focused
-  browser smoke.
+  latest-overlay/PNG probe for each added product pass. User-owned browser proof
+  now passes for all six MRMS products and their animation.
+- The authorized shared-timeline follow-up is implemented. Clock priority is
+  Radar, MRMS, Satellite, then RTMA; every follower selects its newest frame at
+  or before the master time. Selected-only histories fill progressively through
+  the existing overlay coordinator, retain scrubbed position, and advance at
+  live edge. RTMA Values/Gradient follow the historical frame, and Winds uses
+  direction only from an exactly matching analysis. Standalone pages are
+  unchanged.
+- The first combined-layer smoke found RTMA blank at master times between the
+  one-hour boundary and RTMA's first returned analysis. Workspace now requests
+  a bounded two-hour selected RTMA source window, retains only the newest hidden
+  predecessor before the boundary, and exposes only the normal one-hour frames
+  as the scrubber clock. This preserves strict no-future matching and applies to
+  paired historical wind direction. The opening-segment browser re-smoke remains
+  open.
+- JavaScript syntax passes for the six affected modules. Six focused Node
+  tests plus the Satellite timeline script pass. The focused Python gate passes
+  45 tests with the two known stale Workspace assertions excluded. Live API
+  probes returned chronological progressive histories for MRMS Base
+  Reflectivity QC (21 frames) and RTMA-RU Temperature (three frames); this is
+  API/runtime evidence, not browser acceptance. The corrected two-hour RTMA-RU
+  request subsequently completed with seven chronological frames from 19:45
+  through 21:15 local and `refreshing=false`.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -484,12 +506,12 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- Continue the existing Phase 4 implementation at the user-owned `/workspace`
-  MRMS gate; do not reimplement it. Verify Surface Precipitation Type and Base
-  Reflectivity QC plus opacity
-  and legend changes, pane order, latest-only timeline isolation, CONUS-only
-  region behavior, layer-off/Home cleanup, and auto-refresh retention. Recheck
-  one representative standalone `/mrms` load/scrub. Close Phase 4 only after
-  those pass; do not start WPC or another product family without explicit
+- Continue at the user-owned `/workspace` acceptance gate; do not reimplement
+  the timeline. Verify Surface Precipitation Type and Base Reflectivity QC,
+  Radar-master four-layer matching, MRMS-master behavior without Radar, RTMA
+  repeated frames, Values/Gradient and historical Winds, live-edge versus
+  scrubbed refresh, product-switch cancellation, CONUS-only behavior, and
+  layer-off/Region/Home cleanup. Recheck one representative standalone `/mrms`
+  and `/rtma` load/scrub. Do not start WPC or another family without explicit
   authorization.
 ```

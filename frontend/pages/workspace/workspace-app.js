@@ -13,9 +13,10 @@ import { buildSpcOutlookDetailHtml, buildSpcTextDetailHtml, wireSpcDetailContent
 import { CIG_OVERLAY_BY_HAZARD, createSpcEngine } from '../spc/spc-engine.js?v=20260801a';
 import { createSpcRenderer } from '../spc/spc-render.js?v=20260803a';
 import { createWorkspaceDetailCarousel } from './workspace-detail-carousel.js?v=20260801a';
-import { createWorkspaceSatellite } from './workspace-satellite.js?v=20260802e';
-import { createWorkspaceRtma } from './workspace-rtma.js?v=20260802b';
-import { createWorkspaceMrms } from './workspace-mrms.js?v=20260803b';
+import { createWorkspaceSatellite } from './workspace-satellite.js?v=20260803a';
+import { createWorkspaceRtma } from './workspace-rtma.js?v=20260803b';
+import { createWorkspaceMrms } from './workspace-mrms.js?v=20260803c';
+import { workspaceTimelineSource as selectWorkspaceTimelineSource } from './workspace-timeline.js?v=20260803b';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 
 const byId = (id) => document.getElementById(id);
@@ -285,14 +286,30 @@ async function initialize() {
         api, renderer: spcRenderer, legend: spcLegend, status,
         onCount(count) { byId('workspace-spc-count').textContent = String(count); },
     });
-    let radarTimelineFrames = [];
-    let satelliteTimelineFrames = [];
+    const workspaceTimelineFrameSets = { radar: [], mrms: [], satellite: [], rtma: [] };
+    let workspaceTimelineSource = '';
+    let workspaceTimelineFrames = [];
+    let workspaceTimelineIndex = 0;
     let syncWorkspaceTimeline = () => {};
+    function updateWorkspaceTimelineFrames(source, frames, options = {}) {
+        const previousFrames = workspaceTimelineFrameSets[source] || [];
+        const wasAtNewest = source === workspaceTimelineSource
+            && previousFrames.length > 0
+            && workspaceTimelineIndex === previousFrames.length - 1;
+        workspaceTimelineFrameSets[source] = Array.isArray(frames) ? frames : [];
+        const preferredIndex = Number.isFinite(Number(options.index))
+            ? Number(options.index)
+            : (wasAtNewest ? workspaceTimelineFrameSets[source].length - 1 : null);
+        syncWorkspaceTimeline({ preferredSource: source, preferredIndex });
+    }
     const workspaceSatellite = createWorkspaceSatellite({
         api, mapCore, legend: satelliteLegend, status,
         onFrames(frames, options = {}) {
-            satelliteTimelineFrames = frames.map((frame) => ({ ...frame, label: satelliteFrameLabel(frame) }));
-            syncWorkspaceTimeline({ preferredSource: 'satellite', preferredIndex: options.index });
+            updateWorkspaceTimelineFrames(
+                'satellite',
+                frames.map((frame) => ({ ...frame, label: satelliteFrameLabel(frame) })),
+                options,
+            );
         },
         elements: {
             enabledInput: byId('workspace-satellite-enabled'),
@@ -318,6 +335,9 @@ async function initialize() {
         getRegion: () => regionSelect.value,
         gradientPaneName: 'workspace-rtma-gradient',
         pointPaneName: 'workspace-rtma-values',
+        onFrames(frames, options = {}) {
+            updateWorkspaceTimelineFrames('rtma', frames, options);
+        },
         elements: {
             enabledInput: byId('workspace-rtma-enabled'),
             controls: byId('workspace-rtma-controls'),
@@ -335,6 +355,9 @@ async function initialize() {
         api, mapCore, legend: mrmsLegend, status,
         getRegion: () => regionSelect.value,
         paneName: 'workspace-mrms-overlays',
+        onFrames(frames, options = {}) {
+            updateWorkspaceTimelineFrames('mrms', frames, options);
+        },
         elements: {
             enabledInput: byId('workspace-mrms-enabled'),
             controls: byId('workspace-mrms-controls'),
@@ -650,25 +673,42 @@ async function initialize() {
         byId('workspace-radar-product').value = options.some((option) => option.value === current) ? current : fallback;
     };
     const radarScrubberBar = byId('workspace-radar-scrubber-bar');
-    let workspaceTimelineSource = '';
-    let workspaceTimelineFrames = [];
-    let workspaceTimelineIndex = 0;
+    async function renderWorkspaceTimelineFrame(index, { waitForVisible = false } = {}) {
+        if (!workspaceTimelineFrames.length || !workspaceTimelineSource) return false;
+        const safeIndex = Math.max(0, Math.min(workspaceTimelineFrames.length - 1, Number(index) || 0));
+        workspaceTimelineIndex = safeIndex;
+        const frame = workspaceTimelineFrames[safeIndex];
+        const timestamp = frame?.timestamp_utc || frame?.timestamp;
+        const tasks = [];
+
+        if (workspaceTimelineSource === 'radar') tasks.push(Promise.resolve(radarEngine.renderFrameAt(safeIndex)));
+        if (workspaceTimelineSource === 'mrms') tasks.push(workspaceMrms.showFrameAt(safeIndex));
+        if (workspaceTimelineSource === 'satellite') {
+            tasks.push(workspaceSatellite.showFrameAt(safeIndex, { waitForVisibleTile: waitForVisible }));
+        }
+        if (workspaceTimelineSource === 'rtma') tasks.push(workspaceRtma.showFrameAt(safeIndex));
+
+        if (workspaceTimelineSource !== 'satellite' && workspaceTimelineFrameSets.satellite.length) {
+            tasks.push(workspaceSatellite.showFrameForTimestamp(timestamp, {
+                waitForVisibleTile: waitForVisible,
+            }));
+        }
+        if (workspaceTimelineSource !== 'mrms' && workspaceTimelineFrameSets.mrms.length) {
+            tasks.push(workspaceMrms.showFrameForTimestamp(timestamp));
+        }
+        if (workspaceTimelineSource !== 'rtma' && workspaceTimelineFrameSets.rtma.length) {
+            tasks.push(workspaceRtma.showFrameForTimestamp(timestamp));
+        }
+
+        await Promise.all(tasks);
+        return true;
+    }
     const radarScrubber = createScrubber(byId('workspace-radar-bottom-scrubber'), {
         holdAtEnd: true,
         awaitFrameOnPlay: true,
         onFrame(frame, index) {
-            workspaceTimelineIndex = index;
-            if (workspaceTimelineSource === 'radar') {
-                void radarEngine.renderFrameAt(index);
-                if (workspaceSatellite.isEnabled() && satelliteTimelineFrames.length) {
-                    return workspaceSatellite.showFrameForTimestamp(frame?.timestamp, {
-                        waitForVisibleTile: radarScrubber.isPlaying(),
-                    });
-                }
-                return true;
-            }
-            return workspaceSatellite.showFrameAt(index, {
-                waitForVisibleTile: radarScrubber.isPlaying(),
+            return renderWorkspaceTimelineFrame(index, {
+                waitForVisible: radarScrubber.isPlaying(),
             });
         },
         onPlayingChange(playing) {
@@ -690,12 +730,15 @@ async function initialize() {
             previousSource,
             workspaceTimelineFrames[workspaceTimelineIndex],
         );
-        const nextSource = radarTimelineFrames.length
-            ? 'radar'
-            : (satelliteTimelineFrames.length ? 'satellite' : '');
-        const nextFrames = nextSource === 'radar' ? radarTimelineFrames : satelliteTimelineFrames;
+        const nextSource = selectWorkspaceTimelineSource(workspaceTimelineFrameSets);
+        const nextFrames = nextSource ? workspaceTimelineFrameSets[nextSource] : [];
         let nextIndex = nextFrames.length - 1;
-        if (nextSource && nextSource === preferredSource && Number.isFinite(Number(preferredIndex))) {
+        if (
+            nextSource
+            && nextSource === preferredSource
+            && preferredIndex !== null
+            && Number.isFinite(Number(preferredIndex))
+        ) {
             nextIndex = Number(preferredIndex);
         } else if (nextSource && nextSource === previousSource && previousFrameKey) {
             const preservedIndex = nextFrames.findIndex(
@@ -714,12 +757,7 @@ async function initialize() {
         });
         showRadarScrubber(nextFrames.length > 0);
         radarEngine.setPlaybackActive(radarScrubber.isPlaying() && nextSource === 'radar');
-        if (nextSource === 'radar' && nextFrames[nextIndex]
-            && workspaceSatellite.isEnabled() && satelliteTimelineFrames.length) {
-            void workspaceSatellite.showFrameForTimestamp(nextFrames[nextIndex].timestamp, {
-                waitForVisibleTile: radarScrubber.isPlaying(),
-            });
-        }
+        if (nextFrames[nextIndex]) void renderWorkspaceTimelineFrame(nextIndex);
     };
 
     const radarEngine = createRadarEngine({
@@ -732,8 +770,11 @@ async function initialize() {
             radarEngine.showSiteLegend();
         },
         onFrames(frames, options = {}) {
-            radarTimelineFrames = frames.map((frame) => ({ ...frame, label: radarFrameLabel(frame) }));
-            syncWorkspaceTimeline({ preferredSource: 'radar', preferredIndex: options.index });
+            updateWorkspaceTimelineFrames(
+                'radar',
+                frames.map((frame) => ({ ...frame, label: radarFrameLabel(frame) })),
+                options,
+            );
         },
         onStormTrackLegend(html) { if (html) stormTrackLegend.setHtml(html); else stormTrackLegend.clear(); },
         onSitePicked(site, coords) {

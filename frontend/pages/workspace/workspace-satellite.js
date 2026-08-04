@@ -4,6 +4,7 @@ import {
     SAT_SOURCES,
     createSatelliteEngine,
 } from '../satellite/satellite-engine.js?v=20260731a';
+import { workspaceFrameIndexAtOrBefore } from './workspace-timeline.js?v=20260803b';
 
 const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const INITIAL_TILE_READY_TIMEOUT_MS = 45_000;
@@ -33,18 +34,7 @@ function maxFramesForSector(sector) {
 }
 
 export function satelliteFrameIndexAtOrBefore(frames, timestamp) {
-    const targetMs = new Date(timestamp || '').getTime();
-    if (!Number.isFinite(targetMs)) return -1;
-    let matchedIndex = -1;
-    let matchedMs = Number.NEGATIVE_INFINITY;
-    (Array.isArray(frames) ? frames : []).forEach((frame, index) => {
-        const frameMs = new Date(frame?.timestamp_utc || frame?.timestamp || '').getTime();
-        if (Number.isFinite(frameMs) && frameMs <= targetMs && frameMs > matchedMs) {
-            matchedIndex = index;
-            matchedMs = frameMs;
-        }
-    });
-    return matchedIndex;
+    return workspaceFrameIndexAtOrBefore(frames, timestamp);
 }
 
 export function createWorkspaceSatellite({

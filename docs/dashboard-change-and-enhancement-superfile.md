@@ -17,7 +17,9 @@ adds curated Day 1 SPC composition and is user-accepted. Phase 2 adds a bounded
 one-hour GOES Satellite overlay with shared Workspace playback and is
 user-accepted and closed. Phase 3 adds curated CONUS RTMA-RU live composition
 and is user-accepted and closed. Phase 4 is authorized for curated MRMS live
-composition and is implemented pending user-owned browser acceptance.)
+composition and is implemented pending user-owned browser acceptance. A
+separately authorized follow-up adds selected RTMA/MRMS one-hour history to the
+shared Workspace timeline and awaits user-owned browser acceptance.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -67,7 +69,8 @@ to PNG-only behavior.
    gate passed on 2026-08-02. Phase 3 is implemented for curated CONUS RTMA-RU
    live composition; its user-owned browser gate passed on 2026-08-02. Phase 4
    is implemented for curated MRMS live composition and awaits its user-owned
-   browser gate.
+   browser gate. The authorized shared-timeline follow-up is implemented for
+   selected MRMS and RTMA-RU history and awaits focused browser acceptance.
 2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
    `docs/archive/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
@@ -385,19 +388,17 @@ Authorized, implemented, and user-accepted 2026-08-02. Phase 3 is closed.
 - RTMA is off and collapsed by default. Workspace composes the shared RTMA
   engine, never the standalone page controller, and fixes the stream to the
   CONUS-only 15-minute Rapid Update analysis. Hourly RTMA, 24-hour change,
-  history, scrubber playback, and Archive behavior remain on `/rtma` and are
-  outside this phase.
+  extended lookback, and Archive behavior remain on `/rtma`; a later authorized
+  follow-up adds the selected RTMA-RU field to Workspace's rolling hour.
 - The compact field control is a two-column, three-row pill grid ordered
   Temperature, Feels Like, Dew Point, Winds, Wind Gust, and Visibility. The
   combined Winds pill loads wind-speed values plus direction barbs. Independent
   Values and Gradient pills can each be enabled or disabled; every new field
   selection defaults to Values on and Gradient off. Marker density and gradient
   opacity remain Workspace-local controls.
-- RTMA stays in the live tier and never joins the Radar/Satellite timeline. A
-  selected resource requests refresh on the natural 15-minute cadence; while
-  the coordinator reports a queued/running refresh, the existing 30-second
-  Workspace loop performs bounded follow-up reads so a completed frame is not
-  delayed until the next 15-minute interval.
+- The accepted Phase 3 baseline was latest-only. The separately authorized
+  timeline follow-up below supersedes that presentation rule while retaining
+  the natural 15-minute refresh cadence and bounded coordinator follow-up.
 - Workspace owns separate RTMA panes: Gradient `350` remains below SPC `400`,
   Radar `410`, and boundaries `420`; Values `425` stays above map borders but
   below Alerts `430+`. The shared RTMA engine accepts independent gradient/value
@@ -456,12 +457,12 @@ user-owned browser acceptance gate remains open.
   products in a two-column pill grid: low-level 30-minute Rotation Track,
   Instant MESH, 30-minute MESH, 30-minute Lightning Probability, Surface
   Precipitation Type, and Base Reflectivity QC. The
-  standalone product matrix, lookback history, scrubber playback, and other
-  accumulation windows remain on `/mrms`.
-- MRMS stays in the live tier and never joins the Radar/Satellite timeline.
-  Selected products refresh on their natural two-minute cadence; while the
-  coordinator reports a queued/running refresh, the existing 30-second
-  Workspace loop performs bounded follow-up reads. Opacity defaults to `0.7`.
+  standalone product matrix, extended lookback, and other accumulation windows
+  remain on `/mrms`.
+- The accepted initial Phase 4 implementation was latest-only. The separately
+  authorized timeline follow-up below adds the selected product's rolling hour
+  while retaining its natural two-minute cadence, bounded coordinator
+  follow-up, and default `0.7` opacity.
 - Workspace owns the MRMS overlay pane at `375`, above RTMA Gradient `350` and
   below SPC `400`, Radar `410`, boundaries `420`, RTMA Values `425`, and Alerts
   `430+`. The shared MRMS engine accepts an optional pane without changing the
@@ -482,15 +483,64 @@ user-owned browser acceptance gate remains open.
   winter-event composition, followed by Base Reflectivity QC through the
   existing `Refl_BaseQC` path. JavaScript syntax, its Node check, 20 focused
   Workspace tests with the two known stale assertions excluded, and a live
-  latest-overlay/PNG probe for each added product pass. They await focused
-  browser smoke. Remaining
-  browser acceptance: verify it, opacity and legend
-  updates, MRMS `375` stacking, latest-only timeline isolation, CONUS-only
+  latest-overlay/PNG probe for each added product pass. User-owned browser
+  proof now passes for all six products and their animation. Remaining combined
+  browser acceptance: verify opacity and legend updates, MRMS `375` stacking,
+  shared-timeline behavior, CONUS-only
   region behavior, layer-off/Home cleanup, auto-refresh retention, and one
   representative standalone `/mrms` load/scrub after the shared-engine change.
   The next session should continue this implemented slice at acceptance and
   correction work, not reimplement it. Do not begin WPC until MRMS is accepted
   and the next family is explicitly authorized.
+
+### Workspace shared timeline extension — MRMS + RTMA-RU
+
+Authorized and implemented 2026-08-03. Automated validation passes; user-owned
+browser acceptance remains open.
+
+- The existing bottom scrubber now selects its clock source in the stable order
+  Radar, MRMS, Satellite, then RTMA. Radar therefore remains master whenever it
+  has frames; without Radar, two-minute MRMS takes precedence over Satellite,
+  and 15-minute RTMA-RU is the final fallback.
+- Every non-master time layer displays only its newest frame at or before the
+  master time. No future MRMS, Satellite, or RTMA analysis is borrowed. Repeated
+  slower-source frames are intentional.
+- Workspace requests only the selected MRMS product and selected RTMA-RU field
+  for a rolling one-hour window through the existing `/api/overlay/frames`
+  coordinator path. Empty/partial histories fill progressively, poll at five
+  seconds while pending, append by stable frame identity, and retain a scrubbed
+  position while live-edge users follow new frames. No product-family preload
+  or Task Scheduler dependency was added.
+- MRMS uses the shared engine's existing image-load-before-swap and two-frame
+  prefetch behavior. RTMA historical rendering keeps Values and Gradient modes
+  synchronized with the selected frame and never reveals a disabled gradient.
+  Winds joins direction only when its source key or timestamp exactly matches
+  the historical wind-speed analysis; a missing pair clears direction rather
+  than mixing analysis times.
+- Product, layer, Home, and region changes cancel the old client generation,
+  clear its frame registry, and reject stale results. A bounded coordinator job
+  already accepted by the backend may finish and populate cache. Standalone
+  `/mrms` and `/rtma` retain their own controls, lookback choices, and scrubber
+  workflows.
+- RTMA follower history also retains one hidden predecessor analysis before the
+  visible one-hour boundary. The API accepts whole-hour lookbacks, so Workspace
+  requests a bounded two-hour selected-field source window, discards all but
+  the newest pre-window frame, and exposes only the normal one-hour frames to
+  the scrubber. Strict at-or-before matching can therefore render the prior
+  analysis at the first master step instead of leaving RTMA blank until its
+  next observation. Historical wind direction uses the same anchor rule.
+- JavaScript syntax passes for the six affected modules. Six focused Node
+  tests plus the Satellite timeline script pass. The focused Python gate passes
+  45 tests with the two documented stale Workspace assertions excluded. Live
+  `/api/overlay/frames` probes returned chronological progressive histories for
+  MRMS Base Reflectivity QC (21 frames) and RTMA-RU Temperature (three frames);
+  this is API/runtime evidence, not browser proof. After the predecessor
+  correction, a live two-hour RTMA-RU request completed with seven chronological
+  frames from 19:45 through 21:15 local and `refreshing=false`.
+- Browser acceptance must cover each layer alone, Radar-master four-layer
+  matching, MRMS-master behavior without Radar, RTMA repeated-frame behavior,
+  Values/Gradient and historical Winds, live-edge versus scrubbed refresh,
+  product-switch cancellation, and layer-off/Region/Home cleanup.
 
 ## Current State
 
