@@ -293,10 +293,21 @@ def _prewarm_conus_png(
         f"{product}_{south:.2f}_{west:.2f}_{north:.2f}_{east:.2f}".encode()
     ).hexdigest()[:10]
     png_path = os.path.join(product_cache_dir, f"overlay_{bounds_key}.png")
+    tile_frame_key = None
+    if file_dt is not None:
+        from cache.overlay_cache_utils import frame_key_from_datetime
+
+        tile_frame_key = frame_key_from_datetime(file_dt)
 
     try:
         t0 = _t.time()
-        _render_mrms_png_standalone(grib_path, product, _CONUS_EXTENT, png_path)
+        _render_mrms_png_standalone(
+            grib_path,
+            product,
+            _CONUS_EXTENT,
+            png_path,
+            tile_frame_key=tile_frame_key,
+        )
         print(
             f"[mrms_worker] Pre-warmed CONUS PNG for {product} in {_t.time() - t0:.1f}s"
         )
@@ -413,22 +424,27 @@ def _render_mrms_png_standalone_unbounded(
     product: str,
     crop_extent: list,
     out_path: str,
+    *,
+    tile_frame_key: str | None = None,
 ) -> None:
     """Standalone MRMS PNG renderer using PIL for ~3-5x faster rendering."""
     import json
     from PIL import Image
     import numpy as np
-    import matplotlib.colors as mcolors
 
-    from mrms.legend_utils import build_mrms_overlay_meta, mask_mrms_data
+    from mrms.legend_utils import (
+        build_mrms_overlay_meta,
+        colorize_masked_mrms_data,
+        mask_mrms_data,
+    )
     from mrms.mrms_utils import read_mrms_grib2, warp_array_to_mercator
-    from config.mrms_config import MRMS_PRODUCTS, MRMS_COLORMAPS, MRMS_WARP_MAX_DIM
+    from config.mrms_config import (
+        MRMS_PRODUCTS,
+        MRMS_TILES_ENABLED,
+        MRMS_WARP_MAX_DIM,
+    )
 
     prod_info = MRMS_PRODUCTS[product]
-    cmap_key = prod_info.get("colormap", "precip_rate")
-    vmin = prod_info.get("vmin", 0)
-    vmax = prod_info.get("vmax", 100)
-
     data, meta = read_mrms_grib2(grib_path, product, crop_extent=crop_extent)
     data = mask_mrms_data(data, prod_info)
 
@@ -437,36 +453,21 @@ def _render_mrms_png_standalone_unbounded(
     if lat is None or lon is None:
         raise ValueError("GRIB2 read did not return lat/lon metadata")
 
+    if tile_frame_key and MRMS_TILES_ENABLED:
+        try:
+            from mrms.mrms_tiles import write_tile_source
+
+            write_tile_source(data, lat, lon, product, tile_frame_key)
+        except Exception as exc:
+            print(
+                f"[mrms_worker] Native tile source failed for "
+                f"{product} {tile_frame_key} (non-fatal): {exc}"
+            )
+
     data, actual_bounds = warp_array_to_mercator(
         data, np.asarray(lat), np.asarray(lon), max_dim=MRMS_WARP_MAX_DIM
     )
-
-    # Extract colormap and norm
-    cmap_obj = MRMS_COLORMAPS.get(cmap_key)
-    if isinstance(cmap_obj, tuple):
-        cmap = cmap_obj[0]
-        norm = cmap_obj[1] if len(cmap_obj) > 1 else mcolors.Normalize(vmin=vmin, vmax=vmax)
-    elif cmap_obj is not None:
-        cmap = cmap_obj
-        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-    else:
-        # Fallback to viridis if colormap not found
-        from matplotlib import cm
-        cmap = cm.get_cmap("viridis")
-        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-
-    # Apply normalization and colormap
-    masked = np.ma.getmaskarray(data)
-    normalized = norm(data)
-    rgb = cmap(normalized)
-
-    # Convert to 8-bit RGBA
-    rgba = (rgb * 255).astype(np.uint8)
-
-    # Set masked/invalid pixels to transparent (alpha=0)
-    invalid = masked | np.isnan(data)
-    if np.any(invalid):
-        rgba[invalid, 3] = 0
+    rgba = colorize_masked_mrms_data(product, data)
 
     # Create PIL image from RGBA array
     img = Image.fromarray(rgba, mode="RGBA")
@@ -477,9 +478,16 @@ def _render_mrms_png_standalone_unbounded(
     with open(sidecar, "w") as f:
         json.dump(actual_bounds, f)
 
+    render_meta = build_mrms_overlay_meta(product, data)
+    if tile_frame_key:
+        from cache.overlay_cache_utils import datetime_from_frame_key
+
+        render_meta["data_timestamp"] = datetime_from_frame_key(
+            tile_frame_key
+        ).isoformat()
     meta_sidecar = out_path.replace(".png", "_meta.json")
     with open(meta_sidecar, "w") as f:
-        json.dump(build_mrms_overlay_meta(product, data), f)
+        json.dump(render_meta, f)
 
 
 def _render_mrms_png_standalone(
@@ -487,6 +495,8 @@ def _render_mrms_png_standalone(
     product: str,
     crop_extent: list,
     out_path: str,
+    *,
+    tile_frame_key: str | None = None,
 ) -> None:
     from app_core.render_budget import heavy_render_slot
 
@@ -496,6 +506,7 @@ def _render_mrms_png_standalone(
             product,
             crop_extent,
             out_path,
+            tile_frame_key=tile_frame_key,
         )
 
 

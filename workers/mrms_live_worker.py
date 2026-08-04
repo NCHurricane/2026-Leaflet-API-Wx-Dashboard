@@ -124,7 +124,13 @@ def _render_mrms_frame_to_overlay(
         )
 
         # Render GRIB to PNG
-        _render_mrms_png_standalone(grib_path, product, _CONUS_EXTENT, temp_png)
+        _render_mrms_png_standalone(
+            grib_path,
+            product,
+            _CONUS_EXTENT,
+            temp_png,
+            tile_frame_key=frame_key,
+        )
 
         # Write to overlay cache (handles index updates)
         _write_mrms_overlay_cache(product, temp_png, file_dt, keep_n=None)

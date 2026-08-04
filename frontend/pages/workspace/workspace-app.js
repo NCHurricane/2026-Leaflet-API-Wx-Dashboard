@@ -15,7 +15,7 @@ import { createSpcRenderer } from '../spc/spc-render.js?v=20260803a';
 import { createWorkspaceDetailCarousel } from './workspace-detail-carousel.js?v=20260801a';
 import { createWorkspaceSatellite } from './workspace-satellite.js?v=20260803a';
 import { createWorkspaceRtma } from './workspace-rtma.js?v=20260803b';
-import { createWorkspaceMrms } from './workspace-mrms.js?v=20260803c';
+import { createWorkspaceMrms } from './workspace-mrms.js?v=20260804b';
 import { workspaceTimelineSource as selectWorkspaceTimelineSource } from './workspace-timeline.js?v=20260803b';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 

@@ -504,7 +504,7 @@ def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets(
     assert "radar-engine.js?v=20260802a" in workspace_app
     assert "radar-page.js?v=20260729b" in radar_page
     assert "workspace-satellite.js?v=20260803a" in workspace_app
-    assert "workspace-app.js?v=20260803e" in workspace_page
+    assert "workspace-app.js?v=20260804b" in workspace_page
 
 
 def test_workspace_mrms_is_curated_default_off_and_uses_shared_timeline():
@@ -553,6 +553,9 @@ def test_workspace_mrms_is_curated_default_off_and_uses_shared_timeline():
     assert "paneName = ''" in engine
     assert "pendingOverlay" in engine
     assert "newOverlay.once('load'" in engine
+    assert "leaflet.tileLayer" in engine
+    assert "prepare_url" in engine
+    assert "Native tile preparation failed; retaining PNG fallback" in engine
 
 
 def test_radar_scrubbers_hold_on_the_newest_frame():

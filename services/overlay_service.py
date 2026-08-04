@@ -48,6 +48,7 @@ def get_overlay_latest(
     from cache.overlay_cache_utils import (
         datetime_from_frame_key,
         flat_overlay_image_path,
+        flat_overlay_list_frames,
         flat_overlay_read_latest,
     )
 
@@ -120,7 +121,16 @@ def get_overlay_latest(
             "render": {"type": "image", "image_url": image_url},
         }
     else:
-        meta = flat_overlay_read_latest(CACHE_ROOT, family, path_parts)
+        if family == "mrms":
+            from mrms.mrms_tiles import filter_unpreparable_duplicate_frames
+
+            candidates = filter_unpreparable_duplicate_frames(
+                flat_overlay_list_frames(CACHE_ROOT, family, path_parts),
+                product,
+            )
+            meta = candidates[-1] if candidates else None
+        else:
+            meta = flat_overlay_read_latest(CACHE_ROOT, family, path_parts)
 
     if (
         not meta
@@ -167,7 +177,12 @@ def get_overlay_latest(
                 detail="Pre-rendered overlay image has been pruned; worker re-render pending.",
             )
 
-    return {**meta, **_refresh_fields(refresh)}
+    payload = {**meta, **_refresh_fields(refresh)}
+    if family == "mrms":
+        from mrms.mrms_tiles import enrich_frame_with_tiles
+
+        payload = enrich_frame_with_tiles(payload, product)
+    return payload
 
 
 def get_overlay_frames(
@@ -277,6 +292,10 @@ def get_overlay_frames(
     )
 
     raw_frames = flat_overlay_list_frames(CACHE_ROOT, family, path_parts)
+    if family == "mrms":
+        from mrms.mrms_tiles import filter_unpreparable_duplicate_frames
+
+        raw_frames = filter_unpreparable_duplicate_frames(raw_frames, product)
     frames = _filter_by_lookback(raw_frames) if raw_frames else []
     refreshing = False
 
@@ -288,6 +307,11 @@ def get_overlay_frames(
     if not frames:
         if _render_on_demand(max_render_frames=OVERLAY_EMPTY_CACHE_SYNC_FRAMES) > 0:
             raw_frames = flat_overlay_list_frames(CACHE_ROOT, family, path_parts)
+            if family == "mrms":
+                raw_frames = filter_unpreparable_duplicate_frames(
+                    raw_frames,
+                    product,
+                )
             frames = _filter_by_lookback(raw_frames)
 
     # A partial cache is not proof that the requested horizon is complete.
@@ -295,6 +319,11 @@ def get_overlay_frames(
     # background; the horizon-specific key and cadence gate make this cheap
     # after a successful fill.
     refreshing = _kick_background_render()
+
+    if family == "mrms":
+        from mrms.mrms_tiles import enrich_frame_with_tiles
+
+        frames = [enrich_frame_with_tiles(frame, product) for frame in frames]
 
     return {
         "family": family,

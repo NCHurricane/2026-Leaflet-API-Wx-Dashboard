@@ -151,6 +151,19 @@ def mask_mrms_data(data, product_info: dict) -> np.ndarray:
     return np.where(invalid, np.nan, arr)
 
 
+def colorize_masked_mrms_data(product: str, data) -> np.ndarray:
+    """Map already-masked MRMS values to the shared 8-bit RGBA palette."""
+    product_info = MRMS_PRODUCTS[product]
+    cmap, norm = _resolve_cmap_and_norm(product_info)
+    arr = np.ma.asarray(data)
+    filled = np.ma.filled(arr, np.nan)
+    invalid = np.ma.getmaskarray(arr) | ~np.isfinite(filled)
+    rgba = (cmap(norm(filled)) * 255).astype(np.uint8)
+    if np.any(invalid):
+        rgba[invalid, 3] = 0
+    return rgba
+
+
 def build_mrms_legend(product: str) -> dict:
     product_info = MRMS_PRODUCTS[product]
     cmap, norm = _resolve_cmap_and_norm(product_info)

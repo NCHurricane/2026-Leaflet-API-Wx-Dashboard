@@ -12,6 +12,8 @@ The frontend uses that dict to build conditional sub-dropdowns.
 The composed product key (e.g. "RotationTrack_LL_60min") maps into MRMS_PRODUCTS.
 """
 
+import os
+
 import numpy as np
 import matplotlib.colors as mcolors
 
@@ -932,6 +934,19 @@ MRMS_BUCKET = "noaa-mrms-pds"
 # 1440p display can show and slows rendering ~linearly with pixel count.
 # Nearest-neighbor resampling keeps every pixel an exact data value at any cap.
 MRMS_WARP_MAX_DIM = 4096
+
+# Additive native-resolution tile path. The existing 4096px CONUS PNG remains
+# the low-zoom and failure fallback; disabling this flag restores PNG-only
+# behavior without deleting either cache namespace.
+MRMS_TILES_ENABLED = os.getenv("MRMS_TILES_ENABLED", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
+MRMS_TILE_RENDER_VERSION = "mrms-v1"
+MRMS_TILE_SIZE = 256
+MRMS_TILE_MIN_ZOOM = 7
 
 # Archive depth (MRMS data available from ~2015+ depending on product)
 MRMS_ARCHIVE_START = "2015-01-01"

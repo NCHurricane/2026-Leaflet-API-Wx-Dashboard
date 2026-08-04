@@ -58,6 +58,17 @@ def _write_mrms_render_meta(meta_sidecar: str, render_meta: dict) -> None:
         json.dump(render_meta, f)
 
 
+def _load_latest_source_timestamp(product_cache_dir: str) -> str | None:
+    """Read the canonical NOAA object timestamp for the current cached GRIB."""
+    state_path = os.path.join(product_cache_dir, "latest_source.json")
+    try:
+        with open(state_path, "r", encoding="utf-8") as handle:
+            state = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    return _normalize_mrms_data_timestamp(state.get("source_timestamp"))
+
+
 def _normalize_mrms_data_timestamp(raw_time) -> str | None:
     """Convert GRIB time metadata to an ISO-8601 UTC string."""
     if raw_time is None:
@@ -281,6 +292,7 @@ def get_mrms_data(
 
     timestamp = (
         render_meta.get("data_timestamp")
+        or _load_latest_source_timestamp(product_cache_dir)
         or datetime.fromtimestamp(grib_mtime, tz=timezone.utc).isoformat()
     )
 

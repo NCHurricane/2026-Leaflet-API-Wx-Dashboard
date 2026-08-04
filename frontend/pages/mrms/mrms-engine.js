@@ -39,6 +39,7 @@ function normalizeFrame(raw, product) {
         units: raw.units || '',
         vmin: raw.vmin ?? null,
         vmax: raw.vmax ?? null,
+        tile: raw.tile || raw.render?.tile || null,
         product,
     };
 }
@@ -105,17 +106,41 @@ export function createMrmsEngine({ api, mapCore, legend, status, paneName = '' }
     const gate = createRequestGate();
     let overlay = null;
     let pendingOverlay = null;
+    let tileOverlay = null;
+    let pendingTileOverlay = null;
+    let currentFrame = null;
     let overlaySwapSeq = 0;
+    let tileSwapSeq = 0;
     let opacity = 0.8;
     let renderSeq = 0;
     let lastWorkerProductSet = null;
+    const tilePreparePromises = new Map();
+
+    function hasLayer(layer) {
+        return Boolean(layer && map.hasLayer(layer));
+    }
+
+    function removeLayer(layer) {
+        if (hasLayer(layer)) map.removeLayer(layer);
+    }
+
+    function removeTileOverlays({ restorePng = true } = {}) {
+        tileSwapSeq += 1;
+        removeLayer(pendingTileOverlay);
+        removeLayer(tileOverlay);
+        pendingTileOverlay = null;
+        tileOverlay = null;
+        if (restorePng) overlay?.setOpacity(opacity);
+    }
 
     function removeOverlay() {
         overlaySwapSeq += 1;
-        if (pendingOverlay && map.hasLayer(pendingOverlay)) map.removeLayer(pendingOverlay);
-        if (overlay && map.hasLayer(overlay)) map.removeLayer(overlay);
+        removeTileOverlays({ restorePng: false });
+        removeLayer(pendingOverlay);
+        removeLayer(overlay);
         pendingOverlay = null;
         overlay = null;
+        currentFrame = null;
     }
 
     function clear() {
@@ -129,9 +154,101 @@ export function createMrmsEngine({ api, mapCore, legend, status, paneName = '' }
         const parsed = parseFloat(value);
         if (!Number.isFinite(parsed)) return;
         opacity = parsed;
-        overlay?.setOpacity(opacity);
+        overlay?.setOpacity(tileOverlay ? 0 : opacity);
         pendingOverlay?.setOpacity(opacity);
+        tileOverlay?.setOpacity(opacity);
     }
+
+    function tileConfig(frame) {
+        const tile = frame?.tile || frame?.render?.tile || null;
+        if (!tile?.url_template || !Number.isFinite(Number(tile.min_zoom))) return null;
+        return tile;
+    }
+
+    function atTileZoom(tile) {
+        return typeof map.getZoom === 'function' && map.getZoom() >= Number(tile.min_zoom);
+    }
+
+    async function prepareTiles(tile) {
+        if (tile.ready) return tile;
+        if (!tile.prepare_url) return null;
+        const key = tile.prepare_url;
+        if (!tilePreparePromises.has(key)) {
+            const preparing = api.fetchJson(key, { method: 'POST', cache: 'no-store' })
+                .then((payload) => payload?.tile || null)
+                .finally(() => tilePreparePromises.delete(key));
+            tilePreparePromises.set(key, preparing);
+        }
+        return tilePreparePromises.get(key);
+    }
+
+    async function enhanceFrameWithTiles(frame, frameSeq) {
+        let tile = tileConfig(frame);
+        if (!tile || !atTileZoom(tile) || typeof leaflet.tileLayer !== 'function') return;
+        const swapSeq = ++tileSwapSeq;
+        try {
+            tile = await prepareTiles(tile);
+        } catch (err) {
+            console.warn('[mrms] Native tile preparation failed; retaining PNG fallback:', err?.message || err);
+            return;
+        }
+        if (tile) frame.tile = tile;
+        if (!tile || frameSeq !== renderSeq || currentFrame !== frame || swapSeq !== tileSwapSeq || !atTileZoom(tile)) return;
+
+        const bounds = Array.isArray(frame.bounds) ? frame.bounds : null;
+        const leafletBounds = bounds?.length >= 4
+            ? [[bounds[2], bounds[0]], [bounds[3], bounds[1]]]
+            : null;
+        let failed = false;
+        const layer = leaflet.tileLayer(api.apiUrl(tile.url_template), {
+            opacity: 0,
+            noWrap: true,
+            updateWhenZooming: false,
+            keepBuffer: 1,
+            crossOrigin: true,
+            minNativeZoom: Number(tile.min_zoom),
+            maxNativeZoom: Number(tile.max_native_zoom),
+            ...(leafletBounds ? { bounds: leafletBounds } : {}),
+            ...(paneName ? { pane: paneName } : {}),
+            className: 'mrms-native-tile-overlay',
+        });
+        pendingTileOverlay = layer;
+
+        const restoreFallback = () => {
+            failed = true;
+            if (layer === pendingTileOverlay) pendingTileOverlay = null;
+            if (layer === tileOverlay) tileOverlay = null;
+            removeLayer(layer);
+            if (currentFrame === frame) overlay?.setOpacity(opacity);
+        };
+        layer.on?.('tileerror', restoreFallback);
+        layer.once('load', () => {
+            if (failed || frameSeq !== renderSeq || currentFrame !== frame || swapSeq !== tileSwapSeq || !atTileZoom(tile)) {
+                removeLayer(layer);
+                if (layer === pendingTileOverlay) pendingTileOverlay = null;
+                return;
+            }
+            removeLayer(tileOverlay);
+            tileOverlay = layer;
+            pendingTileOverlay = null;
+            tileOverlay.setOpacity(opacity);
+            overlay?.setOpacity(0);
+        });
+        layer.addTo(map);
+    }
+
+    function handleZoomEnd() {
+        const tile = tileConfig(currentFrame);
+        if (!tile || !atTileZoom(tile)) {
+            removeTileOverlays();
+            return;
+        }
+        if (!tileOverlay && !pendingTileOverlay) {
+            void enhanceFrameWithTiles(currentFrame, renderSeq);
+        }
+    }
+
+    map.on?.('zoomend', handleZoomEnd);
 
     // Points the backend MRMS worker at the active product so its frame cache
     // fills for the right GRIB stream. Best-effort; the overlay APIs still
@@ -209,11 +326,15 @@ export function createMrmsEngine({ api, mapCore, legend, status, paneName = '' }
                 if (oldOverlay && oldOverlay !== newOverlay && map.hasLayer(oldOverlay)) {
                     map.removeLayer(oldOverlay);
                 }
+                removeTileOverlays({ restorePng: false });
                 overlay = newOverlay;
                 pendingOverlay = null;
+                currentFrame = frame;
+                overlay.setOpacity(opacity);
                 legend.setHtml(mrmsLegendHtml(frame));
                 applyFrameStatus(frame);
                 resolve(true);
+                void enhanceFrameWithTiles(frame, seq);
             });
             newOverlay.once('error', () => {
                 if (map.hasLayer(newOverlay)) map.removeLayer(newOverlay);
@@ -259,6 +380,7 @@ export function createMrmsEngine({ api, mapCore, legend, status, paneName = '' }
                 vmin: overlayData?.vmin ?? null,
                 vmax: overlayData?.vmax ?? null,
                 timestamp: overlayData?.timestamp ?? null,
+                tile: overlayData?.tile || overlayData?.render?.tile || null,
                 refreshing: Boolean(overlayData?.refreshing),
                 product,
             };
@@ -284,9 +406,14 @@ export function createMrmsEngine({ api, mapCore, legend, status, paneName = '' }
         return { data, tsMs, stale, refreshing: Boolean(data.refreshing), rendered };
     }
 
+    function destroy() {
+        map.off?.('zoomend', handleZoomEnd);
+        clear();
+    }
+
     return Object.freeze({
         clear,
-        destroy: clear,
+        destroy,
         fetchNewFrames,
         loadFrames,
         loadLatest,

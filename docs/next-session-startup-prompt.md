@@ -493,6 +493,24 @@ Current checkpoint:
   API/runtime evidence, not browser acceptance. The corrected two-hour RTMA-RU
   request subsequently completed with seven chronological frames from 19:45
   through 21:15 local and `refreshing=false`.
+- The 2026-08-04 MRMS native-detail optimization is implemented in the shared
+  engine, so it applies to both `/mrms` and `/workspace`. NOAA GRIB2 and the
+  existing 4096-pixel PNG remain unchanged as source/fallback. At zoom 7+ the
+  client asynchronously promotes versioned `mrms-v1` 256-pixel tiles after
+  their visible set loads; standard products retain native detail through zoom
+  7 and Rotation Track/Azimuthal Shear through zoom 8. Tile errors, low zoom,
+  or `MRMS_TILES_ENABLED=0` retain/restore the PNG.
+- Synthetic focused coverage and the shared-engine Node tests pass. A real
+  cached Instant MESH frame built its native scalar source in 9.877 seconds and
+  rendered a requested tile in 0.021 seconds. This is test/runtime evidence,
+  not browser proof. The new both-page high-zoom acceptance remains open.
+- First standalone smoke showed a clean Base Reflectivity PNG-to-tile handoff.
+  Rotation Track exposed one mtime-derived false frame (`21:12:10` versus the
+  canonical NOAA `21:12:00`) plus frames whose preparation finished after the
+  scrubber moved. The `20260804b` correction uses canonical source timestamps,
+  filters only source-less near-duplicates, remembers successful prepares, and
+  emits history tile sources during the existing decode. No cache files were
+  deleted. Restart and re-smoke Rotation Track before closing this gate.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -511,7 +529,9 @@ Next step:
   Radar-master four-layer matching, MRMS-master behavior without Radar, RTMA
   repeated frames, Values/Gradient and historical Winds, live-edge versus
   scrubbed refresh, product-switch cancellation, CONUS-only behavior, and
-  layer-off/Region/Home cleanup. Recheck one representative standalone `/mrms`
-  and `/rtma` load/scrub. Do not start WPC or another family without explicit
-  authorization.
+  layer-off/Region/Home cleanup. At zoom 7+, compare MRMS storm-scale detail,
+  scrub multiple MRMS frames, and verify the PNG-to-tile handoff has no blank
+  flash or opacity stacking in both `/workspace` and standalone `/mrms`.
+  Recheck one representative standalone `/rtma` load/scrub. Do not start WPC
+  or another family without explicit authorization.
 ```

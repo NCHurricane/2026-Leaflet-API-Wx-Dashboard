@@ -31,7 +31,7 @@ def test_mrms_initial_load_and_live_append_hold_at_newest() -> None:
     assert "scrubber.setFrames(frames, { index: frames.length - 1 })" in page
     assert "const wasAtNewest = currentIndex === frames.length - 1;" in page
     assert "Loading newest frame…" in page
-    assert "mrms-page.js?v=20260802a" in markup
+    assert "mrms-page.js?v=20260804b" in markup
 
 
 def test_satellite_requests_selected_newest_frame_before_neighbor_priming() -> None:

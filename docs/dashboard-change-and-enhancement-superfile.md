@@ -493,6 +493,49 @@ user-owned browser acceptance gate remains open.
   correction work, not reimplement it. Do not begin WPC until MRMS is accepted
   and the next family is explicitly authorized.
 
+### MRMS native-detail tile optimization
+
+Authorized and implemented 2026-08-04. Browser acceptance remains open.
+
+- NOAA `noaa-mrms-pds` GRIB2 remains the sole data source. Each freshly decoded
+  frame now also writes a versioned, block-compressed native scalar GeoTIFF;
+  historical frames build that source on demand from the retained GRIB. Tile
+  rendering reads only the requested raster window and uses the same masking
+  and palette as the existing overlay renderer.
+- `/api/overlay/latest` and `/api/overlay/frames` advertise an additive
+  `mrms-v1` tile template and prepare URL. Standard 0.01-degree products use
+  native zoom 7; 0.005-degree Rotation Track and Azimuthal Shear use native
+  zoom 8. Generated sources and 256-pixel PNG tiles live under the existing
+  24-hour `cache/mrms` retention policy.
+- The shared `createMrmsEngine()` keeps the 4096-pixel CONUS PNG as the
+  immediate, low-zoom, and error fallback. At zoom 7 or higher it prepares the
+  selected frame without blocking the loaded PNG, promotes the tile layer only
+  after its visible tiles load, and restores the PNG below the threshold or on
+  any tile error. This one shared change applies to both `/mrms` and
+  `/workspace`, including their historical scrubbers and Workspace pane 375.
+- Focused Python tests cover source creation, versioned metadata, native zooms,
+  palette parity, tile generation/cache reuse, and PNG metadata retention. Node
+  tests cover loaded-image frame swaps, on-demand prepare, tile promotion,
+  pane/opacity behavior, low-zoom fallback, and cleanup. A real cached Instant
+  MESH GRIB produced its native source in 9.877 seconds and a requested tile in
+  0.021 seconds. This is backend/runtime evidence, not browser proof.
+- Browser acceptance should compare a storm-scale view at zoom 7+ with the old
+  CONUS PNG, scrub multiple frames/products, verify that no opacity stacking or
+  blank flash occurs, then repeat one representative load in both `/mrms` and
+  `/workspace`. Flag-off behavior remains available through
+  `MRMS_TILES_ENABLED=0`.
+- First standalone browser evidence 2026-08-04: Base Reflectivity changed from
+  PNG to tiles at zoom 7 with acceptable speed. Rotation Track tiled 20 frames;
+  four more completed source preparation after the scrubber had already moved,
+  and one false `21:12:10` frame repeatedly returned 404 because the legacy
+  latest path had indexed the GRIB download mtime instead of NOAA's canonical
+  `21:12:00` timestamp. The correction now persists canonical source time,
+  hides only near-duplicate frames without a retained GRIB/tile source, retains
+  successful prepare metadata in the client, and writes history tile sources
+  during the existing GRIB decode. The two known false cached entries were
+  verified as filtered without deleting cache files. Browser re-smoke remains
+  open after restart/cache-busted `20260804b` assets.
+
 ### Workspace shared timeline extension — MRMS + RTMA-RU
 
 Authorized and implemented 2026-08-03. Automated validation passes; user-owned
