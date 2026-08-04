@@ -452,9 +452,10 @@ Authorized and implemented 2026-08-02. Automated validation passes; the
 user-owned browser acceptance gate remains open.
 
 - MRMS is off and collapsed by default. Workspace composes the shared MRMS
-  engine, never the standalone page controller, and exposes four fixed CONUS
+  engine, never the standalone page controller, and exposes six fixed CONUS
   products in a two-column pill grid: low-level 30-minute Rotation Track,
-  Instant MESH, 30-minute MESH, and 30-minute Lightning Probability. The
+  Instant MESH, 30-minute MESH, 30-minute Lightning Probability, Surface
+  Precipitation Type, and Base Reflectivity QC. The
   standalone product matrix, lookback history, scrubber playback, and other
   accumulation windows remain on `/mrms`.
 - MRMS stays in the live tier and never joins the Radar/Satellite timeline.
@@ -476,7 +477,14 @@ user-owned browser acceptance gate remains open.
   stale Workspace assertions excluded. Full pytest passes 360 tests plus 42
   subtests and fails only those same assertions against removed
   `WORKSPACE_REGION_BOUNDS` and aggregate-watch markup.
-- Remaining browser acceptance: verify all four products, opacity and legend
+- The user confirmed the original four products loaded without errors. Surface
+  Precipitation Type was then added through the existing `PrecipFlag` path for
+  winter-event composition, followed by Base Reflectivity QC through the
+  existing `Refl_BaseQC` path. JavaScript syntax, its Node check, 20 focused
+  Workspace tests with the two known stale assertions excluded, and a live
+  latest-overlay/PNG probe for each added product pass. They await focused
+  browser smoke. Remaining
+  browser acceptance: verify it, opacity and legend
   updates, MRMS `375` stacking, latest-only timeline isolation, CONUS-only
   region behavior, layer-off/Home cleanup, auto-refresh retention, and one
   representative standalone `/mrms` load/scrub after the shared-engine change.

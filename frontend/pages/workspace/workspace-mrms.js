@@ -10,6 +10,8 @@ export const WORKSPACE_MRMS_PRODUCTS = Object.freeze([
     { value: 'mesh_instant', label: 'Instant MESH', product: 'MESH_Instant' },
     { value: 'mesh_30min', label: '30m MESH', product: 'MESH_Max_30min' },
     { value: 'lightning_30min', label: '30m Lightning', product: 'Lightning_30min' },
+    { value: 'precip_type', label: 'Precip Type', product: 'PrecipFlag' },
+    { value: 'base_reflectivity', label: 'Base Reflectivity', product: 'Refl_BaseQC' },
 ]);
 
 const PRODUCT_BY_VALUE = new Map(WORKSPACE_MRMS_PRODUCTS.map((item) => [item.value, item]));

@@ -498,7 +498,7 @@ def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets(
     assert "radar-engine.js?v=20260802a" in workspace_app
     assert "radar-page.js?v=20260729b" in radar_page
     assert "workspace-satellite.js?v=20260802e" in workspace_app
-    assert "workspace-app.js?v=20260803a" in workspace_page
+    assert "workspace-app.js?v=20260803c" in workspace_page
 
 
 def test_workspace_mrms_phase4_is_curated_default_off_and_live_only():
@@ -511,11 +511,13 @@ def test_workspace_mrms_phase4_is_curated_default_off_and_live_only():
     assert 'id="workspace-mrms-enabled" type="checkbox"' in page
     assert 'id="workspace-mrms-enabled" type="checkbox" checked' not in page
     assert 'id="workspace-mrms-controls" class="workspace-group-body is-disabled" hidden' in page
-    assert page.count("data-mrms-product=") == 4
+    assert page.count("data-mrms-product=") == 6
     assert 'data-mrms-product="rotation"' in page
     assert 'data-mrms-product="mesh_instant"' in page
     assert 'data-mrms-product="mesh_30min"' in page
     assert 'data-mrms-product="lightning_30min"' in page
+    assert 'data-mrms-product="precip_type"' in page
+    assert 'data-mrms-product="base_reflectivity"' in page
     assert 'id="workspace-mrms-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled' in page
     assert "CONUS-only latest MRMS guidance stays live" in page
     assert 'id="workspace-mrms-legend-tab"' in page
@@ -535,6 +537,8 @@ def test_workspace_mrms_phase4_is_curated_default_off_and_live_only():
     assert "MESH_Instant" in mrms
     assert "MESH_Max_30min" in mrms
     assert "Lightning_30min" in mrms
+    assert "PrecipFlag" in mrms
+    assert "Refl_BaseQC" in mrms
     assert "loadLatest(selected.product)" in mrms
     assert "loadFrames" not in mrms
     assert "supportsCurrentRegion" in mrms

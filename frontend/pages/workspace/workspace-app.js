@@ -15,7 +15,7 @@ import { createSpcRenderer } from '../spc/spc-render.js?v=20260803a';
 import { createWorkspaceDetailCarousel } from './workspace-detail-carousel.js?v=20260801a';
 import { createWorkspaceSatellite } from './workspace-satellite.js?v=20260802e';
 import { createWorkspaceRtma } from './workspace-rtma.js?v=20260802b';
-import { createWorkspaceMrms } from './workspace-mrms.js?v=20260802a';
+import { createWorkspaceMrms } from './workspace-mrms.js?v=20260803b';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 
 const byId = (id) => document.getElementById(id);

@@ -445,9 +445,10 @@ Current checkpoint:
   becomes recurrent, but it recovered normally. This is runtime/idle evidence,
   not MRMS interaction acceptance.
 - Workspace expansion Phase 4 is implemented for curated CONUS MRMS live
-  composition and awaits user-owned browser acceptance. MRMS is off/collapsed
-  by default. Its two-column pill grid is low-level 30-minute Rotation Track,
-  Instant MESH, 30-minute MESH, and 30-minute Lightning Probability; opacity
+  composition and awaits final user-owned browser acceptance. MRMS is
+  off/collapsed by default. Its two-column pill grid is low-level 30-minute
+  Rotation Track, Instant MESH, 30-minute MESH, 30-minute Lightning
+  Probability, Surface Precipitation Type, and Base Reflectivity QC; opacity
   defaults to `0.7`.
 - MRMS stays latest-only and never joins the Radar/Satellite timeline. Selected
   refresh runs on the natural two-minute cadence with 30-second follow-up reads
@@ -463,6 +464,13 @@ Current checkpoint:
   focused gate passes 40 tests with the two known stale Workspace assertions
   excluded. Full pytest passes 360 tests plus 42 subtests and fails only those
   same stale assertions.
+- The user confirmed the original four products loaded without errors. Surface
+  Precipitation Type was then added from the existing `PrecipFlag` MRMS path for
+  winter-event composition, followed by Base Reflectivity QC through the
+  existing `Refl_BaseQC` path. JavaScript syntax, its Node check, 20 focused
+  Workspace tests with the two known stale assertions excluded, and a live
+  latest-overlay/PNG probe for each added product pass. They await focused
+  browser smoke.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -477,7 +485,8 @@ Guardrails:
 
 Next step:
 - Continue the existing Phase 4 implementation at the user-owned `/workspace`
-  MRMS gate; do not reimplement it. Verify all four products, opacity
+  MRMS gate; do not reimplement it. Verify Surface Precipitation Type and Base
+  Reflectivity QC plus opacity
   and legend changes, pane order, latest-only timeline isolation, CONUS-only
   region behavior, layer-off/Home cleanup, and auto-refresh retention. Recheck
   one representative standalone `/mrms` load/scrub. Close Phase 4 only after
