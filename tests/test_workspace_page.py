@@ -369,7 +369,7 @@ def test_workspace_satellite_phase2_is_curated_default_off_and_uses_shared_timel
     assert "workspaceSatellite.showFrameAt(safeIndex" in app
 
 
-def test_workspace_overlay_order_places_rtma_gradient_below_borders_and_values_above():
+def test_workspace_overlay_order_places_satellite_above_rtma_gradient_and_spc():
     root = Path(BASE_DIR) / "frontend" / "pages"
     app = (root / "workspace" / "workspace-app.js").read_text(encoding="utf-8")
     satellite = (root / "satellite" / "satellite-anim.js").read_text(
@@ -388,6 +388,7 @@ def test_workspace_overlay_order_places_rtma_gradient_below_borders_and_values_a
     assert "spcPane.style.zIndex = '400'" in app
     assert "paneName: 'workspace-spc-overlays'" in app
     assert "pane: paneName" in spc
+    assert "satellitePane.style.zIndex = '405'" in app
     assert "radarPane.style.zIndex = '410'" in radar
     assert "rtmaValuesPane.style.zIndex = '425'" in app
     assert "pointPaneName: 'workspace-rtma-values'" in app
@@ -504,7 +505,7 @@ def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets(
     assert "radar-engine.js?v=20260802a" in workspace_app
     assert "radar-page.js?v=20260729b" in radar_page
     assert "workspace-satellite.js?v=20260803a" in workspace_app
-    assert "workspace-app.js?v=20260804b" in workspace_page
+    assert "workspace-app.js?v=20260804c" in workspace_page
 
 
 def test_workspace_mrms_is_curated_default_off_and_uses_shared_timeline():

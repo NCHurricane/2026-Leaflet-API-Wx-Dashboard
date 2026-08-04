@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-08-03 (Task-scheduler-free rendering Phases 0-8 are closed.
+Last updated: 2026-08-04 (Task-scheduler-free rendering Phases 0-8 are closed.
 The zero-task browser matrix and optional-warmer enabled/disabled acceptance
 passed. Radar render optimization Phases 1-7 are implemented and
 golden-validated; the Phase 1-2 browser acceptance passed and the backend-only
@@ -17,9 +17,10 @@ adds curated Day 1 SPC composition and is user-accepted. Phase 2 adds a bounded
 one-hour GOES Satellite overlay with shared Workspace playback and is
 user-accepted and closed. Phase 3 adds curated CONUS RTMA-RU live composition
 and is user-accepted and closed. Phase 4 is authorized for curated MRMS live
-composition and is implemented pending user-owned browser acceptance. A
+composition and is implemented and user-accepted. A
 separately authorized follow-up adds selected RTMA/MRMS one-hour history to the
-shared Workspace timeline and awaits user-owned browser acceptance.)
+shared Workspace timeline and is user-accepted. MRMS native-detail tiles are
+also browser-accepted on Workspace and standalone MRMS.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -68,9 +69,10 @@ to PNG-only behavior.
    Satellite overlay with shared Workspace playback; its user-owned browser
    gate passed on 2026-08-02. Phase 3 is implemented for curated CONUS RTMA-RU
    live composition; its user-owned browser gate passed on 2026-08-02. Phase 4
-   is implemented for curated MRMS live composition and awaits its user-owned
-   browser gate. The authorized shared-timeline follow-up is implemented for
-   selected MRMS and RTMA-RU history and awaits focused browser acceptance.
+   is implemented and user-accepted for curated MRMS live composition. The
+   authorized shared-timeline follow-up is implemented and user-accepted for
+   selected MRMS and RTMA-RU history. MRMS native-detail tiles are accepted on
+   both Workspace and standalone MRMS.
 2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
    `docs/archive/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
@@ -449,8 +451,8 @@ Authorized, implemented, and user-accepted 2026-08-02. Phase 3 is closed.
 
 ### Workspace expansion Phase 4 — curated MRMS composition
 
-Authorized and implemented 2026-08-02. Automated validation passes; the
-user-owned browser acceptance gate remains open.
+Authorized and implemented 2026-08-02. Automated validation and the user-owned
+browser acceptance gate pass; this phase closed on 2026-08-04.
 
 - MRMS is off and collapsed by default. Workspace composes the shared MRMS
   engine, never the standalone page controller, and exposes six fixed CONUS
@@ -484,18 +486,17 @@ user-owned browser acceptance gate remains open.
   existing `Refl_BaseQC` path. JavaScript syntax, its Node check, 20 focused
   Workspace tests with the two known stale assertions excluded, and a live
   latest-overlay/PNG probe for each added product pass. User-owned browser
-  proof now passes for all six products and their animation. Remaining combined
-  browser acceptance: verify opacity and legend updates, MRMS `375` stacking,
-  shared-timeline behavior, CONUS-only
-  region behavior, layer-off/Home cleanup, auto-refresh retention, and one
-  representative standalone `/mrms` load/scrub after the shared-engine change.
-  The next session should continue this implemented slice at acceptance and
-  correction work, not reimplement it. Do not begin WPC until MRMS is accepted
-  and the next family is explicitly authorized.
+  proof now passes for all six products and their animation. Final user-owned
+  acceptance on 2026-08-04 also passed opacity and legend updates, stacking,
+  shared-timeline behavior, CONUS-only region behavior, layer-off/Region/Home
+  cleanup, auto-refresh retention, and representative standalone `/mrms` and
+  `/rtma` load/scrubs. Satellite now uses Workspace pane `405`, above RTMA
+  Gradient `350`, MRMS `375`, and SPC `400`, while remaining below Radar `410`,
+  boundaries `420`, RTMA Values `425`, and Alerts `430+`.
 
 ### MRMS native-detail tile optimization
 
-Authorized and implemented 2026-08-04. Browser acceptance remains open.
+Authorized, implemented, and browser-accepted 2026-08-04.
 
 - NOAA `noaa-mrms-pds` GRIB2 remains the sole data source. Each freshly decoded
   frame now also writes a versioned, block-compressed native scalar GeoTIFF;
@@ -519,10 +520,9 @@ Authorized and implemented 2026-08-04. Browser acceptance remains open.
   pane/opacity behavior, low-zoom fallback, and cleanup. A real cached Instant
   MESH GRIB produced its native source in 9.877 seconds and a requested tile in
   0.021 seconds. This is backend/runtime evidence, not browser proof.
-- Browser acceptance should compare a storm-scale view at zoom 7+ with the old
-  CONUS PNG, scrub multiple frames/products, verify that no opacity stacking or
-  blank flash occurs, then repeat one representative load in both `/mrms` and
-  `/workspace`. Flag-off behavior remains available through
+- Browser acceptance passed at storm scale and across multiple frames/products
+  in both `/mrms` and `/workspace`: PNG-to-tile promotion had no opacity
+  stacking or blank flash. Flag-off behavior remains available through
   `MRMS_TILES_ENABLED=0`.
 - First standalone browser evidence 2026-08-04: Base Reflectivity changed from
   PNG to tiles at zoom 7 with acceptable speed. Rotation Track tiled 20 frames;
@@ -533,13 +533,14 @@ Authorized and implemented 2026-08-04. Browser acceptance remains open.
   hides only near-duplicate frames without a retained GRIB/tile source, retains
   successful prepare metadata in the client, and writes history tile sources
   during the existing GRIB decode. The two known false cached entries were
-  verified as filtered without deleting cache files. Browser re-smoke remains
-  open after restart/cache-busted `20260804b` assets.
+  verified as filtered without deleting cache files. The restarted,
+  cache-busted Rotation Track re-smoke passed with canonical timestamps and
+  complete tile promotion.
 
 ### Workspace shared timeline extension — MRMS + RTMA-RU
 
-Authorized and implemented 2026-08-03. Automated validation passes; user-owned
-browser acceptance remains open.
+Authorized and implemented 2026-08-03. Automated validation and user-owned
+browser acceptance pass; this follow-up closed on 2026-08-04.
 
 - The existing bottom scrubber now selects its clock source in the stable order
   Radar, MRMS, Satellite, then RTMA. Radar therefore remains master whenever it
@@ -580,10 +581,10 @@ browser acceptance remains open.
   this is API/runtime evidence, not browser proof. After the predecessor
   correction, a live two-hour RTMA-RU request completed with seven chronological
   frames from 19:45 through 21:15 local and `refreshing=false`.
-- Browser acceptance must cover each layer alone, Radar-master four-layer
-  matching, MRMS-master behavior without Radar, RTMA repeated-frame behavior,
-  Values/Gradient and historical Winds, live-edge versus scrubbed refresh,
-  product-switch cancellation, and layer-off/Region/Home cleanup.
+- User-owned browser acceptance passed for each layer alone, Radar-master
+  four-layer matching, MRMS-master behavior without Radar, RTMA repeated-frame
+  behavior, Values/Gradient and historical Winds, live-edge versus scrubbed
+  refresh, product-switch cancellation, and layer-off/Region/Home cleanup.
 
 ## Current State
 

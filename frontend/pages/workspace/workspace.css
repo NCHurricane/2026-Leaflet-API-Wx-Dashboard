@@ -1692,6 +1692,8 @@ body.wx-standalone-product .weather-header-right {
 
 .mrms-legend-units {
     text-align: right;
+    font-size: 0.7rem;
+    font-weight: 700;
 }
 
 .mrms-legend-scale-bar {
@@ -1718,6 +1720,8 @@ body.wx-standalone-product .weather-header-right {
 .mrms-legend-tick {
     text-align: center;
     line-height: 1.1;
+    font-size: 0.66rem;
+    font-weight: 700;
 }
 
 #wx-section-mrms .wx-check-row {

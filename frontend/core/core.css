@@ -418,8 +418,9 @@ button:hover { border-color: var(--core-accent); }
     white-space: nowrap;
 }
 .core-legend-colorbar { height: 13px; border: 1px solid rgba(255, 255, 255, 0.24); border-radius: 4px; }
-.core-legend-ticks { position: relative; height: 20px; color: var(--core-text); font-size: 0.61rem; font-weight:500;}
+.core-legend-ticks { position: relative; height: 20px; color: var(--core-text); font-size: 0.66rem; font-weight:700;}
 .core-legend-tick { position: absolute; top: 4px; transform: translateX(-50%); white-space: nowrap; }
+
 
 .core-map-logo { margin-top: 4px; background: transparent; border: 0; }
 .core-map-logo img { display: block; height: 40px; width: auto; }

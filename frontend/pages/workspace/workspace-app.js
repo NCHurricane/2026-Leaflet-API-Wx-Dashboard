@@ -302,6 +302,9 @@ async function initialize() {
             : (wasAtNewest ? workspaceTimelineFrameSets[source].length - 1 : null);
         syncWorkspaceTimeline({ preferredSource: source, preferredIndex });
     }
+    const satellitePane = mapCore.map.createPane('satellite-overlays');
+    satellitePane.style.zIndex = '405';
+    satellitePane.style.pointerEvents = 'none';
     const workspaceSatellite = createWorkspaceSatellite({
         api, mapCore, legend: satelliteLegend, status,
         onFrames(frames, options = {}) {

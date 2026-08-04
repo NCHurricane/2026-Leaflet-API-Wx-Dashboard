@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date updated: 2026-08-03
+Date updated: 2026-08-04
 
 ```text
 Continue dashboard work in F:\Python\dashboard_2026.
@@ -444,8 +444,8 @@ Current checkpoint:
   enrichment cycle reached about 16 seconds and should be monitored if it
   becomes recurrent, but it recovered normally. This is runtime/idle evidence,
   not MRMS interaction acceptance.
-- Workspace expansion Phase 4 is implemented for curated CONUS MRMS live
-  composition and awaits final user-owned browser acceptance. MRMS is
+- Workspace expansion Phase 4 is implemented and user-accepted for curated
+  CONUS MRMS live composition. MRMS is
   off/collapsed by default. Its two-column pill grid is low-level 30-minute
   Rotation Track, Instant MESH, 30-minute MESH, 30-minute Lightning
   Probability, Surface Precipitation Type, and Base Reflectivity QC; opacity
@@ -454,7 +454,9 @@ Current checkpoint:
   shared Workspace scrubber. Refresh remains on its natural two-minute cadence
   with five-second history polling while pending. Its pane is `375`, above RTMA
   Gradient `350` and below SPC `400`, Radar `410`, boundaries `420`, RTMA Values
-  `425`, and Alerts `430+`.
+  `425`, and Alerts `430+`. Satellite uses pane `405`, above RTMA Gradient,
+  MRMS, and SPC while remaining below Radar, boundaries, RTMA Values, and
+  Alerts.
 - MRMS is CONUS-only. AK/HI/PR clear it and expose the limitation; returning to
   CONUS reloads the selected product. MRMS-off and Home clear it without
   changing other composed layers. The shared engine now supports an optional
@@ -483,8 +485,7 @@ Current checkpoint:
   a bounded two-hour selected RTMA source window, retains only the newest hidden
   predecessor before the boundary, and exposes only the normal one-hour frames
   as the scrubber clock. This preserves strict no-future matching and applies to
-  paired historical wind direction. The opening-segment browser re-smoke remains
-  open.
+  paired historical wind direction. The opening-segment browser re-smoke passed.
 - JavaScript syntax passes for the six affected modules. Six focused Node
   tests plus the Satellite timeline script pass. The focused Python gate passes
   45 tests with the two known stale Workspace assertions excluded. Live API
@@ -503,14 +504,15 @@ Current checkpoint:
 - Synthetic focused coverage and the shared-engine Node tests pass. A real
   cached Instant MESH frame built its native scalar source in 9.877 seconds and
   rendered a requested tile in 0.021 seconds. This is test/runtime evidence,
-  not browser proof. The new both-page high-zoom acceptance remains open.
+  not browser proof. Both-page high-zoom acceptance subsequently passed.
 - First standalone smoke showed a clean Base Reflectivity PNG-to-tile handoff.
   Rotation Track exposed one mtime-derived false frame (`21:12:10` versus the
   canonical NOAA `21:12:00`) plus frames whose preparation finished after the
   scrubber moved. The `20260804b` correction uses canonical source timestamps,
   filters only source-less near-duplicates, remembers successful prepares, and
   emits history tile sources during the existing decode. No cache files were
-  deleted. Restart and re-smoke Rotation Track before closing this gate.
+  deleted. Restarted Rotation Track re-smoke passed with canonical timestamps
+  and complete tile promotion.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -523,15 +525,13 @@ Guardrails:
 - Keep all four optional warmers disabled during Radar benchmark/golden
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
-Next step:
-- Continue at the user-owned `/workspace` acceptance gate; do not reimplement
-  the timeline. Verify Surface Precipitation Type and Base Reflectivity QC,
-  Radar-master four-layer matching, MRMS-master behavior without Radar, RTMA
-  repeated frames, Values/Gradient and historical Winds, live-edge versus
-  scrubbed refresh, product-switch cancellation, CONUS-only behavior, and
-  layer-off/Region/Home cleanup. At zoom 7+, compare MRMS storm-scale detail,
-  scrub multiple MRMS frames, and verify the PNG-to-tile handoff has no blank
-  flash or opacity stacking in both `/workspace` and standalone `/mrms`.
-  Recheck one representative standalone `/rtma` load/scrub. Do not start WPC
-  or another family without explicit authorization.
+Accepted checkpoint:
+- The final user-owned `/workspace` gate passed Surface Precipitation Type and
+  Base Reflectivity QC, Radar-master four-layer matching, MRMS-master behavior
+  without Radar, RTMA repeated frames, Values/Gradient and historical Winds,
+  live-edge versus scrubbed refresh, product-switch cancellation, CONUS-only
+  behavior, and layer-off/Region/Home cleanup. High-zoom MRMS handoff/scrubbing
+  passed in `/workspace` and standalone `/mrms`; representative standalone
+  `/rtma` load/scrub also passed. Await explicit authorization before starting
+  WPC or another product family.
 ```
