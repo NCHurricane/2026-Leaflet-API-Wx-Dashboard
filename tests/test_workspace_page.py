@@ -12,6 +12,27 @@ def test_workspace_route_serves_new_page_and_legacy_url_redirects():
     assert read_weather_page().headers["location"] == "/workspace"
 
 
+def test_workspace_declares_favicon_and_spc_uses_one_module_identity():
+    workspace = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.html"
+    ).read_text(encoding="utf-8")
+    workspace_app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace-app.js"
+    ).read_text(encoding="utf-8")
+    spc_page = (
+        Path(BASE_DIR) / "frontend" / "pages" / "spc" / "spc-page.js"
+    ).read_text(encoding="utf-8")
+    spc_render = (
+        Path(BASE_DIR) / "frontend" / "pages" / "spc" / "spc-render.js"
+    ).read_text(encoding="utf-8")
+
+    assert '<link rel="icon" href="/img/favicon.ico">' in workspace
+    expected = "spc-engine.js?v=20260801a"
+    assert expected in workspace_app
+    assert expected in spc_page
+    assert expected in spc_render
+
+
 def test_workspace_composes_engines_without_page_controllers():
     app = (
         Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace-app.js"
@@ -20,9 +41,13 @@ def test_workspace_composes_engines_without_page_controllers():
     assert "../alerts/alerts-engine.js" in app
     assert "../radar/radar-engine.js" in app
     assert "./workspace-satellite.js" in app
+    assert "./workspace-rtma.js" in app
+    assert "./workspace-mrms.js" in app
     assert "alerts-page.js" not in app
     assert "radar-page.js" not in app
     assert "satellite-page.js" not in app
+    assert "rtma-page.js" not in app
+    assert "mrms-page.js" not in app
     assert "js/weather.js" not in app
 
 
@@ -104,7 +129,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert 'id="workspace-radar-scrubber-bar"' in page
     assert 'id="workspace-radar-bottom-scrubber"' in page
     assert all(f'<h2>{label}</h2>' in page for label in ['SPC', 'Satellite', 'RTMA', 'MRMS', 'WPC', 'Water'])
-    assert page.count('workspace-layer-group workspace-placeholder') == 4
+    assert page.count('workspace-layer-group workspace-placeholder') == 2
     assert page.count('workspace-group workspace-layer-group" open') == 1
     assert 'id="workspace-right-rail"' in page
     assert 'id="workspace-warning-section"' in page
@@ -171,7 +196,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "legendTray.legend('alerts')" in app
     assert "legendTray.markReady()" in app
     assert 'class="workspace-legend-tabs" role="tablist"' in page
-    assert page.count('class="workspace-legend-tab"') == 6
+    assert page.count('class="workspace-legend-tab"') == 8
     assert "fa-chevron-down" in page
     assert "panel.classList.toggle('is-collapsed', !isOpen)" in app
     assert "elevation: '0.5'" in app
@@ -343,7 +368,7 @@ def test_workspace_satellite_phase2_is_curated_default_off_and_uses_shared_timel
     assert "workspaceSatellite.showFrameAt(index" in app
 
 
-def test_workspace_overlay_order_is_satellite_then_spc_then_radar_then_alerts():
+def test_workspace_overlay_order_places_rtma_gradient_below_borders_and_values_above():
     root = Path(BASE_DIR) / "frontend" / "pages"
     app = (root / "workspace" / "workspace-app.js").read_text(encoding="utf-8")
     satellite = (root / "satellite" / "satellite-anim.js").read_text(
@@ -351,13 +376,85 @@ def test_workspace_overlay_order_is_satellite_then_spc_then_radar_then_alerts():
     )
     spc = (root / "spc" / "spc-render.js").read_text(encoding="utf-8")
     radar = (root / "radar" / "radar-engine.js").read_text(encoding="utf-8")
+    mrms = (root / "mrms" / "mrms-engine.js").read_text(encoding="utf-8")
 
     assert "pane.style.zIndex = '330'" in satellite
+    assert "rtmaGradientPane.style.zIndex = '350'" in app
+    assert "gradientPaneName: 'workspace-rtma-gradient'" in app
+    assert "mrmsPane.style.zIndex = '375'" in app
+    assert "paneName: 'workspace-mrms-overlays'" in app
+    assert "...(paneName ? { pane: paneName } : {})" in mrms
     assert "spcPane.style.zIndex = '400'" in app
     assert "paneName: 'workspace-spc-overlays'" in app
     assert "pane: paneName" in spc
     assert "radarPane.style.zIndex = '410'" in radar
+    assert "rtmaValuesPane.style.zIndex = '425'" in app
+    assert "pointPaneName: 'workspace-rtma-values'" in app
     assert "alertPaneZIndex: 440" in app
+
+
+def test_workspace_rtma_phase3_is_curated_default_off_and_live_only():
+    root = Path(BASE_DIR) / "frontend" / "pages"
+    page = (root / "workspace" / "workspace.html").read_text(encoding="utf-8")
+    app = (root / "workspace" / "workspace-app.js").read_text(encoding="utf-8")
+    rtma = (root / "workspace" / "workspace-rtma.js").read_text(encoding="utf-8")
+    engine = (root / "rtma" / "rtma-engine.js").read_text(encoding="utf-8")
+
+    assert 'id="workspace-rtma-enabled" type="checkbox"' in page
+    assert 'id="workspace-rtma-enabled" type="checkbox" checked' not in page
+    assert 'id="workspace-rtma-controls" class="workspace-group-body is-disabled" hidden' in page
+    assert 'id="workspace-rtma-product"' not in page
+    assert 'id="workspace-rtma-values"' not in page
+    assert 'id="workspace-rtma-products" class="workspace-pills workspace-rtma-product-pills"' in page
+    assert page.count("data-rtma-product=") == 6
+    assert page.index('data-rtma-product="temperature"') < page.index('data-rtma-product="apparent_temperature"')
+    assert page.index('data-rtma-product="apparent_temperature"') < page.index('data-rtma-product="dew_point"')
+    assert 'data-rtma-product="winds" aria-pressed="false" disabled>Winds</button>' in page
+    assert 'data-rtma-product="wind_speed"' not in page
+    assert 'data-rtma-product="wind_direction"' not in page
+    assert 'id="workspace-rtma-modes" class="workspace-pills workspace-rtma-mode-pills"' in page
+    assert 'class="is-active" type="button" data-rtma-mode="values" aria-pressed="true" disabled>Values</button>' in page
+    assert 'data-rtma-mode="gradient" aria-pressed="false" disabled>Gradient</button>' in page
+    assert 'id="workspace-rtma-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled' in page
+    assert "CONUS-only latest RTMA-RU analysis stays live" in page
+    assert 'id="workspace-rtma-legend-tab"' in page
+    assert 'id="workspace-rtma-legend"' in page
+
+    assert "createWorkspaceRtma" in app
+    assert "workspaceRtma.refresh({ auto: true })" in app
+    assert "workspaceRtma.setRegion()" in app
+    assert "workspaceRtma.reset()" in app
+    assert "workspaceRtma.destroy()" in app
+    assert "../rtma/rtma-engine.js" in rtma
+    assert "rtma-page.js" not in rtma
+    assert "const AUTO_REFRESH_INTERVAL_MS = 15 * 60 * 1000" in rtma
+    assert "const STREAM = 'rtma_rapid_update'" in rtma
+    assert "const supportsCurrentRegion = () => dataRegionForMapRegion(getRegion()) === 'CONUS'" in rtma
+    assert "auto && !refreshPending" in rtma
+    assert "{ value: 'temperature', label: 'Temperature', product: 'temperature' }" in rtma
+    assert "{ value: 'apparent_temperature', label: 'Feels Like', product: 'apparent_temperature' }" in rtma
+    assert "{ value: 'dew_point', label: 'Dew Point', product: 'dew_point' }" in rtma
+    assert "{ value: 'winds', label: 'Winds', product: 'wind_speed', secondaryProduct: 'wind_direction' }" in rtma
+    assert "{ value: 'wind_gust', label: 'Wind Gust', product: 'wind_gust' }" in rtma
+    assert "{ value: 'visibility', label: 'Visibility', product: 'visibility' }" in rtma
+    assert "temperature_change_24h" not in rtma
+    assert "loadFrames" not in rtma
+    assert "loadLatest(selection())" in rtma
+    assert "showValues = true" in rtma
+    assert "showGradient = false" in rtma
+    assert "engine.loadSecondary(selection(), secondaryProduct)" in rtma
+    assert "dataRegionForMapRegion(getRegion())" in rtma
+    assert "paneName = ''" in engine
+    assert "gradientPaneName = ''" in engine
+    assert "pointPaneName = ''" in engine
+    assert "setShowGradient" in engine
+    assert "pendingGradientLayer" in engine
+    assert ".workspace-rtma-product-pills," in (
+        root / "workspace" / "workspace.css"
+    ).read_text(encoding="utf-8")
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in (
+        root / "workspace" / "workspace.css"
+    ).read_text(encoding="utf-8")
 
 
 def test_all_product_pages_use_vendored_leaflet():
@@ -401,7 +498,49 @@ def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets(
     assert "radar-engine.js?v=20260802a" in workspace_app
     assert "radar-page.js?v=20260729b" in radar_page
     assert "workspace-satellite.js?v=20260802e" in workspace_app
-    assert "workspace-app.js?v=20260802f" in workspace_page
+    assert "workspace-app.js?v=20260803a" in workspace_page
+
+
+def test_workspace_mrms_phase4_is_curated_default_off_and_live_only():
+    root = Path(BASE_DIR) / "frontend" / "pages"
+    page = (root / "workspace" / "workspace.html").read_text(encoding="utf-8")
+    app = (root / "workspace" / "workspace-app.js").read_text(encoding="utf-8")
+    mrms = (root / "workspace" / "workspace-mrms.js").read_text(encoding="utf-8")
+    engine = (root / "mrms" / "mrms-engine.js").read_text(encoding="utf-8")
+
+    assert 'id="workspace-mrms-enabled" type="checkbox"' in page
+    assert 'id="workspace-mrms-enabled" type="checkbox" checked' not in page
+    assert 'id="workspace-mrms-controls" class="workspace-group-body is-disabled" hidden' in page
+    assert page.count("data-mrms-product=") == 4
+    assert 'data-mrms-product="rotation"' in page
+    assert 'data-mrms-product="mesh_instant"' in page
+    assert 'data-mrms-product="mesh_30min"' in page
+    assert 'data-mrms-product="lightning_30min"' in page
+    assert 'id="workspace-mrms-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled' in page
+    assert "CONUS-only latest MRMS guidance stays live" in page
+    assert 'id="workspace-mrms-legend-tab"' in page
+    assert 'id="workspace-mrms-legend"' in page
+
+    assert "createWorkspaceMrms" in app
+    assert "workspaceMrms.refresh({ auto: true })" in app
+    assert "workspaceMrms.setRegion()" in app
+    assert "workspaceMrms.reset()" in app
+    assert "workspaceMrms.destroy()" in app
+    assert "mrmsPane.style.zIndex = '375'" in app
+    assert "paneName: 'workspace-mrms-overlays'" in app
+    assert "../mrms/mrms-engine.js" in mrms
+    assert "mrms-page.js" not in mrms
+    assert "const AUTO_REFRESH_INTERVAL_MS = 2 * 60 * 1000" in mrms
+    assert "RotationTrack_LL_30min" in mrms
+    assert "MESH_Instant" in mrms
+    assert "MESH_Max_30min" in mrms
+    assert "Lightning_30min" in mrms
+    assert "loadLatest(selected.product)" in mrms
+    assert "loadFrames" not in mrms
+    assert "supportsCurrentRegion" in mrms
+    assert "paneName = ''" in engine
+    assert "pendingOverlay" in engine
+    assert "newOverlay.once('load'" in engine
 
 
 def test_radar_scrubbers_hold_on_the_newest_frame():

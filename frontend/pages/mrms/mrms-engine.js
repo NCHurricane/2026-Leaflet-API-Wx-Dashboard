@@ -99,17 +99,22 @@ export function mrmsLegendHtml(data) {
     return legendShellHtml(`${title}${stat}`, body);
 }
 
-export function createMrmsEngine({ api, mapCore, legend, status }) {
+export function createMrmsEngine({ api, mapCore, legend, status, paneName = '' }) {
     const leaflet = mapCore.leaflet;
     const map = mapCore.map;
     const gate = createRequestGate();
     let overlay = null;
+    let pendingOverlay = null;
+    let overlaySwapSeq = 0;
     let opacity = 0.8;
     let renderSeq = 0;
     let lastWorkerProductSet = null;
 
     function removeOverlay() {
+        overlaySwapSeq += 1;
+        if (pendingOverlay && map.hasLayer(pendingOverlay)) map.removeLayer(pendingOverlay);
         if (overlay && map.hasLayer(overlay)) map.removeLayer(overlay);
+        pendingOverlay = null;
         overlay = null;
     }
 
@@ -125,6 +130,7 @@ export function createMrmsEngine({ api, mapCore, legend, status }) {
         if (!Number.isFinite(parsed)) return;
         opacity = parsed;
         overlay?.setOpacity(opacity);
+        pendingOverlay?.setOpacity(opacity);
     }
 
     // Points the backend MRMS worker at the active product so its frame cache
@@ -182,25 +188,40 @@ export function createMrmsEngine({ api, mapCore, legend, status }) {
         const seq = ++renderSeq;
         const imageUrl = frame?.image_url || '';
         const bounds = Array.isArray(frame?.bounds) ? frame.bounds : null;
-        if (!imageUrl || !bounds || bounds.length < 4) return;
-
-        await new Promise((resolve) => {
-            const img = new Image();
-            img.onload = resolve;
-            img.onerror = resolve;
-            img.src = api.apiUrl(imageUrl);
-        });
-        if (seq !== renderSeq) return;
+        if (!imageUrl || !bounds || bounds.length < 4) return false;
 
         const leafletBounds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
         const oldOverlay = overlay;
-        const newOverlay = leaflet.imageOverlay(api.apiUrl(imageUrl), leafletBounds, { opacity });
-        newOverlay.addTo(map);
-        if (oldOverlay && map.hasLayer(oldOverlay)) map.removeLayer(oldOverlay);
-        overlay = newOverlay;
-
-        legend.setHtml(mrmsLegendHtml(frame));
-        applyFrameStatus(frame);
+        const swapSeq = ++overlaySwapSeq;
+        const newOverlay = leaflet.imageOverlay(api.apiUrl(imageUrl), leafletBounds, {
+            opacity,
+            className: 'mrms-gradient-overlay',
+            ...(paneName ? { pane: paneName } : {}),
+        });
+        pendingOverlay = newOverlay;
+        return new Promise((resolve) => {
+            newOverlay.once('load', () => {
+                if (seq !== renderSeq || swapSeq !== overlaySwapSeq) {
+                    if (map.hasLayer(newOverlay)) map.removeLayer(newOverlay);
+                    resolve(false);
+                    return;
+                }
+                if (oldOverlay && oldOverlay !== newOverlay && map.hasLayer(oldOverlay)) {
+                    map.removeLayer(oldOverlay);
+                }
+                overlay = newOverlay;
+                pendingOverlay = null;
+                legend.setHtml(mrmsLegendHtml(frame));
+                applyFrameStatus(frame);
+                resolve(true);
+            });
+            newOverlay.once('error', () => {
+                if (map.hasLayer(newOverlay)) map.removeLayer(newOverlay);
+                if (swapSeq === overlaySwapSeq) pendingOverlay = null;
+                resolve(false);
+            });
+            newOverlay.addTo(map);
+        });
     }
 
     // Browser-cache prefetch of the next frames after `index` (fire-and-forget).
@@ -228,6 +249,8 @@ export function createMrmsEngine({ api, mapCore, legend, status }) {
                 { signal: request.signal },
             );
             data = {
+                frame_key: overlayData?.frame_key ?? '',
+                source_data_key: overlayData?.source_data_key ?? '',
                 image_url: overlayData?.render?.image_url ?? '',
                 bounds: overlayData?.bounds ?? [],
                 legend: overlayData?.legend ?? null,
@@ -236,6 +259,7 @@ export function createMrmsEngine({ api, mapCore, legend, status }) {
                 vmin: overlayData?.vmin ?? null,
                 vmax: overlayData?.vmax ?? null,
                 timestamp: overlayData?.timestamp ?? null,
+                refreshing: Boolean(overlayData?.refreshing),
                 product,
             };
             const overlayTsMs = timestampMs(data.timestamp) || 0;
@@ -254,10 +278,10 @@ export function createMrmsEngine({ api, mapCore, legend, status }) {
         }
         if (!gate.isCurrent(request.sequence)) return null;
 
-        await renderFrame(data);
+        const rendered = await renderFrame(data);
         const tsMs = timestampMs(data.timestamp);
         const stale = Number.isFinite(tsMs) && (Date.now() - tsMs) > STALE_MS;
-        return { data, tsMs, stale };
+        return { data, tsMs, stale, refreshing: Boolean(data.refreshing), rendered };
     }
 
     return Object.freeze({

@@ -30,6 +30,21 @@ def _polygon(west: float, south: float) -> dict:
     }
 
 
+def test_zone_disk_cache_load_is_lazy_and_single_shot(monkeypatch):
+    calls = []
+    monkeypatch.setattr(alerts_utils, "_ZONE_DISK_CACHE_LOADED", False)
+    monkeypatch.setattr(
+        alerts_utils,
+        "_load_zone_disk_cache",
+        lambda: calls.append("loaded"),
+    )
+
+    alerts_utils._ensure_zone_disk_cache_loaded()
+    alerts_utils._ensure_zone_disk_cache_loaded()
+
+    assert calls == ["loaded"]
+
+
 def _feature(alert_id: str, west: float, *, provenance: str) -> dict:
     return {
         "id": alert_id,

@@ -79,6 +79,8 @@ MARINE_ALERT_EVENTS = {
 # ---------------------------------------------------------------------------
 _ZONE_GEOM_CACHE = {}  # zone_id -> (shapely_geom | None, expire_ts)
 _ZONE_GEOM_LOCK = threading.Lock()
+_ZONE_DISK_CACHE_LOAD_LOCK = threading.Lock()
+_ZONE_DISK_CACHE_LOADED = False
 # NWS forecast/public/fire zones change on the order of years, not hours.
 # A long TTL means restart-after-restart hits the disk cache instead of
 # re-fetching ~1000+ zones (~60s of cold-start latency).
@@ -149,13 +151,22 @@ def _save_zone_disk_cache() -> None:
         print(f"[zone-geom] Disk cache save skipped: {exc}")
 
 
-# Load persisted zone geometries at module import time so the first worker
-# run after a restart hits warm cache instead of re-fetching ~895 zones.
-_load_zone_disk_cache()
+def _ensure_zone_disk_cache_loaded() -> None:
+    """Load once on first alerts use, not in unrelated spawned render children."""
+
+    global _ZONE_DISK_CACHE_LOADED
+    if _ZONE_DISK_CACHE_LOADED:
+        return
+    with _ZONE_DISK_CACHE_LOAD_LOCK:
+        if _ZONE_DISK_CACHE_LOADED:
+            return
+        _load_zone_disk_cache()
+        _ZONE_DISK_CACHE_LOADED = True
 
 
 def _fetch_single_zone_geometry(zone_url):
     """Fetch geometry for one NWS zone URL.  Returns (zone_id, geom|None)."""
+    _ensure_zone_disk_cache_loaded()
     zone_id = zone_url.rstrip("/").split("/")[-1]
     now = time.time()
     with _ZONE_GEOM_LOCK:
@@ -181,6 +192,7 @@ def _prefetch_zone_geometries(features):
     inline geometry, then fetches them in one batched pass so that later
     per-alert `_resolve_zone_geometry` calls hit the warm cache.
     """
+    _ensure_zone_disk_cache_loaded()
     now = time.time()
     urls_needed = set()
     for feat in features:
@@ -223,6 +235,7 @@ def _resolve_zone_geometry(affected_zone_urls):
     Fetches zone polygons concurrently, caches each one, and returns the
     union of all valid geometries (or *None* when nothing is resolvable).
     """
+    _ensure_zone_disk_cache_loaded()
     if not affected_zone_urls:
         return None
     # Figure out which need fetching vs are cached

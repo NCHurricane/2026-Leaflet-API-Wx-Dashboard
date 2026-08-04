@@ -6,7 +6,7 @@ import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
-import { createMrmsEngine, formatValidTimeLabel, timestampMs } from './mrms-engine.js';
+import { createMrmsEngine, formatValidTimeLabel, timestampMs } from './mrms-engine.js?v=20260802a';
 
 const byId = (id) => document.getElementById(id);
 const SELECT_PRODUCT_MESSAGE = 'Pick an MRMS product to load frames from the rolling cache.';

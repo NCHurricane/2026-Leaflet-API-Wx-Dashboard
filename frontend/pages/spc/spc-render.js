@@ -13,7 +13,7 @@ import {
     isFireHazard,
     nonZeroDn,
     reportTypeKey,
-} from './spc-engine.js';
+} from './spc-engine.js?v=20260801a';
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({

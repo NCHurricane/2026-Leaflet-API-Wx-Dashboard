@@ -10,8 +10,8 @@ export const STREAM_MAX_HOURS = Object.freeze({
 });
 
 const RTMA_REGIONS = Object.freeze(['CONUS', 'AK', 'HI', 'PR']);
-const VALUE_MARKER_OFFSET_X_PX = 0;
-const VALUE_MARKER_OFFSET_Y_PX = -15;
+const VALUE_MARKER_OFFSET_X_PX = 5;
+const VALUE_MARKER_OFFSET_Y_PX = -25;
 const INTEGER_LABEL_PRODUCTS = new Set(['temperature', 'dew_point', 'apparent_temperature']);
 
 export function dataRegionForMapRegion(selectedRegion) {
@@ -141,16 +141,29 @@ export function rtmaLegendHtml(data) {
     return `${header}<div class="core-legend-body">${body}</div>`;
 }
 
-export function createRtmaEngine({ api, mapCore, legend, status }) {
+export function createRtmaEngine({
+    api,
+    mapCore,
+    legend,
+    status,
+    paneName = '',
+    gradientPaneName = '',
+    pointPaneName = '',
+}) {
     const leaflet = mapCore.leaflet;
     const map = mapCore.map;
     const gate = createRequestGate();
+    const resolvedGradientPaneName = gradientPaneName || paneName;
+    const resolvedPointPaneName = pointPaneName || paneName;
 
     let gradientLayer = null;
+    let pendingGradientLayer = null;
+    let gradientSwapSeq = 0;
     let pointLayer = null;
     let gradientOpacity = 0.9;
     let valueOpacity = 0.9;
     let density = 0.25;
+    let showGradient = true;
     let showValues = false;
 
     let primaryPoints = [];
@@ -218,6 +231,56 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
         });
     }
 
+    function windValueDirectionIcon(value, unit, dirDeg) {
+        const label = unit === 'kt' ? String(Math.round(value)) : Number(value).toFixed(1);
+        const alpha = Math.max(0, Math.min(1, valueOpacity));
+        const zoom = map?.getZoom() ?? 5;
+        const t = Math.max(0, Math.min(1, (zoom - 5) / 4));
+        const fontSizePx = Math.round(16 + t * 22);
+        const strokePx = Math.max(1, Math.round(fontSizePx * 0.1));
+        const labelWidth = Math.max(32, Math.round(fontSizePx * (label.length * 0.62 + 0.8)));
+        const labelHeight = Math.max(20, Math.round(fontSizePx * 1.25));
+        const arrowLength = Math.round(15 + t * 10);
+        const arrowHead = Math.max(4, Math.round(arrowLength * 0.3));
+        const arrowRadius = arrowLength + arrowHead + 2;
+        const gapPx = Math.round(4 + t * 2);
+        const tailY = labelHeight + gapPx;
+        const iconWidth = Math.max(labelWidth, arrowRadius * 2);
+        const iconHeight = tailY + arrowRadius;
+        const rot = ((Number(dirDeg) % 360) + 360) % 360;
+        const svgSize = arrowRadius * 2;
+        const arrowLabel = `${label}${unit ? ` ${unit}` : ''}, direction ${Math.round(rot)}°`;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-${arrowRadius} -${arrowRadius} ${svgSize} ${svgSize}" `
+            + `width="${svgSize}" height="${svgSize}" data-arrow-tail="value-bottom" `
+            + `style="position:absolute;left:${Math.round(iconWidth / 2 - arrowRadius)}px;top:${tailY - arrowRadius}px;overflow:visible;opacity:${alpha};" `
+            + `role="img" aria-label="${escapeHtml(arrowLabel)}">`
+            + '<defs><filter id="wvd-shadow" x="-60%" y="-60%" width="220%" height="220%">'
+            + '<feDropShadow dx="0" dy="0" stdDeviation="1.4" flood-color="black" flood-opacity="0.95"/>'
+            + '</filter></defs>'
+            + `<g transform="rotate(${rot} 0 0)" filter="url(#wvd-shadow)">`
+            + `<line x1="0" y1="0" x2="0" y2="-${arrowLength}" stroke="white" stroke-width="2.5" stroke-linecap="round"/>`
+            + `<polygon points="0,-${arrowLength + arrowHead} -${arrowHead},-${arrowLength - 1} ${arrowHead},-${arrowLength - 1}" fill="white"/>`
+            + '</g></svg>';
+        return leaflet.divIcon({
+            className: '',
+            html: `<div style="position:relative;width:${iconWidth}px;height:${iconHeight}px;overflow:visible;">`
+                + `<div style="position:absolute;left:0;top:0;width:${iconWidth}px;height:${labelHeight}px;opacity:${alpha};color:rgb(255,255,0);font-weight:800;font-size:${fontSizePx}px;line-height:1;font-family:Montserrat-ExtraBold, sans-serif;text-align:center;-webkit-text-stroke:${strokePx}px black;paint-order:stroke fill;">${label}</div>`
+                + `${svg}</div>`,
+            iconSize: [iconWidth, iconHeight],
+            iconAnchor: [
+                Math.round(iconWidth / 2 - VALUE_MARKER_OFFSET_X_PX),
+                Math.round(labelHeight / 2 - VALUE_MARKER_OFFSET_Y_PX),
+            ],
+        });
+    }
+
+    function pointLocationKey(point) {
+        const lat = Number(point?.lat);
+        const lon = Number(point?.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return '';
+        return `${lat.toFixed(5)}:${lon.toFixed(5)}`;
+    }
+
     // ── Point thinning + rendering ──────────────────────────────────────────
     function thinPoints(points) {
         if (!Array.isArray(points) || !points.length) return [];
@@ -239,27 +302,49 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
         if (!primaryPoints.length && !secondaryPoints.length) return;
 
         const markers = [];
+        const pairedWind = primaryProduct === 'wind_speed'
+            && secondaryUnits === 'deg'
+            && secondaryPoints.length > 0;
+        const secondaryByLocation = pairedWind
+            ? new Map(secondaryPoints.map((point) => [pointLocationKey(point), point]))
+            : new Map();
+        const matchedSecondary = new Set();
         if (primaryPoints.length) {
             const isWindDir = primaryUnits === 'deg';
             const useIntegerLabels = INTEGER_LABEL_PRODUCTS.has(primaryProduct);
             thinPoints(primaryPoints).forEach((p) => {
-                const icon = isWindDir
-                    ? windDirectionBarbIcon(p.value)
-                    : coloredTextIcon(p.value, primaryUnits, useIntegerLabels);
-                const marker = leaflet.marker([p.lat, p.lon], { icon });
+                const locationKey = pointLocationKey(p);
+                const directionPoint = pairedWind ? secondaryByLocation.get(locationKey) : null;
+                const icon = directionPoint
+                    ? windValueDirectionIcon(p.value, primaryUnits, directionPoint.value)
+                    : (isWindDir
+                        ? windDirectionBarbIcon(p.value)
+                        : coloredTextIcon(p.value, primaryUnits, useIntegerLabels));
+                if (directionPoint) matchedSecondary.add(locationKey);
+                const marker = leaflet.marker([p.lat, p.lon], {
+                    icon,
+                    ...(resolvedPointPaneName ? { pane: resolvedPointPaneName } : {}),
+                });
                 const location = [p.city, p.state].filter(Boolean).join(', ') || 'Sample location';
                 const value = isWindDir ? `${Math.round(p.value)}°` : `${p.value} ${primaryUnits}`.trim();
-                marker.bindPopup(`<strong>${escapeHtml(location)}</strong><br>${escapeHtml(primaryLabel || primaryProduct)}: ${escapeHtml(value)}`);
+                const direction = directionPoint
+                    ? `<br>${escapeHtml(secondaryLabel || 'Wind Direction')}: ${Math.round(directionPoint.value)}°`
+                    : '';
+                marker.bindPopup(`<strong>${escapeHtml(location)}</strong><br>${escapeHtml(primaryLabel || primaryProduct)}: ${escapeHtml(value)}${direction}`);
                 markers.push(marker);
             });
         }
         if (secondaryPoints.length) {
             const isWindDir = secondaryUnits === 'deg';
             thinPoints(secondaryPoints).forEach((p) => {
+                if (matchedSecondary.has(pointLocationKey(p))) return;
                 const icon = isWindDir
                     ? windDirectionBarbIcon(p.value)
                     : coloredTextIcon(p.value, secondaryUnits, false);
-                const marker = leaflet.marker([p.lat, p.lon], { icon });
+                const marker = leaflet.marker([p.lat, p.lon], {
+                    icon,
+                    ...(resolvedPointPaneName ? { pane: resolvedPointPaneName } : {}),
+                });
                 const location = [p.city, p.state].filter(Boolean).join(', ') || 'Sample location';
                 const value = isWindDir ? `${Math.round(p.value)}°` : `${p.value} ${secondaryUnits}`.trim();
                 marker.bindPopup(`<strong>${escapeHtml(location)}</strong><br>${escapeHtml(secondaryLabel || 'Value')}: ${escapeHtml(value)}`);
@@ -273,7 +358,10 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
 
     // ── Layer management ────────────────────────────────────────────────────
     function clearGradientLayer() {
+        gradientSwapSeq += 1;
+        if (pendingGradientLayer && map.hasLayer(pendingGradientLayer)) map.removeLayer(pendingGradientLayer);
         if (gradientLayer && map.hasLayer(gradientLayer)) map.removeLayer(gradientLayer);
+        pendingGradientLayer = null;
         gradientLayer = null;
     }
 
@@ -304,6 +392,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
         if (!Number.isFinite(parsed)) return;
         gradientOpacity = parsed;
         gradientLayer?.setOpacity(gradientOpacity);
+        pendingGradientLayer?.setOpacity(gradientOpacity);
     }
 
     function setDensity(value) {
@@ -311,6 +400,11 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
         if (!Number.isFinite(parsed)) return;
         density = Math.max(0.01, Math.min(2, parsed));
         renderPoints();
+    }
+
+    function setShowGradient(value) {
+        showGradient = !!value;
+        if (!showGradient) clearGradientLayer();
     }
 
     function setShowValues(value) {
@@ -342,12 +436,28 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
     function setGradientFromImage(imageUrl, bounds) {
         const leafletBounds = [[bounds[2], bounds[0]], [bounds[3], bounds[1]]];
         const oldLayer = gradientLayer;
+        const swapSeq = ++gradientSwapSeq;
         const newLayer = leaflet.imageOverlay(api.apiUrl(imageUrl), leafletBounds, {
             opacity: gradientOpacity,
             className: 'surface-gradient-overlay',
-        }).addTo(map);
-        if (oldLayer && map.hasLayer(oldLayer)) map.removeLayer(oldLayer);
-        gradientLayer = newLayer;
+            ...(resolvedGradientPaneName ? { pane: resolvedGradientPaneName } : {}),
+        });
+        pendingGradientLayer = newLayer;
+        newLayer.once('load', () => {
+            if (swapSeq !== gradientSwapSeq) {
+                if (map.hasLayer(newLayer)) map.removeLayer(newLayer);
+                return;
+            }
+            if (oldLayer && oldLayer !== newLayer && map.hasLayer(oldLayer)) map.removeLayer(oldLayer);
+            gradientLayer = newLayer;
+            pendingGradientLayer = null;
+        });
+        newLayer.once('error', () => {
+            if (swapSeq !== gradientSwapSeq) return;
+            if (map.hasLayer(newLayer)) map.removeLayer(newLayer);
+            pendingGradientLayer = null;
+        });
+        newLayer.addTo(map);
     }
 
     function applyStatus({ title, stream, tsMs, note = '', tone = '' }) {
@@ -376,9 +486,16 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
 
         let usedPrerender = false;
         let pointsSourceDataKey = '';
+        let refreshState = { refreshing: false, retryAfterSeconds: 0 };
+        const captureRefreshState = (data) => {
+            refreshState = {
+                refreshing: Boolean(data?.refreshing),
+                retryAfterSeconds: Math.max(0, Number(data?.retry_after_seconds) || 0),
+            };
+        };
 
         // Pre-rendered overlay first; wind direction is barbs-only (no raster).
-        if (product !== 'wind_direction') {
+        if (showGradient && product !== 'wind_direction') {
             try {
                 const overlayData = await api.fetchJson(
                     `/api/overlay/latest?family=rtma&region=${encodeURIComponent(region)}`
@@ -386,6 +503,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
                     { signal: request.signal },
                 );
                 if (!gate.isCurrent(request.sequence)) return;
+                captureRefreshState(overlayData);
                 const imageUrl = overlayData?.render?.image_url;
                 const bounds = overlayData?.bounds;
                 pointsSourceDataKey = typeof overlayData?.source_data_key === 'string'
@@ -410,7 +528,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
             }
         }
 
-        if (!usedPrerender && product !== 'wind_direction') {
+        if (!usedPrerender && showGradient && product !== 'wind_direction') {
             try {
                 const data = await api.fetchJson(
                     `/api/data/rtma?region=${encodeURIComponent(region)}&stream=${encodeURIComponent(stream)}`
@@ -418,6 +536,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
                     { signal: request.signal },
                 );
                 if (!gate.isCurrent(request.sequence)) return;
+                captureRefreshState(data);
                 const b = data?.bounds;
                 pointsSourceDataKey = typeof data?.source_data_key === 'string' ? data.source_data_key : '';
                 if (data?.image_url && Array.isArray(b) && b.length === 4) {
@@ -440,9 +559,17 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
             }
         }
 
+        if (usedPrerender && !showValues) {
+            clearPointLayer();
+            primaryPoints = [];
+            secondaryPoints = [];
+            return refreshState;
+        }
+
         try {
             const data = await fetchPoints(selection, pointsSourceDataKey, { signal: request.signal });
             if (!gate.isCurrent(request.sequence)) return;
+            if (!usedPrerender) captureRefreshState(data);
             primaryPoints = Array.isArray(data.points) ? data.points : [];
             primaryUnits = data.units || '';
             primaryProduct = product;
@@ -469,13 +596,16 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
                 status.setMessage(`RTMA load failed: ${err.message}`, 'error');
             }
         }
+        return refreshState;
     }
 
     // Secondary wind product (wind_speed + wind_direction selected together).
     async function loadSecondary(selection, product) {
         if (!showValues || !product) return;
+        const seq = renderSeq;
         try {
             const data = await fetchPoints({ ...selection, product }, '');
+            if (seq !== renderSeq) return;
             secondaryPoints = Array.isArray(data.points) ? data.points : [];
             secondaryUnits = data.units || '';
             secondaryLabel = data.full_name || product;
@@ -486,8 +616,10 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
     // Refresh primary markers for the current viewport (moveend with values on).
     async function reloadPoints(selection) {
         if (!showValues) return;
+        const seq = renderSeq;
         try {
             const data = await fetchPoints(selection, '');
+            if (seq !== renderSeq) return;
             primaryPoints = Array.isArray(data.points) ? data.points : [];
             primaryUnits = data.units || '';
             primaryProduct = selection.product;
@@ -677,6 +809,7 @@ export function createRtmaEngine({ api, mapCore, legend, status }) {
         renderPoints,
         setDensity,
         setGradientOpacity,
+        setShowGradient,
         setShowValues,
     });
 }

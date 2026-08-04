@@ -4,11 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Severe Weather Workspace | NCHurricane</title>
+    <link rel="icon" href="/img/favicon.ico">
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260730b">
     <link rel="stylesheet" href="/frontend/pages/spc/spc.css?v=20260801a">
-    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260802b">
+    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260802e">
 </head>
 <body>
     <header class="core-header">
@@ -238,8 +239,65 @@
                             <p class="workspace-layer-note">One-hour Satellite history uses the shared Workspace timeline. Radar timestamps lead when both layers are active.</p>
                         </div>
                     </details>
-                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>RTMA</h2><span>Planned</span></summary><div class="workspace-group-body"><p>RTMA engine composition placeholder.</p></div></details>
-                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>MRMS</h2><span>Planned</span></summary><div class="workspace-group-body"><p>MRMS engine composition placeholder.</p></div></details>
+                    <details id="workspace-rtma-group" class="workspace-group workspace-layer-group">
+                        <summary class="workspace-group-summary">
+                            <div class="workspace-title-count"><h2>RTMA</h2><span>RU</span></div>
+                            <label class="workspace-layer-toggle" title="Show RTMA Rapid Update analysis">
+                                <span class="core-visually-hidden">Show RTMA Rapid Update analysis</span>
+                                <input id="workspace-rtma-enabled" type="checkbox">
+                                <span aria-hidden="true"></span>
+                            </label>
+                        </summary>
+                        <div id="workspace-rtma-controls" class="workspace-group-body is-disabled" hidden>
+                            <div class="workspace-eyebrow">Rapid Update 15-Min</div>
+                            <div id="workspace-rtma-products" class="workspace-pills workspace-rtma-product-pills" role="group" aria-label="RTMA-RU field">
+                                <button type="button" data-rtma-product="temperature" aria-pressed="false" disabled>Temperature</button>
+                                <button type="button" data-rtma-product="apparent_temperature" aria-pressed="false" disabled>Feels Like</button>
+                                <button type="button" data-rtma-product="dew_point" aria-pressed="false" disabled>Dew Point</button>
+                                <button type="button" data-rtma-product="winds" aria-pressed="false" disabled>Winds</button>
+                                <button type="button" data-rtma-product="wind_gust" aria-pressed="false" disabled>Wind Gust</button>
+                                <button type="button" data-rtma-product="visibility" aria-pressed="false" disabled>Visibility</button>
+                            </div>
+                            <div class="workspace-eyebrow">Display</div>
+                            <div id="workspace-rtma-modes" class="workspace-pills workspace-rtma-mode-pills" role="group" aria-label="RTMA display layers">
+                                <button class="is-active" type="button" data-rtma-mode="values" aria-pressed="true" disabled>Values</button>
+                                <button type="button" data-rtma-mode="gradient" aria-pressed="false" disabled>Gradient</button>
+                            </div>
+                            <div class="core-adjustment workspace-rtma-density-control">
+                                <label id="workspace-rtma-density-label" for="workspace-rtma-density">Value Density</label>
+                                <input id="workspace-rtma-density" type="range" min="0.01" max="2" step="0.005" value="0.25" disabled>
+                            </div>
+                            <div class="core-adjustment workspace-opacity-control">
+                                <label id="workspace-rtma-opacity-label" for="workspace-rtma-opacity">RTMA Opacity (0.7)</label>
+                                <input id="workspace-rtma-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled>
+                            </div>
+                            <p class="workspace-layer-note">CONUS-only latest RTMA-RU analysis stays live and is not added to the Radar/Satellite timeline.</p>
+                        </div>
+                    </details>
+                    <details id="workspace-mrms-group" class="workspace-group workspace-layer-group">
+                        <summary class="workspace-group-summary">
+                            <div class="workspace-title-count"><h2>MRMS</h2><span>Live</span></div>
+                            <label class="workspace-layer-toggle" title="Show curated MRMS guidance">
+                                <span class="core-visually-hidden">Show curated MRMS guidance</span>
+                                <input id="workspace-mrms-enabled" type="checkbox">
+                                <span aria-hidden="true"></span>
+                            </label>
+                        </summary>
+                        <div id="workspace-mrms-controls" class="workspace-group-body is-disabled" hidden>
+                            <div class="workspace-eyebrow">Severe Weather Fields</div>
+                            <div id="workspace-mrms-products" class="workspace-pills workspace-mrms-product-pills" role="group" aria-label="MRMS field">
+                                <button type="button" data-mrms-product="rotation" aria-pressed="false" disabled>Rotation Track</button>
+                                <button type="button" data-mrms-product="mesh_instant" aria-pressed="false" disabled>Instant MESH</button>
+                                <button type="button" data-mrms-product="mesh_30min" aria-pressed="false" disabled>30m MESH</button>
+                                <button type="button" data-mrms-product="lightning_30min" aria-pressed="false" disabled>30m Lightning</button>
+                            </div>
+                            <div class="core-adjustment workspace-opacity-control">
+                                <label id="workspace-mrms-opacity-label" for="workspace-mrms-opacity">MRMS Opacity (0.7)</label>
+                                <input id="workspace-mrms-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled>
+                            </div>
+                            <p class="workspace-layer-note">CONUS-only latest MRMS guidance stays live and is not added to the Radar/Satellite timeline.</p>
+                        </div>
+                    </details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>WPC</h2><span>Planned</span></summary><div class="workspace-group-body"><p>WPC engine composition placeholder.</p></div></details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>Water</h2><span>Planned</span></summary><div class="workspace-group-body"><p>Water engine composition placeholder.</p></div></details>
                 </section>
@@ -290,6 +348,8 @@
                             <button id="workspace-lsr-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="storm-reports" aria-controls="workspace-lsr-legend" hidden>Storm Reports</button>
                             <button id="workspace-spc-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="spc" aria-controls="workspace-spc-legend" hidden>SPC</button>
                             <button id="workspace-satellite-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="satellite" aria-controls="workspace-satellite-legend" hidden>Satellite</button>
+                            <button id="workspace-rtma-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="rtma" aria-controls="workspace-rtma-legend" hidden>RTMA</button>
+                            <button id="workspace-mrms-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="mrms" aria-controls="workspace-mrms-legend" hidden>MRMS</button>
                         </div>
                         <button class="core-legend-collapse" type="button" aria-expanded="true" aria-label="Collapse legends" title="Collapse legends"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </div>
@@ -300,6 +360,8 @@
                         <section id="workspace-lsr-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="storm-reports" aria-labelledby="workspace-lsr-legend-tab" hidden></section>
                         <section id="workspace-spc-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="spc" aria-labelledby="workspace-spc-legend-tab" hidden></section>
                         <section id="workspace-satellite-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="satellite" aria-labelledby="workspace-satellite-legend-tab" hidden></section>
+                        <section id="workspace-rtma-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="rtma" aria-labelledby="workspace-rtma-legend-tab" hidden></section>
+                        <section id="workspace-mrms-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="mrms" aria-labelledby="workspace-mrms-legend-tab" hidden></section>
                     </div>
                 </div>
             </div>
@@ -336,6 +398,6 @@
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
     <script src="/frontend/lib/tz-lookup/tz.js?v=6.1.25"></script>
-    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260802f"></script>
+    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260803a"></script>
 </body>
 </html>

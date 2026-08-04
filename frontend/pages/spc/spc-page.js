@@ -11,8 +11,8 @@ import {
     allowedConvectiveHazards,
     convectiveLabel,
     createSpcEngine,
-} from './spc-engine.js?v=20260725e';
-import { createSpcRenderer } from './spc-render.js';
+} from './spc-engine.js?v=20260801a';
+import { createSpcRenderer } from './spc-render.js?v=20260803a';
 
 const byId = (id) => document.getElementById(id);
 const SELECT_PRODUCT_MESSAGE = 'Select an SPC product to load outlooks.';

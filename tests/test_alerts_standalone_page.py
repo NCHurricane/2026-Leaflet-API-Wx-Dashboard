@@ -73,6 +73,17 @@ def test_alerts_cache_rejects_generations_older_than_latest_seen():
     assert "if (!isCurrentAlertPayload(freshPayloads)) return;" in engine
 
 
+def test_live_alert_refresh_follows_stale_generation_until_publish():
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"
+    ).read_text(encoding="utf-8")
+
+    assert "liveAlertRefreshRetryDelayMs" in engine
+    assert "scheduleLiveRefreshRetry(freshPayloads" in engine
+    assert "refreshAttempt: refreshAttempt + 1" in engine
+    assert "cancelLiveRefreshRetry();" in engine
+
+
 def test_new_alert_notifications_ignore_pre_start_and_previously_seen_alerts():
     engine = (
         Path(BASE_DIR) / "frontend" / "pages" / "alerts" / "alerts-engine.js"

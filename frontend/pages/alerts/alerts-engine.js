@@ -73,6 +73,19 @@ function legendHeader(title) {
 const LIVE_ALERT_CACHE_NAME = 'nch-alerts-live-v1';
 const LIVE_ALERT_CACHE_LIMIT = 32;
 const LIVE_ALERT_CACHE_INDEX = `${LIVE_ALERT_CACHE_NAME}:keys`;
+const LIVE_ALERT_REFRESH_MAX_ATTEMPTS = 30;
+
+export function liveAlertRefreshRetryDelayMs(payloads, refreshAttempt = 0) {
+    if (refreshAttempt >= LIVE_ALERT_REFRESH_MAX_ATTEMPTS) return 0;
+    const refreshing = (Array.isArray(payloads) ? payloads : [])
+        .filter((payload) => payload?.refreshing === true);
+    if (!refreshing.length) return 0;
+    const retrySeconds = refreshing
+        .map((payload) => Number(payload?.retry_after_seconds))
+        .filter((value) => Number.isFinite(value) && value > 0);
+    const delaySeconds = retrySeconds.length ? Math.min(...retrySeconds) : 1;
+    return Math.max(250, Math.min(5_000, Math.round(delaySeconds * 1000)));
+}
 
 async function readLiveAlertCache(api, paths) {
     if (!('caches' in window)) return null;
@@ -112,6 +125,8 @@ async function writeLiveAlertCache(api, paths, payloads) {
 export function createAlertsEngine(options) {
     const { api, mapCore, legend, lsrLegend = null, status, onAlertCount, onLsrCount, onWarnings, onRenderedAlerts, onDetail, onNewAlert, onLsrDetail, onLsrDetailClose, shouldHandleAlertClick } = options;
     const railScope = options.railScope === 'national' ? 'national' : 'rendered';
+    const setTimeoutFn = options.setTimeoutFn || ((callback, delay) => window.setTimeout(callback, delay));
+    const clearTimeoutFn = options.clearTimeoutFn || ((timer) => window.clearTimeout(timer));
     const selectedAlertMissingGraceRefreshes = Math.max(
         0,
         Math.trunc(Number(options.selectedAlertMissingGraceRefreshes) || 0),
@@ -155,6 +170,7 @@ export function createAlertsEngine(options) {
     let lsrOpacity = 1;
     let pulseEnabled = true;
     let liveSequence = 0;
+    let liveRefreshTimer = null;
     let lsrSequence = 0;
     let archiveSequence = 0;
     let knownAlertIds = null;
@@ -162,6 +178,28 @@ export function createAlertsEngine(options) {
     let selectedAlert = null;
     let selectedAlertMissingRefreshes = 0;
     let selectedLsrId = '';
+
+    function cancelLiveRefreshRetry() {
+        if (liveRefreshTimer !== null) clearTimeoutFn(liveRefreshTimer);
+        liveRefreshTimer = null;
+    }
+
+    function scheduleLiveRefreshRetry(payloads, seq, nextSelection, region, loadOptions) {
+        const refreshAttempt = Math.max(0, Number(loadOptions.refreshAttempt) || 0);
+        const delayMs = liveAlertRefreshRetryDelayMs(payloads, refreshAttempt);
+        if (!delayMs || seq !== liveSequence) return;
+        cancelLiveRefreshRetry();
+        liveRefreshTimer = setTimeoutFn(() => {
+            liveRefreshTimer = null;
+            if (seq !== liveSequence) return;
+            void loadLive({ ...nextSelection }, region, {
+                ...loadOptions,
+                silent: true,
+                refresh: true,
+                refreshAttempt: refreshAttempt + 1,
+            });
+        }, delayMs);
+    }
 
     function featureId(feature) {
         const props = feature?.properties || {};
@@ -444,6 +482,7 @@ export function createAlertsEngine(options) {
     }
 
     async function loadLive(nextSelection, region, loadOptions = {}) {
+        cancelLiveRefreshRetry();
         selection = { ...nextSelection };
         const seq = ++liveSequence;
         if (!selection.categories.length && railScope !== 'national') { renderAlerts(); return; }
@@ -514,6 +553,7 @@ export function createAlertsEngine(options) {
             if (alertPayloadCache.size > 16) alertPayloadCache.delete(alertPayloadCache.keys().next().value);
             void writeLiveAlertCache(api, paths, freshPayloads);
             applyPayloads(freshPayloads, { ...loadOptions, reconcileSelectedAlert: true });
+            scheduleLiveRefreshRetry(freshPayloads, seq, nextSelection, region, loadOptions);
         } catch (error) {
             if (seq === liveSequence) {
                 status.setMessage(
@@ -645,6 +685,7 @@ export function createAlertsEngine(options) {
     }
 
     function clear() {
+        cancelLiveRefreshRetry();
         liveSequence += 1; lsrSequence += 1; archiveSequence += 1;
         fullBaseFeatures = []; displayBaseFeatures = []; railAlertBaseFeatures = []; renderedAlerts = []; renderedLsr = [];
         alertCacheReady = false; lsrBaseFeatures = []; railLsrBaseFeatures = []; lsrCacheKey = ''; lsrCacheReady = false;

@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date updated: 2026-08-01
+Date updated: 2026-08-03
 
 ```text
 Continue dashboard work in F:\Python\dashboard_2026.
@@ -397,6 +397,72 @@ Current checkpoint:
   opacity and refresh retention, Satellite < SPC < Radar < Alerts stacking,
   viewport/alert/Radar preservation on source-sector changes, and
   Satellite-off/Region/Home cleanup. Phase 2 is closed.
+- Workspace expansion Phase 3 is user-accepted and closed for curated CONUS
+  RTMA-RU live composition. RTMA is off/collapsed
+  by default. Its two-column pill grid is Temperature, Feels Like, Dew Point,
+  Winds, Wind Gust, and Visibility; Winds combines speed values and direction
+  barbs. Values and Gradient are independent pills. A new field defaults to
+  Values on and Gradient off; density and gradient opacity remain adjustable.
+- RTMA stays latest-only and never joins the Radar/Satellite timeline. Selected
+  refresh runs on the 15-minute RTMA-RU cadence with 30-second follow-up reads
+  only while coordinator refresh is pending. Pane order is Satellite `330`,
+  RTMA Gradient `350`, SPC `400`, Radar `410`, boundaries `420`, RTMA Values
+  `425`, and Alerts `430+`.
+- RTMA-RU is CONUS-only. AK/HI/PR clear its imagery and expose the limitation;
+  returning to CONUS reloads the selected field. RTMA-off and Home clear it
+  without changing other composed layers. The shared engine supports separate
+  gradient/value panes, waits for the replacement gradient before swapping, and
+  skips point requests when Values is off and a gradient is ready. Matched Winds
+  points use one composite marker whose arrow tail is centered 4-6 px below the
+  speed value and rotates there toward the reported bearing.
+- JavaScript syntax and diff checks pass. Three Node behavior tests pass. The
+  focused gate passes 57 tests with the two known stale Workspace assertions
+  excluded. Full pytest passes 359 tests plus 42 subtests and fails only those
+  same stale assertions. User smoke confirmed the six field pills, Values-first
+  mode, independent Values/Gradient toggles, split pane order, and the composite
+  Winds arrow placement. Future Winds marker polish is deferred in the backlog.
+- The 2026-08-03 cold-start correction serializes all RTMA and MRMS cfgrib work
+  through one process-wide gate because the bundled Windows ecCodes runtime is
+  not thread-enabled. RTMA derived point/grid publication is also keyed and uses
+  unique temporary files, so a foreground Values request cannot collide with
+  its background latest render. A real concurrent Temperature/Dew Point decode
+  of the reported 1597 x 2345 RTMA-RU file now passes.
+- Shared Alerts now follows `refreshing` stale responses with bounded one-second
+  generation checks instead of waiting for the next global 30-second cycle or a
+  manual Refresh Active Layers click. Spawned Radar render children no longer
+  parse the Alerts zone cache merely by importing the application, Py-ART child
+  banners are suppressed, Workspace declares the tracked favicon, and SPC uses
+  one versioned engine module identity. The correction gate passes 63 focused
+  Python tests, Alerts retry Node coverage,
+  Workspace RTMA/MRMS Node coverage, JavaScript syntax, native concurrent GRIB
+  decode, and diff checks.
+- The user's post-correction restart and 15-20 minute idle `/workspace` soak
+  passed. The log contained no exceptions, HTTP 4xx/5xx responses, ecCodes
+  failures, or unselected Radar/RTMA/MRMS work. Alerts refreshed normally with
+  one lazy zone-cache load; the Py-ART banners remained suppressed, the favicon
+  returned `200`, and SPC requested one versioned engine module. One Alerts
+  enrichment cycle reached about 16 seconds and should be monitored if it
+  becomes recurrent, but it recovered normally. This is runtime/idle evidence,
+  not MRMS interaction acceptance.
+- Workspace expansion Phase 4 is implemented for curated CONUS MRMS live
+  composition and awaits user-owned browser acceptance. MRMS is off/collapsed
+  by default. Its two-column pill grid is low-level 30-minute Rotation Track,
+  Instant MESH, 30-minute MESH, and 30-minute Lightning Probability; opacity
+  defaults to `0.7`.
+- MRMS stays latest-only and never joins the Radar/Satellite timeline. Selected
+  refresh runs on the natural two-minute cadence with 30-second follow-up reads
+  only while coordinator refresh is pending. Its pane is `375`, above RTMA
+  Gradient `350` and below SPC `400`, Radar `410`, boundaries `420`, RTMA Values
+  `425`, and Alerts `430+`.
+- MRMS is CONUS-only. AK/HI/PR clear it and expose the limitation; returning to
+  CONUS reloads the selected product. MRMS-off and Home clear it without
+  changing other composed layers. The shared engine now supports an optional
+  pane and retains the loaded image until its replacement loads; standalone
+  MRMS retains its default pane and history scrubber.
+- JavaScript syntax and diff checks pass. Four Node behavior tests pass. The
+  focused gate passes 40 tests with the two known stale Workspace assertions
+  excluded. Full pytest passes 360 tests plus 42 subtests and fails only those
+  same stale assertions.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -410,6 +476,11 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Next step:
-- Workspace expansion Phase 2 is closed. RTMA is the next composition product,
-  but do not begin it until the user explicitly authorizes that phase.
+- Continue the existing Phase 4 implementation at the user-owned `/workspace`
+  MRMS gate; do not reimplement it. Verify all four products, opacity
+  and legend changes, pane order, latest-only timeline isolation, CONUS-only
+  region behavior, layer-off/Home cleanup, and auto-refresh retention. Recheck
+  one representative standalone `/mrms` load/scrub. Close Phase 4 only after
+  those pass; do not start WPC or another product family without explicit
+  authorization.
 ```

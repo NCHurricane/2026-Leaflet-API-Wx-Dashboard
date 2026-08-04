@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-08-01 (Task-scheduler-free rendering Phases 0-8 are closed.
+Last updated: 2026-08-03 (Task-scheduler-free rendering Phases 0-8 are closed.
 The zero-task browser matrix and optional-warmer enabled/disabled acceptance
 passed. Radar render optimization Phases 1-7 are implemented and
 golden-validated; the Phase 1-2 browser acceptance passed and the backend-only
@@ -15,7 +15,9 @@ browser-accepted, pass all eight permanent PNG golden rows, and are closed.
 Radar render optimization Phase 8 is complete. Workspace expansion Phase 1
 adds curated Day 1 SPC composition and is user-accepted. Phase 2 adds a bounded
 one-hour GOES Satellite overlay with shared Workspace playback and is
-user-accepted and closed.)
+user-accepted and closed. Phase 3 adds curated CONUS RTMA-RU live composition
+and is user-accepted and closed. Phase 4 is authorized for curated MRMS live
+composition and is implemented pending user-owned browser acceptance.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -40,7 +42,7 @@ Keep separate:
 - `docs/archive/satellite-radar-render-pipeline-files.md` for the historical
   shared pipeline file reference.
 
-## Active Tracks (2026-08-01)
+## Active Tracks (2026-08-03)
 
 Track numbers preserve the existing roadmap grouping. Track 3 Radar render
 optimization Phases 3-5 are closed with byte-identical golden output,
@@ -62,7 +64,10 @@ to PNG-only behavior.
    Workspace expansion Phase 1 was authorized on 2026-08-01 and completed for
    curated SPC products. Phase 2 is complete for a curated one-hour GOES
    Satellite overlay with shared Workspace playback; its user-owned browser
-   gate passed on 2026-08-02.
+   gate passed on 2026-08-02. Phase 3 is implemented for curated CONUS RTMA-RU
+   live composition; its user-owned browser gate passed on 2026-08-02. Phase 4
+   is implemented for curated MRMS live composition and awaits its user-owned
+   browser gate.
 2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
    `docs/archive/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
@@ -372,6 +377,112 @@ browser acceptance pass; Phase 2 closed 2026-08-02.
   refresh retention, Satellite < SPC < Radar < Alerts stacking, viewport/alert/
   Radar preservation on source-sector changes, and Satellite-off/Region/Home
   cleanup. Phase 2 is closed.
+
+### Workspace expansion Phase 3 — curated RTMA-RU composition
+
+Authorized, implemented, and user-accepted 2026-08-02. Phase 3 is closed.
+
+- RTMA is off and collapsed by default. Workspace composes the shared RTMA
+  engine, never the standalone page controller, and fixes the stream to the
+  CONUS-only 15-minute Rapid Update analysis. Hourly RTMA, 24-hour change,
+  history, scrubber playback, and Archive behavior remain on `/rtma` and are
+  outside this phase.
+- The compact field control is a two-column, three-row pill grid ordered
+  Temperature, Feels Like, Dew Point, Winds, Wind Gust, and Visibility. The
+  combined Winds pill loads wind-speed values plus direction barbs. Independent
+  Values and Gradient pills can each be enabled or disabled; every new field
+  selection defaults to Values on and Gradient off. Marker density and gradient
+  opacity remain Workspace-local controls.
+- RTMA stays in the live tier and never joins the Radar/Satellite timeline. A
+  selected resource requests refresh on the natural 15-minute cadence; while
+  the coordinator reports a queued/running refresh, the existing 30-second
+  Workspace loop performs bounded follow-up reads so a completed frame is not
+  delayed until the next 15-minute interval.
+- Workspace owns separate RTMA panes: Gradient `350` remains below SPC `400`,
+  Radar `410`, and boundaries `420`; Values `425` stays above map borders but
+  below Alerts `430+`. The shared RTMA engine accepts independent gradient/value
+  panes and retains the old gradient image until its replacement loads. It also
+  skips the points request when Values is off and a pre-rendered gradient is
+  available. Matched Winds speed/direction points now render as one composite
+  marker: the direction arrow tail is centered 4-6 px below the value and the
+  arrow rotates around that fixed tail to point at the reported bearing.
+  Unmatched/standalone direction points retain the prior arrow fallback.
+  Standalone RTMA retains its default pane and controls.
+- Workspace Region changes reload the selected field for CONUS. AK, HI, and PR
+  clear RTMA imagery and report that RTMA-RU is CONUS-only; returning to CONUS
+  restores the selected live field. Home reset and the RTMA header switch clear
+  RTMA without changing Radar, Alerts, SPC, or Satellite state.
+- JavaScript syntax and diff checks pass. Three Node behavior tests cover the
+  shared Satellite timeline, RTMA loaded-image pane swap, and Values-only pane
+  request path. The focused gate
+  passes 57 tests with the two documented stale Workspace assertions excluded.
+  Full pytest passes 359 tests plus 42 subtests and fails only those same stale
+  assertions against removed `WORKSPACE_REGION_BOUNDS` and aggregate-watch
+  markup. User-owned smoke confirmed all six field pills, Values-first loading,
+  independent Values/Gradient toggles, split pane order, and the combined Winds
+  marker. The accepted Winds arrow begins at the centered bottom of its speed
+  value with a small gap and points at the reported direction. Phase 3 is
+  closed.
+- Cold-start correction 2026-08-03: foreground RTMA Values generation and the
+  application-owned latest render had entered cfgrib concurrently even though
+  the bundled Windows ecCodes runtime reports thread support disabled. RTMA and
+  MRMS now share one process-wide decoder gate; RTMA point/grid output is keyed
+  and published through unique temporary files. The reported 1597 x 2345
+  RTMA-RU file passes a real concurrent Temperature/Dew Point decode. Shared
+  Alerts also performs bounded follow-up reads when a stale response reports
+  `refreshing`, eliminating reliance on the next 30-second cycle or manual
+  Refresh Active Layers. Radar process children no longer load the Alerts zone
+  cache as an import side effect, Py-ART child banners are quiet, SPC uses one
+  versioned engine identity, and Workspace declares the tracked favicon. The
+  correction gate passes 63 focused Python tests, Alerts/RTMA/MRMS Node
+  coverage, JavaScript syntax, native concurrent
+  GRIB decode, and diff checks.
+- Post-correction runtime evidence 2026-08-03: the user's restart and 15-20
+  minute idle `/workspace` soak completed without exceptions, HTTP 4xx/5xx
+  responses, ecCodes failures, or unselected Radar/RTMA/MRMS work. Alerts
+  refreshed normally with one lazy zone-cache load; Py-ART banners stayed
+  suppressed, the favicon returned `200`, and SPC loaded one versioned engine
+  module. One Alerts enrichment cycle reached about 16 seconds and recovered;
+  monitor it only if the outlier becomes recurrent. This idle soak does not
+  satisfy the Phase 4 MRMS interaction gate.
+
+### Workspace expansion Phase 4 — curated MRMS composition
+
+Authorized and implemented 2026-08-02. Automated validation passes; the
+user-owned browser acceptance gate remains open.
+
+- MRMS is off and collapsed by default. Workspace composes the shared MRMS
+  engine, never the standalone page controller, and exposes four fixed CONUS
+  products in a two-column pill grid: low-level 30-minute Rotation Track,
+  Instant MESH, 30-minute MESH, and 30-minute Lightning Probability. The
+  standalone product matrix, lookback history, scrubber playback, and other
+  accumulation windows remain on `/mrms`.
+- MRMS stays in the live tier and never joins the Radar/Satellite timeline.
+  Selected products refresh on their natural two-minute cadence; while the
+  coordinator reports a queued/running refresh, the existing 30-second
+  Workspace loop performs bounded follow-up reads. Opacity defaults to `0.7`.
+- Workspace owns the MRMS overlay pane at `375`, above RTMA Gradient `350` and
+  below SPC `400`, Radar `410`, boundaries `420`, RTMA Values `425`, and Alerts
+  `430+`. The shared MRMS engine accepts an optional pane without changing the
+  standalone default. Replacement imagery must load before the prior image is
+  removed; failed or stale requests cannot discard the last loaded overlay.
+- MRMS is CONUS-only. AK, HI, and PR clear its imagery and report the
+  limitation; returning to CONUS reloads the selected product. Home reset and
+  the MRMS header switch clear MRMS without changing Radar, Alerts, SPC,
+  Satellite, or RTMA state. MRMS has its own tab in the Workspace legend tray.
+- JavaScript syntax and diff checks pass. Four Node behavior tests cover the
+  MRMS loaded-image pane swap, RTMA pane/value behavior, and Satellite timeline
+  matching. The focused Python gate passes 40 tests with the two documented
+  stale Workspace assertions excluded. Full pytest passes 360 tests plus 42
+  subtests and fails only those same assertions against removed
+  `WORKSPACE_REGION_BOUNDS` and aggregate-watch markup.
+- Remaining browser acceptance: verify all four products, opacity and legend
+  updates, MRMS `375` stacking, latest-only timeline isolation, CONUS-only
+  region behavior, layer-off/Home cleanup, auto-refresh retention, and one
+  representative standalone `/mrms` load/scrub after the shared-engine change.
+  The next session should continue this implemented slice at acceptance and
+  correction work, not reimplement it. Do not begin WPC until MRMS is accepted
+  and the next family is explicitly authorized.
 
 ## Current State
 
@@ -3268,6 +3379,11 @@ imagery.
      product/lookback, Tropical basin, city label source/density, and similar
      UI preferences. Keep provider names, cache namespaces, render versions,
      function names, and implementation internals in code or operator config.
+5. Workspace RTMA Winds composite marker polish (deferred): the current
+   speed-plus-direction marker is accepted. Revisit only after higher-priority
+   expansion work for possible arrow sizing/gap, collision handling, pairing
+   tolerance, or bearing-presentation refinements; preserve the centered-tail
+   and reported-bearing contract.
 
 ### Radar: All NWS NEXRAD Sites + L2-Only Filtering
 

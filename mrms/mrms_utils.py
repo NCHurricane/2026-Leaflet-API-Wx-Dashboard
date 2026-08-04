@@ -31,6 +31,7 @@ from lib.geo_utils import (
 )  # Consolidated geometry helpers
 
 import numpy as np
+from app_core.grib_decode import serialized_grib_decode
 import matplotlib
 
 matplotlib.use("Agg")
@@ -298,6 +299,22 @@ def read_mrms_grib2(
     if grib_path.endswith(".gz"):
         grib_path = decompress_grib2_gz(grib_path)
 
+    # The bundled Windows ecCodes runtime is not thread-enabled. Keep the
+    # dataset open, materialization, and close within the shared decoder gate.
+    with serialized_grib_decode():
+        return _read_mrms_grib2_unlocked(
+            grib_path,
+            crop_extent=crop_extent,
+            crop_slices=crop_slices,
+        )
+
+
+def _read_mrms_grib2_unlocked(
+    grib_path: str,
+    *,
+    crop_extent: Optional[List[float]] = None,
+    crop_slices: Optional[Tuple[slice, slice]] = None,
+) -> Tuple[np.ndarray, dict]:
     try:
         # Open GRIB2 file with xarray/cfgrib.
         # Use in-memory index to avoid stale .idx sidecar warnings and extra disk churn.

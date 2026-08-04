@@ -7,9 +7,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import json
 from types import SimpleNamespace
+from pathlib import Path
 
 from app_core.refresh_coordinator import Submission
+from app_core.grib_decode import serialized_grib_decode
 from app_core.render_budget import heavy_render_slot
+import mrms.mrms_utils as mrms_utils
 import rtma.rtma_utils as rtma_utils
 import services.mrms_service as mrms_service
 import services.overlay_service as overlay_service
@@ -93,6 +96,14 @@ def test_rtma_refresh_is_hourly_and_latest_only(monkeypatch):
             {"force": True, "latest_only": True, "max_hours": 2},
         )
     ]
+
+
+def test_main_quiets_pyart_before_route_imports():
+    main_source = Path("main.py").read_text(encoding="utf-8")
+
+    quiet_index = main_source.index('_os.environ.setdefault("PYART_QUIET", "1")')
+    route_index = main_source.index("from routes.radar import router as radar_router")
+    assert quiet_index < route_index
 
 
 def test_rtma_rapid_refresh_uses_fifteen_minute_cadence(monkeypatch):
@@ -305,6 +316,124 @@ def test_rtma_grib_download_is_deduplicated_per_source(monkeypatch, tmp_path):
     assert maximum == 1
     assert open(paths[0], "rb").read() == b"GRIB test payload"
     assert not os.path.exists(f"{paths[0]}.part")
+
+
+def test_rtma_cfgrib_decode_is_serialized(monkeypatch):
+    entered = threading.Event()
+    release = threading.Event()
+    active = 0
+    maximum = 0
+    guard = threading.Lock()
+
+    class _Value:
+        def __init__(self, values):
+            self.values = values
+
+        def squeeze(self, drop=True):
+            assert drop is True
+            return self
+
+    class _Dataset:
+        data_vars = {"t2m": _Value([[1.0, 2.0], [3.0, 4.0]])}
+        coords = {}
+
+        def __getitem__(self, key):
+            if key == "latitude":
+                return _Value([35.0, 36.0])
+            if key == "longitude":
+                return _Value([-79.0, -78.0])
+            return self.data_vars[key]
+
+    def fake_open(path, **_kwargs):
+        nonlocal active, maximum
+        with guard:
+            active += 1
+            maximum = max(maximum, active)
+        if path == "first.grb2":
+            entered.set()
+            assert release.wait(timeout=1)
+        with guard:
+            active -= 1
+        return [_Dataset()]
+
+    rtma_utils._get_grib_datasets_cached.cache_clear()
+    monkeypatch.setattr(rtma_utils.cfgrib, "open_datasets", fake_open)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(rtma_utils._extract_dataset, "first.grb2", "t2m")
+        assert entered.wait(timeout=1)
+        second = executor.submit(rtma_utils._extract_dataset, "second.grb2", "t2m")
+        time.sleep(0.03)
+        release.set()
+        first.result(timeout=1)
+        second.result(timeout=1)
+    rtma_utils._get_grib_datasets_cached.cache_clear()
+
+    assert maximum == 1
+
+
+def test_mrms_decode_uses_shared_eccodes_gate(monkeypatch):
+    entered = threading.Event()
+    monkeypatch.setattr(mrms_utils, "CFGRIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        mrms_utils,
+        "_read_mrms_grib2_unlocked",
+        lambda *_args, **_kwargs: entered.set() or ([], {}),
+    )
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with serialized_grib_decode():
+            future = executor.submit(
+                mrms_utils.read_mrms_grib2,
+                "test.grib2",
+                "PrecipRate",
+            )
+            time.sleep(0.03)
+            assert not entered.is_set()
+        future.result(timeout=1)
+
+    assert entered.is_set()
+
+
+def test_rtma_city_cache_generation_is_deduplicated(monkeypatch, tmp_path):
+    source = SimpleNamespace(
+        url="https://example.invalid/current.grb2",
+        data_key="current",
+        valid_time=datetime.now(timezone.utc),
+    )
+    cities_path = tmp_path / "cities.json"
+    cities_path.write_text("[]", encoding="utf-8")
+    entered = threading.Event()
+    release = threading.Event()
+    load_count = 0
+
+    def fake_load(*_args, **_kwargs):
+        nonlocal load_count
+        load_count += 1
+        entered.set()
+        assert release.wait(timeout=1)
+        return (
+            [[1.0, 2.0], [3.0, 4.0]],
+            [35.0, 36.0],
+            [-79.0, -78.0],
+            source.valid_time.isoformat(),
+        )
+
+    monkeypatch.setattr(rtma_utils, "_load_rtma_product_grid", fake_load)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        args = (
+            str(tmp_path), source, "CONUS", "rtma_rapid_update",
+            "temperature", str(cities_path),
+        )
+        first = executor.submit(rtma_utils.ensure_rtma_city_geojson, *args)
+        assert entered.wait(timeout=1)
+        second = executor.submit(rtma_utils.ensure_rtma_city_geojson, *args)
+        time.sleep(0.03)
+        release.set()
+        first_result = first.result(timeout=1)
+        second_result = second.result(timeout=1)
+
+    assert first_result == second_result
+    assert load_count == 1
 
 
 def test_unchanged_mrms_source_skips_conversion(monkeypatch, tmp_path):

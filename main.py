@@ -12,6 +12,8 @@ _load_dotenv()
 # before any module builds an SSL context.
 _os.environ.setdefault("SSL_CERT_FILE", _certifi.where())
 _os.environ.setdefault("REQUESTS_CA_BUNDLE", _certifi.where())
+# Py-ART prints a citation banner on every Windows ProcessPool child import.
+_os.environ.setdefault("PYART_QUIET", "1")
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles

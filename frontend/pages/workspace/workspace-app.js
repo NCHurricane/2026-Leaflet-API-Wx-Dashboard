@@ -7,13 +7,15 @@ import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
 import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260726a';
-import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260731b';
+import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260803a';
 import { createRadarEngine } from '../radar/radar-engine.js?v=20260802a';
 import { buildSpcOutlookDetailHtml, buildSpcTextDetailHtml, wireSpcDetailContent } from '../spc/spc-detail.js?v=20260801a';
 import { CIG_OVERLAY_BY_HAZARD, createSpcEngine } from '../spc/spc-engine.js?v=20260801a';
-import { createSpcRenderer } from '../spc/spc-render.js?v=20260802a';
+import { createSpcRenderer } from '../spc/spc-render.js?v=20260803a';
 import { createWorkspaceDetailCarousel } from './workspace-detail-carousel.js?v=20260801a';
 import { createWorkspaceSatellite } from './workspace-satellite.js?v=20260802e';
+import { createWorkspaceRtma } from './workspace-rtma.js?v=20260802b';
+import { createWorkspaceMrms } from './workspace-mrms.js?v=20260802a';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 
 const byId = (id) => document.getElementById(id);
@@ -229,7 +231,7 @@ async function initialize() {
     });
     const legendTray = createTabbedLegendTray(
         byId('workspace-legends'),
-        ['radar', 'storm-tracks', 'alerts', 'storm-reports', 'spc', 'satellite'],
+        ['radar', 'storm-tracks', 'alerts', 'storm-reports', 'spc', 'satellite', 'rtma', 'mrms'],
         'alerts',
     );
     const alertsLegend = legendTray.legend('alerts');
@@ -238,6 +240,8 @@ async function initialize() {
     const stormTrackLegend = legendTray.legend('storm-tracks');
     const spcLegendSource = legendTray.legend('spc');
     const satelliteLegend = legendTray.legend('satellite');
+    const rtmaLegend = legendTray.legend('rtma');
+    const mrmsLegend = legendTray.legend('mrms');
     const spcLegend = Object.freeze({
         clear: () => spcLegendSource.clear(),
         setHtml(html) {
@@ -303,6 +307,40 @@ async function initialize() {
             opacityInput: byId('workspace-satellite-opacity'),
             opacityLabel: byId('workspace-satellite-opacity-label'),
             frameCount: byId('workspace-satellite-count'),
+        },
+    });
+    const rtmaGradientPane = mapCore.map.createPane('workspace-rtma-gradient');
+    rtmaGradientPane.style.zIndex = '350';
+    const rtmaValuesPane = mapCore.map.createPane('workspace-rtma-values');
+    rtmaValuesPane.style.zIndex = '425';
+    const workspaceRtma = createWorkspaceRtma({
+        api, mapCore, legend: rtmaLegend, status,
+        getRegion: () => regionSelect.value,
+        gradientPaneName: 'workspace-rtma-gradient',
+        pointPaneName: 'workspace-rtma-values',
+        elements: {
+            enabledInput: byId('workspace-rtma-enabled'),
+            controls: byId('workspace-rtma-controls'),
+            productPills: byId('workspace-rtma-products'),
+            modePills: byId('workspace-rtma-modes'),
+            densityInput: byId('workspace-rtma-density'),
+            densityLabel: byId('workspace-rtma-density-label'),
+            opacityInput: byId('workspace-rtma-opacity'),
+            opacityLabel: byId('workspace-rtma-opacity-label'),
+        },
+    });
+    const mrmsPane = mapCore.map.createPane('workspace-mrms-overlays');
+    mrmsPane.style.zIndex = '375';
+    const workspaceMrms = createWorkspaceMrms({
+        api, mapCore, legend: mrmsLegend, status,
+        getRegion: () => regionSelect.value,
+        paneName: 'workspace-mrms-overlays',
+        elements: {
+            enabledInput: byId('workspace-mrms-enabled'),
+            controls: byId('workspace-mrms-controls'),
+            productPills: byId('workspace-mrms-products'),
+            opacityInput: byId('workspace-mrms-opacity'),
+            opacityLabel: byId('workspace-mrms-opacity-label'),
         },
     });
     const tools = createWorkspaceTools({
@@ -814,6 +852,8 @@ async function initialize() {
         radarEngine.clear();
         resetSpcState();
         workspaceSatellite.reset();
+        workspaceRtma.reset();
+        workspaceMrms.reset();
         syncRadarControls();
         if (byId('workspace-radar-enabled').checked && byId('workspace-radar-sites').checked) {
             radarEngine.showSiteLegend();
@@ -848,7 +888,10 @@ async function initialize() {
         }
     }
     async function refreshAll(options = {}) {
-        await Promise.all([refreshAlerts(options), refreshRadar(), refreshSpc(), workspaceSatellite.refresh(options)]);
+        await Promise.all([
+            refreshAlerts(options), refreshRadar(), refreshSpc(),
+            workspaceSatellite.refresh(options), workspaceRtma.refresh(options), workspaceMrms.refresh(options),
+        ]);
     }
     async function autoRefreshLiveLayers() {
         const tasks = [refreshAlerts({ silent: true, refresh: true })];
@@ -856,6 +899,12 @@ async function initialize() {
         if (byId('workspace-spc-enabled').checked && hasSpcSelection()) tasks.push(refreshSpc({ keepDetail: true }));
         if (workspaceSatellite.isEnabled() && workspaceSatellite.hasSelection()) {
             tasks.push(workspaceSatellite.refresh({ refresh: true, auto: true }));
+        }
+        if (workspaceRtma.isEnabled() && workspaceRtma.hasSelection()) {
+            tasks.push(workspaceRtma.refresh({ auto: true }));
+        }
+        if (workspaceMrms.isEnabled() && workspaceMrms.hasSelection()) {
+            tasks.push(workspaceMrms.refresh({ auto: true }));
         }
         await Promise.allSettled(tasks);
     }
@@ -1053,6 +1102,8 @@ async function initialize() {
         workspaceSatellite.reset();
         syncRadarControls();
         fitWorkspaceRegion(region);
+        void workspaceRtma.setRegion();
+        void workspaceMrms.setRegion();
         void refreshAlerts({ refresh: true, notifyNewAlerts: false });
     }
     regionSelect.addEventListener('change', () => applyWorkspaceRegion(regionSelect.value));
@@ -1134,6 +1185,8 @@ async function initialize() {
         spcDetailCarousel.destroy();
         spcEngine.destroy();
         workspaceSatellite.destroy();
+        workspaceRtma.destroy();
+        workspaceMrms.destroy();
     }, { once: true });
 }
 

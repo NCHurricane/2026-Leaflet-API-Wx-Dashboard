@@ -11,6 +11,8 @@ from functools import lru_cache
 
 import cfgrib
 import numpy as np
+from app_core.atomic_io import atomic_write_json
+from app_core.grib_decode import serialized_grib_decode
 from app_core.upstream_ledger import requests
 from config.geo_config import STATE_BOUNDS
 from config.surface_config import TEMPERATURE_GRADIENT_ANCHORS
@@ -31,6 +33,8 @@ REQUEST_TIMEOUT = 30
 _RTMA_CITY_CACHE_SCHEMA = 2
 _GRIB_DOWNLOAD_LOCKS: dict[str, threading.Lock] = {}
 _GRIB_DOWNLOAD_LOCKS_GUARD = threading.Lock()
+_DERIVED_CACHE_LOCKS: dict[str, threading.Lock] = {}
+_DERIVED_CACHE_LOCKS_GUARD = threading.Lock()
 
 REGION_PREFIXES = {
     "CONUS": "rtma2p5",
@@ -652,6 +656,16 @@ def _grib_download_lock(local_path: str) -> threading.Lock:
         return lock
 
 
+def _derived_cache_lock(output_path: str) -> threading.Lock:
+    key = os.path.abspath(output_path)
+    with _DERIVED_CACHE_LOCKS_GUARD:
+        lock = _DERIVED_CACHE_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _DERIVED_CACHE_LOCKS[key] = lock
+        return lock
+
+
 def ensure_rtma_grib(
     cache_root: str,
     source: RtmaSource,
@@ -709,35 +723,36 @@ def _get_grib_datasets_cached(grib_path: str):
 
 
 def _extract_dataset(grib_path: str, var_name: str):
-    datasets = _get_grib_datasets_cached(grib_path)
-    for dataset in datasets:
-        if var_name in dataset.data_vars:
-            data_array = dataset[var_name].squeeze(drop=True)
-            latitude = np.asarray(dataset["latitude"].values, dtype=float)
-            longitude = np.asarray(dataset["longitude"].values, dtype=float)
-            data_values = np.asarray(data_array.values, dtype=float)
-            if (
-                data_values.ndim == 1
-                and latitude.ndim == 1
-                and longitude.ndim == 1
-                and data_values.size == latitude.size == longitude.size
-            ):
-                unique_lat = np.unique(np.round(latitude, 6))
-                unique_lon = np.unique(np.round(longitude, 6))
-                if unique_lat.size * unique_lon.size == data_values.size:
-                    rows = unique_lat.size
-                    cols = unique_lon.size
-                    data_array = data_values.reshape(rows, cols)
-                    latitude = latitude.reshape(rows, cols)
-                    longitude = longitude.reshape(rows, cols)
-            valid_time = dataset.coords.get("valid_time")
-            data_time = None
-            if valid_time is not None:
-                try:
-                    data_time = np.asarray(valid_time.values).reshape(-1)[0]
-                except Exception:
-                    data_time = None
-            return data_array, latitude, longitude, data_time
+    with serialized_grib_decode():
+        datasets = _get_grib_datasets_cached(grib_path)
+        for dataset in datasets:
+            if var_name in dataset.data_vars:
+                data_array = dataset[var_name].squeeze(drop=True)
+                latitude = np.asarray(dataset["latitude"].values, dtype=float)
+                longitude = np.asarray(dataset["longitude"].values, dtype=float)
+                data_values = np.asarray(data_array.values, dtype=float)
+                if (
+                    data_values.ndim == 1
+                    and latitude.ndim == 1
+                    and longitude.ndim == 1
+                    and data_values.size == latitude.size == longitude.size
+                ):
+                    unique_lat = np.unique(np.round(latitude, 6))
+                    unique_lon = np.unique(np.round(longitude, 6))
+                    if unique_lat.size * unique_lon.size == data_values.size:
+                        rows = unique_lat.size
+                        cols = unique_lon.size
+                        data_values = data_values.reshape(rows, cols)
+                        latitude = latitude.reshape(rows, cols)
+                        longitude = longitude.reshape(rows, cols)
+                valid_time = dataset.coords.get("valid_time")
+                data_time = None
+                if valid_time is not None:
+                    try:
+                        data_time = np.asarray(valid_time.values).reshape(-1)[0]
+                    except Exception:
+                        data_time = None
+                return data_values, latitude, longitude, data_time
     raise ValueError(
         f"Variable '{var_name}' was not found in '{os.path.basename(grib_path)}'."
     )
@@ -1087,6 +1102,34 @@ def ensure_rtma_city_geojson(
     source_data_key: str | None = None,
 ) -> tuple[str, dict]:
     product_dir = os.path.join(cache_root, "rtma", "points", region, stream)
+    out_name = (
+        f"{product}__{_sanitize_cache_token(source_data_key)}.geojson"
+        if source_data_key
+        else f"{product}.geojson"
+    )
+    out_path = os.path.join(product_dir, out_name)
+    with _derived_cache_lock(out_path):
+        return _ensure_rtma_city_geojson_unlocked(
+            cache_root,
+            source,
+            region,
+            stream,
+            product,
+            cities_path,
+            source_data_key,
+        )
+
+
+def _ensure_rtma_city_geojson_unlocked(
+    cache_root: str,
+    source: RtmaSource,
+    region: str,
+    stream: str,
+    product: str,
+    cities_path: str,
+    source_data_key: str | None = None,
+) -> tuple[str, dict]:
+    product_dir = os.path.join(cache_root, "rtma", "points", region, stream)
     os.makedirs(product_dir, exist_ok=True)
     if source_data_key:
         token = _sanitize_cache_token(source_data_key)
@@ -1144,10 +1187,7 @@ def ensure_rtma_city_geojson(
         "units": config["units"],
         "points": points_compact,
     }
-    tmp_geo = f"{out_path}.part"
-    with open(tmp_geo, "w", encoding="utf-8") as handle:
-        json.dump(compact_doc, handle, separators=(",", ":"))
-    os.replace(tmp_geo, out_path)
+    atomic_write_json(out_path, compact_doc, separators=(",", ":"))
 
     meta = {
         "schema_version": _RTMA_CITY_CACHE_SCHEMA,
@@ -1163,14 +1203,32 @@ def ensure_rtma_city_geojson(
         "cities_file": cities_file,
         "cities_size": cities_size,
     }
-    tmp_meta = f"{meta_path}.part"
-    with open(tmp_meta, "w", encoding="utf-8") as handle:
-        json.dump(meta, handle)
-    os.replace(tmp_meta, meta_path)
+    atomic_write_json(meta_path, meta)
     return out_path, meta
 
 
 def ensure_rtma_grid_json(
+    cache_root: str,
+    source: RtmaSource,
+    region: str,
+    stream: str,
+    product: str,
+    stride: int = 8,
+) -> tuple[str, dict]:
+    product_dir = os.path.join(cache_root, "rtma", "grid", region, stream)
+    out_path = os.path.join(product_dir, f"{product}_s{stride}.json")
+    with _derived_cache_lock(out_path):
+        return _ensure_rtma_grid_json_unlocked(
+            cache_root,
+            source,
+            region,
+            stream,
+            product,
+            stride,
+        )
+
+
+def _ensure_rtma_grid_json_unlocked(
     cache_root: str,
     source: RtmaSource,
     region: str,
@@ -1254,15 +1312,8 @@ def ensure_rtma_grid_json(
         "points": points,
     }
 
-    tmp_out = f"{out_path}.part"
-    with open(tmp_out, "w", encoding="utf-8") as handle:
-        json.dump(output, handle, separators=(",", ":"))
-    os.replace(tmp_out, out_path)
-
-    tmp_meta = f"{meta_path}.part"
-    with open(tmp_meta, "w", encoding="utf-8") as handle:
-        json.dump(meta, handle)
-    os.replace(tmp_meta, meta_path)
+    atomic_write_json(out_path, output, separators=(",", ":"))
+    atomic_write_json(meta_path, meta)
 
     return out_path, meta
 
