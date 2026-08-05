@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260730b">
     <link rel="stylesheet" href="/frontend/pages/spc/spc.css?v=20260801a">
-    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260802e">
+    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260804a">
 </head>
 <body>
     <header class="core-header">
@@ -300,7 +300,46 @@
                             <p class="workspace-layer-note">CONUS-only MRMS guidance follows the shared rolling one-hour timeline.</p>
                         </div>
                     </details>
-                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>WPC</h2><span>Planned</span></summary><div class="workspace-group-body"><p>WPC engine composition placeholder.</p></div></details>
+                    <details id="workspace-wpc-group" class="workspace-group workspace-layer-group">
+                        <summary class="workspace-group-summary">
+                            <div class="workspace-title-count"><h2>WPC</h2><span>Guidance</span></div>
+                            <label class="workspace-layer-toggle" title="Show curated WPC guidance">
+                                <span class="core-visually-hidden">Show curated WPC guidance</span>
+                                <input id="workspace-wpc-enabled" type="checkbox">
+                                <span aria-hidden="true"></span>
+                            </label>
+                        </summary>
+                        <div id="workspace-wpc-controls" class="workspace-group-body is-disabled" hidden>
+                            <div class="workspace-eyebrow">Forecast Family</div>
+                            <div id="workspace-wpc-groups" class="workspace-pills workspace-wpc-group-pills" role="group" aria-label="WPC forecast family">
+                                <button type="button" data-wpc-group="ero" aria-pressed="false" disabled>Excess Rain</button>
+                                <button type="button" data-wpc-group="qpf" aria-pressed="false" disabled>QPF</button>
+                                <button type="button" data-wpc-group="mpd" aria-pressed="false" disabled>Meso Disc</button>
+                                <button type="button" data-wpc-group="winter" aria-pressed="false" disabled>Winter</button>
+                            </div>
+                            <div id="workspace-wpc-product-pills-wrap" class="workspace-wpc-selection" hidden>
+                                <div id="workspace-wpc-product-pills-label" class="workspace-eyebrow">Product</div>
+                                <div id="workspace-wpc-product-pills" class="workspace-pills workspace-wpc-product-pills" role="group" aria-labelledby="workspace-wpc-product-pills-label"></div>
+                            </div>
+                            <div id="workspace-wpc-winter-day-wrap" class="workspace-wpc-selection" hidden>
+                                <div id="workspace-wpc-winter-days-label" class="workspace-eyebrow">Forecast Day</div>
+                                <div id="workspace-wpc-winter-days" class="workspace-pills workspace-wpc-winter-days" role="group" aria-labelledby="workspace-wpc-winter-days-label">
+                                    <button type="button" data-wpc-winter-day="1" aria-pressed="false" disabled>Day 1</button>
+                                    <button type="button" data-wpc-winter-day="2" aria-pressed="false" disabled>Day 2</button>
+                                    <button type="button" data-wpc-winter-day="3" aria-pressed="false" disabled>Day 3</button>
+                                </div>
+                            </div>
+                            <div id="workspace-wpc-product-select-wrap" class="workspace-wpc-selection" hidden>
+                                <label for="workspace-wpc-product">Winter Product</label>
+                                <select id="workspace-wpc-product" disabled><option value="">Select forecast day</option></select>
+                            </div>
+                            <div class="core-adjustment workspace-opacity-control">
+                                <label id="workspace-wpc-opacity-label" for="workspace-wpc-opacity">WPC Opacity (0.55)</label>
+                                <input id="workspace-wpc-opacity" type="range" min="0.1" max="1" step="0.05" value="0.55" disabled>
+                            </div>
+                            <p class="workspace-layer-note">CONUS-only ERO, QPF, MPD, and winter guidance refreshes on WPC's natural cadence.</p>
+                        </div>
+                    </details>
                     <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>Water</h2><span>Planned</span></summary><div class="workspace-group-body"><p>Water engine composition placeholder.</p></div></details>
                 </section>
                 <section class="core-sidebar-panel workspace-settings-panel" data-sidebar-panel="map" hidden>
@@ -352,6 +391,7 @@
                             <button id="workspace-satellite-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="satellite" aria-controls="workspace-satellite-legend" hidden>Satellite</button>
                             <button id="workspace-rtma-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="rtma" aria-controls="workspace-rtma-legend" hidden>RTMA</button>
                             <button id="workspace-mrms-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="mrms" aria-controls="workspace-mrms-legend" hidden>MRMS</button>
+                            <button id="workspace-wpc-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="wpc" aria-controls="workspace-wpc-legend" hidden>WPC</button>
                         </div>
                         <button class="core-legend-collapse" type="button" aria-expanded="true" aria-label="Collapse legends" title="Collapse legends"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </div>
@@ -364,6 +404,7 @@
                         <section id="workspace-satellite-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="satellite" aria-labelledby="workspace-satellite-legend-tab" hidden></section>
                         <section id="workspace-rtma-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="rtma" aria-labelledby="workspace-rtma-legend-tab" hidden></section>
                         <section id="workspace-mrms-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="mrms" aria-labelledby="workspace-mrms-legend-tab" hidden></section>
+                        <section id="workspace-wpc-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="wpc" aria-labelledby="workspace-wpc-legend-tab" hidden></section>
                     </div>
                 </div>
             </div>
@@ -400,6 +441,6 @@
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
     <script src="/frontend/lib/tz-lookup/tz.js?v=6.1.25"></script>
-    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260804c"></script>
+    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260804f"></script>
 </body>
 </html>

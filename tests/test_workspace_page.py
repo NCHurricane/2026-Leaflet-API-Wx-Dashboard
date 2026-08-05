@@ -129,7 +129,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert 'id="workspace-radar-scrubber-bar"' in page
     assert 'id="workspace-radar-bottom-scrubber"' in page
     assert all(f'<h2>{label}</h2>' in page for label in ['SPC', 'Satellite', 'RTMA', 'MRMS', 'WPC', 'Water'])
-    assert page.count('workspace-layer-group workspace-placeholder') == 2
+    assert page.count('workspace-layer-group workspace-placeholder') == 1
     assert page.count('workspace-group workspace-layer-group" open') == 1
     assert 'id="workspace-right-rail"' in page
     assert 'id="workspace-warning-section"' in page
@@ -385,6 +385,8 @@ def test_workspace_overlay_order_places_satellite_above_rtma_gradient_and_spc():
     assert "mrmsPane.style.zIndex = '375'" in app
     assert "paneName: 'workspace-mrms-overlays'" in app
     assert "...(paneName ? { pane: paneName } : {})" in mrms
+    assert "wpcPane.style.zIndex = '390'" in app
+    assert "paneName: 'workspace-wpc-overlays'" in app
     assert "spcPane.style.zIndex = '400'" in app
     assert "paneName: 'workspace-spc-overlays'" in app
     assert "pane: paneName" in spc
@@ -505,7 +507,9 @@ def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets(
     assert "radar-engine.js?v=20260802a" in workspace_app
     assert "radar-page.js?v=20260729b" in radar_page
     assert "workspace-satellite.js?v=20260803a" in workspace_app
-    assert "workspace-app.js?v=20260804c" in workspace_page
+    assert "workspace-wpc.js?v=20260804b" in workspace_app
+    assert "workspace.css?v=20260804a" in workspace_page
+    assert "workspace-app.js?v=20260804f" in workspace_page
 
 
 def test_workspace_mrms_is_curated_default_off_and_uses_shared_timeline():
@@ -557,6 +561,62 @@ def test_workspace_mrms_is_curated_default_off_and_uses_shared_timeline():
     assert "leaflet.tileLayer" in engine
     assert "prepare_url" in engine
     assert "Native tile preparation failed; retaining PNG fallback" in engine
+
+
+def test_workspace_wpc_is_curated_default_off_and_stays_below_live_layers():
+    root = Path(BASE_DIR) / "frontend" / "pages"
+    page = (root / "workspace" / "workspace.html").read_text(encoding="utf-8")
+    app = (root / "workspace" / "workspace-app.js").read_text(encoding="utf-8")
+    workspace_wpc = (root / "workspace" / "workspace-wpc.js").read_text(
+        encoding="utf-8"
+    )
+    engine = (root / "wpc" / "wpc-engine.js").read_text(encoding="utf-8")
+
+    assert 'id="workspace-wpc-enabled" type="checkbox"' in page
+    assert 'id="workspace-wpc-enabled" type="checkbox" checked' not in page
+    assert 'id="workspace-wpc-controls" class="workspace-group-body is-disabled" hidden' in page
+    assert page.count("data-wpc-group=") == 4
+    assert all(
+        f'data-wpc-group="{group}"' in page
+        for group in ["ero", "qpf", "mpd", "winter"]
+    )
+    assert 'id="workspace-wpc-product-pills"' in page
+    assert 'id="workspace-wpc-winter-days"' in page
+    assert page.count("data-wpc-winter-day=") == 3
+    assert 'id="workspace-wpc-product-select-wrap" class="workspace-wpc-selection" hidden' in page
+    assert 'id="workspace-wpc-product" disabled' in page
+    assert 'id="workspace-wpc-opacity" type="range" min="0.1" max="1" step="0.05" value="0.55" disabled' in page
+    assert 'id="workspace-wpc-legend-tab"' in page
+    assert 'id="workspace-wpc-legend"' in page
+
+    assert "createWorkspaceWpc" in app
+    assert "workspaceWpc.refresh({ auto: true })" in app
+    assert "workspaceWpc.setRegion()" in app
+    assert "workspaceWpc.reset()" in app
+    assert "workspaceWpc.destroy()" in app
+    assert "wpcPane.style.zIndex = '390'" in app
+    assert "paneName: 'workspace-wpc-overlays'" in app
+    assert "../wpc/wpc-engine.js" in workspace_wpc
+    assert "wpc-page.js" not in workspace_wpc
+    assert "const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000" in workspace_wpc
+    assert "const PILL_GROUPS = new Set(['ero', 'qpf'])" in workspace_wpc
+    assert all(
+        product_id in workspace_wpc
+        for product_id in [
+            "qpf48_day1_2",
+            "qpf72_day1_3",
+            "qpf120_day1_5",
+            "qpf168_day1_7",
+        ]
+    )
+    assert "activeProductId = productsForActiveGroup()[0]?.id || ''" in workspace_wpc
+    assert "data-wpc-product" in workspace_wpc
+    assert "data-wpc-winter-day" in workspace_wpc
+    assert "productDay(product) === activeWinterDay" in workspace_wpc
+    assert "WPC Workspace products are available for CONUS only" in workspace_wpc
+    assert "paneName = ''" in engine
+    assert "const layerPane = paneName || 'overlayPane'" in engine
+    assert engine.count("pane: layerPane") == 2
 
 
 def test_radar_scrubbers_hold_on_the_newest_frame():

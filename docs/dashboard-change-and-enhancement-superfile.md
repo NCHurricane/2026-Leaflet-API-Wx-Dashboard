@@ -20,7 +20,9 @@ and is user-accepted and closed. Phase 4 is authorized for curated MRMS live
 composition and is implemented and user-accepted. A
 separately authorized follow-up adds selected RTMA/MRMS one-hour history to the
 shared Workspace timeline and is user-accepted. MRMS native-detail tiles are
-also browser-accepted on Workspace and standalone MRMS.)
+also browser-accepted on Workspace and standalone MRMS. Workspace expansion
+Phase 5 adds curated WPC composition; its initial browser gate passed and its
+requested control refinement awaits a focused user re-smoke.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -72,7 +74,9 @@ to PNG-only behavior.
    is implemented and user-accepted for curated MRMS live composition. The
    authorized shared-timeline follow-up is implemented and user-accepted for
    selected MRMS and RTMA-RU history. MRMS native-detail tiles are accepted on
-   both Workspace and standalone MRMS.
+   both Workspace and standalone MRMS. The initial Phase 5 WPC browser gate
+   passed; the requested mutually exclusive day/product control refinement is
+   implemented and awaits its focused user re-smoke.
 2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
    `docs/archive/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
@@ -585,6 +589,47 @@ browser acceptance pass; this follow-up closed on 2026-08-04.
   four-layer matching, MRMS-master behavior without Radar, RTMA repeated-frame
   behavior, Values/Gradient and historical Winds, live-edge versus scrubbed
   refresh, product-switch cancellation, and layer-off/Region/Home cleanup.
+
+### Workspace expansion Phase 5 — curated WPC composition
+
+Authorized and implemented 2026-08-04. The initial user-owned browser gate
+passed. A requested follow-up refines the selection controls without changing
+the shared engine, pane order, or standalone page; its focused re-smoke remains
+open.
+
+- WPC is off and collapsed by default. Workspace imports the shared
+  `createWpcEngine()` through `workspace-wpc.js`, never the standalone page
+  controller. The curated families are Excessive Rainfall Outlooks Days 1-3,
+  multi-day QPF Days 1-2/1-3/1-5/1-7, active Mesoscale Precipitation
+  Discussions, and the existing Days 1-3 winter snow/ice catalog. River Flood,
+  6-hour/24-hour QPF, Significant Weather, Surface Analysis/Forecast, and future
+  WPC increments remain standalone-only.
+- Family pills are navigation-only and mutually exclusive. ERO Days 1-3 and
+  the four multi-day QPF periods use mutually exclusive product pills. Selecting
+  MPD immediately loads the active discussions/polygons. Winter first exposes
+  mutually exclusive Days 1-3 pills, then limits its single product dropdown to
+  that day. Every family/day/product change clears the prior WPC overlay, so no
+  two WPC products can remain selected together. The catalog loads lazily only
+  after WPC is enabled; disabled WPC performs no catalog/product work. The
+  selected product refreshes on WPC's natural 30-minute cadence and does not
+  join the Radar/MRMS/Satellite/RTMA shared timeline.
+- WPC is CONUS-only in Workspace. AK/HI/PR clear it and show the limitation;
+  returning to CONUS reloads the selected product. Layer-off, Region, and Home
+  clear WPC without changing the other composed layers. Standalone `/wpc`
+  retains its complete product matrix, controls, and scrubber behavior.
+- The shared WPC engine accepts an optional pane for both image and GeoJSON
+  overlays. Workspace uses pane `390`, below SPC `400`, Satellite `405`, Radar
+  `410`, boundaries `420`, RTMA Values `425`, and Alerts `440+`; WPC therefore
+  cannot obscure the user-specified Radar, Satellite, or Alert layers. The
+  standalone engine retains the default Leaflet overlay pane.
+- WPC has its own Workspace legend tab, opacity defaults to `0.55`, and WPC
+  forecast/detail clicks reuse the Workspace detail panel with WPC-specific
+  labeling. Focused Workspace/WPC tests and JavaScript syntax pass. The initial
+  browser acceptance passed all listed functional/stacking/lifecycle checks.
+  Post-refinement focused tests, syntax checks, and controlled-browser runtime
+  checks pass. The follow-up user re-smoke must confirm exclusive ERO/QPF pills,
+  automatic MPD loading, Winter day filtering, and that changing any WPC choice
+  leaves only one WPC product selected/rendered.
 
 ## Current State
 

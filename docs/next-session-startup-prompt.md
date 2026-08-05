@@ -513,6 +513,22 @@ Current checkpoint:
   emits history tile sources during the existing decode. No cache files were
   deleted. Restarted Rotation Track re-smoke passed with canonical timestamps
   and complete tile promotion.
+- Workspace expansion Phase 5 is implemented for curated CONUS WPC composition.
+  Its initial user-owned browser gate passed. The requested control refinement
+  now exposes mutually exclusive ERO Days 1-3 pills, mutually exclusive
+  multi-day QPF 1-2/1-3/1-5/1-7 pills, automatic active-MPD loading, and Winter
+  Days 1-3 pills that filter the single winter-product dropdown. It refreshes
+  on WPC's natural 30-minute cadence and does not join the shared timeline.
+  Focused tests, syntax checks, and controlled-browser interaction checks pass;
+  the focused user re-smoke remains open.
+- WPC uses Workspace pane `390`, below SPC `400`, Satellite `405`, Radar `410`,
+  boundaries `420`, RTMA Values `425`, and Alerts `440+`. The shared engine's
+  optional pane applies to both image and GeoJSON overlays; standalone `/wpc`
+  retains its default pane and complete product/controller behavior.
+- WPC is CONUS-only in Workspace. Layer-off, Region, and Home clear it without
+  disturbing other layers; return to CONUS reloads the selected product. WPC
+  has its own legend tab, defaults opacity to `0.55`, and uses the Workspace
+  detail panel with WPC-specific labeling.
 
 Guardrails:
 - Preserve the dirty worktree and unrelated concurrent changes.
@@ -525,13 +541,22 @@ Guardrails:
 - Keep all four optional warmers disabled during Radar benchmark/golden
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
-Accepted checkpoint:
+Previous accepted checkpoint:
+- The initial Workspace WPC gate passed for all manual functional, stacking,
+  lifecycle, and standalone checks. The later control refinement has not yet
+  received its focused user re-smoke.
 - The final user-owned `/workspace` gate passed Surface Precipitation Type and
   Base Reflectivity QC, Radar-master four-layer matching, MRMS-master behavior
   without Radar, RTMA repeated frames, Values/Gradient and historical Winds,
   live-edge versus scrubbed refresh, product-switch cancellation, CONUS-only
   behavior, and layer-off/Region/Home cleanup. High-zoom MRMS handoff/scrubbing
   passed in `/workspace` and standalone `/mrms`; representative standalone
-  `/rtma` load/scrub also passed. Await explicit authorization before starting
-  WPC or another product family.
+  `/rtma` load/scrub also passed.
+
+Next step:
+- Run the focused user-owned WPC control re-smoke: verify ERO and QPF pills are
+  mutually exclusive, MPD loads active discussions immediately, Winter day
+  pills filter its dropdown, and every family/day/product change leaves only
+  one WPC selection/overlay. Do not start Drought, Water, or another family
+  until this refinement is accepted and the next family is authorized.
 ```

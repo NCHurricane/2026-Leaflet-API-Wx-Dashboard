@@ -10,10 +10,11 @@ The application landing page is `index.html`, served at `/`. The severe-weather
 workspace is `frontend/pages/workspace/workspace.html`, served at `/workspace`;
 `/weather.html` is now a compatibility redirect.
 
-- Vector GeoJSON overlays (alerts, SPC)
-- Newest-frame Satellite XYZ raster overlay composed below SPC and Radar; the
-  Workspace pane order is Satellite 330, SPC 400, Radar 410, boundaries 420,
-  and Alerts 430+
+- Vector GeoJSON overlays (alerts, SPC, WPC)
+- Newest-frame Satellite XYZ raster overlay composed above forecast guidance
+  but below Radar; the Workspace pane order is RTMA Gradient 350, MRMS 375,
+  WPC 390, SPC 400, Satellite 405, Radar 410, boundaries 420, RTMA Values 425,
+  and Alerts 440+
 - Pre-rendered raster overlays + frame-locked value points (RTMA)
 - Radar live overlays from cache-first per-site/per-product PNG streams
 
@@ -21,13 +22,16 @@ Active root pages and their JS in this checkout:
 
 - `index.html` — main landing page for the dashboard
 - `/workspace` — Stage 2 composition page. It imports the Alerts, Radar,
-  curated Day 1 SPC, and bounded one-hour Satellite engines/renderers
+  curated SPC, bounded one-hour Satellite, RTMA-RU, MRMS, and WPC engines/renderers
   (never their page controllers), combines active warnings/LSRs, live radar,
-  SPC outlooks/MDs/watches, and optional GOES imagery, and owns the Projected
+  SPC outlooks/MDs/watches, optional GOES imagery, RTMA/MRMS analysis, and
+  curated WPC ERO, multi-day QPF, active-MPD, and day-filtered Winter guidance,
+  and owns the Projected
   Arrival Tool in `frontend/pages/workspace/workspace-tools.js`.
   Overlapping SPC features use the Workspace-local paged context carousel;
-  one shared bottom timeline animates Satellite alone or uses Radar timestamps
-  as the master clock when both raster layers are active. Satellite sector pills
+  one shared bottom timeline synchronizes Radar, MRMS, Satellite, and RTMA.
+  WPC retains its issuance/product cadence and does not join that timeline.
+  Satellite sector pills
   select imagery sources without changing the Workspace viewport; Region and
   Home own recentering/reset. Satellite Archive and other product details remain
   on their existing paths pending a later gate.

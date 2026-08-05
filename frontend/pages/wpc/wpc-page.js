@@ -6,7 +6,7 @@ import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
 import { createWpcDetailPanel } from './wpc-detail.js';
-import { createWpcEngine } from './wpc-engine.js?v=20260725d';
+import { createWpcEngine } from './wpc-engine.js?v=20260804a';
 import { createScrubber } from '../../core/scrubber.js';
 
 const byId = (id) => document.getElementById(id);

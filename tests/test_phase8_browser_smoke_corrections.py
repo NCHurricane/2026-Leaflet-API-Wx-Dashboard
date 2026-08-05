@@ -21,7 +21,7 @@ def test_wpc_raster_url_is_versioned_and_status_is_separate() -> None:
     assert "versionedImageUrl(geojson.image_url, geojson._updated)" in engine
     assert "status.setDataState('Fresh data', 'fresh')" in engine
     assert "Refreshing stale data…" in engine
-    assert "wpc-page.js?v=20260725e" in page
+    assert "wpc-page.js?v=20260804a" in page
 
 
 def test_mrms_initial_load_and_live_append_hold_at_newest() -> None:

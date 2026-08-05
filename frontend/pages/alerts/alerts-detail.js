@@ -142,8 +142,9 @@ export function createAlertDetail(root, options = {}) {
         const { body, locations } = splitDescription(props.description);
         const link = textProductUrl(feature);
         const badges = [props.severity, props.urgency, props.certainty].filter(Boolean);
+        const isWpcForecast = props.wpc_forecast === true;
         position(color, ALERT_TEXT_COLORS[event] || color);
-        root.innerHTML = `<div class="alerts-detail-head"><div><div class="alerts-eyebrow">NWS Alert</div><h2>${escapeHtml(event)}</h2></div><button class="alerts-detail-close" type="button" aria-label="Close alert detail">×</button></div>
+        root.innerHTML = `<div class="alerts-detail-head"><div><div class="alerts-eyebrow">${isWpcForecast ? 'WPC Forecast' : 'NWS Alert'}</div><h2>${escapeHtml(event)}</h2></div><button class="alerts-detail-close" type="button" aria-label="Close ${isWpcForecast ? 'WPC forecast' : 'alert'} detail">×</button></div>
             <div class="alerts-detail-body">
                 ${badges.length ? `<div class="alerts-detail-badges">${badges.map((badge) => `<span class="alerts-detail-badge">${escapeHtml(badge)}</span>`).join('')}</div>` : ''}
                 <dl class="alerts-detail-grid"><dt>Area</dt><dd>${escapeHtml(props.areaDesc || '—')}</dd><dt>Issued</dt><dd>${escapeHtml(formatTime(props.sent || props.effective))}${props.senderName ? ` by ${escapeHtml(props.senderName)}` : ''}</dd><dt>Expires</dt><dd>${escapeHtml(formatTime(props.expires || props.ends))}${expiresIn(props.expires || props.ends) ? ` (${escapeHtml(expiresIn(props.expires || props.ends))})` : ''}</dd></dl>
@@ -152,7 +153,7 @@ export function createAlertDetail(root, options = {}) {
                 ${body ? `<div class="alerts-detail-section">${formatText(body)}</div>` : ''}
                 ${locations ? `<div class="alerts-detail-section"><h3>Locations Impacted</h3>${formatText(locations)}</div>` : ''}
                 ${props.instruction ? `<div class="alerts-detail-section"><h3>Precautionary / Preparedness Actions</h3>${formatText(props.instruction)}</div>` : ''}
-                ${link ? `<a class="alerts-detail-link" href="${escapeHtml(link)}" target="_blank" rel="noopener">View Full NWS Alert Text</a>` : ''}
+                ${link ? `<a class="alerts-detail-link" href="${escapeHtml(link)}" target="_blank" rel="noopener">${isWpcForecast ? 'View WPC Source' : 'View Full NWS Alert Text'}</a>` : ''}
                 ${options.onZoom ? '<button class="alerts-detail-zoom" type="button">Zoom to Alert</button>' : ''}
             </div>`;
         finishOpen(feature, 'alert');

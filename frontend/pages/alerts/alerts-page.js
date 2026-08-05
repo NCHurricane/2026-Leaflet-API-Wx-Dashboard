@@ -7,7 +7,7 @@ import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from './alerts-config.js?v=20260719a';
-import { createAlertDetail } from './alerts-detail.js?v=20260719b';
+import { createAlertDetail } from './alerts-detail.js?v=20260804a';
 import { classifyLsrEvent, createAlertsEngine } from './alerts-engine.js?v=20260803a';
 
 const byId = (id) => document.getElementById(id);

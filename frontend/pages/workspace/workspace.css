@@ -5227,6 +5227,17 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
 .workspace-layer-toggle input:checked + span::after { background: #e6faff; transform: translateX(15px); }
 .workspace-layer-toggle input:focus-visible + span { outline: 2px solid #7dd3fc; outline-offset: 2px; }
 .workspace-pills { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.workspace-wpc-group-pills { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.workspace-wpc-selection { display: grid; gap: 6px; }
+.workspace-wpc-selection[hidden] { display: none; }
+.workspace-wpc-product-pills { grid-template-columns: repeat(auto-fit, minmax(48px, 1fr)); }
+.workspace-wpc-winter-days { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.workspace-legend-content .wpc-legend-flow { display: flex; flex-wrap: wrap; gap: 5px 10px; }
+.workspace-legend-content .wpc-legend-item { display: inline-flex; align-items: center; gap: 5px; color: #d8e8f5; font-size: .68rem; font-weight: 800; }
+.workspace-legend-content .wpc-legend-item.is-disabled { opacity: .4; }
+.workspace-legend-content .wpc-legend-swatch { width: 14px; height: 10px; border: 1px solid rgba(255, 255, 255, .65); border-radius: 2px; }
+.leaflet-tooltip.wpc-hover-tip { padding: 4px 7px; border: 1px solid #4b6075; background: rgba(10, 20, 31, .94); color: #e6f3ff; font-size: .7rem; }
+.leaflet-tooltip.wpc-hover-tip::before { display: none; }
 #workspace-alert-all-filter { grid-template-columns: 1fr; }
 #workspace-warning-filters { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 #workspace-watch-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }

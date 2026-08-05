@@ -129,7 +129,12 @@ export function wpcLegendHtml({ group, day, label, features }) {
 // Synthesizes an alert-detail-shaped feature for ERO/winter forecast areas.
 // MPD features already carry their own detail properties.
 function wpcForecastDetailFeature(feature, geojson, group, day) {
-    if (group === 'mpd') return feature;
+    if (group === 'mpd') {
+        return {
+            ...feature,
+            properties: { ...feature?.properties, wpc_forecast: true, wpc_group: group },
+        };
+    }
     const properties = feature?.properties || {};
     const productLabel = geojson?.product_label || 'WPC Forecast';
     const label = properties.label || properties.category || 'Forecast Area';
@@ -182,12 +187,13 @@ function wpcForecastDetailFeature(feature, geojson, group, day) {
     };
 }
 
-export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, onDetail }) {
+export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, onDetail, paneName = '' }) {
     const leaflet = mapCore.leaflet;
     const map = mapCore.map;
     const gate = createRequestGate();
     let layer = null;
     let opacity = 0.55;
+    const layerPane = paneName || 'overlayPane';
 
     function removeLayer() {
         if (layer && map.hasLayer(layer)) map.removeLayer(layer);
@@ -295,7 +301,7 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
                 layer = leaflet.imageOverlay(
                     versionedImageUrl(geojson.image_url, geojson._updated),
                     leafletBounds,
-                    { opacity, interactive: false, pane: 'overlayPane' },
+                    { opacity, interactive: false, pane: layerPane },
                 ).addTo(map);
                 legend.clear();
                 onEmptyMessage?.(null);
@@ -342,6 +348,7 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
             const eroDetailFeature = group === 'ero' ? detailFeatures[0] : null;
 
             layer = leaflet.geoJSON(geojson, {
+                pane: layerPane,
                 style: (feature) => {
                     const color = feature.properties?.color || '#cccccc';
                     return {

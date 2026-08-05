@@ -6,7 +6,7 @@ import { loadDefaultSettings } from '../../core/settings.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { createStatusReporter } from '../../core/status.js?v=20260725e';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
-import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260726a';
+import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260804a';
 import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260803a';
 import { createRadarEngine } from '../radar/radar-engine.js?v=20260802a';
 import { buildSpcOutlookDetailHtml, buildSpcTextDetailHtml, wireSpcDetailContent } from '../spc/spc-detail.js?v=20260801a';
@@ -16,6 +16,7 @@ import { createWorkspaceDetailCarousel } from './workspace-detail-carousel.js?v=
 import { createWorkspaceSatellite } from './workspace-satellite.js?v=20260803a';
 import { createWorkspaceRtma } from './workspace-rtma.js?v=20260803b';
 import { createWorkspaceMrms } from './workspace-mrms.js?v=20260804b';
+import { createWorkspaceWpc } from './workspace-wpc.js?v=20260804b';
 import { workspaceTimelineSource as selectWorkspaceTimelineSource } from './workspace-timeline.js?v=20260803b';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
 
@@ -232,7 +233,7 @@ async function initialize() {
     });
     const legendTray = createTabbedLegendTray(
         byId('workspace-legends'),
-        ['radar', 'storm-tracks', 'alerts', 'storm-reports', 'spc', 'satellite', 'rtma', 'mrms'],
+        ['radar', 'storm-tracks', 'alerts', 'storm-reports', 'spc', 'satellite', 'rtma', 'mrms', 'wpc'],
         'alerts',
     );
     const alertsLegend = legendTray.legend('alerts');
@@ -243,6 +244,7 @@ async function initialize() {
     const satelliteLegend = legendTray.legend('satellite');
     const rtmaLegend = legendTray.legend('rtma');
     const mrmsLegend = legendTray.legend('mrms');
+    const wpcLegend = legendTray.legend('wpc');
     const spcLegend = Object.freeze({
         clear: () => spcLegendSource.clear(),
         setHtml(html) {
@@ -367,6 +369,31 @@ async function initialize() {
             productPills: byId('workspace-mrms-products'),
             opacityInput: byId('workspace-mrms-opacity'),
             opacityLabel: byId('workspace-mrms-opacity-label'),
+        },
+    });
+    const wpcPane = mapCore.map.createPane('workspace-wpc-overlays');
+    wpcPane.style.zIndex = '390';
+    const workspaceWpc = createWorkspaceWpc({
+        api, mapCore, legend: wpcLegend, status,
+        getRegion: () => regionSelect.value,
+        paneName: 'workspace-wpc-overlays',
+        onDetail(_latlng, feature) {
+            spcDetailCarousel.close();
+            clearSelectedAlert();
+            window.setTimeout(() => detail.open(feature), 0);
+        },
+        elements: {
+            enabledInput: byId('workspace-wpc-enabled'),
+            controls: byId('workspace-wpc-controls'),
+            groupPills: byId('workspace-wpc-groups'),
+            productPillsWrap: byId('workspace-wpc-product-pills-wrap'),
+            productPills: byId('workspace-wpc-product-pills'),
+            winterDayWrap: byId('workspace-wpc-winter-day-wrap'),
+            winterDayPills: byId('workspace-wpc-winter-days'),
+            productSelectWrap: byId('workspace-wpc-product-select-wrap'),
+            productSelect: byId('workspace-wpc-product'),
+            opacityInput: byId('workspace-wpc-opacity'),
+            opacityLabel: byId('workspace-wpc-opacity-label'),
         },
     });
     const tools = createWorkspaceTools({
@@ -898,6 +925,7 @@ async function initialize() {
         workspaceSatellite.reset();
         workspaceRtma.reset();
         workspaceMrms.reset();
+        workspaceWpc.reset();
         syncRadarControls();
         if (byId('workspace-radar-enabled').checked && byId('workspace-radar-sites').checked) {
             radarEngine.showSiteLegend();
@@ -935,6 +963,7 @@ async function initialize() {
         await Promise.all([
             refreshAlerts(options), refreshRadar(), refreshSpc(),
             workspaceSatellite.refresh(options), workspaceRtma.refresh(options), workspaceMrms.refresh(options),
+            workspaceWpc.refresh(options),
         ]);
     }
     async function autoRefreshLiveLayers() {
@@ -949,6 +978,9 @@ async function initialize() {
         }
         if (workspaceMrms.isEnabled() && workspaceMrms.hasSelection()) {
             tasks.push(workspaceMrms.refresh({ auto: true }));
+        }
+        if (workspaceWpc.isEnabled() && workspaceWpc.hasSelection()) {
+            tasks.push(workspaceWpc.refresh({ auto: true }));
         }
         await Promise.allSettled(tasks);
     }
@@ -1148,6 +1180,7 @@ async function initialize() {
         fitWorkspaceRegion(region);
         void workspaceRtma.setRegion();
         void workspaceMrms.setRegion();
+        void workspaceWpc.setRegion();
         void refreshAlerts({ refresh: true, notifyNewAlerts: false });
     }
     regionSelect.addEventListener('change', () => applyWorkspaceRegion(regionSelect.value));
@@ -1231,6 +1264,7 @@ async function initialize() {
         workspaceSatellite.destroy();
         workspaceRtma.destroy();
         workspaceMrms.destroy();
+        workspaceWpc.destroy();
     }, { once: true });
 }
 
