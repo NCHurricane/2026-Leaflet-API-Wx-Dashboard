@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260730b">
     <link rel="stylesheet" href="/frontend/pages/spc/spc.css?v=20260801a">
-    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260804a">
+    <link rel="stylesheet" href="/frontend/pages/workspace/workspace.css?v=20260804e">
 </head>
 <body>
     <header class="core-header">
@@ -236,7 +236,6 @@
                                 <label id="workspace-satellite-opacity-label" for="workspace-satellite-opacity">Satellite Opacity (0.7)</label>
                                 <input id="workspace-satellite-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled>
                             </div>
-                            <p class="workspace-layer-note">One-hour Satellite history uses the shared Workspace timeline. Radar timestamps lead when both layers are active.</p>
                         </div>
                     </details>
                     <details id="workspace-rtma-group" class="workspace-group workspace-layer-group">
@@ -271,7 +270,6 @@
                                 <label id="workspace-rtma-opacity-label" for="workspace-rtma-opacity">RTMA Opacity (0.7)</label>
                                 <input id="workspace-rtma-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled>
                             </div>
-                            <p class="workspace-layer-note">CONUS-only RTMA-RU analysis follows the shared rolling one-hour timeline.</p>
                         </div>
                     </details>
                     <details id="workspace-mrms-group" class="workspace-group workspace-layer-group">
@@ -297,7 +295,6 @@
                                 <label id="workspace-mrms-opacity-label" for="workspace-mrms-opacity">MRMS Opacity (0.7)</label>
                                 <input id="workspace-mrms-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled>
                             </div>
-                            <p class="workspace-layer-note">CONUS-only MRMS guidance follows the shared rolling one-hour timeline.</p>
                         </div>
                     </details>
                     <details id="workspace-wpc-group" class="workspace-group workspace-layer-group">
@@ -337,10 +334,26 @@
                                 <label id="workspace-wpc-opacity-label" for="workspace-wpc-opacity">WPC Opacity (0.55)</label>
                                 <input id="workspace-wpc-opacity" type="range" min="0.1" max="1" step="0.05" value="0.55" disabled>
                             </div>
-                            <p class="workspace-layer-note">CONUS-only ERO, QPF, MPD, and winter guidance refreshes on WPC's natural cadence.</p>
                         </div>
                     </details>
-                    <details class="workspace-group workspace-layer-group workspace-placeholder"><summary class="workspace-group-summary"><h2>Water</h2><span>Planned</span></summary><div class="workspace-group-body"><p>Water engine composition placeholder.</p></div></details>
+                    <details id="workspace-water-group" class="workspace-group workspace-layer-group">
+                        <summary class="workspace-group-summary">
+                            <div class="workspace-title-count"><h2>Water</h2><span>Live</span></div>
+                            <label class="workspace-layer-toggle" title="Show Water observations">
+                                <span class="core-visually-hidden">Show Water observations</span>
+                                <input id="workspace-water-enabled" type="checkbox">
+                                <span aria-hidden="true"></span>
+                            </label>
+                        </summary>
+                        <div id="workspace-water-controls" class="workspace-group-body is-disabled" hidden>
+                            <div class="workspace-eyebrow">Networks</div>
+                            <div id="workspace-water-networks" class="workspace-pills workspace-water-network-pills" role="group" aria-label="Water observation networks">
+                                <button type="button" class="is-active" data-water-network="river" aria-pressed="true" disabled>RIVER</button>
+                                <button type="button" class="is-active" data-water-network="coastal" aria-pressed="true" disabled>COAST</button>
+                                <button type="button" class="is-active" data-water-network="buoy" aria-pressed="true" disabled>BUOY</button>
+                            </div>
+                        </div>
+                    </details>
                 </section>
                 <section class="core-sidebar-panel workspace-settings-panel" data-sidebar-panel="map" hidden>
                     <div class="core-field workspace-settings-section">
@@ -392,6 +405,7 @@
                             <button id="workspace-rtma-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="rtma" aria-controls="workspace-rtma-legend" hidden>RTMA</button>
                             <button id="workspace-mrms-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="mrms" aria-controls="workspace-mrms-legend" hidden>MRMS</button>
                             <button id="workspace-wpc-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="wpc" aria-controls="workspace-wpc-legend" hidden>WPC</button>
+                            <button id="workspace-water-legend-tab" class="workspace-legend-tab" type="button" role="tab" data-legend-tab="water" aria-controls="workspace-water-legend" hidden>Water</button>
                         </div>
                         <button class="core-legend-collapse" type="button" aria-expanded="true" aria-label="Collapse legends" title="Collapse legends"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </div>
@@ -405,11 +419,13 @@
                         <section id="workspace-rtma-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="rtma" aria-labelledby="workspace-rtma-legend-tab" hidden></section>
                         <section id="workspace-mrms-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="mrms" aria-labelledby="workspace-mrms-legend-tab" hidden></section>
                         <section id="workspace-wpc-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="wpc" aria-labelledby="workspace-wpc-legend-tab" hidden></section>
+                        <section id="workspace-water-legend" class="workspace-legend-content" role="tabpanel" data-legend-view="water" aria-labelledby="workspace-water-legend-tab" hidden></section>
                     </div>
                 </div>
             </div>
             <div id="workspace-radar-scrubber-bar" hidden><div id="workspace-radar-bottom-scrubber"></div></div>
             <div id="workspace-detail" class="alerts-detail" hidden></div>
+            <div id="workspace-water-detail" class="water-detail workspace-water-detail" role="dialog" aria-modal="false" aria-labelledby="water-detail-title" hidden></div>
             <div id="workspace-notifications" class="alerts-notifications workspace-notifications" aria-live="assertive"></div>
         </section>
         <aside id="workspace-right-rail" class="alerts-warning-rail workspace-right-rail" aria-label="Active warnings and latest storm reports">
@@ -441,6 +457,6 @@
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
     <script src="/frontend/lib/tz-lookup/tz.js?v=6.1.25"></script>
-    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260804f"></script>
+    <script type="module" src="/frontend/pages/workspace/workspace-app.js?v=20260804j"></script>
 </body>
 </html>

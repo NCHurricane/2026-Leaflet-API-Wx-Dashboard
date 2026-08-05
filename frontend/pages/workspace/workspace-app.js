@@ -16,6 +16,7 @@ import { createWorkspaceDetailCarousel } from './workspace-detail-carousel.js?v=
 import { createWorkspaceSatellite } from './workspace-satellite.js?v=20260803a';
 import { createWorkspaceRtma } from './workspace-rtma.js?v=20260803b';
 import { createWorkspaceMrms } from './workspace-mrms.js?v=20260804b';
+import { createWorkspaceWater } from './workspace-water.js?v=20260804c';
 import { createWorkspaceWpc } from './workspace-wpc.js?v=20260804b';
 import { workspaceTimelineSource as selectWorkspaceTimelineSource } from './workspace-timeline.js?v=20260803b';
 import { createWorkspaceTools } from './workspace-tools.js?v=20260719c';
@@ -206,9 +207,33 @@ async function initialize() {
     createSidebarTabs(byId('workspace-sidebar-tabs'), { defaultTab: 'layers' });
     const defaults = await loadDefaultSettings().catch(() => ({}));
     const cityDefaults = defaults?.global?.cityLabels || {};
-    document.querySelectorAll('.workspace-group-summary .workspace-layer-toggle').forEach((toggle) => {
+    const layerGroupBindings = [...document.querySelectorAll('details.workspace-layer-group')]
+        .map((group) => ({
+            group,
+            summary: group.querySelector(':scope > .workspace-group-summary'),
+            toggle: group.querySelector(':scope > .workspace-group-summary .workspace-layer-toggle'),
+            input: group.querySelector(':scope > .workspace-group-summary .workspace-layer-toggle input[type="checkbox"]'),
+        }))
+        .filter(({ summary, toggle, input }) => summary && toggle && input);
+    const syncWorkspaceLayerGroups = ({ expandedInput = null } = {}) => {
+        layerGroupBindings.forEach(({ group, input }) => {
+            const enabled = input.checked;
+            if (!enabled) group.open = false;
+            else if (input === expandedInput) group.open = true;
+            group.classList.toggle('is-layer-disabled', !enabled);
+        });
+    };
+    layerGroupBindings.forEach(({ group, summary, toggle, input }) => {
         toggle.addEventListener('click', (event) => event.stopPropagation());
+        input.addEventListener('change', () => syncWorkspaceLayerGroups({ expandedInput: input }));
+        summary.addEventListener('click', (event) => {
+            if (!input.checked && !event.target.closest('.workspace-layer-toggle')) event.preventDefault();
+        });
+        group.addEventListener('toggle', () => {
+            if (group.open && !input.checked) group.open = false;
+        });
     });
+    syncWorkspaceLayerGroups();
     const regionSelect = byId('workspace-region');
     regionSelect.value = 'CONUS';
 
@@ -233,7 +258,7 @@ async function initialize() {
     });
     const legendTray = createTabbedLegendTray(
         byId('workspace-legends'),
-        ['radar', 'storm-tracks', 'alerts', 'storm-reports', 'spc', 'satellite', 'rtma', 'mrms', 'wpc'],
+        ['radar', 'storm-tracks', 'alerts', 'storm-reports', 'spc', 'satellite', 'rtma', 'mrms', 'wpc', 'water'],
         'alerts',
     );
     const alertsLegend = legendTray.legend('alerts');
@@ -245,6 +270,7 @@ async function initialize() {
     const rtmaLegend = legendTray.legend('rtma');
     const mrmsLegend = legendTray.legend('mrms');
     const wpcLegend = legendTray.legend('wpc');
+    const waterLegend = legendTray.legend('water');
     const spcLegend = Object.freeze({
         clear: () => spcLegendSource.clear(),
         setHtml(html) {
@@ -270,6 +296,7 @@ async function initialize() {
     const spcRenderer = createSpcRenderer(mapCore, {
         paneName: 'workspace-spc-overlays',
         onDetailPages(latlng, pages) {
+            workspaceWater.closeDetail();
             detail.hide();
             spcDetailCarousel.open(latlng, pages.map((page) => ({
                 label: page.label,
@@ -378,6 +405,7 @@ async function initialize() {
         getRegion: () => regionSelect.value,
         paneName: 'workspace-wpc-overlays',
         onDetail(_latlng, feature) {
+            workspaceWater.closeDetail();
             spcDetailCarousel.close();
             clearSelectedAlert();
             window.setTimeout(() => detail.open(feature), 0);
@@ -394,6 +422,24 @@ async function initialize() {
             productSelect: byId('workspace-wpc-product'),
             opacityInput: byId('workspace-wpc-opacity'),
             opacityLabel: byId('workspace-wpc-opacity-label'),
+        },
+    });
+    const waterPane = mapCore.map.createPane('workspace-water-markers');
+    waterPane.style.zIndex = '470';
+    const workspaceWater = createWorkspaceWater({
+        api, mapCore, legend: waterLegend, status,
+        paneName: 'workspace-water-markers',
+        detailRoot: byId('workspace-water-detail'),
+        onBeforeDetail() {
+            spcDetailCarousel.close();
+            detail.close();
+            clearSelectedAlert();
+            hideProjectedArrival();
+        },
+        elements: {
+            enabledInput: byId('workspace-water-enabled'),
+            controls: byId('workspace-water-controls'),
+            networkPills: byId('workspace-water-networks'),
         },
     });
     const tools = createWorkspaceTools({
@@ -502,6 +548,7 @@ async function initialize() {
 
     function selectAlert(feature, options = { maxZoom: 9 }) {
         const props = feature?.properties || {};
+        workspaceWater.closeDetail();
         spcDetailCarousel.close();
         clearSelectedAlert();
         let projectedArrivalReady = false;
@@ -670,7 +717,7 @@ async function initialize() {
         onWarnings: renderWarnings,
         onLsrReports: renderLsrReports,
         onDetail: selectAlert,
-        onLsrDetail(feature) { spcDetailCarousel.close(); clearSelectedAlert(); detail.openLsr(feature); },
+        onLsrDetail(feature) { workspaceWater.closeDetail(); spcDetailCarousel.close(); clearSelectedAlert(); detail.openLsr(feature); },
         onLsrDetailClose: detail.closeLsr,
         onNewAlert: showNewAlert,
         onSelectedAlertRemoved(feature) {
@@ -926,6 +973,8 @@ async function initialize() {
         workspaceRtma.reset();
         workspaceMrms.reset();
         workspaceWpc.reset();
+        workspaceWater.reset();
+        syncWorkspaceLayerGroups();
         syncRadarControls();
         if (byId('workspace-radar-enabled').checked && byId('workspace-radar-sites').checked) {
             radarEngine.showSiteLegend();
@@ -964,6 +1013,7 @@ async function initialize() {
             refreshAlerts(options), refreshRadar(), refreshSpc(),
             workspaceSatellite.refresh(options), workspaceRtma.refresh(options), workspaceMrms.refresh(options),
             workspaceWpc.refresh(options),
+            workspaceWater.refresh(options),
         ]);
     }
     async function autoRefreshLiveLayers() {
@@ -981,6 +1031,9 @@ async function initialize() {
         }
         if (workspaceWpc.isEnabled() && workspaceWpc.hasSelection()) {
             tasks.push(workspaceWpc.refresh({ auto: true }));
+        }
+        if (workspaceWater.isEnabled() && workspaceWater.hasSelection()) {
+            tasks.push(workspaceWater.refresh({ auto: true }));
         }
         await Promise.allSettled(tasks);
     }
@@ -1181,6 +1234,8 @@ async function initialize() {
         void workspaceRtma.setRegion();
         void workspaceMrms.setRegion();
         void workspaceWpc.setRegion();
+        workspaceWater.setRegion();
+        syncWorkspaceLayerGroups();
         void refreshAlerts({ refresh: true, notifyNewAlerts: false });
     }
     regionSelect.addEventListener('change', () => applyWorkspaceRegion(regionSelect.value));
@@ -1265,6 +1320,7 @@ async function initialize() {
         workspaceRtma.destroy();
         workspaceMrms.destroy();
         workspaceWpc.destroy();
+        workspaceWater.destroy();
     }, { once: true });
 }
 

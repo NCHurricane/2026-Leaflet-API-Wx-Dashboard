@@ -46,31 +46,30 @@ def test_water_legend_uses_refactored_core_shell():
     page = (
         Path(BASE_DIR) / "frontend" / "pages" / "water" / "water.html"
     ).read_text(encoding="utf-8")
-    app = (
-        Path(BASE_DIR) / "frontend" / "pages" / "water" / "water-app.js"
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "water" / "water-engine.js"
     ).read_text(encoding="utf-8")
 
     assert 'class="water-legend" data-legend-align="left" hidden' in page
-    assert 'class="core-legend-header"' in app
-    assert 'class="core-legend-provider">NOAA' in app
-    assert 'class="core-legend-body"' in app
+    assert 'class="core-legend-header"' in engine
+    assert 'class="core-legend-provider">NOAA' in engine
+    assert 'class="core-legend-body"' in engine
 
 
 def test_water_legend_tracks_selected_networks_and_groups_categories():
-    app = (
-        Path(BASE_DIR) / "frontend" / "pages" / "water" / "water-app.js"
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "water" / "water-engine.js"
     ).read_text(encoding="utf-8")
     styles = (
         Path(BASE_DIR) / "frontend" / "pages" / "water" / "water.css"
     ).read_text(encoding="utf-8")
 
-    assert "const networks = _selectedWaterNetworks();" in app
-    assert "if (!networks.length) return '';" in app
-    assert "setLegend(_waterLegendHtml());" in app
-    assert "WATER_FLOOD_RANKS[_waterFloodFilter]" in app
-    assert "_waterFloodRank(status) >= minFloodRank" in app
-    assert "River Flood Stage" in app
-    assert "Other Networks" in app
+    assert "function legendHtml(networks, floodFilter)" in engine
+    assert "if (!networks.length) return '';" in engine
+    assert "WATER_FLOOD_RANKS[floodFilter]" in engine
+    assert "floodRank(status) >= minRank" in engine
+    assert "River Flood Stage" in engine
+    assert "Other Networks" in engine
     assert "water-legend-river" in styles
     assert "water-legend-other" in styles
 
@@ -79,16 +78,16 @@ def test_water_station_details_use_map_modal_not_leaflet_popups():
     page = (
         Path(BASE_DIR) / "frontend" / "pages" / "water" / "water.html"
     ).read_text(encoding="utf-8")
-    app = (
-        Path(BASE_DIR) / "frontend" / "pages" / "water" / "water-app.js"
+    engine = (
+        Path(BASE_DIR) / "frontend" / "pages" / "water" / "water-engine.js"
     ).read_text(encoding="utf-8")
 
     assert 'id="weather-water-detail" class="water-detail" role="dialog"' in page
-    assert "_waterStationDetailHtml" in app
-    assert "water-detail-close" in app
-    assert ".bindPopup(" not in app
-    assert ".openPopup(" not in app
-    assert ".setPopupContent(" not in app
+    assert "function stationDetailHtml" in engine
+    assert "water-detail-close" in engine
+    assert ".bindPopup(" not in engine
+    assert ".openPopup(" not in engine
+    assert ".setPopupContent(" not in engine
 
 
 def test_water_region_selector_uses_shared_map_regions_and_reloads_viewport():
@@ -103,7 +102,7 @@ def test_water_region_selector_uses_shared_map_regions_and_reloads_viewport():
     assert "createMapCore, REGION_LABELS" in app
     assert "Object.entries(REGION_LABELS)" in app
     assert "mapCore.fitRegion(regionSelect.value)" in app
-    assert "_scheduleWaterReload(0)" in app
+    assert "engine.setRegion()" in app
 
 
 def test_water_sidebar_controls_use_refactored_label_and_checkbox_styles():
@@ -125,11 +124,17 @@ def test_water_sidebar_controls_use_refactored_label_and_checkbox_styles():
     assert 'id="water-city-font-size"' in page
 
 
-def test_workspace_excludes_water_but_preserves_projected_arrival():
+def test_workspace_composes_shared_water_engine_and_preserves_projected_arrival():
     workspace = (
         Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace.html"
     ).read_text(encoding="utf-8")
 
+    app = (
+        Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace-app.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'id="workspace-water-enabled"' in workspace
+    assert "createWorkspaceWater" in app
     assert 'id="wx-section-water"' not in workspace
     assert 'id="wx-stormtrack-start"' in workspace
     assert 'id="wx-radarcal-start"' not in workspace

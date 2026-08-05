@@ -5207,6 +5207,8 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
 .workspace-group-summary::-webkit-details-marker { display: none; }
 .workspace-group-summary::after { content: '+'; flex: 0 0 auto; color: #55d7ff; font-size: 1rem; font-weight: 900; line-height: 1; }
 .workspace-layer-group[open] > .workspace-group-summary::after { content: '−'; }
+.workspace-layer-group.is-layer-disabled > .workspace-group-summary { cursor: default; }
+.workspace-layer-group.is-layer-disabled > .workspace-group-summary::after { color: #4b6075; }
 .workspace-group-summary > .workspace-layer-toggle { margin-left: auto; margin-right: 3px; }
 .workspace-group-body { display: grid; gap: 7px; margin-top: 9px; padding-top: 9px; border-top: 1px solid rgba(75, 96, 117, .45); }
 .workspace-placeholder { background: rgba(16, 27, 40, .62); border-style: dashed; }
@@ -5232,12 +5234,50 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
 .workspace-wpc-selection[hidden] { display: none; }
 .workspace-wpc-product-pills { grid-template-columns: repeat(auto-fit, minmax(48px, 1fr)); }
 .workspace-wpc-winter-days { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.workspace-water-network-pills { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.workspace-water-network-pills button[aria-pressed="false"] { color: #91a4b8; background: #111d2b; border-color: #33475b; box-shadow: none; }
+.workspace-water-network-pills button[aria-pressed="true"] { color: #06111f; background: #55d7ff; border-color: #8ce6ff; box-shadow: inset 0 0 0 1px rgba(230, 250, 255, .45); }
+.workspace-legend-content .water-legend-sections { display: grid; gap: 10px; }
+.workspace-legend-content .water-legend-section { display: grid; gap: 5px; }
+.workspace-legend-content .water-legend-section-title { color: #8fb3d9; font-size: .62rem; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+.workspace-legend-content .water-legend-row { display: flex; flex-wrap: wrap; gap: 5px 14px; }
+.workspace-legend-content .water-legend-row .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.workspace-legend-content .water-legend-row .legend-text { font-size: .72rem; font-weight: 700; }
 .workspace-legend-content .wpc-legend-flow { display: flex; flex-wrap: wrap; gap: 5px 10px; }
 .workspace-legend-content .wpc-legend-item { display: inline-flex; align-items: center; gap: 5px; color: #d8e8f5; font-size: .68rem; font-weight: 800; }
 .workspace-legend-content .wpc-legend-item.is-disabled { opacity: .4; }
 .workspace-legend-content .wpc-legend-swatch { width: 14px; height: 10px; border: 1px solid rgba(255, 255, 255, .65); border-radius: 2px; }
 .leaflet-tooltip.wpc-hover-tip { padding: 4px 7px; border: 1px solid #4b6075; background: rgba(10, 20, 31, .94); color: #e6f3ff; font-size: .7rem; }
 .leaflet-tooltip.wpc-hover-tip::before { display: none; }
+.workspace-water-detail {
+    position: absolute;
+    z-index: 1200;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    width: min(470px, calc(100% - 24px));
+    max-height: min(72%, 620px);
+    overflow: hidden;
+    color: #e5eefc;
+    background: rgba(4, 14, 30, .97);
+    border: 1px solid #35538b;
+    border-top: 5px solid var(--water-detail-color, #38bdf8);
+    border-radius: 8px;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, .5);
+}
+.workspace-water-detail[hidden] { display: none; }
+.workspace-water-detail .water-detail-head { display: flex; flex: 0 0 auto; justify-content: space-between; gap: 12px; padding: 12px 14px 9px; border-bottom: 1px solid #29384f; cursor: move; user-select: none; touch-action: none; }
+.workspace-water-detail .water-detail-eyebrow { color: #7f93ad; font-size: .62rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.workspace-water-detail .water-detail-head h2 { margin: 2px 0 0; color: var(--water-detail-color, #38bdf8); font-size: 1rem; }
+.workspace-water-detail .water-detail-close { width: auto; align-self: start; padding: 2px 7px; font-size: 1rem; }
+.workspace-water-detail .water-detail-body { min-height: 0; overflow: auto; padding: 11px 14px 15px; font-size: .76rem; line-height: 1.45; }
+.workspace-water-detail .water-detail-message { margin: 0; color: #cbd5e1; }
+.workspace-water-detail .wx-storm-popup-grid { grid-template-columns: auto minmax(0, 1fr); }
+.workspace-water-detail .wx-storm-popup-grid dd { white-space: normal; overflow-wrap: anywhere; }
+.workspace-water-detail a.wx-water-hydrograph-link,
+.workspace-water-detail a.wx-water-detail-link { display: block; margin-top: 10px; color: #38bdf8; font-size: .78rem; font-weight: 700; }
+.workspace-water-detail .wx-water-hydrograph { display: block; width: 100%; height: auto; max-height: 260px; object-fit: contain; }
 #workspace-alert-all-filter { grid-template-columns: 1fr; }
 #workspace-warning-filters { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 #workspace-watch-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -5369,13 +5409,6 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
     margin: 7px 15px 0;
     color: #91a4b8;
     font-size: .61rem;
-    line-height: 1.35;
-}
-
-.workspace-layer-note {
-    margin: 0;
-    color: var(--core-muted);
-    font-size: .66rem;
     line-height: 1.35;
 }
 

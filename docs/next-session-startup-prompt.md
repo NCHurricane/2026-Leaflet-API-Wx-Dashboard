@@ -513,14 +513,14 @@ Current checkpoint:
   emits history tile sources during the existing decode. No cache files were
   deleted. Restarted Rotation Track re-smoke passed with canonical timestamps
   and complete tile promotion.
-- Workspace expansion Phase 5 is implemented for curated CONUS WPC composition.
-  Its initial user-owned browser gate passed. The requested control refinement
+- Workspace expansion Phase 5 is implemented, committed at `1180b74`, and
+  user-accepted for curated CONUS WPC composition. The control refinement
   now exposes mutually exclusive ERO Days 1-3 pills, mutually exclusive
   multi-day QPF 1-2/1-3/1-5/1-7 pills, automatic active-MPD loading, and Winter
   Days 1-3 pills that filter the single winter-product dropdown. It refreshes
   on WPC's natural 30-minute cadence and does not join the shared timeline.
-  Focused tests, syntax checks, and controlled-browser interaction checks pass;
-  the focused user re-smoke remains open.
+  Focused tests, syntax checks, controlled-browser interaction checks, and the
+  focused user re-smoke all pass. Phase 5 is closed.
 - WPC uses Workspace pane `390`, below SPC `400`, Satellite `405`, Radar `410`,
   boundaries `420`, RTMA Values `425`, and Alerts `440+`. The shared engine's
   optional pane applies to both image and GeoJSON overlays; standalone `/wpc`
@@ -529,9 +529,39 @@ Current checkpoint:
   disturbing other layers; return to CONUS reloads the selected product. WPC
   has its own legend tab, defaults opacity to `0.55`, and uses the Workspace
   detail panel with WPC-specific labeling.
+- Workspace expansion Phase 6 is implemented for the full existing Water
+  observation feature. Its initial user-owned browser gate passed. Water is off
+  and collapsed by default, then loads River, Coastal, and NDBC Buoy stations
+  for the current Workspace viewport. A requested Workspace-only refinement
+  replaces its network checkboxes with independent `RIVER | COAST | BUOY`
+  pills and removes the Minimum Flood Stage control and wiring. Standalone
+  `/water` remains unchanged with its existing controls and flood filter. The
+  pills now use `aria-pressed` as their source of truth: pressed is highlighted
+  and unpressed is dark/muted; a controlled-browser state/style check passes.
+- `frontend/pages/water/water-engine.js` is now the shared source for station
+  fetching/retry hints, markers, filters, legend content, and draggable station
+  details. Standalone `/water` and Workspace use thin page controllers over the
+  same engine. Workspace uses marker pane `470`, has its own Water legend tab,
+  refreshes on a bounded five-minute auto cadence plus viewport/provider retry
+  triggers, and never adds Water to the shared timeline.
+- Layer-off, Region, and Home clear Water state. Selecting Water detail closes
+  competing Alert/LSR/SPC/WPC detail, and selecting those products closes Water
+  detail. JavaScript syntax, the Water engine Node behavior check, 31 focused
+  Workspace/standalone tests (with the two known stale Workspace assertions
+  deselected), 21 Water worker/browser-regression tests, and diff checks pass.
+  The corrected active/inactive pill treatment also passes a controlled-browser
+  check, 32 Water-focused tests, and the final user-owned re-smoke. Phase 6 is
+  user-accepted and closed.
+- A Workspace-wide disclosure follow-up is implemented: all nine layer groups
+  with enable switches stay collapsed while off, open when switched on, and
+  close when switched off. This shared guard does not replace or alter product
+  lifecycle handlers; Projected Arrival retains selection-driven visibility.
+  JavaScript syntax, 31 focused Workspace/browser-regression tests, diff checks,
+  and controlled-browser Water/Radar interaction checks pass. User re-smoke is
+  pending.
 
 Guardrails:
-- Preserve the dirty worktree and unrelated concurrent changes.
+- Preserve committed checkpoint `1180b74` and any later unrelated changes.
 - Do not repeat Phase 8 acceptance unless a regression requires it.
 - Keep the API at one application process; multi-worker operation remains
   unsupported.
@@ -542,9 +572,14 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Previous accepted checkpoint:
-- The initial Workspace WPC gate passed for all manual functional, stacking,
-  lifecycle, and standalone checks. The later control refinement has not yet
-  received its focused user re-smoke.
+- The initial Workspace Water gate passed for all three networks, filtering,
+  details, legend, stacking, timeline isolation, refresh, Region, and cleanup.
+  The later Workspace-only pill/removal refinement and corrected active-pill
+  treatment also passed the focused user re-smoke. Phase 6 is closed.
+- Workspace WPC Phase 5 passed all manual functional, stacking, lifecycle, and
+  standalone checks. Its later control refinement also passed exclusive ERO/QPF
+  selection, automatic MPD loading, Winter day filtering, and single-overlay
+  behavior. Phase 5 is closed at commit `1180b74`.
 - The final user-owned `/workspace` gate passed Surface Precipitation Type and
   Base Reflectivity QC, Radar-master four-layer matching, MRMS-master behavior
   without Radar, RTMA repeated frames, Values/Gradient and historical Winds,
@@ -554,9 +589,8 @@ Previous accepted checkpoint:
   `/rtma` load/scrub also passed.
 
 Next step:
-- Run the focused user-owned WPC control re-smoke: verify ERO and QPF pills are
-  mutually exclusive, MPD loads active discussions immediately, Winter day
-  pills filter its dropdown, and every family/day/product change leaves only
-  one WPC selection/overlay. Do not start Drought, Water, or another family
-  until this refinement is accepted and the next family is authorized.
+- Run the focused Workspace layer-group disclosure re-smoke: confirm every off
+  group ignores header expansion, switching a layer on opens it, switching it
+  off closes it, and representative layers retain their existing behavior.
+  After acceptance, await explicit authorization for the next product family.
 ```

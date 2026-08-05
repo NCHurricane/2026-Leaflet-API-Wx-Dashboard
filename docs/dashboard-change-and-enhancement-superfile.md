@@ -21,8 +21,11 @@ composition and is implemented and user-accepted. A
 separately authorized follow-up adds selected RTMA/MRMS one-hour history to the
 shared Workspace timeline and is user-accepted. MRMS native-detail tiles are
 also browser-accepted on Workspace and standalone MRMS. Workspace expansion
-Phase 5 adds curated WPC composition; its initial browser gate passed and its
-requested control refinement awaits a focused user re-smoke.)
+Phase 5 adds curated WPC composition; its initial gate and requested control
+refinement re-smoke passed, so Phase 5 is user-accepted and closed. Workspace
+expansion Phase 6 adds the full existing Water observation feature through one
+shared engine. Its initial browser gate and requested Workspace-only
+network-pill refinement re-smoke passed, so Phase 6 is user-accepted and closed.
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -47,7 +50,7 @@ Keep separate:
 - `docs/archive/satellite-radar-render-pipeline-files.md` for the historical
   shared pipeline file reference.
 
-## Active Tracks (2026-08-03)
+## Active Tracks (2026-08-04)
 
 Track numbers preserve the existing roadmap grouping. Track 3 Radar render
 optimization Phases 3-5 are closed with byte-identical golden output,
@@ -74,9 +77,11 @@ to PNG-only behavior.
    is implemented and user-accepted for curated MRMS live composition. The
    authorized shared-timeline follow-up is implemented and user-accepted for
    selected MRMS and RTMA-RU history. MRMS native-detail tiles are accepted on
-   both Workspace and standalone MRMS. The initial Phase 5 WPC browser gate
-   passed; the requested mutually exclusive day/product control refinement is
-   implemented and awaits its focused user re-smoke.
+   both Workspace and standalone MRMS. Phase 5 WPC and its mutually exclusive
+   day/product control refinement are implemented, committed at `1180b74`,
+   user-accepted, and closed. Phase 6 Water is implemented through the shared
+   standalone engine. Its initial browser gate and Workspace-only network-pill
+   refinement re-smoke passed; Phase 6 is user-accepted and closed.
 2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
    `docs/archive/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
@@ -592,10 +597,9 @@ browser acceptance pass; this follow-up closed on 2026-08-04.
 
 ### Workspace expansion Phase 5 — curated WPC composition
 
-Authorized and implemented 2026-08-04. The initial user-owned browser gate
-passed. A requested follow-up refines the selection controls without changing
-the shared engine, pane order, or standalone page; its focused re-smoke remains
-open.
+Authorized, implemented, committed at `1180b74`, and user-accepted 2026-08-04.
+The initial browser gate and the requested selection-control follow-up re-smoke
+passed. Phase 5 is closed without changing the standalone WPC behavior.
 
 - WPC is off and collapsed by default. Workspace imports the shared
   `createWpcEngine()` through `workspace-wpc.js`, never the standalone page
@@ -627,9 +631,52 @@ open.
   labeling. Focused Workspace/WPC tests and JavaScript syntax pass. The initial
   browser acceptance passed all listed functional/stacking/lifecycle checks.
   Post-refinement focused tests, syntax checks, and controlled-browser runtime
-  checks pass. The follow-up user re-smoke must confirm exclusive ERO/QPF pills,
-  automatic MPD loading, Winter day filtering, and that changing any WPC choice
-  leaves only one WPC product selected/rendered.
+  checks pass. The user re-smoke also passed exclusive ERO/QPF pills, automatic
+  MPD loading, Winter day filtering, and single-selection/single-overlay behavior.
+  Phase 5 is closed.
+
+### Workspace expansion Phase 6 — Water composition
+
+Authorized and implemented 2026-08-04. The initial user-owned browser gate and
+the requested Workspace-only control-refinement re-smoke passed. Phase 6 is
+user-accepted and closed. Standalone `/water` behavior remains unchanged.
+
+- Water is off and collapsed by default. Enabling it loads all three existing
+  observation networks—River, Coastal, and NDBC Buoys—against the current map
+  viewport. Workspace exposes three independent `RIVER | COAST | BUOY` pills,
+  and no network is queried while all three are off. The Workspace Minimum
+  Flood Stage control and its wiring are removed; standalone `/water` retains
+  its checkbox network controls and complete flood-stage filter behavior.
+- Water network pills use `aria-pressed` as the selection source of truth;
+  pressed pills receive the bright active treatment and unpressed pills remain
+  dark/muted. A controlled-browser state/style check passes this correction.
+- The Water legend updates from the selected Workspace network pills and
+  occupies its own Workspace legend tab.
+- `frontend/pages/water/water-engine.js` now owns station requests, provider
+  retry hints, filtering, marker rendering, legend content, and River/Coastal/
+  NDBC detail rendering. Standalone `water-app.js` and Workspace
+  `workspace-water.js` are thin controllers over that shared engine; neither
+  imports the other page controller.
+- Water is latest-only and does not join the Radar/MRMS/Satellite/RTMA shared
+  timeline. Workspace auto-refresh is throttled to five minutes, while viewport
+  changes and server retry hints retain the accepted bounded reload behavior.
+- Workspace uses marker pane `470`. Station clicks open the existing draggable
+  Water detail treatment and close competing Alert/LSR/SPC/WPC detail. Layer
+  off, Region changes, and Home clear markers, legend, pending detail, and stale
+  requests without disturbing other composed layers.
+- JavaScript syntax passes for the four affected modules. The Water engine Node
+  behavior check passes. Focused Python validation passes 31 Workspace/
+  standalone checks with the two documented stale Workspace assertions
+  deselected, plus 21 Water worker/browser-regression checks. `git diff --check`
+  passes. The corrected active/inactive pill treatment passed a controlled-
+  browser check, 32 Water-focused tests, and the final user-owned re-smoke.
+- Workspace-wide disclosure follow-up: every layer group with an enable switch
+  now stays collapsed while that switch is off, opens when switched on, and
+  closes when switched off. The shared guard changes disclosure only; existing
+  product enable/disable handlers remain authoritative. Projected Arrival keeps
+  its separate selection-driven visibility. JavaScript syntax, 31 focused
+  Workspace/browser-regression tests, diff checks, and controlled-browser Water
+  and Radar lifecycle checks pass. Focused user re-smoke remains pending.
 
 ## Current State
 

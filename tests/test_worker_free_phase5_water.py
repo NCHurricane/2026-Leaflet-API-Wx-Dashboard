@@ -377,14 +377,14 @@ def test_only_optional_coops_current_layer_may_skip_source_error(monkeypatch):
 
 
 def test_water_client_retries_from_response_hint():
-    app = (
+    engine = (
         Path(BASE_DIR)
         / "frontend"
         / "pages"
         / "water"
-        / "water-app.js"
+        / "water-engine.js"
     ).read_text(encoding="utf-8")
 
-    assert "Number(data?.retry_after_seconds)" in app
-    assert "data?.cache_state !== 'fresh'" in app
-    assert "_scheduleWaterReload(Math.max(500, retryAfterSeconds * 1000))" in app
+    assert "Number(data?.retry_after_seconds)" in engine
+    assert "data?.cache_state !== 'fresh'" in engine
+    assert "scheduleReload(Math.max(500, retryAfterSeconds * 1000))" in engine

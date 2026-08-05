@@ -129,7 +129,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert 'id="workspace-radar-scrubber-bar"' in page
     assert 'id="workspace-radar-bottom-scrubber"' in page
     assert all(f'<h2>{label}</h2>' in page for label in ['SPC', 'Satellite', 'RTMA', 'MRMS', 'WPC', 'Water'])
-    assert page.count('workspace-layer-group workspace-placeholder') == 1
+    assert page.count('workspace-layer-group workspace-placeholder') == 0
     assert page.count('workspace-group workspace-layer-group" open') == 1
     assert 'id="workspace-right-rail"' in page
     assert 'id="workspace-warning-section"' in page
@@ -508,8 +508,28 @@ def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets(
     assert "radar-page.js?v=20260729b" in radar_page
     assert "workspace-satellite.js?v=20260803a" in workspace_app
     assert "workspace-wpc.js?v=20260804b" in workspace_app
-    assert "workspace.css?v=20260804a" in workspace_page
-    assert "workspace-app.js?v=20260804f" in workspace_page
+    assert "workspace.css?v=20260804e" in workspace_page
+    assert "workspace-app.js?v=20260804j" in workspace_page
+
+
+def test_workspace_layer_groups_only_expand_while_enabled():
+    root = Path(BASE_DIR) / "frontend" / "pages" / "workspace"
+    page = (root / "workspace.html").read_text(encoding="utf-8")
+    app = (root / "workspace-app.js").read_text(encoding="utf-8")
+    styles = (root / "workspace.css").read_text(encoding="utf-8")
+
+    assert all(
+        f'id="workspace-{layer}-enabled" type="checkbox"' in page
+        for layer in ("radar", "alerts", "lsr", "spc", "satellite", "rtma", "mrms", "wpc", "water")
+    )
+    assert "const layerGroupBindings" in app
+    assert "if (!enabled) group.open = false;" in app
+    assert "else if (input === expandedInput) group.open = true;" in app
+    assert "if (!input.checked && !event.target.closest('.workspace-layer-toggle')) event.preventDefault();" in app
+    assert "if (group.open && !input.checked) group.open = false;" in app
+    assert "group.classList.toggle('is-layer-disabled', !enabled);" in app
+    assert app.count("syncWorkspaceLayerGroups();") == 3
+    assert ".workspace-layer-group.is-layer-disabled > .workspace-group-summary::after" in styles
 
 
 def test_workspace_mrms_is_curated_default_off_and_uses_shared_timeline():
@@ -617,6 +637,54 @@ def test_workspace_wpc_is_curated_default_off_and_stays_below_live_layers():
     assert "paneName = ''" in engine
     assert "const layerPane = paneName || 'overlayPane'" in engine
     assert engine.count("pane: layerPane") == 2
+
+
+def test_workspace_water_reuses_shared_engine_and_is_default_off():
+    root = Path(BASE_DIR) / "frontend" / "pages"
+    page = (root / "workspace" / "workspace.html").read_text(encoding="utf-8")
+    app = (root / "workspace" / "workspace-app.js").read_text(encoding="utf-8")
+    workspace_water = (root / "workspace" / "workspace-water.js").read_text(
+        encoding="utf-8"
+    )
+    water_engine = (root / "water" / "water-engine.js").read_text(
+        encoding="utf-8"
+    )
+    water_app = (root / "water" / "water-app.js").read_text(encoding="utf-8")
+
+    assert 'id="workspace-water-enabled" type="checkbox"' in page
+    assert 'id="workspace-water-enabled" type="checkbox" checked' not in page
+    assert 'id="workspace-water-controls" class="workspace-group-body is-disabled" hidden' in page
+    assert page.count('id="workspace-water-networks"') == 1
+    assert all(
+        f'data-water-network="{network}" aria-pressed="true" disabled>{label}</button>' in page
+        for network, label in [("river", "RIVER"), ("coastal", "COAST"), ("buoy", "BUOY")]
+    )
+    assert "data-water-flood=" not in page
+    assert "Minimum Flood Stage" not in page
+    assert 'id="workspace-water-legend-tab"' in page
+    assert 'id="workspace-water-legend"' in page
+    assert 'id="workspace-water-detail" class="water-detail workspace-water-detail"' in page
+
+    assert "createWorkspaceWater" in app
+    assert "waterPane.style.zIndex = '470'" in app
+    assert "workspaceWater.refresh({ auto: true })" in app
+    assert app.count("workspaceWater.closeDetail()") >= 3
+    assert "workspaceWater.setRegion()" in app
+    assert "workspaceWater.reset()" in app
+    assert "workspaceWater.destroy()" in app
+    assert "../water/water-engine.js" in workspace_water
+    assert "water-app.js" not in workspace_water
+    assert "const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000" in workspace_water
+    assert "networkPills.addEventListener('click'" in workspace_water
+    assert 'data-water-network][aria-pressed="true"]' in workspace_water
+    assert "button.getAttribute('aria-pressed') !== 'true'" in workspace_water
+    assert "data-water-flood" not in workspace_water
+    assert "setFloodFilter" not in workspace_water
+    assert "createWaterEngine" in water_app
+    assert "/api/water/stations?" in water_engine
+    assert "/api/water/stations/${encodeURIComponent(siteId)}" in water_engine
+    assert "pane: paneName" in water_engine
+    assert "map.on('moveend', onMapMoveEnd)" in water_engine
 
 
 def test_radar_scrubbers_hold_on_the_newest_frame():
