@@ -26,6 +26,9 @@ refinement re-smoke passed, so Phase 5 is user-accepted and closed. Workspace
 expansion Phase 6 adds the full existing Water observation feature through one
 shared engine. Its initial browser gate and requested Workspace-only
 network-pill refinement re-smoke passed, so Phase 6 is user-accepted and closed.
+The Workspace-wide layer-group disclosure follow-up also passed its user
+re-smoke. Drought is explicitly excluded from Workspace expansion and remains a
+standalone product.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -81,7 +84,9 @@ to PNG-only behavior.
    day/product control refinement are implemented, committed at `1180b74`,
    user-accepted, and closed. Phase 6 Water is implemented through the shared
    standalone engine. Its initial browser gate and Workspace-only network-pill
-   refinement re-smoke passed; Phase 6 is user-accepted and closed.
+   refinement re-smoke passed; Phase 6 is user-accepted and closed. The shared
+   layer-group disclosure follow-up also passed user re-smoke. Drought is not
+   part of Workspace expansion and remains standalone-only.
 2. Task-scheduler-free refresh/rendering — Phases 0-8 are complete under
    `docs/archive/worker-free-render-plan.md`. Application-owned HTTP and NODD S3 calls
    emit a credential-safe ledger, all required isolated cold renders are
@@ -676,7 +681,7 @@ user-accepted and closed. Standalone `/water` behavior remains unchanged.
   product enable/disable handlers remain authoritative. Projected Arrival keeps
   its separate selection-driven visibility. JavaScript syntax, 31 focused
   Workspace/browser-regression tests, diff checks, and controlled-browser Water
-  and Radar lifecycle checks pass. Focused user re-smoke remains pending.
+  and Radar lifecycle checks pass. The focused user re-smoke passed.
 
 ## Current State
 
@@ -2025,10 +2030,10 @@ found it.
   radar overlay pool now keys frames by site/product/elevation/frame to prevent
   same-scan cross-product image reuse. The deferred standalone Water shell issue
   was subsequently corrected and user-smoked without reopening this slice.
-  Additional
-  SPC/MRMS/RTMA/Satellite/Drought/WPC
-  engine composition remains an explicit workspace expansion; those standalone
-  pages remain canonical and are linked in navigation. Static boundary tests
+  Subsequent authorized Workspace expansion implemented SPC, Satellite, RTMA,
+  MRMS, WPC, and Water composition. Drought remains standalone-only by product
+  decision; all standalone pages remain canonical and linked in navigation.
+  Static boundary tests
   passed (23 focused tests). The final repository-wide suite reached 58 passed
   with the same five unrelated Radar expectation failures already recorded
   above; Phase 27 did not modify those Radar backend/config behaviors. Browser
@@ -2058,12 +2063,11 @@ dashboard products — a curated subset:
 - SPC: outlooks, MDs, watches.
 - MRMS: rotational tracks, MESH, lightning (instant or 30-min variants
   only).
-- Drought: latest only.
 - WPC: excessive rain, QPF, meso discussions, winter weather.
+- Water: River, Coastal, and NDBC Buoy observations.
 
-Excluded: Tropical (stays a separate page). Deferred: Water (all-or-nothing
-as currently built; adding it later is one engine instantiation plus a
-config entry, so the decision can wait indefinitely).
+Excluded: Tropical and Drought stay separate pages. No additional product
+family remains in the active Workspace expansion plan.
 
 ### Workspace time-sync design (two-tier layer model)
 

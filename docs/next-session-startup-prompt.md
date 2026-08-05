@@ -557,8 +557,11 @@ Current checkpoint:
   close when switched off. This shared guard does not replace or alter product
   lifecycle handlers; Projected Arrival retains selection-driven visibility.
   JavaScript syntax, 31 focused Workspace/browser-regression tests, diff checks,
-  and controlled-browser Water/Radar interaction checks pass. User re-smoke is
-  pending.
+  controlled-browser Water/Radar interaction checks, and the focused user
+  re-smoke pass.
+- Workspace expansion is complete through Phase 6. Drought is explicitly
+  excluded and remains a standalone product; no additional product family is
+  currently planned for Workspace.
 
 Guardrails:
 - Preserve committed checkpoint `1180b74` and any later unrelated changes.
@@ -572,6 +575,9 @@ Guardrails:
   capture; RTMA and MRMS share heavyweight render capacity with Radar/Satellite.
 
 Previous accepted checkpoint:
+- The Workspace-wide layer-group disclosure re-smoke passed: off groups cannot
+  expand, enabling opens them, disabling closes them, and existing layer
+  behavior remains intact.
 - The initial Workspace Water gate passed for all three networks, filtering,
   details, legend, stacking, timeline isolation, refresh, Region, and cleanup.
   The later Workspace-only pill/removal refinement and corrected active-pill
@@ -589,8 +595,6 @@ Previous accepted checkpoint:
   `/rtma` load/scrub also passed.
 
 Next step:
-- Run the focused Workspace layer-group disclosure re-smoke: confirm every off
-  group ignores header expansion, switching a layer on opens it, switching it
-  off closes it, and representative layers retain their existing behavior.
-  After acceptance, await explicit authorization for the next product family.
+- Review the remaining non-Workspace dashboard tracks/backlog with the user.
+  Do not begin another track from this handoff alone.
 ```
