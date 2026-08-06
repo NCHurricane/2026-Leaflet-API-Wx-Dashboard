@@ -452,9 +452,10 @@ Both standalone pages are live and on cache-first contracts:
   on-demand Web Mercator tiles.
 
 The older root `radar.html`/`satellite.html` split (synchronous Lambert render
-pipeline, layered PNG scrubber, `active_tasks` progress) was not carried forward for
-the live paths. Archive/export render workflows keep the synchronous Lambert pipeline
-where render time is non-trivial.
+pipeline and layered PNG scrubber) was not carried forward for the live paths.
+Cleanup Phase 2 also removed the disconnected MRMS/SPC archive render-session
+and progress workflow. The retained Alerts and Surface archive endpoints use
+synchronous vector/data responses with deterministic JSON caching.
 
 Direction:
 

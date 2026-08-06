@@ -5,7 +5,6 @@ import json
 from fastapi import APIRouter
 
 from app_core.paths import BASE_PATH
-from app_core.progress import active_tasks
 from app_core.runtime import is_using_nodd
 
 router = APIRouter()
@@ -25,10 +24,3 @@ def read_default_user_settings():
     settings_path = BASE_PATH / "config" / "user_settings.default.json"
     with settings_path.open("r", encoding="utf-8") as fp:
         return json.load(fp)
-
-
-@router.get("/api/progress/{task_id}")
-def get_task_progress(task_id: str):
-    return active_tasks.get(
-        task_id, {"percent": 0, "message": "Waiting...", "stage": "idle"}
-    )

@@ -5,7 +5,6 @@ from typing import Optional
 from fastapi import APIRouter
 
 from services.alerts_service import (
-    get_alert_polygons,
     get_alerts_data,
     get_local_storm_reports,
 )
@@ -49,12 +48,3 @@ def get_data_local_storm_reports(
         north=north,
         hours=hours,
     )
-
-
-@router.get("/api/alerts/polygons")
-def get_alerts_polygons(
-    region: str = "CONUS",
-    hazard: str = "All Alerts",
-    wfo: Optional[str] = None,
-):
-    return get_alert_polygons(region=region, hazard=hazard, wfo=wfo)

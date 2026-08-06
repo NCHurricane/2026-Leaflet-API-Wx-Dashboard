@@ -6,7 +6,6 @@ from config.rtma_config import RTMA_UI_PRODUCTS, RTMA_STREAMS
 from services.rtma_service import (
     get_rtma_data,
     get_rtma_frames,
-    get_rtma_grid,
     get_rtma_points,
 )
 
@@ -44,23 +43,6 @@ def get_data_rtma_points(
         west=west,
         north=north,
         east=east,
-        stride=stride,
-    )
-
-
-@router.get("/api/data/rtma/grid")
-def get_data_rtma_grid(
-    region: str = "CONUS",
-    stream: str = "rtma_hourly",
-    product: str = "temperature",
-    source_data_key: str | None = None,
-    stride: int = 2,
-):
-    return get_rtma_grid(
-        region=region,
-        stream=stream,
-        product=product,
-        source_data_key=source_data_key,
         stride=stride,
     )
 

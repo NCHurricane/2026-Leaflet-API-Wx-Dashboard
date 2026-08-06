@@ -4,7 +4,6 @@ from fastapi import APIRouter
 
 from services.surface_service import (
     SURFACE_PRODUCTS,
-    get_colormap_data,
     get_surface_data,
     get_surface_gradient,
 )
@@ -33,8 +32,3 @@ def get_data_surface(
 @router.get("/api/data/surface-gradient")
 def get_data_surface_gradient(region: str = "CONUS", product: str = "temperature"):
     return get_surface_gradient(region=region, product=product)
-
-
-@router.get("/api/data/colormap")
-def get_colormap(product: str = "temperature"):
-    return get_colormap_data(product=product)

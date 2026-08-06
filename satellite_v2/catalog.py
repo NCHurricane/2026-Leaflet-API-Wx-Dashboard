@@ -269,22 +269,3 @@ def get_catalog(
             payload["provider_error"] = str(exc)
             return payload
         raise
-
-
-def status_payload(cache_root: str) -> dict[str, Any]:
-    root = catalog_path(cache_root, "goes19", "CONUS", "Channel13").parents[2]
-    catalogs = list(root.glob("*/*/*.json")) if root.exists() else []
-    newest_age = None
-    if catalogs:
-        ages = [file_age_seconds(path) for path in catalogs]
-        valid_ages = [age for age in ages if age is not None]
-        if valid_ages:
-            newest_age = int(min(valid_ages))
-    return {
-        "status": "success",
-        "schema_version": 1,
-        "catalog_count": len(catalogs),
-        "newest_catalog_age_seconds": newest_age,
-        "cache_root": str(root.parents[1]) if root.exists() else str(root),
-        "generated_at": utc_now_iso(),
-    }

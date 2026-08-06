@@ -1,14 +1,13 @@
-"""Radar metadata, tile proxy, and live-frame services."""
+"""Radar metadata and live-frame services."""
 
 from datetime import datetime, timedelta, timezone
-import importlib.util
 import json
 import os
 import re
 import threading
 
 from fastapi import HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse
 
 from app_core.http import parse_utc_datetime
 from app_core.paths import BASE_DIR, CACHE_ROOT
@@ -69,74 +68,6 @@ RADAR_SITE_ALIASES = {
 def normalize_radar_site_id(site: str) -> str:
     site_id = str(site or "").strip().upper()
     return RADAR_SITE_ALIASES.get(site_id, site_id)
-
-
-def get_radar_sites_data() -> dict:
-    try:
-        sites_path = os.path.join(BASE_DIR, "radar", "radar_sites.json")
-        with open(sites_path, "r", encoding="utf-8") as fh:
-            raw_sites = json.load(fh)
-
-        if not isinstance(raw_sites, dict):
-            raise ValueError("radar_sites.json is not a key/value object")
-
-        sites = [
-            {"label": label, "value": value}
-            for label, value in raw_sites.items()
-            if isinstance(label, str) and isinstance(value, str)
-        ]
-        sites.sort(key=lambda entry: entry["label"])
-
-        return {
-            "status": "success",
-            "sites": sites,
-            "count": len(sites),
-        }
-    except Exception as exc:
-        print(f"Radar sites endpoint error: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
-def get_radar_site_locations_data() -> dict:
-    try:
-        from pyart.io.nexrad_common import NEXRAD_LOCATIONS
-
-        valid_prefixes = ("K", "P")
-        valid_extras = {"TJUA"}
-
-        sites = []
-        seen = set()
-        for site_id, info in NEXRAD_LOCATIONS.items():
-            if not (site_id.startswith(valid_prefixes) or site_id in valid_extras):
-                continue
-
-            normalized_id = normalize_radar_site_id(site_id)
-            if normalized_id in seen:
-                continue
-
-            lat = info.get("lat")
-            lon = info.get("lon")
-            if lat is None or lon is None:
-                continue
-
-            seen.add(normalized_id)
-            sites.append(
-                {
-                    "site": normalized_id,
-                    "lat": float(lat),
-                    "lon": float(lon),
-                }
-            )
-
-        sites.sort(key=lambda entry: entry["site"])
-        return {
-            "status": "success",
-            "sites": sites,
-            "count": len(sites),
-        }
-    except Exception as exc:
-        print(f"Radar site locations endpoint error: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 def _radar_live_catalog():
@@ -704,64 +635,6 @@ def get_radar_colortable_data(product: str = "BR") -> dict:
     }
 
 
-_RADAR_FRAME_LAYERS = {
-    0: "nexrad-n0q-m20m",
-    1: "nexrad-n0q-m15m",
-    2: "nexrad-n0q-m10m",
-    3: "nexrad-n0q-m05m",
-    4: "nexrad-n0q",
-}
-
-
-def get_radar_alert_tile(z: str, x: str, y: str, frame: int = 4) -> Response:
-    """Proxy IEM NEXRAD reflectivity tiles."""
-    try:
-        import urllib.request as ur
-
-        layer = _RADAR_FRAME_LAYERS.get(frame, "nexrad-n0q")
-        url = (
-            "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/"
-            f"{layer}/{z}/{x}/{y}.png"
-        )
-        req = ur.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        from app_core.upstream_ledger import urlopen
-
-        with urlopen(req, timeout=10) as resp:
-            data = resp.read()
-            return Response(
-                content=data,
-                media_type="image/png",
-                headers={"Cache-Control": "public, max-age=3600, immutable"},
-            )
-    except Exception as exc:
-        print(f"[radar tiles] Tile fetch error: {exc}")
-        raise HTTPException(status_code=404, detail="Tile not found")
-
-
-def head_radar_alert_tile() -> Response:
-    """HEAD request for IEM NEXRAD radar tiles."""
-    return Response(media_type="image/png")
-
-
-def get_radar_tiles_freshness_data() -> dict:
-    """Return Last-Modified header for current IEM nexrad-n0q tile."""
-    try:
-        import urllib.request as ur
-
-        url = (
-            "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/"
-            "nexrad-n0q/4/4/6.png"
-        )
-        req = ur.Request(url, headers={"User-Agent": "Mozilla/5.0"}, method="HEAD")
-        from app_core.upstream_ledger import urlopen
-
-        with urlopen(req, timeout=8) as resp:
-            return {"last_modified": resp.headers.get("Last-Modified", "")}
-    except Exception as exc:
-        print(f"[radar tiles] Freshness check error: {exc}")
-        return {"last_modified": ""}
-
-
 def get_radar_status_data() -> dict:
     """Return NWS radar station operational status for all sites."""
     try:
@@ -787,7 +660,6 @@ def get_radar_live_sites_data() -> dict:
 
         # Load fallback coordinates from the nexrad_coordinates module
         try:
-            import sys
             import importlib.util
             coords_path = os.path.join(BASE_DIR, "radar", "nexrad_coordinates.py")
             spec = importlib.util.spec_from_file_location("nexrad_coordinates", coords_path)

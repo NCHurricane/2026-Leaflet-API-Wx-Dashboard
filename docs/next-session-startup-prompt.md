@@ -8,12 +8,13 @@ Continue dashboard work in F:\Python\dashboard_2026.
 Read first:
 - docs/token-saver-maybe.md
 - docs/dashboard-change-and-enhancement-superfile.md
+- docs/project-cleanup-phase2-audit.md
 - docs/archive/worker-free-render-plan.md, Phase 8 completion summary only
 - docs/archive/satellite-platform-expansion-plan.md
 - git status
 
 Current checkpoint:
-- Project cleanup Phase 1 is implemented but not committed. The audited
+- Project cleanup Phase 1 is committed at `628c3cf`. The audited
   33-file removal set is deleted (58,609,963 tracked bytes / 55.89 MiB), the
   empty root `js` mount/directory and broken `/radar.html` route are gone, and
   dead landing-page purge code was removed.
@@ -35,9 +36,38 @@ Current checkpoint:
   product. Every product loaded and animated where applicable, with no errors.
   The observed wiring/layout enhancements are deferred in
   `docs/post-refactor-follow-ups.md` and do not block this cleanup checkpoint.
-- Scheduled Tasks and compatibility-only APIs were not modified. Disabled task
-  definition cleanup, compatibility endpoint review, and any separate palette
-  preview decision remain deferred pending explicit approval.
+- Project cleanup Phase 2's read-only task/API audit and Batch A/B1
+  implementations are recorded in `docs/project-cleanup-phase2-audit.md`. Its
+  preview found no registered `Wx-Dashboard-*` tasks, so no task cleanup was
+  needed.
+- Batch A removes the compatibility-only IEM `/api/radar/tiles/*` routes and
+  route-only service helpers. Production Radar and Workspace remain on
+  `/api/radar/live/*`. Ruff, compilation, 61 focused automated tests plus 42
+  subtests, and diff checks pass. The user-owned `/radar` and `/workspace`
+  browser smoke passed current Radar loading and playback, so Batch A is closed.
+- Batch B1 removes the seven audited non-debug endpoints and their dedicated
+  service helpers, including the dead Alerts selector, RTMA grid-JSON, and
+  Satellite catalog-status paths. The README API quick reference now reflects
+  current route families. Changed-file Ruff/compilation, 112 focused tests, and
+  the full Python suite of 387 tests plus 42 subtests pass. The 52 warnings are
+  existing dependency deprecations. No browser check was performed because the
+  removed endpoints had no current frontend callers.
+- Batch B2 removes the unused `/api/radar/debug/meso-raw` operator endpoint and
+  its route-local response shaping. Internal IEM fetching, radar-site
+  normalization, storm classification, and `/api/radar/live/storm-tracks`
+  remain unchanged. Ruff/compilation, 70 focused tests plus 42 subtests, and the
+  full 387-test Python suite plus 42 subtests pass with the same 52 existing
+  warnings. No browser check was needed because the route had no frontend
+  caller.
+- Batch C removes the disconnected `/api/archive/mrms`,
+  `/api/archive/result`, `/api/archive/spc`, and `/api/progress/{task_id}`
+  routes, their MRMS/SPC session/result implementation, and the now-unused
+  `app_core/progress.py` state module. Active Alerts and Surface archive routes
+  remain. Changed-file Ruff/compilation, a 66-test focused retention gate, and
+  the full 389-test Python suite pass with 31 existing dependency deprecation
+  warnings. Static caller inspection and route tests confirm that no frontend
+  workflow was removed, so no browser check is required. The route inventory is
+  now 74 decorators.
 - Worker-free rendering Phases 0-8 are closed.
 - The whole-system user-owned browser smoke passed.
 - The optional `core` and `surface` Task Scheduler warmers passed enabled and
@@ -45,10 +75,11 @@ Current checkpoint:
 - New `rtma` and `mrms` optional profiles are implemented and registered
   disabled. RTMA targets CONUS Hourly/Rapid Update Temperature latest frames;
   MRMS targets PrecipRate, LL 60-minute Rotation Track, and Instant MESH.
-- All four optional warmers are currently disabled for Radar benchmarking.
-- Legacy direct-writing `Wx-Dashboard-*` tasks remain retired/disabled. No
-  legacy-task unregistration was performed; deletion remains an explicit
-  operator action.
+- No optional warmer is currently registered. Keep optional warmers absent or
+  disabled during Radar benchmarking.
+- The 2026-08-05 preview found no registered `Wx-Dashboard-*` tasks. No
+  task mutation was performed; legacy-task deletion remains an explicit
+  operator action if matching definitions are found on another machine.
 - Optional warmers are API-only clients. Dashboard correctness, freshness,
   rendering, health, and cleanup do not depend on Task Scheduler.
 - Phase 8 follow-up corrected SPC cold recovery, WPC cold recovery, NHC 304
@@ -620,6 +651,7 @@ Previous accepted checkpoint:
   `/rtma` load/scrub also passed.
 
 Next step:
-- Review the remaining non-Workspace dashboard tracks/backlog with the user.
-  Do not begin another track from this handoff alone.
+- Review and commit the bounded Phase 2 API cleanup (Batches A, B1, B2, and C).
+  Do not remove task tooling/definitions or palette-preview code from this
+  handoff alone.
 ```

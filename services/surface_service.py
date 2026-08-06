@@ -542,32 +542,6 @@ def _surface_gradient_response_for_submission(
     )
 
 
-def get_colormap_data(product: str = "temperature") -> dict:
-    """Return colormap anchor points for a given surface product."""
-    product_lower = product.lower().strip()
-    if product_lower not in SURFACE_PRODUCTS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown product '{product}'. Valid: {list(SURFACE_PRODUCTS.keys())}",
-        )
-    meta = SURFACE_PRODUCTS[product_lower]
-    if meta["anchors"] == "temp":
-        anchors = _TEMP_ANCHORS
-    elif meta["anchors"] == "wind":
-        anchors = _WIND_ANCHORS
-    elif meta["anchors"] == "pressure":
-        anchors = _PRESSURE_ANCHORS
-    elif meta["anchors"] == "visibility":
-        anchors = _VISIBILITY_ANCHORS
-    else:
-        anchors = _RH_ANCHORS
-    return {
-        "product": product_lower,
-        "unit": meta["unit"],
-        "anchors": [{"value": a[0], "color": a[1]} for a in anchors],
-    }
-
-
 def fetch_surface_archive_frames(region: str, frame_times: list, source: str = "iem"):
     return surface_utils.fetch_metar_data_archive_frames(
         region, frame_times, source=source

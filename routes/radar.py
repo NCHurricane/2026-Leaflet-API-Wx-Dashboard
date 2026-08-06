@@ -3,7 +3,6 @@
 from fastapi import APIRouter
 
 from services.radar_service import (
-    get_radar_alert_tile,
     get_radar_colortable_data,
     get_radar_live_frames_data,
     get_radar_live_latest_data,
@@ -11,45 +10,16 @@ from services.radar_service import (
     get_radar_live_sites_data,
     get_radar_live_value_data,
     get_radar_live_webgl_artifact_data,
-    get_radar_site_locations_data,
-    get_radar_sites_data,
     get_radar_status_data,
-    get_radar_tiles_freshness_data,
-    head_radar_alert_tile,
 )
-from services.radar_storm_attributes_service import get_radar_storm_cells_data, _fetch_iem, _radar_3letter
+from services.radar_storm_attributes_service import get_radar_storm_cells_data
 
 router = APIRouter()
-
-
-@router.get("/api/radar/sites")
-def get_radar_sites():
-    return get_radar_sites_data()
-
-
-@router.get("/api/radar/site-locations")
-def get_radar_site_locations():
-    return get_radar_site_locations_data()
 
 
 @router.get("/api/radar/colortable")
 def get_radar_colortable(product: str = "BR"):
     return get_radar_colortable_data(product=product)
-
-
-@router.get("/api/radar/tiles/{z}/{x}/{y}")
-def get_radar_alert_tiles(z: str, x: str, y: str, frame: int = 4):
-    return get_radar_alert_tile(z=z, x=x, y=y, frame=frame)
-
-
-@router.head("/api/radar/tiles/{z}/{x}/{y}")
-def head_radar_alert_tiles(z: str, x: str, y: str):
-    return head_radar_alert_tile()
-
-
-@router.get("/api/radar/tiles/freshness")
-def get_radar_tiles_freshness():
-    return get_radar_tiles_freshness_data()
 
 
 @router.get("/api/radar/status")
@@ -156,37 +126,6 @@ def get_radar_live_value(
         storm_motion_source=storm_motion_source,
         storm_cell_id=storm_cell_id,
     )
-
-
-@router.get("/api/radar/debug/meso-raw")
-def get_radar_debug_meso_raw(site: str = "KMHX"):
-    """Return raw IEM meso/tvs field values for every cell at a radar site.
-
-    Use this to inspect the numeric scale IEM uses for the ``meso`` and ``tvs``
-    fields so an appropriate threshold can be chosen for icon filtering.
-    """
-    radar3 = _radar_3letter(site)
-    try:
-        geojson = _fetch_iem(valid=None)
-    except Exception as exc:
-        return {"error": str(exc), "site": site}
-
-    cells = []
-    for feature in geojson.get("features", []):
-        props = feature.get("properties") or {}
-        if str(props.get("nexrad", "")).upper() != radar3:
-            continue
-        cells.append({
-            "cell_id": props.get("storm_id"),
-            "meso_raw": props.get("meso"),
-            "tvs_raw": props.get("tvs"),
-            "posh": props.get("posh"),
-            "poh": props.get("poh"),
-            "max_dbz": props.get("max_dbz"),
-            "valid": props.get("valid"),
-        })
-
-    return {"site": site, "radar3": radar3, "cell_count": len(cells), "cells": cells}
 
 
 @router.get("/api/radar/live/storm-tracks")

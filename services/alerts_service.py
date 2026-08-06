@@ -1,4 +1,4 @@
-"""Alert cache, geometry enrichment, and selector compatibility helpers."""
+"""Alert cache and geometry enrichment helpers."""
 
 from __future__ import annotations
 
@@ -21,13 +21,7 @@ from app_core.upstream_ledger import record_measurement, urlopen
 
 from app_core.paths import CACHE_ROOT
 from app_core.refresh_coordinator import Submission, get_refresh_coordinator
-from config.alerts_config import (
-    ALERT_COLORS,
-    DEFAULT_COLOR,
-    GEOMETRY_ENDPOINT_DEFAULTS,
-    HAZARD_CATEGORIES,
-    HAZARD_CATEGORY_ALIASES,
-)
+from config.alerts_config import GEOMETRY_ENDPOINT_DEFAULTS
 
 _LSR_QUERY_URL = (
     "https://mapservices.weather.noaa.gov/vector/rest/services/"
@@ -556,44 +550,6 @@ def get_alerts_data(
     }
 
 
-def get_alert_polygons(
-    *, region: str = "CONUS", hazard: str = "All Alerts", wfo: Optional[str] = None
-) -> dict:
-    region_upper = (region or "CONUS").strip().upper()
-    state = None if region_upper in {"", "CONUS", "WORLD"} else region_upper
-    payload = get_alerts_data(state=state)
-    features = payload.get("features") or []
-
-    hazard_name = HAZARD_CATEGORY_ALIASES.get(hazard, hazard)
-    allowed_events = HAZARD_CATEGORIES.get(hazard_name)
-    if allowed_events is not None:
-        allowed = {str(event).lower() for event in allowed_events}
-        features = [
-            f
-            for f in features
-            if str((f.get("properties") or {}).get("event") or "").lower() in allowed
-        ]
-
-    wfo_code = (wfo or "").strip().upper()
-    if wfo_code:
-        features = [f for f in features if _feature_matches_wfo(f, wfo_code)]
-
-    feature_collection = {
-        "type": "FeatureCollection",
-        "features": [_selector_feature(f) for f in features if f.get("geometry")],
-    }
-
-    return {
-        "feature_collection": feature_collection,
-        "count": len(feature_collection["features"]),
-        "_source": payload.get("_source", "NWS"),
-        "_updated": payload.get("_updated"),
-        "region": region_upper,
-        "hazard": hazard_name,
-        "wfo": wfo_code or None,
-    }
-
-
 def _iter_coords(node):
     if isinstance(node, (list, tuple)):
         if len(node) >= 2 and all(isinstance(v, (int, float)) for v in node[:2]):
@@ -626,32 +582,3 @@ def _feature_overlaps_bbox(feat: dict, w: float, e: float, s: float, n: float) -
     if not seen:
         return False
     return not (max_x < w or min_x > e or max_y < s or min_y > n)
-
-
-def _feature_matches_wfo(feat: dict, wfo_code: str) -> bool:
-    props = feat.get("properties") or {}
-    sender_code = str(props.get("senderCode") or "").upper()
-    if sender_code and wfo_code in sender_code:
-        return True
-    params = props.get("parameters") or {}
-    if isinstance(params, dict):
-        for key in ["WMOidentifier", "AWIPSidentifier", "NWSidentifier"]:
-            value = params.get(key)
-            if value and wfo_code in str(value).upper():
-                return True
-    for zone in props.get("affectedZones") or []:
-        if f"/{wfo_code}" in str(zone).upper():
-            return True
-    return False
-
-
-def _selector_feature(feat: dict) -> dict:
-    props = dict(feat.get("properties") or {})
-    event = str(props.get("event") or "Alert")
-    props.setdefault("color", ALERT_COLORS.get(event, DEFAULT_COLOR))
-    props.setdefault("headline", props.get("headline") or event)
-    return {
-        "type": "Feature",
-        "geometry": feat.get("geometry"),
-        "properties": props,
-    }

@@ -10,7 +10,6 @@ from services.tropical_service import (
     get_tropical_basin_feeds_data,
     get_tropical_storm_data,
     get_tropical_storms_data,
-    get_tropical_summary_data,
     start_tropical_archive_warm_data,
 )
 
@@ -34,11 +33,6 @@ def get_tropical_products():
 @router.get("/api/tropical/storms")
 def get_tropical_storms(basin: str = "WORLD", force: bool = False):
     return get_tropical_storms_data(basin=basin, force=force)
-
-
-@router.get("/api/tropical/summary")
-def get_tropical_summary(force: bool = False):
-    return get_tropical_summary_data(force=force)
 
 
 @router.get("/api/tropical/basin/{basin_id}/feeds")

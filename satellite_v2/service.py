@@ -508,10 +508,6 @@ def get_catalog_payload(
     return payload
 
 
-def get_status_payload(cache_root: str) -> dict[str, Any]:
-    return catalog.status_payload(cache_root)
-
-
 def get_frame_bounds(
     cache_root: str,
     sat_id: str,

@@ -144,15 +144,15 @@ with the panel does not also manipulate or close the map view.
 - The default-on timer explicitly refreshes selected live data every 60 seconds.
 - The right rail derives visibility from selected datasets, not response counts.
 
-## Endpoint Progress Pattern
+## Archive Endpoint Pattern
 
-Progress tracking (`active_tasks` in `app_core/progress.py`, polled via
-`/api/progress/{task_id}` in `routes/core.py`) applies to the synchronous archive
-render workflow in `services/archive_service.py`, where render time is non-trivial.
+The retained `/api/archive/alerts` and `/api/archive/surface` endpoints return
+their results synchronously and use deterministic JSON caching in
+`services/archive_service.py`. The disconnected MRMS/SPC render-session and
+progress-polling workflow was removed during cleanup Phase 2.
 
 Cache-first endpoints (`/api/data/*`, `/api/overlay/*`, `/api/radar/live/*`,
-`/api/satellite-v2/*`) are lightweight reads or bounded on-demand renders — no progress
-tracking needed.
+`/api/satellite-v2/*`) remain lightweight reads or bounded on-demand renders.
 
 ## Radar Live Fallback Pattern (Standalone Page)
 

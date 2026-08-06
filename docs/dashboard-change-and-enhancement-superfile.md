@@ -31,7 +31,13 @@ re-smoke. Drought is explicitly excluded from Workspace expansion and remains a
 standalone product. Project cleanup Phase 1 removed the 33-file audited set,
 retired the empty root `js` mount and broken `/radar.html` route, centralized
 generated telemetry under `cache`, fixed browser ISO archive timestamps, and
-passed the complete automated and 13-page browser gates.)
+passed the complete automated and 13-page browser gates. Project cleanup Phase
+2 Batch A removes the unused compatibility-only IEM Radar tile API while
+preserving `/api/radar/live/*`; Batch B1 removes seven unused non-debug API
+endpoints and their dedicated helpers; Batch B2 removes the unused raw-IEM
+Radar diagnostic route while preserving storm-track internals; Batch C removes
+the disconnected MRMS/SPC archive-result and progress workflow while retaining
+Alerts and Surface archive routes.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -59,7 +65,7 @@ Keep separate:
 ## Project Cleanup Phase 1 (2026-08-05)
 
 The first implementation slice from the user-interface-focused project audit
-is complete and intentionally uncommitted for review:
+is complete and committed at `628c3cf`:
 
 - Deleted the clean-room-validated 33-file set: 11 obsolete Python modules,
   the unused vendored TopoJSON client, the unused root favicon, 12 superseded
@@ -86,8 +92,58 @@ is complete and intentionally uncommitted for review:
   Non-blocking wiring/layout observations are recorded in
   `docs/post-refactor-follow-ups.md`.
 
-Deferred: do not modify disabled Scheduled Task definitions, compatibility-only
-API routes, or the standalone palette-preview area without separate approval.
+At this checkpoint, Scheduled Task tooling/definitions, compatibility-only API
+routes, and the standalone palette-preview area required separate approval.
+Phase 2 subsequently received bounded authorization for the API cleanup only.
+
+## Project Cleanup Phase 2 Audit and Batches A/B1/B2/C (2026-08-05)
+
+The separately authorized audit and implementation batches are recorded in
+`docs/project-cleanup-phase2-audit.md`. No scheduled tasks were changed.
+
+- The preview-only task inspection found no registered `Wx-Dashboard-*` tasks
+  on the current machine. Retain the installer's 13-name legacy removal
+  allowlist and four optional API-warmer profiles; there is no current task
+  definition cleanup to perform.
+- Static inspection covered 89 FastAPI route decorators. Current page/runtime
+  routes, dynamic MRMS tile URLs, standardized product-catalog contracts, the
+  `/weather.html` redirect, and scheduler lifecycle hooks remain retained.
+- Batch A removes the compatibility-only IEM Radar tile GET/HEAD route and its
+  freshness route, their route-only service helpers, and the unused tile
+  response import. The production Radar and Workspace engines remain on
+  `/api/radar/live/*`.
+- Ruff, Python compilation, 61 focused automated tests plus 42 subtests, and
+  `git diff --check` pass. The 28 Matplotlib warnings and denied pytest cache
+  write are existing/environment-only. The user-owned focused `/radar` and
+  `/workspace` browser smoke passed current Radar loading and playback. Batch A
+  is closed.
+- The user confirmed this is a single-user application with no external API
+  consumers. Batch B1 removes the seven unused non-debug endpoints listed in
+  the audit, their dedicated route-only helpers, the dead Alerts selector and
+  RTMA grid-JSON paths, and the Satellite catalog-status wrapper. The README API
+  quick reference is reconciled to current routes.
+- Batch B1 passes changed-file Ruff and compilation, 112 focused tests, and the
+  complete Python suite of 387 tests plus 42 subtests. The 52 warnings are
+  existing dependency deprecations. No live browser check was performed because
+  the removed endpoints had no current frontend callers.
+- Batch B2 removes `/api/radar/debug/meso-raw` and its route-local response
+  shaping. The internal IEM fetch, radar-site normalization, storm-cell
+  classification, and `/api/radar/live/storm-tracks` workflow remain intact.
+  Ruff/compilation, 70 focused tests plus 42 subtests, and the full 387-test
+  Python suite plus 42 subtests pass with the same 52 existing warnings. No
+  browser check was needed because the debug route had no frontend caller.
+- Batch C removes `/api/archive/mrms`, `/api/archive/result`,
+  `/api/archive/spc`, and `/api/progress/{task_id}`, their MRMS/SPC
+  render-session/result implementation, and the now-unused
+  `app_core/progress.py` state module. Active Alerts and Surface archive routes
+  remain unchanged. Changed-file Ruff/compilation, 66 focused retention tests,
+  and the full 389-test Python suite pass with 31 existing dependency
+  deprecation warnings. Static caller inspection and route tests establish that
+  no frontend workflow was removed, so no browser check is required. The route
+  inventory is now 74 decorators.
+
+Recommended next action: review and commit the bounded Phase 2 API cleanup.
+Keep task tooling/definitions and palette preview deferred.
 
 ## Active Tracks (2026-08-05)
 
@@ -1614,8 +1670,8 @@ found it.
   has NOT yet been deleted from `js/weather.js`/`weather.html` — deletion
   happens after user smoke, per the strangler-fig rule. Deliberate deltas to
   review during smoke: (a) SPC archive mode was not rebuilt (same Option B
-  treatment as Surface; the single-date `/api/archive/spc` UI remains only in
-  weather.html until the Phase 22 scrubber decision), (b) detail-panel drag
+  treatment as Surface; the disconnected `/api/archive/spc` backend workflow
+  was later removed in cleanup Phase 2), (b) detail-panel drag
   and prev/next alert-stack navigation were dropped (SPC details are always
   single-feature), (c) "Zoom to Outlook Area" fits the clicked feature's
   bounds instead of flyTo(center, z9), (d) the boundary bring-to-front hack
@@ -2190,9 +2246,9 @@ Completed radar enhancements:
   the Meso icon. Ranks 1–3 are weak rotational shear; below this threshold
   the cell falls back to its hail/default icon. Constant `_MESO_MIN_RANK`
   in `services/radar_storm_attributes_service.py`.
-- Debug endpoint `/api/radar/debug/meso-raw?site=KXXX` returns raw IEM
-  `meso`/`tvs` field values for every cell at a site — use this when tuning
-  the rank threshold.
+- The former raw-IEM meso/TVS debug route was removed in Project Cleanup Phase
+  2 Batch B2. Threshold behavior remains covered by the storm-attributes
+  service and its focused tests.
 - Radar scrubber auto-update sends `?refresh=true` on
   `/api/radar/live/frames`. The selected-resource coordinator keeps one
   deduplicated latest-only probe active at a 60-second cadence and the client
@@ -2357,9 +2413,9 @@ Current radar notes:
 - Do not bump `cache_variant` for BR products without also updating the comment
   in `radar_config.py` and confirming the pal file change is intentional; stale
   frames from the old variant accumulate on disk but are ignored automatically.
-- Legacy `/api/radar/tiles/{z}/{x}/{y}` and `/api/radar/tiles/freshness`
-  endpoints still exist in `routes/radar.py` / `services/radar_service.py` for
-  API compatibility, but the production frontend no longer calls them.
+- The unused compatibility-only IEM `/api/radar/tiles/*` proxy and freshness
+  endpoints were removed in Project Cleanup Phase 2 Batch A. Production Radar
+  remains on the cache-first `/api/radar/live/*` contract.
 
 ### Satellite and lightning
 

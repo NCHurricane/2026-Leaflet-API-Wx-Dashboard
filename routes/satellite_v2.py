@@ -86,14 +86,6 @@ def get_satellite_v2_frame_bounds(
     return {"bounds": bounds}
 
 
-@router.get("/api/satellite-v2/status")
-def get_satellite_v2_status():
-    try:
-        return satellite_v2_service.get_status_payload(CACHE_ROOT)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
 @router.get("/api/satellite-v2/legend")
 def get_satellite_v2_legend(channel: str = SATELLITE_V2_DEFAULT_CHANNEL):
     try:

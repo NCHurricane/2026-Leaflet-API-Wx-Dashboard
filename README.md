@@ -19,8 +19,7 @@ NCHurricane Dashboard 2026 is an operational weather workstation app designed fo
 - A severe-weather workspace at `/workspace`
 - Standalone product pages with clean URLs such as `/radar`, `/satellite`, and
   `/alerts`
-- Current and archive rendering endpoints
-- Progress tracking for long-running jobs
+- Current and retained Alerts/Surface archive endpoints
 - Local caching of downloads and generated products
 - Built-in purge tooling for retention control
 
@@ -61,8 +60,7 @@ Suggested branch protections on `main`:
 
 ### Ops Features
 
-- Per-request progress endpoint: `/api/progress/{task_id}`
-- File retention purge endpoint: `/api/purge`
+- Application-owned periodic cache retention and cleanup
 - Unified static mounts for generated media under `/img/*`
 
 ## Tech Stack
@@ -83,7 +81,7 @@ Suggested branch protections on `main`:
 
 ## Architecture at a Glance
 
-- `main.py` hosts the FastAPI app, endpoint routing, static mounts, and task progress state.
+- `main.py` hosts the FastAPI app, endpoint routing, and static mounts.
 - `index.html` is the main dashboard landing page served at `/`.
 - `/workspace` composes active Alerts and live Radar engines on one Leaflet map;
   `/weather.html` redirects there.
@@ -213,29 +211,27 @@ Open in browser:
 
 ### Surface
 
-- `GET /api/surface/current`
-- `GET /api/surface/archive`
-- `GET /api/surface` (legacy multiplexer)
+- `GET /api/surface/products`
+- `GET /api/data/surface`
+- `GET /api/data/surface-gradient`
+- `GET /api/archive/surface`
 
 ### Alerts
 
-- `GET /api/alerts/current`
-- `GET /api/alerts/archive`
-- `GET /api/alerts/polygons`
-- `GET /api/alerts` (legacy multiplexer)
+- `GET /api/data/alerts`
+- `GET /api/data/alerts/lsr`
+- `GET /api/archive/alerts`
 
 ### Radar
 
-- `GET /api/radar/sites`
-- `GET /api/radar/current`
-- `GET /api/radar/archive`
-- `GET /api/radar` (legacy multiplexer)
-
-### Weather Radar Live (Leaflet weather tab)
-
+- `GET /api/radar/products`
 - `GET /api/radar/live/sites`
+- `GET /api/radar/status`
+- `GET /api/radar/colortable?product=L3_N0B`
 - `GET /api/radar/live/latest?site=KMHX&product=L3_N0B`
 - `GET /api/radar/live/frames?site=KMHX&product=L3_N0B&hours=2`
+- `GET /api/radar/live/value`
+- `GET /api/radar/live/storm-tracks`
 
 Notes:
 
@@ -245,9 +241,11 @@ Notes:
 
 ### Satellite
 
-- `GET /api/satellite/current`
-- `GET /api/satellite/archive`
-- `GET /api/satellite` (legacy multiplexer)
+- `GET /api/satellite/products`
+- `GET /api/satellite-v2/catalog`
+- `GET /api/satellite-v2/frame-bounds`
+- `GET /api/satellite-v2/legend`
+- `GET /api/satellite-v2/tile/{z}/{x}/{y}`
 
 ### Satellite v2 Rapid Worker
 
@@ -280,18 +278,23 @@ $env:WX_SATELLITE_V2_RAPID_TILE_WORKERS = "2"
 
 ### MRMS
 
-- `GET /api/mrms/current`
-- `GET /api/mrms/archive`
-- `GET /api/mrms` (legacy multiplexer)
+- `GET /api/mrms/products`
+- `GET /api/mrms/set-product`
+- `GET /api/data/mrms`
+- `POST /api/mrms/tiles/prepare`
+- `GET /api/mrms/tiles/{render_version}/{product}/{frame_key}/{z}/{x}/{y}.png`
 
-### Lightning
+### Other product APIs
 
-- `GET /api/lightning/latest`
-
-### Task progress and cache maintenance
-
-- `GET /api/progress/{task_id}`
-- `POST /api/purge`
+- RTMA: `/api/rtma/products`, `/api/data/rtma`,
+  `/api/data/rtma/points`, `/api/data/rtma/frames`
+- SPC: `/api/spc/products`, `/api/data/spc`, `/api/data/spc/reports`,
+  `/api/data/spc/active`
+- WPC: `/api/wpc/products`, `/api/data/wpc`, `/api/data/wpc/catalog`
+- Drought: `/api/drought/products`, `/api/data/drought/dates`,
+  `/api/data/drought`, `/api/data/drought/state-stats`
+- Tropical and Water routes are defined in `routes/tropical.py` and
+  `routes/water.py`.
 
 ## Example Requests
 
@@ -299,14 +302,12 @@ $env:WX_SATELLITE_V2_RAPID_TILE_WORKERS = "2"
 # System status
 curl "http://127.0.0.1:8000/api/status"
 
-# Current radar image (auto source)
-curl "http://127.0.0.1:8000/api/radar/current?request_id=test123&site=KMHX&product=N0B&level=Level%203&source=auto"
+# Current radar metadata
+curl "http://127.0.0.1:8000/api/radar/live/latest?site=KMHX&product=L3_N0B"
 
-# Satellite archive animation
-curl "http://127.0.0.1:8000/api/satellite/archive?request_id=sat1&sat_id=goes19&sector=CONUS&channel=Channel13&date_from=2026-03-10%2012:00&date_to=2026-03-10%2018:00&source=aws"
+# Current Satellite catalog
+curl "http://127.0.0.1:8000/api/satellite-v2/catalog?sat_id=goes19&sector=CONUS&channel=Channel13"
 
-# Poll task progress
-curl "http://127.0.0.1:8000/api/progress/test123"
 ```
 
 ## Basemap Cache Pre-Rendering (Optional but Recommended)
@@ -327,13 +328,11 @@ Use `--force` to rebuild cache artifacts.
 - Archive endpoints require paired `date_from` and `date_to`.
 - Maximum archive spans are enforced in API logic per category.
 
-## Data Retention and Purging
+## Data Retention and Cleanup
 
-The dashboard includes retention controls on the landing page and via API:
-
-- Endpoint: `POST /api/purge?hours=<N>&categories=radar,satellite,...`
-- `hours=0` purges all selected categories
-- Purge skips protected basemap cache directories
+The FastAPI lifecycle registers `workers/cache_cleanup_worker.py` with the
+application refresh coordinator. Cleanup runs every six hours without requiring
+an open page or a scheduled task. There is no public purge endpoint.
 
 ## Known Operational Considerations
 
@@ -355,7 +354,7 @@ The dashboard includes retention controls on the landing page and via API:
 This project currently supports personal operations first. If you contribute:
 
 - Keep changes scoped by workflow (`surface`, `alerts`, `radar`, etc.)
-- Preserve backward compatibility for legacy multiplexer endpoints where practical
+- Preserve current route contracts unless a cleanup batch explicitly retires them
 - Include clear reproduction steps for rendering/data-source bugs
 
 ## License Recommendation

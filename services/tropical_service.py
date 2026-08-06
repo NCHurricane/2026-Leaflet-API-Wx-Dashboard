@@ -577,28 +577,6 @@ def get_tropical_storms_data(basin: str = "WORLD", force: bool = False) -> dict:
     }
 
 
-def get_tropical_summary_data(force: bool = False) -> dict:
-    """Return the cached tropical worker summary."""
-    if not force:
-        _maybe_schedule_tropical_refresh()
-    summary = None if force else _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
-    if summary is None:
-        try:
-            _run_tropical_worker_once(force=force)
-        except Exception as exc:
-            fallback = _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
-            if fallback is None:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Tropical cache refresh failed: {exc}",
-                )
-            return fallback
-        summary = _read_tropical_cache_any_age(_TROPICAL_SUMMARY_CACHE)
-    if summary is None:
-        raise HTTPException(status_code=503, detail="Tropical cache is not available.")
-    return summary
-
-
 def get_tropical_basin_feeds_data(basin_id: str) -> dict:
     """Return cached normalized RSS/GIS feed data for one tropical basin."""
     basin_key = basin_id.strip().upper()
