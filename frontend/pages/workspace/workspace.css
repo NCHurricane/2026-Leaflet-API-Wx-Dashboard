@@ -5280,7 +5280,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; }
 .workspace-water-detail .wx-water-hydrograph { display: block; width: 100%; height: auto; max-height: 260px; object-fit: contain; }
 #workspace-alert-all-filter { grid-template-columns: 1fr; }
 #workspace-warning-filters { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-#workspace-watch-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#workspace-watch-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .workspace-alert-filter-group { display: grid; gap: 4px; }
 .workspace-alert-filter-label {
     color: #8fa9c1;

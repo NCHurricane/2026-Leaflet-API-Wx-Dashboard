@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-Last updated: 2026-08-04 (Task-scheduler-free rendering Phases 0-8 are closed.
+Last updated: 2026-08-05 (Task-scheduler-free rendering Phases 0-8 are closed.
 The zero-task browser matrix and optional-warmer enabled/disabled acceptance
 passed. Radar render optimization Phases 1-7 are implemented and
 golden-validated; the Phase 1-2 browser acceptance passed and the backend-only
@@ -28,7 +28,10 @@ shared engine. Its initial browser gate and requested Workspace-only
 network-pill refinement re-smoke passed, so Phase 6 is user-accepted and closed.
 The Workspace-wide layer-group disclosure follow-up also passed its user
 re-smoke. Drought is explicitly excluded from Workspace expansion and remains a
-standalone product.)
+standalone product. Project cleanup Phase 1 removed the 33-file audited set,
+retired the empty root `js` mount and broken `/radar.html` route, centralized
+generated telemetry under `cache`, fixed browser ISO archive timestamps, and
+passed the complete automated and 13-page browser gates.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -53,7 +56,40 @@ Keep separate:
 - `docs/archive/satellite-radar-render-pipeline-files.md` for the historical
   shared pipeline file reference.
 
-## Active Tracks (2026-08-04)
+## Project Cleanup Phase 1 (2026-08-05)
+
+The first implementation slice from the user-interface-focused project audit
+is complete and intentionally uncommitted for review:
+
+- Deleted the clean-room-validated 33-file set: 11 obsolete Python modules,
+  the unused vendored TopoJSON client, the unused root favicon, 12 superseded
+  image assets, four unused alert-specific sounds, and four obsolete/test city
+  data files. The tracked reduction is 58,609,963 bytes (55.89 MiB).
+- Removed the empty root `js` mount and directory, the broken `/radar.html`
+  route, and the dead landing-page purge client/CSS. Required borders, runtime
+  city files, `img/favicon.ico`, `img/nchurricane_logo.png`, station legend,
+  fonts, and `sounds/weather_alert.mp3` remain.
+- Moved the upstream ledger, Phase 0 measurement output, and headless-worker
+  log defaults beneath `cache`. Existing root logs were preserved by moving
+  254,352,783 bytes to `cache/metrics/` and `cache/logs/`; obsolete external
+  generated-directory ignore rules were removed.
+- Fixed the shared archive date parser for `Date.toISOString()` values such as
+  `2026-08-05T20:00:00.000Z`. Refreshed stale Workspace assertions to the
+  shared core region table/current timeline wiring and corrected the TOR/SVR/FLD
+  Watch grid to three columns.
+- Validation: changed-file Ruff (excluding the intentional import-order
+  pattern), Python compilation, 382 pytest tests plus 42 subtests, 13-page HTTP
+  and browser initialization, the landing navigation, and Workspace Watch
+  filter interaction all pass. The 52 warnings are existing dependency
+  deprecations. The user's subsequent full manual pass covered every page and
+  product; every product loaded and animated where applicable with no errors.
+  Non-blocking wiring/layout observations are recorded in
+  `docs/post-refactor-follow-ups.md`.
+
+Deferred: do not modify disabled Scheduled Task definitions, compatibility-only
+API routes, or the standalone palette-preview area without separate approval.
+
+## Active Tracks (2026-08-05)
 
 Track numbers preserve the existing roadmap grouping. Track 3 Radar render
 optimization Phases 3-5 are closed with byte-identical golden output,

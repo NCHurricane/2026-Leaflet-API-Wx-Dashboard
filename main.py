@@ -92,7 +92,6 @@ ensure_runtime_dirs()
 app.mount("/cache", CacheStaticFiles(directory=_CACHE_ROOT), name="cache")
 
 app.mount("/css", StaticFiles(directory=os.path.join(BASE_DIR, "css")), name="css")
-app.mount("/js", StaticFiles(directory=os.path.join(BASE_DIR, "js")), name="js")
 app.mount(
     "/frontend",
     StaticFiles(directory=os.path.join(BASE_DIR, "frontend")),

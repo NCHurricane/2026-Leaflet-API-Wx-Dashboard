@@ -1,6 +1,6 @@
 # Next Session Startup Prompt
 
-Date updated: 2026-08-04
+Date updated: 2026-08-05
 
 ```text
 Continue dashboard work in F:\Python\dashboard_2026.
@@ -13,6 +13,31 @@ Read first:
 - git status
 
 Current checkpoint:
+- Project cleanup Phase 1 is implemented but not committed. The audited
+  33-file removal set is deleted (58,609,963 tracked bytes / 55.89 MiB), the
+  empty root `js` mount/directory and broken `/radar.html` route are gone, and
+  dead landing-page purge code was removed.
+- Generated telemetry defaults now live under `cache/metrics/` and
+  `cache/logs/scheduled/`. The existing root `logs/` contents were preserved by
+  moving 254,352,783 bytes under `cache`; no root `logs/`, old generated-product
+  directories, or removal targets remain.
+- Alerts and Surface archive requests now accept the browser-generated
+  millisecond-precision `Z` timestamps. Workspace tests now assert the current
+  shared region/timeline/watch-filter design; the Watch filter grid has three
+  columns for TOR/SVR/FLD.
+- Cleanup validation passes Ruff on changed Python files (with the intentional
+  import-order exception), Python compilation, 382 pytest tests plus 42
+  subtests, HTTP probes for all 13 user pages and retained assets, and an
+  isolated browser pass for all 13 pages. The landing link and Workspace FLD
+  Watch toggle also passed. There were 52 existing dependency deprecation
+  warnings.
+- The user then completed the full manual acceptance pass across every page and
+  product. Every product loaded and animated where applicable, with no errors.
+  The observed wiring/layout enhancements are deferred in
+  `docs/post-refactor-follow-ups.md` and do not block this cleanup checkpoint.
+- Scheduled Tasks and compatibility-only APIs were not modified. Disabled task
+  definition cleanup, compatibility endpoint review, and any separate palette
+  preview decision remain deferred pending explicit approval.
 - Worker-free rendering Phases 0-8 are closed.
 - The whole-system user-owned browser smoke passed.
 - The optional `core` and `surface` Task Scheduler warmers passed enabled and

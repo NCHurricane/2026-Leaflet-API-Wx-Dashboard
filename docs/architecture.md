@@ -92,9 +92,8 @@ Product-page architecture (migration completed in Phase 27):
   workspace.
 - `/radar` serves `frontend/pages/radar/radar.html`, which owns live site/product
   selection, current and cached-frame playback, NST overlays, legends, and the
-  value inspector. (A legacy `/radar.html` route is still declared in
-  `routes/pages.py` but its root file no longer exists, so it 404s — `/radar` is
-  canonical.)
+  value inspector. The extensionless `/radar` URL is canonical; the broken
+  legacy `/radar.html` route has been removed.
 - `/tropical` serves `frontend/pages/tropical/tropical.html`, which composes its
   page-local engine/controller/application modules with `frontend/core/` and
   does not load `js/weather.js` or the removed root `js/tropical-*` modules.
@@ -177,11 +176,6 @@ all work stays inside the application's coordinator/provider/render budgets.
 The RTMA and MRMS profiles are explicit opt-ins because they share heavyweight
 render capacity with Radar and Satellite. Keep every optional warmer disabled
 during performance benchmark capture.
-
-Manual RTMA backfill/preload:
-
-- `workers/rtma_preload.py` primes the full lookback cache (hourly + rapid update)
-- Intended for one-time rebuilds and cold-start priming
 
 Current default runtime behavior: the coordinator and its cleanup schedule run;
 there is no required or opt-in broad APScheduler worker profile.
@@ -400,7 +394,6 @@ cache/
 | `workers/alerts_worker.py`     | NWS alerts fetch → cache                                                      |
 | `workers/spc_worker.py`        | SPC outlook fetch → cache                                                     |
 | `workers/rtma_worker.py`       | RTMA points + pre-render overlay refresh                                      |
-| `workers/rtma_preload.py`      | One-time RTMA backfill/preload                                                |
 | `workers/radar_live_worker.py` | Live radar cache renderer for weather radar endpoints                          |
 | `satellite_v2/renderer.py`     | Source-raster loading, Web Mercator reprojection, PNG alpha policy, composite dispatch |
 | `satellite_v2/composites.py`   | RGB recipes, including solar-aware/Rayleigh-corrected GOES GeoColor                     |
@@ -484,7 +477,8 @@ the backend cache/retention design and the variable-depth tuning notes still app
 **Completed:**
 
 - `workers/mrms_worker.py` writes each rendered CONUS PNG to the overlay cache after every 15-min cycle. Accepts `keep_n: int | None` to defer pruning during batch writes.
-- `workers/mrms_preload.py` backfills all 14 products across their full lookback windows using `list_mrms_files`. Per-product pruning happens once at the end of each batch.
+- The retired `workers/mrms_preload.py` once backfilled all products; current
+  pages use application-owned, demand-driven cache preparation instead.
 - `routes/overlays.py` / `services/overlay_service.py` — `mrms` is included in
   the `allowed_families` allowlist on both `/api/overlay/latest` and
   `/api/overlay/frames`.
@@ -494,7 +488,8 @@ the backend cache/retention design and the variable-depth tuning notes still app
 
 1. **Raise `keep_n` in `mrms_worker.py`** — current default is `keep_n=3`. At 15-min worker cadence a 24-hour scrubber needs `keep_n=96`. Increase to at least 96 (or a config constant).
 
-2. **Raise preload lookback + `_keep_n` in `mrms_preload.py`** — `_lookback_minutes` returns 120 min for high-cadence products. For 24-hour backfill set it to `24 * 60`. `_keep_n` for high-cadence should match worker target (96+).
+2. **Keep demand-driven preparation within the intended history window** — the
+   retired broad preload worker is no longer part of the runtime design.
 
 3. **Add MRMS scrubber to `js/weather.js`** — port the RTMA scrubber pattern:
    - `loadMrmsFrames()` calls `/api/overlay/frames?family=mrms&region=CONUS&stream=default&product={product}` to populate the frame list.

@@ -25,38 +25,15 @@ Thumbs.db
 # Logs and temp
 *.log
 *.tmp
-logs/
 
 # Generic caches/build artifacts (but keep Python modules living in cache/)
 cache/*
 !cache/overlay_cache_utils.py
-basemap_cache/
-surface/basemap_cache/
 
 # Transient data artifacts
 *.grib2
 *.grib2.gz
 *.idx
-
-# Generated weather/radar/satellite artifacts
-alerts/alert_data/
-alerts/alert_images/
-alerts/alerts_archive/
-mrms/mrms_images/
-radar/radar_archive/
-radar/radar_level2_images/
-radar/radar_level3_downloads/
-radar/radar_level3_images/
-satellite/satellite_archive/
-satellite/satellite_images/
-spc/spc_archive/
-spc/spc_images/
-surface/surface_archive/
-surface/surface_data/
-surface/surface_images/
-weather/weather_archive/
-weather/weather_cache/
-weather/weather_images/
 
 # Local backups/recovery artifacts
 *_recovered.py

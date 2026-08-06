@@ -109,6 +109,9 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     app = (
         Path(BASE_DIR) / "frontend" / "pages" / "workspace" / "workspace-app.js"
     ).read_text(encoding="utf-8")
+    map_core = (
+        Path(BASE_DIR) / "frontend" / "core" / "map-core.js"
+    ).read_text(encoding="utf-8")
 
     assert 'id="workspace-radar-enabled" type="checkbox" checked' in page
     assert 'id="workspace-radar-elevation"' not in page
@@ -142,7 +145,9 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
         value for value in ['CONUS', 'AK', 'HI', 'PR']
         if f'<option value="{value}">' in page
     ]
-    assert "WORKSPACE_REGION_BOUNDS" in app
+    assert "WORKSPACE_REGION_BOUNDS" not in app
+    assert "const REGION_BOUNDS = Object.freeze" in map_core
+    assert "mapCore.fitRegion(region, fitOptions)" in app
     assert "WORKSPACE_WARNING_EVENTS" in app
     assert "WORKSPACE_WATCH_EVENTS" in app
     assert "function toggleAlertPill" in app
@@ -185,7 +190,8 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "new Audio('/sounds/weather_alert.mp3')" in app
     assert "NEW_ALERT_EVENTS.has(props.event)" in app
     assert "onNewAlert: showNewAlert" in app
-    assert "onLsrDetail: (feature) => detail.openLsr(feature)" in app
+    assert "onLsrDetail(feature) {" in app
+    assert "detail.openLsr(feature);" in app
     assert "shouldHandleAlertClick: () => !tools.isDrawing()" in app
     assert "detail.open(feature)" in app
     assert "createScrubber" in app
@@ -196,7 +202,7 @@ def test_workspace_uses_simplified_live_controls_and_separate_legends():
     assert "legendTray.legend('alerts')" in app
     assert "legendTray.markReady()" in app
     assert 'class="workspace-legend-tabs" role="tablist"' in page
-    assert page.count('class="workspace-legend-tab"') == 8
+    assert page.count('class="workspace-legend-tab"') == 10
     assert "fa-chevron-down" in page
     assert "panel.classList.toggle('is-collapsed', !isOpen)" in app
     assert "elevation: '0.5'" in app
@@ -325,7 +331,6 @@ def test_workspace_satellite_phase2_is_curated_default_off_and_uses_shared_timel
     assert 'id="workspace-satellite-product-stage" hidden' in page
     assert 'id="workspace-satellite-product" disabled' in page
     assert "workspace-satellite-view" not in page
-    assert "One-hour Satellite history uses the shared Workspace timeline" in page
     assert 'id="workspace-satellite-legend-tab"' in page
     assert 'id="workspace-satellite-legend"' in page
 
@@ -362,6 +367,7 @@ def test_workspace_satellite_phase2_is_curated_default_off_and_uses_shared_timel
     assert "animator.prepareForZoom()" in satellite
     assert "satelliteFrameIndexAtOrBefore" in satellite
     assert "showFrameForTimestamp" in satellite
+    assert "onFrames?.([...frames], { index: nextIndex })" in satellite
     assert "awaitFrameOnPlay: true" in app
     assert "workspaceTimelineFrameSets = { radar: [], mrms: [], satellite: [], rtma: [] }" in app
     assert "selectWorkspaceTimelineSource(workspaceTimelineFrameSets)" in app
@@ -420,7 +426,6 @@ def test_workspace_rtma_is_curated_default_off_and_uses_shared_timeline():
     assert 'class="is-active" type="button" data-rtma-mode="values" aria-pressed="true" disabled>Values</button>' in page
     assert 'data-rtma-mode="gradient" aria-pressed="false" disabled>Gradient</button>' in page
     assert 'id="workspace-rtma-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled' in page
-    assert "CONUS-only RTMA-RU analysis follows the shared rolling one-hour timeline" in page
     assert 'id="workspace-rtma-legend-tab"' in page
     assert 'id="workspace-rtma-legend"' in page
 
@@ -444,6 +449,7 @@ def test_workspace_rtma_is_curated_default_off_and_uses_shared_timeline():
     assert "temperature_change_24h" not in rtma
     assert "const SOURCE_LOOKBACK_HOURS = 2" in rtma
     assert "workspaceFrameWindowWithPredecessor" in rtma
+    assert "onFrames?.(timelineSourceFrames.map" in rtma
     assert "engine.loadFrames(primarySelection, SOURCE_LOOKBACK_HOURS)" in rtma
     assert "engine.fetchNewFrames" in rtma
     assert "showFrameForTimestamp" in rtma
@@ -550,7 +556,6 @@ def test_workspace_mrms_is_curated_default_off_and_uses_shared_timeline():
     assert 'data-mrms-product="precip_type"' in page
     assert 'data-mrms-product="base_reflectivity"' in page
     assert 'id="workspace-mrms-opacity" type="range" min="0.1" max="1" step="0.05" value="0.7" disabled' in page
-    assert "CONUS-only MRMS guidance follows the shared rolling one-hour timeline" in page
     assert 'id="workspace-mrms-legend-tab"' in page
     assert 'id="workspace-mrms-legend"' in page
 
@@ -574,6 +579,7 @@ def test_workspace_mrms_is_curated_default_off_and_uses_shared_timeline():
     assert "engine.loadFrames(selected.product, LOOKBACK_HOURS)" in mrms
     assert "engine.fetchNewFrames" in mrms
     assert "showFrameForTimestamp" in mrms
+    assert "onFrames?.(timelineFrames.map" in mrms
     assert "supportsCurrentRegion" in mrms
     assert "paneName = ''" in engine
     assert "pendingOverlay" in engine
@@ -834,7 +840,7 @@ def test_workspace_watch_filters_are_independent_and_workspace_scoped():
 
     assert 'id="workspace-watch-filters"' in page
     assert 'aria-label="Watch polygons"' in page
-    assert 'data-watch="all" aria-pressed="false"' in page
+    assert 'data-watch="all"' not in page
     assert 'data-watch="tor" aria-pressed="true" title="Tornado Watch"' in page
     assert 'data-watch="svr" aria-pressed="true" title="Severe Thunderstorm Watch"' in page
     assert 'data-watch="fld" aria-pressed="false" title="Flood Watch / Flash Flood Watch"' in page
@@ -852,7 +858,7 @@ def test_workspace_watch_filters_are_independent_and_workspace_scoped():
     assert "fillOpacity: isSubduedWatch ? opacity * 0.16 : opacity" in engine
     assert "buildAlertLayer(displayedWatches, 'alerts-watches')" in engine
     assert "alerts-watch-legend-color" in engine
-    assert "#workspace-watch-filters { grid-template-columns: repeat(4" in styles
+    assert "#workspace-watch-filters { grid-template-columns: repeat(3" in styles
 
 
 def test_legacy_monolith_assets_are_deleted():

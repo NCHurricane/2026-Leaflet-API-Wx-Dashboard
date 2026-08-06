@@ -252,9 +252,9 @@ Notes:
 ### Satellite v2 Rapid Worker
 
 Satellite v2 Full Disk and CONUS imagery are live-rendered on demand with
-tile-cache reuse and supertiles. The only scheduled Satellite v2 warmer is the
-narrow rapid-sector worker, which targets high-cadence sectors where animation
-latency matters.
+tile-cache reuse and supertiles. No scheduled Satellite v2 warmer is required.
+The narrow rapid-sector implementation remains available as an optional manual
+cache primer for high-cadence sectors where animation latency matters.
 
 Default rapid worker scope:
 
@@ -267,8 +267,8 @@ Default rapid worker scope:
 One-off examples:
 
 ```powershell
-python -m workers.satellite_v2_rapid_worker --force
-python -m workers.satellite_v2_rapid_worker --force --jobs goes19:MESO1 --products Channel02 --frames 2 --tile-workers 1
+python -m satellite_v2.rapid_worker --force
+python -m satellite_v2.rapid_worker --force --jobs goes19:MESO1 --products Channel02 --frames 2 --tile-workers 1
 ```
 
 Tune rapid warming with environment variables:

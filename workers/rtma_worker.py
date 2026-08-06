@@ -476,7 +476,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--log-to-file",
         action="store_true",
-        help="Redirect stdout/stderr to logs/scheduled/rtma*.log (for headless task runs).",
+        help="Redirect stdout/stderr to cache/logs/scheduled/rtma*.log (for headless task runs).",
     )
     args = parser.parse_args()
     if args.log_to_file:

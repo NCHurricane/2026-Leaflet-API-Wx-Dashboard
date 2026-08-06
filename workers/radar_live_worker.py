@@ -2340,7 +2340,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--log-to-file",
         action="store_true",
-        help="Redirect stdout/stderr to logs/scheduled/radar_live.log",
+        help="Redirect stdout/stderr to cache/logs/scheduled/radar_live.log",
     )
     args = parser.parse_args()
 

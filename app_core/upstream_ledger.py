@@ -23,9 +23,10 @@ from typing import Any, Iterator
 
 import requests as _requests
 
+from app_core.paths import CACHE_ROOT
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_DEFAULT_LEDGER_PATH = _REPO_ROOT / "logs" / "metrics" / "upstream_requests.jsonl"
+
+_DEFAULT_LEDGER_PATH = Path(CACHE_ROOT) / "metrics" / "upstream_requests.jsonl"
 _WRITE_LOCK = threading.Lock()
 _PROCESS_IDENTITY = uuid.uuid4().hex
 _MEASUREMENT_CONTEXT: ContextVar[dict[str, Any]] = ContextVar(

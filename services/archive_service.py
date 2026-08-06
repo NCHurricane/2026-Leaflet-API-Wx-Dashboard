@@ -102,18 +102,24 @@ def _new_archive_session(session_id: str, product_type: str) -> dict:
 
 def _parse_archive_dt(value: str) -> datetime:
     """Parse ISO 8601 or YYYY-MM-DDTHH:MM string to UTC datetime."""
+    normalized = str(value or "").strip()
+    if normalized.endswith(("Z", "z")):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        dt = datetime.fromisoformat(normalized)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except ValueError:
+        pass
+
     for fmt in (
-        "%Y-%m-%dT%H:%M:%S%z",
-        "%Y-%m-%dT%H:%M%z",
         "%Y-%m-%dT%H:%M:%S",
         "%Y-%m-%dT%H:%M",
         "%Y-%m-%d",
     ):
         try:
-            dt = datetime.strptime(value, fmt)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt
+            return datetime.strptime(normalized, fmt).replace(tzinfo=timezone.utc)
         except ValueError:
             continue
     raise ValueError(

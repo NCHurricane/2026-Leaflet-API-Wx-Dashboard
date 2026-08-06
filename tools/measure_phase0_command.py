@@ -106,7 +106,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("logs/metrics/phase0_render_measurements.jsonl"),
+        default=Path("cache/metrics/phase0_render_measurements.jsonl"),
     )
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()

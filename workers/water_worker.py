@@ -526,7 +526,7 @@ def run_water_worker(*, force: bool = False) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Refresh cached NOAA river gauge markers.")
     parser.add_argument("--force", action="store_true", help="Bypass freshness gate.")
-    parser.add_argument("--log-to-file", action="store_true", help="Redirect output to logs/scheduled/water_riv_gauges.log.")
+    parser.add_argument("--log-to-file", action="store_true", help="Redirect output to cache/logs/scheduled/water_riv_gauges.log.")
     args = parser.parse_args()
 
     if args.log_to_file:

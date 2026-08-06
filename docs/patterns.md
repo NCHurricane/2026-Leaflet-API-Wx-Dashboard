@@ -79,7 +79,7 @@ Supervisor requirements:
 - Keep one-off worker module commands available.
 - Do not overlap legacy direct-write OS tasks with migrated coordinator paths;
   later optional warmers must share persistent leases and provider state.
-- Log worker output consistently under `logs/scheduled/` or a replacement
+- Log worker output consistently under `cache/logs/scheduled/` or a replacement
   cross-platform log directory.
 
 Guard pattern — import is wrapped in try/except so app starts without APScheduler if it is not installed:

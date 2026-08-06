@@ -46,12 +46,12 @@ def mark_run_complete(worker_name: str) -> None:
     os.utime(sentinel, None)
 
 
-# Repo root → logs/scheduled/<name>.log destination for headless task runs.
-_LOG_DIR = Path(__file__).resolve().parent.parent / "logs" / "scheduled"
+# cache/logs/scheduled/<name>.log destination for headless task runs.
+_LOG_DIR = Path(__file__).resolve().parent.parent / "cache" / "logs" / "scheduled"
 
 
 def redirect_stdio_to_log(log_name: str) -> None:
-    """Redirect stdout/stderr into ``logs/scheduled/<log_name>.log`` (append).
+    """Redirect stdout/stderr into ``cache/logs/scheduled/<log_name>.log`` (append).
 
     Intended for use only when the worker is launched headlessly by Task
     Scheduler via ``pythonw.exe`` (no console attached). A timestamped header

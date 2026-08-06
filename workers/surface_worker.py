@@ -533,15 +533,6 @@ def _build_surface_gradients(
                 )
                 continue
 
-            mean_lat = float(np.mean(lats))
-            cos_lat = max(0.2, np.cos(np.radians(mean_lat)))
-
-            if vals.size < 20:
-                print(
-                    f"[surface_worker] gradient {product}: too few points after outlier filter ({vals.size})"
-                )
-                continue
-
             grid, bounds = _interpolate_surface_grid(
                 lons, lats, vals, region=region)
             if grid is None or bounds is None:
@@ -670,7 +661,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--log-to-file",
         action="store_true",
-        help="Redirect stdout/stderr to logs/scheduled/surface.log (for headless task runs).",
+        help="Redirect stdout/stderr to cache/logs/scheduled/surface.log (for headless task runs).",
     )
     parser.add_argument(
         "--product",
