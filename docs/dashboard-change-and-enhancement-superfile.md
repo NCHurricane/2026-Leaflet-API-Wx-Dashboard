@@ -37,7 +37,9 @@ preserving `/api/radar/live/*`; Batch B1 removes seven unused non-debug API
 endpoints and their dedicated helpers; Batch B2 removes the unused raw-IEM
 Radar diagnostic route while preserving storm-track internals; Batch C removes
 the disconnected MRMS/SPC archive-result and progress workflow while retaining
-Alerts and Surface archive routes.)
+Alerts and Surface archive routes. Project cleanup Phase 3 removes four tracked
+research/diagnostic outputs and prevents generated replacements from being
+tracked.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -143,11 +145,29 @@ tasks were changed.
   no frontend workflow was removed, so no browser check is required. The route
   inventory is now 74 decorators.
 
-Recommended next authorization: a bounded Phase 3 removal of four tracked,
-unreferenced research/diagnostic outputs totaling 2,672,966 bytes
-(`tmp/pdfs/*` and `tools/KRAX_chunk_assembled.png`), plus recurrence prevention
-for generated diagnostic output. Keep task tooling/definitions and palette
-preview deferred.
+Phase 2 is closed at `795b9c1`. Its separately gated tracked-output candidate
+was authorized as Phase 3 below. Task tooling/definitions and palette preview
+remain deferred.
+
+## Project Cleanup Phase 3 — Tracked Diagnostic Outputs (2026-08-05)
+
+Complete:
+
+- Removed three unreferenced research files under `tmp/pdfs/` and the generated
+  `tools/KRAX_chunk_assembled.png`, reducing tracked content by 2,672,966 bytes.
+- Added ignore coverage for scratch `tmp/` content and generated
+  `tools/*_chunk_assembled.png` files.
+- Redirected `tools/test_l2_chunks.py` render proof output to the already ignored
+  `cache/diagnostics/radar/` tree, preserving the operator diagnostic while
+  preventing recurrence in source control.
+- Changed-file Ruff, Python compilation, ignore-rule probes, stale-reference
+  searches, and `git diff --check` pass. No application or browser test is
+  required because no runtime page, API, imported module, or retained asset was
+  changed.
+
+Phase 3 is closed. Select any further cleanup family through a new bounded
+review and authorization. Task tooling/definitions and palette preview remain
+out of scope.
 
 ## Active Tracks (2026-08-05)
 

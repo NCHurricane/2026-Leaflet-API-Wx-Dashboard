@@ -25,6 +25,8 @@ Thumbs.db
 # Logs and temp
 *.log
 *.tmp
+tmp/
+tools/*_chunk_assembled.png
 
 # Generic caches/build artifacts (but keep Python modules living in cache/)
 cache/*

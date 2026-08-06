@@ -163,7 +163,7 @@ def main():
         print("\n--- Probing with Py-ART ---")
         result = probe_with_pyart(out_path)
         if result.get("success"):
-            print(f"  Py-ART read:    OK")
+            print("  Py-ART read:    OK")
             print(f"  Scan time:      {result.get('scan_time')}")
             print(f"  Sweeps:         {result.get('nsweeps')}")
             print(f"  Elevations:     {result.get('elevations')}")
@@ -176,13 +176,16 @@ def main():
             print(f"  Fields:         {result.get('fields')}")
 
             out_png = tmp_path / f"{SITE}_chunk_assembled.png"
-            print(f"\n--- Rendering PNG ---")
+            print("\n--- Rendering PNG ---")
             rendered = render_png(out_path, out_png, SITE)
             if rendered:
                 import shutil
-                dest = project_root / "tools" / f"{SITE}_chunk_assembled.png"
+
+                diagnostic_dir = project_root / "cache" / "diagnostics" / "radar"
+                diagnostic_dir.mkdir(parents=True, exist_ok=True)
+                dest = diagnostic_dir / f"{SITE}_chunk_assembled.png"
                 shutil.copy(str(out_png), str(dest))
-                print(f"  Saved to tools/{SITE}_chunk_assembled.png")
+                print(f"  Saved to {dest.relative_to(project_root)}")
         else:
             print(f"  Py-ART FAILED: {result.get('error')}")
 

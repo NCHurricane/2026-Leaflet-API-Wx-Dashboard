@@ -68,6 +68,14 @@ Current checkpoint:
   warnings. Static caller inspection and route tests confirm that no frontend
   workflow was removed, so no browser check is required. The route inventory is
   now 74 decorators.
+- Project cleanup Phase 3 is complete. It removes
+  three unreferenced files under `tmp/pdfs/` and the generated
+  `tools/KRAX_chunk_assembled.png`, reducing tracked content by 2,672,966 bytes.
+  Scratch `tmp/` content and generated chunk-assembly images are now ignored;
+  `tools/test_l2_chunks.py` writes its retained render proof beneath
+  `cache/diagnostics/radar/`. Ruff, compilation, ignore-rule probes,
+  stale-reference searches, and diff checks pass. No runtime or browser gate is
+  required because this slice changes no application path or retained asset.
 - Worker-free rendering Phases 0-8 are closed.
 - The whole-system user-owned browser smoke passed.
 - The optional `core` and `surface` Task Scheduler warmers passed enabled and
@@ -651,9 +659,7 @@ Previous accepted checkpoint:
   `/rtma` load/scrub also passed.
 
 Next step:
-- Obtain authorization before Phase 3: remove the four tracked, unreferenced
-  research/diagnostic outputs under `tmp/pdfs/*` and
-  `tools/KRAX_chunk_assembled.png`, then prevent future generated diagnostic
-  output from being tracked. Do not remove task tooling/definitions or
-  palette-preview code from this handoff alone.
+- Select any further cleanup family through a new bounded review and explicit
+  authorization. Do not remove task tooling/definitions or palette-preview code
+  from this handoff alone.
 ```

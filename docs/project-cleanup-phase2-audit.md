@@ -134,9 +134,7 @@ live.
 
 ## Recommended next action
 
-Batches A, B1, B2, and C are committed at `795b9c1`. The next separately
-gated cleanup candidate is the tracked research/diagnostic-output slice:
-three unreferenced `tmp/pdfs/*` files plus
-`tools/KRAX_chunk_assembled.png`, with recurrence prevention for generated
-diagnostic output. Task tooling/definitions and palette-preview code remain out
+Batches A, B1, B2, and C are committed at `795b9c1`. The separately gated
+tracked research/diagnostic-output candidate was subsequently authorized as
+cleanup Phase 3. Task tooling/definitions and palette-preview code remain out
 of scope.
