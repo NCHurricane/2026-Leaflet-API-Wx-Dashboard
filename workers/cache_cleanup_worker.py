@@ -15,7 +15,6 @@ import os
 import sys
 import time as _time
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 
 # Add project root to path for both module and direct execution
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,6 +42,9 @@ _RETENTION_POLICIES = [
     ("tropical", 7 * 24),  # Keep 7 days of tropical data
     ("surface", 7 * 24),   # Keep 7 days of surface gradients
     ("drought", 7 * 24),   # Keep 7 days of drought data
+    ("archive", 7 * 24),   # Keep 7 days of generated archive data
+    ("logs", 7 * 24),      # Keep 7 days of worker logs
+    ("metrics", 7 * 24),   # Keep 7 days of opt-in measurements
 ]
 
 # Temp file patterns to always remove

@@ -38,7 +38,7 @@ def _render_rtma_frame_to_overlay(
 
     Returns True when the frame is available, False on failure.
     """
-    from cache.overlay_cache_utils import (
+    from app_core.overlay_cache import (
         flat_overlay_image_path,
         flat_overlay_read_processed_keys,
         flat_overlay_update_index,

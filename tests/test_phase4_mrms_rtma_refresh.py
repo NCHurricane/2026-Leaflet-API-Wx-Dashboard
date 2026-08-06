@@ -132,7 +132,7 @@ def test_partial_overlay_cache_still_schedules_horizon_fill(monkeypatch):
         lambda: coordinator,
     )
     monkeypatch.setattr(
-        "cache.overlay_cache_utils.flat_overlay_list_frames",
+        "app_core.overlay_cache.flat_overlay_list_frames",
         lambda *args: [
             {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -244,13 +244,13 @@ def test_rtma_cached_frame_is_a_successful_noop(monkeypatch, tmp_path):
         data_key="cached-source",
     )
     monkeypatch.setattr(
-        "cache.overlay_cache_utils.flat_overlay_read_processed_keys",
+        "app_core.overlay_cache.flat_overlay_read_processed_keys",
         lambda *args: {"cached-source"},
     )
     image = tmp_path / "cached.png"
     image.write_bytes(b"png")
     monkeypatch.setattr(
-        "cache.overlay_cache_utils.flat_overlay_image_path",
+        "app_core.overlay_cache.flat_overlay_image_path",
         lambda *args: str(image),
     )
 

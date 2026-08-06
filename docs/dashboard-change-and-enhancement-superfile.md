@@ -39,7 +39,9 @@ Radar diagnostic route while preserving storm-track internals; Batch C removes
 the disconnected MRMS/SPC archive-result and progress workflow while retaining
 Alerts and Surface archive routes. Project cleanup Phase 3 removes four tracked
 research/diagnostic outputs and prevents generated replacements from being
-tracked.)
+tracked. Project cleanup Phase 4 completes a whole-directory audit, moves the
+last source module out of generated `cache`, bounds diagnostic accumulation,
+and removes the approved tracked and generated junk set.)
 
 This file is the canonical planning and status file for dashboard changes,
 completed enhancement phases, and future product work. It consolidates the
@@ -165,9 +167,42 @@ Complete:
   required because no runtime page, API, imported module, or retained asset was
   changed.
 
-Phase 3 is closed. Select any further cleanup family through a new bounded
-review and authorization. Task tooling/definitions and palette preview remain
-out of scope.
+Phase 3 is closed. A subsequent bounded whole-directory review was separately
+authorized as Phase 4 below. Task tooling/definitions and palette preview
+remain out of scope.
+
+## Project Cleanup Phase 4 — Whole-Directory Audit (2026-08-05)
+
+Complete in this Phase 4 checkpoint. Full evidence and retention decisions are
+recorded in `docs/project-cleanup-phase4-audit.md`.
+
+- Moved the shared overlay cache source from `cache/overlay_cache_utils.py` to
+  `app_core/overlay_cache.py` and updated every importer. The entire `cache/`
+  tree is now generated and ignored as one disposable runtime namespace.
+- Removed the superseded root `instructions.md`, three unreferenced one-off
+  probe scripts, and eight Census/TIGER ISO metadata XML sidecars. Required
+  shapefile components remain. These 12 tracked removals total 284,967 bytes;
+  the separately moved cache module was 16,313 bytes.
+- Made the observational upstream ledger opt-in, added 5 MiB worker-log
+  rollover with one backup, and added seven-day archive/log/metrics retention
+  to the application-owned six-hour cache cleanup.
+- During a controlled two-listener shutdown, permanently removed about 266 MiB
+  of ignored worker logs, metrics, archive JSON, non-venv bytecode/tool caches,
+  and 79 ignored performance outputs. Expected runtime directories and Python
+  bytecode may be recreated after startup; these remain ignored and bounded.
+- Product warm caches, `.venv`, `.git`, tracked performance evidence, runtime
+  data/assets, fonts, tests, task tooling/definitions, `.claude`, and the full
+  `pal_preview/` area were deliberately retained. Font deletion was rejected
+  because the renderer dynamically registers the complete TTF inventory.
+- Validation passes 58 focused tests plus 42 subtests and the complete suite of
+  393 tests plus 42 subtests. After cleanup, the restarted port-8000 dashboard
+  returned HTTP 200 for `/api/status`, `/radar`, `/workspace`, and
+  `/api/radar/live/sites`. This is API/runtime evidence, not browser proof.
+
+Phase 4 closes the currently safe, evidence-backed project cleanup. Any future
+reduction of product warm-cache history, `.venv`, fonts, task tooling, or
+palette-preview content requires a separate decision because it changes
+runtime readiness, reproducibility, rendering, or retained operator tooling.
 
 ## Active Tracks (2026-08-05)
 

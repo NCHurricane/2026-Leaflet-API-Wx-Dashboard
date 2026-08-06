@@ -65,8 +65,10 @@ _SENSITIVE_QUERY_PARTS = {
 
 
 def _enabled() -> bool:
-    value = os.environ.get("WX_UPSTREAM_LEDGER", "1").strip().lower()
-    return value not in {"0", "false", "no", "off"}
+    configured = os.environ.get("WX_UPSTREAM_LEDGER")
+    if configured is None:
+        return bool(os.environ.get("WX_UPSTREAM_LEDGER_PATH", "").strip())
+    return configured.strip().lower() not in {"0", "false", "no", "off"}
 
 
 def ledger_path() -> Path:

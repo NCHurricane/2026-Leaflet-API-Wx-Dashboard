@@ -402,7 +402,7 @@ cache/
 | `spc/spc_utils.py`             | `fetch_outlook_geojson()`, `fetch_fire_wx_geojson()`                          |
 | `radar/radar_nodd_utils.py`    | NODD radar key listing + downloads with race-tolerant retries                 |
 | `rtma_utils.py`                | RTMA source resolution, grid extraction, pre-render generation, point caching |
-| `cache/overlay_cache_utils.py` | Overlay frame paths/index/meta helpers                                        |
+| `app_core/overlay_cache.py`    | Overlay frame paths/index/meta helpers                                        |
 | `config/geo_config.py`         | `STATE_BOUNDS` dict (backend region bounds; frontend uses `REGION_BOUNDS` in `map-core.js`) |
 | `config/alerts_config.py`      | `ALERT_COLORS` dict                                                           |
 

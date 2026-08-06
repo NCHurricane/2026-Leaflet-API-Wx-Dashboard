@@ -28,9 +28,8 @@ Thumbs.db
 tmp/
 tools/*_chunk_assembled.png
 
-# Generic caches/build artifacts (but keep Python modules living in cache/)
-cache/*
-!cache/overlay_cache_utils.py
+# Generated runtime cache
+cache/
 
 # Transient data artifacts
 *.grib2

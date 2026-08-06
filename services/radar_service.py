@@ -564,7 +564,7 @@ def _radar_live_latest_meta_dt(meta: dict | None) -> datetime | None:
         ).strip()
         if frame_key:
             try:
-                from cache.overlay_cache_utils import datetime_from_frame_key
+                from app_core.overlay_cache import datetime_from_frame_key
 
                 dt = datetime_from_frame_key(frame_key)
             except Exception:
@@ -759,7 +759,7 @@ def get_radar_live_latest_data(
     storm_cell_id: str | None = None,
 ) -> dict:
     """Return latest live radar frame from cache."""
-    from cache.overlay_cache_utils import radar_read_latest_frame
+    from app_core.overlay_cache import radar_read_latest_frame
     from config.radar_config import (
         LIVE_RADAR_LOOKBACK_HOURS,
         LIVE_RADAR_WORKER_INTERVAL_MIN,
@@ -937,7 +937,7 @@ def get_radar_live_frames_data(
     storm_cell_id: str | None = None,
 ) -> dict:
     """Return live radar frames list for scrubber playback."""
-    from cache.overlay_cache_utils import radar_list_frames
+    from app_core.overlay_cache import radar_list_frames
     from config.cache_config import (
         OVERLAY_EMPTY_CACHE_SYNC_FRAMES,
         OVERLAY_STALE_SERVE_WINDOW_MIN,
@@ -1153,7 +1153,7 @@ def get_radar_live_value_data(
     storm_cell_id: str | None = None,
 ) -> dict:
     """Sample the active live radar frame at a map lat/lon."""
-    from cache.overlay_cache_utils import radar_list_frames, radar_read_latest_frame
+    from app_core.overlay_cache import radar_list_frames, radar_read_latest_frame
     from workers.radar_live_worker import sample_live_radar_value
 
     try:

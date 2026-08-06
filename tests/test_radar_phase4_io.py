@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from cache.overlay_cache_utils import (
+from app_core.overlay_cache import (
     radar_list_frames,
     radar_overlay_image_path,
     radar_prune_frames,

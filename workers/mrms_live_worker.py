@@ -93,7 +93,7 @@ def _render_mrms_frame_to_overlay(
         _render_mrms_png_standalone,
         _write_mrms_overlay_cache,
     )
-    from cache.overlay_cache_utils import (
+    from app_core.overlay_cache import (
         flat_overlay_image_path,
         flat_overlay_read_processed_keys,
         frame_key_from_datetime,
@@ -214,7 +214,7 @@ def run_mrms_live_product(
         candidates = candidates[:max_render_frames]
 
     # Render frames
-    from cache.overlay_cache_utils import (
+    from app_core.overlay_cache import (
         flat_overlay_image_path,
         flat_overlay_read_processed_keys,
         frame_key_from_datetime,

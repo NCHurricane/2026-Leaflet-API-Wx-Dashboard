@@ -108,7 +108,7 @@ def _render_overlay_for_source(
     lat_1d, lon_1d: Optional pre-computed 1D latitude/longitude arrays for Mercator warp
                     optimization (reused across products for the same source).
     """
-    from cache.overlay_cache_utils import (
+    from app_core.overlay_cache import (
         flat_overlay_image_path,
         flat_overlay_prune_frames,
         flat_overlay_read_processed_keys,
@@ -201,7 +201,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
             iter_rtma_sources_within_hours,
             rtma_city_geojson_is_cached,
         )
-        from cache.overlay_cache_utils import (
+        from app_core.overlay_cache import (
             flat_overlay_image_path,
             flat_overlay_read_processed_keys,
             frame_key_from_datetime,
@@ -421,7 +421,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                     # Batch-update index and processed_keys for all products of this source.
                     if overlay_metadata:
                         try:
-                            from cache.overlay_cache_utils import (
+                            from app_core.overlay_cache import (
                                 flat_overlay_batch_update_index_and_keys,
                             )
 

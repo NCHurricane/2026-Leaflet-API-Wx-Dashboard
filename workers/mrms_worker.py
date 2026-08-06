@@ -295,7 +295,7 @@ def _prewarm_conus_png(
     png_path = os.path.join(product_cache_dir, f"overlay_{bounds_key}.png")
     tile_frame_key = None
     if file_dt is not None:
-        from cache.overlay_cache_utils import frame_key_from_datetime
+        from app_core.overlay_cache import frame_key_from_datetime
 
         tile_frame_key = frame_key_from_datetime(file_dt)
 
@@ -340,7 +340,7 @@ def _write_mrms_overlay_cache(
     skip pruning (useful when writing many frames in a batch — caller prunes
     once at the end).
     """
-    from cache.overlay_cache_utils import (
+    from app_core.overlay_cache import (
         flat_overlay_image_path,
         flat_overlay_prune_frames,
         flat_overlay_read_processed_keys,
@@ -480,7 +480,7 @@ def _render_mrms_png_standalone_unbounded(
 
     render_meta = build_mrms_overlay_meta(product, data)
     if tile_frame_key:
-        from cache.overlay_cache_utils import datetime_from_frame_key
+        from app_core.overlay_cache import datetime_from_frame_key
 
         render_meta["data_timestamp"] = datetime_from_frame_key(
             tile_frame_key

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from cache.overlay_cache_utils import radar_list_frames, radar_update_index
+from app_core.overlay_cache import radar_list_frames, radar_update_index
 from config.cache_config import OVERLAY_EMPTY_CACHE_SYNC_FRAMES
 from config.radar_config import (
     LIVE_RADAR_MAX_KEEP_FRAMES,
@@ -173,7 +173,7 @@ class RadarProductCatalogTests(unittest.TestCase):
         self.assertEqual(run_worker.call_args.kwargs["lookback_hours"], 6.0)
 
     @patch("services.radar_service._radar_live_render_in_background", return_value=True)
-    @patch("cache.overlay_cache_utils.radar_list_frames")
+    @patch("app_core.overlay_cache.radar_list_frames")
     def test_frames_endpoint_backfills_when_cache_does_not_cover_request(
         self, list_frames, render_background
     ):
@@ -203,7 +203,7 @@ class RadarProductCatalogTests(unittest.TestCase):
     )
     @patch("services.radar_service._radar_live_render_in_background", return_value=True)
     @patch("services.radar_service._radar_live_render_on_demand", return_value=1)
-    @patch("cache.overlay_cache_utils.radar_list_frames")
+    @patch("app_core.overlay_cache.radar_list_frames")
     def test_empty_frames_returns_one_newest_frame_before_background_fill(
         self,
         list_frames,
@@ -259,7 +259,7 @@ class RadarProductCatalogTests(unittest.TestCase):
     )
     @patch("services.radar_service._radar_live_render_in_background", return_value=False)
     @patch("services.radar_service._radar_live_render_on_demand")
-    @patch("cache.overlay_cache_utils.radar_list_frames")
+    @patch("app_core.overlay_cache.radar_list_frames")
     def test_completed_background_history_reuses_ordered_cache_without_sync_render(
         self,
         list_frames,
@@ -307,7 +307,7 @@ class RadarProductCatalogTests(unittest.TestCase):
         return_value=True,
     )
     @patch("services.radar_service._radar_live_render_in_background")
-    @patch("cache.overlay_cache_utils.radar_list_frames")
+    @patch("app_core.overlay_cache.radar_list_frames")
     def test_refresh_requests_latest_only_when_history_is_complete(
         self,
         list_frames,

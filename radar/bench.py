@@ -292,7 +292,7 @@ def _render_one(
     source: Path,
     scratch: Path,
 ) -> dict[str, Any]:
-    from cache.overlay_cache_utils import (
+    from app_core.overlay_cache import (
         frame_key_from_datetime,
         radar_overlay_image_path,
         radar_update_index,

@@ -45,7 +45,7 @@ def get_overlay_latest(
     rtma_bootstrap: Callable[..., object] | None = None,
 ) -> dict:
     """Return the pre-rendered overlay meta for a specific or latest frame."""
-    from cache.overlay_cache_utils import (
+    from app_core.overlay_cache import (
         datetime_from_frame_key,
         flat_overlay_image_path,
         flat_overlay_list_frames,
@@ -194,7 +194,7 @@ def get_overlay_frames(
     hours: int = 1,
 ) -> dict:
     """Return pre-rendered frames for a product within a lookback window."""
-    from cache.overlay_cache_utils import flat_overlay_list_frames
+    from app_core.overlay_cache import flat_overlay_list_frames
     from config.cache_config import (
         OVERLAY_EMPTY_CACHE_SYNC_FRAMES,
         OVERLAY_STALE_SERVE_WINDOW_MIN,

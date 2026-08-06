@@ -9,6 +9,7 @@ Read first:
 - docs/token-saver-maybe.md
 - docs/dashboard-change-and-enhancement-superfile.md
 - docs/project-cleanup-phase2-audit.md
+- docs/project-cleanup-phase4-audit.md
 - docs/archive/worker-free-render-plan.md, Phase 8 completion summary only
 - docs/archive/satellite-platform-expansion-plan.md
 - git status
@@ -76,6 +77,27 @@ Current checkpoint:
   `cache/diagnostics/radar/`. Ruff, compilation, ignore-rule probes,
   stale-reference searches, and diff checks pass. No runtime or browser gate is
   required because this slice changes no application path or retained asset.
+- Project cleanup Phase 4 is complete in the current checkpoint. It audits every
+  root directory including ignored content, moves the final tracked source
+  module from generated `cache/` to `app_core/overlay_cache.py`, and makes the
+  full cache tree disposable. All importers and architecture documentation use
+  the new path.
+- Phase 4 removes 12 tracked files totaling 284,967 bytes: the superseded root
+  `instructions.md`, three unreferenced probe scripts, and eight shapefile ISO
+  metadata XML sidecars. The separately moved cache module was 16,313 bytes;
+  required shapefile components remain.
+- The observational upstream ledger is now opt-in. Scheduled worker logs roll
+  at 5 MiB with one backup, and application-owned cleanup applies seven-day
+  retention to generated archive, logs, and metrics.
+- With explicit backup acknowledgement, about 266 MiB of ignored logs,
+  metrics, archive JSON, non-venv bytecode/tool caches, and 79 ignored
+  performance outputs were permanently removed. Product warm caches and all
+  `pal_preview/` content were untouched. Runtime may recreate ignored bytecode
+  and empty/current archive paths after restart.
+- Phase 4 validation passes 58 focused tests plus 42 subtests and the full 393
+  tests plus 42 subtests. The restarted dashboard returns HTTP 200 for status,
+  Radar, Workspace, and live Radar sites. No browser proof was performed or
+  claimed.
 - Worker-free rendering Phases 0-8 are closed.
 - The whole-system user-owned browser smoke passed.
 - The optional `core` and `surface` Task Scheduler warmers passed enabled and

@@ -48,6 +48,29 @@ def mark_run_complete(worker_name: str) -> None:
 
 # cache/logs/scheduled/<name>.log destination for headless task runs.
 _LOG_DIR = Path(__file__).resolve().parent.parent / "cache" / "logs" / "scheduled"
+_DEFAULT_LOG_MAX_BYTES = 5 * 1024 * 1024
+
+
+def _log_max_bytes() -> int:
+    configured = os.environ.get("WX_WORKER_LOG_MAX_BYTES", "").strip()
+    if not configured:
+        return _DEFAULT_LOG_MAX_BYTES
+    try:
+        parsed = int(configured)
+    except ValueError:
+        return _DEFAULT_LOG_MAX_BYTES
+    return parsed if parsed > 0 else _DEFAULT_LOG_MAX_BYTES
+
+
+def _rotate_log_if_needed(log_path: Path, max_bytes: int) -> bool:
+    """Keep one prior worker log when the active log reaches its size limit."""
+    try:
+        if not log_path.is_file() or log_path.stat().st_size < max_bytes:
+            return False
+        os.replace(log_path, log_path.with_suffix(log_path.suffix + ".1"))
+        return True
+    except OSError:
+        return False
 
 
 def redirect_stdio_to_log(log_name: str) -> None:
@@ -66,6 +89,7 @@ def redirect_stdio_to_log(log_name: str) -> None:
     try:
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
         log_path = _LOG_DIR / f"{log_name}.log"
+        _rotate_log_if_needed(log_path, _log_max_bytes())
         # Line-buffered append so external tail-watchers see output promptly.
         stream = open(log_path, "a", buffering=1, encoding="utf-8")
         stream.write(
