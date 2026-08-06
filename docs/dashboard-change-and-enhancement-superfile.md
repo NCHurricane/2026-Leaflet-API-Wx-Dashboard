@@ -98,8 +98,9 @@ Phase 2 subsequently received bounded authorization for the API cleanup only.
 
 ## Project Cleanup Phase 2 Audit and Batches A/B1/B2/C (2026-08-05)
 
-The separately authorized audit and implementation batches are recorded in
-`docs/project-cleanup-phase2-audit.md`. No scheduled tasks were changed.
+The separately authorized audit and implementation batches are committed at
+`795b9c1` and recorded in `docs/project-cleanup-phase2-audit.md`. No scheduled
+tasks were changed.
 
 - The preview-only task inspection found no registered `Wx-Dashboard-*` tasks
   on the current machine. Retain the installer's 13-name legacy removal
@@ -142,8 +143,11 @@ The separately authorized audit and implementation batches are recorded in
   no frontend workflow was removed, so no browser check is required. The route
   inventory is now 74 decorators.
 
-Recommended next action: review and commit the bounded Phase 2 API cleanup.
-Keep task tooling/definitions and palette preview deferred.
+Recommended next authorization: a bounded Phase 3 removal of four tracked,
+unreferenced research/diagnostic outputs totaling 2,672,966 bytes
+(`tmp/pdfs/*` and `tools/KRAX_chunk_assembled.png`), plus recurrence prevention
+for generated diagnostic output. Keep task tooling/definitions and palette
+preview deferred.
 
 ## Active Tracks (2026-08-05)
 

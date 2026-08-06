@@ -36,10 +36,10 @@ Current checkpoint:
   product. Every product loaded and animated where applicable, with no errors.
   The observed wiring/layout enhancements are deferred in
   `docs/post-refactor-follow-ups.md` and do not block this cleanup checkpoint.
-- Project cleanup Phase 2's read-only task/API audit and Batch A/B1
-  implementations are recorded in `docs/project-cleanup-phase2-audit.md`. Its
-  preview found no registered `Wx-Dashboard-*` tasks, so no task cleanup was
-  needed.
+- Project cleanup Phase 2's read-only task/API audit and Batches A/B1/B2/C are
+  committed at `795b9c1` and recorded in
+  `docs/project-cleanup-phase2-audit.md`. Its preview found no registered
+  `Wx-Dashboard-*` tasks, so no task cleanup was needed.
 - Batch A removes the compatibility-only IEM `/api/radar/tiles/*` routes and
   route-only service helpers. Production Radar and Workspace remain on
   `/api/radar/live/*`. Ruff, compilation, 61 focused automated tests plus 42
@@ -651,7 +651,9 @@ Previous accepted checkpoint:
   `/rtma` load/scrub also passed.
 
 Next step:
-- Review and commit the bounded Phase 2 API cleanup (Batches A, B1, B2, and C).
-  Do not remove task tooling/definitions or palette-preview code from this
-  handoff alone.
+- Obtain authorization before Phase 3: remove the four tracked, unreferenced
+  research/diagnostic outputs under `tmp/pdfs/*` and
+  `tools/KRAX_chunk_assembled.png`, then prevent future generated diagnostic
+  output from being tracked. Do not remove task tooling/definitions or
+  palette-preview code from this handoff alone.
 ```

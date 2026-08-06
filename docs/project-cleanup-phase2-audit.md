@@ -2,8 +2,8 @@
 
 Date: 2026-08-05
 
-Status: Read-only audit complete. Batches A, B1, B2, and C are implemented
-locally and uncommitted. No scheduled tasks were changed.
+Status: Complete and committed at `795b9c1`. Batches A, B1, B2, and C are
+closed. No scheduled tasks were changed.
 
 ## Scope and evidence
 
@@ -134,6 +134,9 @@ live.
 
 ## Recommended next action
 
-Batches A, B1, B2, and C are complete locally. Review and commit the bounded
-Phase 2 API cleanup before considering any separately gated cleanup family.
-Task tooling/definitions and palette-preview code remain out of scope.
+Batches A, B1, B2, and C are committed at `795b9c1`. The next separately
+gated cleanup candidate is the tracked research/diagnostic-output slice:
+three unreferenced `tmp/pdfs/*` files plus
+`tools/KRAX_chunk_assembled.png`, with recurrence prevention for generated
+diagnostic output. Task tooling/definitions and palette-preview code remain out
+of scope.
