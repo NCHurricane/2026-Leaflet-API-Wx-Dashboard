@@ -3,6 +3,7 @@
 from datetime import date as _date
 from datetime import timedelta
 import json
+import math
 from pathlib import Path
 import re
 import urllib.parse as _up
@@ -72,6 +73,65 @@ _STATE_TO_FIPS = {
     "PR": "72",
 }
 
+_DROUGHT_LEVEL_KEYS = ("D0-D4", "D1-D4", "D2-D4", "D3-D4", "D4")
+_INDIVIDUAL_LEVEL_KEYS = ("D0", "D1", "D2", "D3", "D4")
+
+
+def _validate_geojson(raw: bytes) -> None:
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (AttributeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("invalid USDM GeoJSON") from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("type") != "FeatureCollection"
+        or not isinstance(payload.get("features"), list)
+    ):
+        raise ValueError("invalid USDM GeoJSON")
+
+
+def _provider_row(payload, label: str) -> dict:
+    if not isinstance(payload, list):
+        raise ValueError(f"invalid {label} payload")
+    if not payload:
+        return {}
+    if not isinstance(payload[0], dict):
+        raise ValueError(f"invalid {label} row")
+    return payload[0]
+
+
+def _provider_number(row: dict, key: str) -> float:
+    value = row.get(key)
+    if value in (None, ""):
+        return 0.0
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid {key} value") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"invalid {key} value")
+    return number
+
+
+def _valid_state_stats_cache(payload, state_code: str, valid_date: str) -> bool:
+    if (
+        not isinstance(payload, dict)
+        or payload.get("state") != state_code
+        or payload.get("date") != valid_date
+        or not isinstance(payload.get("cumulative"), dict)
+        or not isinstance(payload.get("individual"), dict)
+    ):
+        return False
+    values = [
+        *(payload["cumulative"].get(key) for key in _DROUGHT_LEVEL_KEYS),
+        *(payload["individual"].get(key) for key in _INDIVIDUAL_LEVEL_KEYS),
+        payload.get("dsci"),
+    ]
+    try:
+        return all(math.isfinite(float(value)) for value in values)
+    except (TypeError, ValueError):
+        return False
+
 
 def get_drought_dates() -> dict:
     """Return the last 15 USDM valid dates (Tuesdays), most recent first."""
@@ -96,7 +156,12 @@ async def get_drought_geojson(date: str = "latest") -> Response:
     cache_file = cache_dir / f"usdm_{date_compact}.json"
 
     if cache_file.exists():
-        return Response(content=cache_file.read_bytes(), media_type="application/json")
+        try:
+            cached = cache_file.read_bytes()
+            _validate_geojson(cached)
+            return Response(content=cached, media_type="application/json")
+        except (OSError, ValueError):
+            pass
 
     url = f"https://droughtmonitor.unl.edu/data/json/usdm_{date_compact}.json"
     try:
@@ -109,6 +174,13 @@ async def get_drought_geojson(date: str = "latest") -> Response:
         raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"USDM unreachable: {exc}") from exc
+
+    try:
+        _validate_geojson(raw)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=503, detail=f"USDM returned invalid GeoJSON: {exc}"
+        ) from exc
 
     atomic_write_text(cache_file, raw.decode("utf-8"))
     return Response(content=raw, media_type="application/json")
@@ -144,7 +216,9 @@ async def get_drought_state_stats(date: str = "latest", state: str = "NC") -> di
     if cache_file.exists():
         try:
             with cache_file.open("r", encoding="utf-8") as fh:
-                return json.load(fh)
+                cached = json.load(fh)
+            if _valid_state_stats_cache(cached, state_code, date):
+                return cached
         except Exception:
             pass
 
@@ -170,24 +244,36 @@ async def get_drought_state_stats(date: str = "latest", state: str = "NC") -> di
         }
         area_req = _ur.Request(area_url, headers=headers)
         with urlopen(area_req, timeout=30) as resp:
-            area_rows = json.loads(resp.read().decode("utf-8"))
+            area_raw = resp.read()
 
         dsci_req = _ur.Request(dsci_url, headers=headers)
         with urlopen(dsci_req, timeout=30) as resp:
-            dsci_rows = json.loads(resp.read().decode("utf-8"))
+            dsci_raw = resp.read()
     except Exception as exc:
         raise HTTPException(
             status_code=503, detail=f"USDM state stats unreachable: {exc}"
         ) from exc
 
-    area = area_rows[0] if isinstance(area_rows, list) and area_rows else {}
-    dsci = dsci_rows[0] if isinstance(dsci_rows, list) and dsci_rows else {}
-
-    d0 = float(area.get("d0") or 0.0)
-    d1 = float(area.get("d1") or 0.0)
-    d2 = float(area.get("d2") or 0.0)
-    d3 = float(area.get("d3") or 0.0)
-    d4 = float(area.get("d4") or 0.0)
+    try:
+        area = _provider_row(
+            json.loads(area_raw.decode("utf-8")),
+            "USDM area statistics",
+        )
+        dsci = _provider_row(
+            json.loads(dsci_raw.decode("utf-8")),
+            "USDM DSCI",
+        )
+        d0 = _provider_number(area, "d0")
+        d1 = _provider_number(area, "d1")
+        d2 = _provider_number(area, "d2")
+        d3 = _provider_number(area, "d3")
+        d4 = _provider_number(area, "d4")
+        dsci_value = _provider_number(dsci, "dsci")
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"USDM state stats returned invalid data: {exc}",
+        ) from exc
 
     payload = {
         "state": state_code,
@@ -207,7 +293,7 @@ async def get_drought_state_stats(date: str = "latest", state: str = "NC") -> di
             "D3": max(0.0, d3 - d4),
             "D4": max(0.0, d4),
         },
-        "dsci": float(dsci.get("dsci") or 0.0),
+        "dsci": dsci_value,
     }
 
     atomic_write_json(cache_file, payload)
