@@ -55,42 +55,27 @@ graceful shutdown belong to the coordinator. Phase 1 is explicitly
 single-process; persistent coordination is required before multi-worker Uvicorn
 or optional OS warmers can safely share ownership.
 
-The older broad APScheduler profile is fallback-only and opt-in via
-`WX_INPROC_WORKERS=1`. Existing direct-write Windows task definitions are not
-coordinator-compatible.
-
-When fallback mode is enabled, `workers/scheduler.py` registers:
-
-- alerts: 1 min
-- spc: 30 min
-- mrms: 15 min (first tick delayed 30s)
-- surface: 30 min
-
-Workers write cache artifacts that API endpoints read directly. Migrated heavy
-cold paths return an explicit warming response and let the client poll the
-local cache; Surface observations are the first implementation.
-Surface uses one observation key per region and fans one upstream response into
-all product cache artifacts.
+`workers/scheduler.py` is a compatibility lifecycle hook and does not restore a
+broad APScheduler profile. Existing direct-write Windows task definitions are
+not coordinator-compatible. Migrated heavy cold paths return an explicit
+warming response and let the client poll local cache; Surface uses one
+observation key per region and fans one upstream response into all product
+cache artifacts.
 
 Supervisor requirements:
 
 - Use existing freshness markers and per-worker skip gates.
 - Keep API-only mode available.
 - Keep one-off worker module commands available.
-- Do not overlap legacy direct-write OS tasks with migrated coordinator paths;
-  later optional warmers must share persistent leases and provider state.
+- Do not overlap legacy direct-write OS tasks with migrated coordinator paths.
+  Optional warmers call the running local API and cannot be a correctness
+  dependency.
 - Log worker output consistently under `cache/logs/scheduled/` or a replacement
   cross-platform log directory.
 
-Guard pattern — import is wrapped in try/except so app starts without APScheduler if it is not installed:
-
-```python
-try:
-    from workers.scheduler import start_scheduler, stop_scheduler
-    _SCHEDULER_AVAILABLE = True
-except ImportError:
-    _SCHEDULER_AVAILABLE = False
-```
+The supported runtime is one application process. Do not add multi-worker
+ownership or persistent leases unless deployment requirements change and a new
+coordination design is approved.
 
 ## Storm Track Projection Pattern
 

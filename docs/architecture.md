@@ -80,16 +80,15 @@ Product-page architecture (migration completed in Phase 27):
 - Browser-only Stage 2 assets live under `frontend/` and are mounted at
   `/frontend`. Root `lib/` remains a backend Python package and is not exposed
   as static content.
-- Legacy `.html` product URLs may be kept as redirects or compatibility routes
-  during the transition, but clean extensionless URLs should become canonical.
+- Clean extensionless product URLs are canonical. Only explicitly retained
+  compatibility redirects, such as `/weather.html` to `/workspace`, remain.
 - `/alerts` serves `frontend/pages/alerts/alerts.html`, which owns active alert
   and Local Storm Report filtering/rendering, the active-warning rail, immersive
   alert detail, in-memory off/on restoration, page-owned combined status,
   severe-warning pulse styling, and default-on 60-second refresh without
-  loading `js/weather.js`. Alerts archive plumbing is dormant and its UI is
-  hidden pending a unified one-target-datetime plus lookback design. The radar-
-  dependent Projected Arrival Tool remains reserved for the severe-weather
-  workspace.
+  loading `js/weather.js`. Retained Alerts archive behavior is part of the
+  current page/API contract. The radar-dependent Projected Arrival Tool remains
+  reserved for the severe-weather workspace.
 - `/radar` serves `frontend/pages/radar/radar.html`, which owns live site/product
   selection, current and cached-frame playback, NST overlays, legends, and the
   value inspector. The extensionless `/radar` URL is canonical; the broken
@@ -105,10 +104,9 @@ Product-page architecture (migration completed in Phase 27):
 - The legacy `weather.html`, `js/weather.js`, product-shell/context scripts,
   dead root JS modules, and `css/dashboard.css` were retired in Phase 27.
 
-Removed in Phase 0:
-
-- `legacy/` pages and JS are retained but unrouted
-- Legacy API render endpoints removed from main.py
+The retired root page/controller tree and disconnected legacy API render
+endpoints are historical; active ownership is the route/page/engine structure
+described above.
 
 ## Backend Refresh Coordinator and Workers
 
@@ -178,7 +176,9 @@ render capacity with Radar and Satellite. Keep every optional warmer disabled
 during performance benchmark capture.
 
 Current default runtime behavior: the coordinator and its cleanup schedule run;
-there is no required or opt-in broad APScheduler worker profile.
+there is no required or opt-in broad APScheduler worker profile. Persistent
+cross-process refresh ownership is not planned for the current single-process
+deployment and requires a new design only if deployment changes.
 
 ### Local Dev Run Profiles
 
@@ -469,80 +469,21 @@ Direction:
 - `radar_nodd_utils.py` download loop tolerates expected Windows file races (`FileExistsError`, `PermissionError`) with retry + race-resolved success detection.
 - Frontend radar controls now include explicit `Clear` behavior (clear loaded radar overlays only, do not reset map view) and site legend visibility tracks the `Show Radar Sites` toggle.
 
-## MRMS Overlay Cache — Rollout Status (2026-05-01)
+## MRMS Overlay Cache and History
 
-Superseded: the standalone `/mrms` page (`frontend/pages/mrms/`) now implements the
-frontend scrubber. The `js/weather.js` references below are historical (pre-Phase-27);
-the backend cache/retention design and the variable-depth tuning notes still apply.
+The standalone `/mrms` page and Workspace use the current frontend engines and
+the shared overlay/tile services; retired `js/weather.js` and broad preload
+workflows are not part of the runtime.
 
-**Completed:**
+- `/api/overlay/latest` and `/api/overlay/frames` expose bounded frame history.
+- The native-detail tile path is preferred where a frame is preparable, with
+  the complete PNG overlay retained as rollback/fallback.
+- Frame identity comes from source metadata, including `latest_source.json`,
+  rather than file modification time.
+- The current UI window is approximately 12 hours. Storage and preparation are
+  bounded; unbounded retention is not supported.
+- A future 24- or 48-hour option requires an explicit measured decision based
+  on upstream availability, disk use, cold-start cost, and user value.
 
-- `workers/mrms_worker.py` writes each rendered CONUS PNG to the overlay cache after every 15-min cycle. Accepts `keep_n: int | None` to defer pruning during batch writes.
-- The retired `workers/mrms_preload.py` once backfilled all products; current
-  pages use application-owned, demand-driven cache preparation instead.
-- `routes/overlays.py` / `services/overlay_service.py` — `mrms` is included in
-  the `allowed_families` allowlist on both `/api/overlay/latest` and
-  `/api/overlay/frames`.
-- `js/weather.js` `loadMrms()` — tries `/api/overlay/latest?family=mrms&...` first; falls back to legacy `/api/data/mrms` on failure.
-
-**Required before 24-hour MRMS scrubber works:**
-
-1. **Raise `keep_n` in `mrms_worker.py`** — current default is `keep_n=3`. At 15-min worker cadence a 24-hour scrubber needs `keep_n=96`. Increase to at least 96 (or a config constant).
-
-2. **Keep demand-driven preparation within the intended history window** — the
-   retired broad preload worker is no longer part of the runtime design.
-
-3. **Add MRMS scrubber to `js/weather.js`** — port the RTMA scrubber pattern:
-   - `loadMrmsFrames()` calls `/api/overlay/frames?family=mrms&region=CONUS&stream=default&product={product}` to populate the frame list.
-   - Scrubber slider maps frame index → `frame_key`, then calls `/api/overlay/latest?...&frame_key={key}`.
-   - Overlay and legend update on slide; no points endpoint needed (MRMS has no value-point layer).
-
-The overlay cache contract and endpoints are identical to RTMA, so the scrubber implementation is a direct port with no backend changes required.
-
-**Future enhancement — variable-depth scrubbing:**
-
-The overlay cache is already structured to support arbitrarily deep scrubbing. Frames are stored as independent timestamp-keyed directories; `prune_overlay_frames` only trims the oldest down to `keep_n`. To let a user scrub through as many days as they have cached:
-
-- Pass `keep_n=None` to skip pruning entirely, or set `keep_n` to a value matching the desired retention depth (e.g. `keep_n=None` for unbounded, `keep_n=672` for 7 days at 15-min cadence).
-- Raise `STREAM_MAX_HOURS` (RTMA) or `_lookback_minutes` (MRMS) to match the desired cold-start backfill depth.
-- No frontend changes required — `loadRtmaScrubberFrames()` / `loadMrmsFrames()` already call `/api/overlay/frames`, which returns whatever is in the cache; the scrubber slider auto-sizes to the available frame count.
-
-The only practical constraints are local disk space and the S3 source data availability window (NODD retains RTMA/MRMS data for a rolling 2–7 days depending on product).
-
-## Radar Filtered Reflectivity — Future Enhancement (2026-05-05)
-
-**Planned Feature:**
-
-Dual-render filtered reflectivity output to reduce ground clutter and clear-air artifacts. Worker generates two overlay PNGs per frame:
-
-- `{PRODUCT}_full.png` — original data (current behavior)
-- `{PRODUCT}_filtered.png` — clutter masked
-
-Filtering logic (to be implemented in `workers/radar_live_worker.py`):
-
-```python
-mask = (
-    (cc < 0.82) &  # Low correlation coefficient targets non-precipitation
-    (reflectivity < 40)  # Weak reflectivity targets clutter + weak returns
-)
-reflectivity[mask] = np.nan  # PyART-compatible masking
-```
-
-**Requirements:**
-
-1. Verify correlation coefficient (CC) field availability in NEXRAD Level 2 via PyART (field name: `correlation_coefficient`)
-2. Modify `_render_overlay_png()` to apply mask before colormap rendering
-3. Store both frame variants in cache; update metadata schema to track `{full,filtered}` frames
-4. Add `/api/radar/live/frames?filter=true|false` query parameter to endpoint
-5. Frontend toggle in Radar sidebar; update legend title/annotation when filtered mode active
-6. State persistence strategy (preserve toggle across site/product switches or reset per interaction)
-
-**Design Trade-offs:**
-
-- **Dual-render (recommended)**: 2x cache storage, instant toggle UX (~0ms latency)
-- **On-demand filtering endpoint**: Lighter cache, ~500ms latency on first toggle if not pre-cached
-- **Frontend canvas masking**: Zero backend changes, but requires CC pixel-data and complex JS canvas logic
-
-**Threshold Validation:**
-
-CC < 0.82 and reflectivity < 40 dBZ are scientifically sound but may require regional tuning. Consider making thresholds user-configurable if adopted.
+Current Radar/Satellite/MRMS proposals and rejected alternatives belong in
+`dashboard-change-and-enhancement-superfile.md`, not implemented architecture.
