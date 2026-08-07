@@ -167,6 +167,8 @@ def _feature_coords(feature: dict, attrs: dict) -> tuple[float | None, float | N
 
 
 def _normalize_feature(feature: dict) -> dict | None:
+    if not isinstance(feature, dict):
+        return None
     attrs = feature.get("attributes") or feature.get("properties") or {}
     lid = str(attrs.get("gaugelid") or "").strip().upper()
     if not lid:
@@ -222,6 +224,8 @@ def _normalize_feature(feature: dict) -> dict | None:
 
 
 def _normalize_coops_feature(feature: dict, station_type: str, station_label: str) -> dict | None:
+    if not isinstance(feature, dict):
+        return None
     attrs = feature.get("attributes") or feature.get("properties") or {}
     coops_id = str(attrs.get("id") or "").strip()
     if not coops_id:

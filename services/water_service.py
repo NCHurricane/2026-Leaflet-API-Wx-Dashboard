@@ -226,6 +226,8 @@ def _nwps_thresholds(flood: dict) -> dict:
 
 
 def _parse_nwps_gauge(raw: dict) -> dict:
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=404, detail="NWPS gauge not found.")
     lid = str(raw.get("lid") or "").strip().upper()
     if not lid:
         raise HTTPException(status_code=404, detail="NWPS gauge not found.")
@@ -299,7 +301,12 @@ def _fetch_coops_live_readings(coops_id: str, station_type: str) -> dict:
     if product == "currents":
         params["bin"] = "1"
     raw = _fetch_json(COOPS_DATA_URL, params, timeout=15)
-    data_rows = raw.get("data") if isinstance(raw.get("data"), list) else []
+    raw_rows = raw.get("data") if isinstance(raw, dict) else None
+    data_rows = (
+        [row for row in raw_rows if isinstance(row, dict)]
+        if isinstance(raw_rows, list)
+        else []
+    )
     if not data_rows:
         return {}
     latest = data_rows[-1]
