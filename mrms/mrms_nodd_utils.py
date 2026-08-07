@@ -262,26 +262,29 @@ def download_mrms_file(
         except OSError:
             pass
 
-        if progress_callback and total_size > 0:
+        try:
+            if progress_callback and total_size > 0:
 
-            def progress_hook(bytes_transferred):
-                progress_callback(bytes_transferred, total_size)
+                def progress_hook(bytes_transferred):
+                    progress_callback(bytes_transferred, total_size)
 
-            s3_client.download_file(
-                MRMS_BUCKET, s3_key, tmp_path, Callback=progress_hook
-            )
-        else:
-            s3_client.download_file(MRMS_BUCKET, s3_key, tmp_path)
+                s3_client.download_file(
+                    MRMS_BUCKET, s3_key, tmp_path, Callback=progress_hook
+                )
+            else:
+                s3_client.download_file(MRMS_BUCKET, s3_key, tmp_path)
 
-        if tmp_path.endswith(".gz") and not _is_valid_gzip_file(tmp_path):
+            if local_path.endswith(".gz") and not _is_valid_gzip_file(tmp_path):
+                raise ValueError(
+                    f"Downloaded MRMS gzip failed integrity validation: {s3_key}"
+                )
+
+            os.replace(tmp_path, local_path)
+        finally:
             try:
                 os.remove(tmp_path)
             except OSError:
                 pass
-            raise ValueError(
-                f"Downloaded MRMS gzip failed integrity validation: {s3_key}")
-
-        os.replace(tmp_path, local_path)
 
         return local_path
 

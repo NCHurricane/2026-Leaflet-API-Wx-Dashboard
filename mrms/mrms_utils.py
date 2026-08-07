@@ -231,14 +231,20 @@ def decompress_grib2_gz(gz_path: str) -> str:
         except OSError:
             pass
 
-        with gzip.open(gz_path, "rb") as f_in:
-            with open(tmp_path, "wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
+        try:
+            with gzip.open(gz_path, "rb") as f_in:
+                with open(tmp_path, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
 
-        if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
-            raise ValueError(f"Decompressed MRMS file is empty: {gz_path}")
+            if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
+                raise ValueError(f"Decompressed MRMS file is empty: {gz_path}")
 
-        os.replace(tmp_path, grib_path)
+            os.replace(tmp_path, grib_path)
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
     return grib_path
 
