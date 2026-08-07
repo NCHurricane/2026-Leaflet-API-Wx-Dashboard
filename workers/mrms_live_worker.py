@@ -10,6 +10,7 @@ frames on-demand when user requests animation.
 
 import os
 import sys
+import tempfile
 import time as _time
 from datetime import datetime, timedelta, timezone
 
@@ -114,14 +115,18 @@ def _render_mrms_frame_to_overlay(
         if os.path.exists(img_path) and os.path.getsize(img_path) > 0:
             return True
 
+    temp_png = None
     try:
         # Create temp PNG path
         product_cache_dir = os.path.join(cache_root, "mrms", product)
         os.makedirs(product_cache_dir, exist_ok=True)
 
-        temp_png = os.path.join(
-            product_cache_dir, f"temp_{file_dt.strftime('%Y%m%d_%H%M%S')}.png"
+        descriptor, temp_png = tempfile.mkstemp(
+            prefix=f"temp_{file_dt.strftime('%Y%m%d_%H%M%S')}_",
+            suffix=".png",
+            dir=product_cache_dir,
         )
+        os.close(descriptor)
 
         # Render GRIB to PNG
         _render_mrms_png_standalone(
@@ -135,12 +140,6 @@ def _render_mrms_frame_to_overlay(
         # Write to overlay cache (handles index updates)
         _write_mrms_overlay_cache(product, temp_png, file_dt, keep_n=None)
 
-        # Clean up temp file
-        try:
-            os.remove(temp_png)
-        except OSError:
-            pass
-
         frame_key = file_dt.strftime("%Y_%m_%d_%H_%M_%S")
         print(f"[mrms_live] {product} frame {frame_key} rendered OK")
         return True
@@ -148,6 +147,17 @@ def _render_mrms_frame_to_overlay(
         frame_key = file_dt.strftime("%Y_%m_%d_%H_%M_%S")
         print(f"[mrms_live] Failed to render {product} frame {frame_key}: {exc}")
         return False
+    finally:
+        if temp_png:
+            for artifact in (
+                temp_png,
+                temp_png.replace(".png", "_bounds.json"),
+                temp_png.replace(".png", "_meta.json"),
+            ):
+                try:
+                    os.remove(artifact)
+                except OSError:
+                    pass
 
 
 def run_mrms_live_product(
