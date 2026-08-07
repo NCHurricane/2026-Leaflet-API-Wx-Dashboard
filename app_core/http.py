@@ -3,7 +3,9 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import numpy as np
 from fastapi import HTTPException
+from fastapi.encoders import jsonable_encoder
 
 MAX_ARCHIVE_SPAN_DAYS = {
     "alerts": 7,
@@ -12,6 +14,24 @@ MAX_ARCHIVE_SPAN_DAYS = {
     "satellite": 3,
     "spc": 14,
 }
+
+
+def json_safe(value):
+    """Convert nested API payload values into FastAPI JSON-compatible types."""
+
+    def encode_numpy_array(array: np.ndarray):
+        return json_safe(array.tolist())
+
+    def encode_numpy_scalar(scalar: np.generic):
+        return json_safe(scalar.item())
+
+    return jsonable_encoder(
+        value,
+        custom_encoder={
+            np.ndarray: encode_numpy_array,
+            np.generic: encode_numpy_scalar,
+        },
+    )
 
 
 def error_payload(message: str, *, code: str = "bad_request", details=None):

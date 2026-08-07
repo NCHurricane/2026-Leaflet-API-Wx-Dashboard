@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
+from app_core.http import json_safe
 from config.mrms_config import MRMS_PRODUCTS, MRMS_SUB_PRODUCTS, PRODUCT_GROUPS
 from services.mrms_service import get_mrms_data, set_mrms_product
 
@@ -11,13 +12,15 @@ router = APIRouter()
 
 @router.get("/api/mrms/products")
 def get_mrms_products():
-    return {
-        "status": "success",
-        "products": MRMS_PRODUCTS,
-        "sub_products": MRMS_SUB_PRODUCTS,
-        "groups": PRODUCT_GROUPS,
-        "count": len(MRMS_PRODUCTS),
-    }
+    return json_safe(
+        {
+            "status": "success",
+            "products": MRMS_PRODUCTS,
+            "sub_products": MRMS_SUB_PRODUCTS,
+            "groups": PRODUCT_GROUPS,
+            "count": len(MRMS_PRODUCTS),
+        }
+    )
 
 
 @router.get("/api/mrms/set-product")
