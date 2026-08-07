@@ -213,17 +213,23 @@ def download_hurdat2(
 # ── HURDAT2 parsing ─────────────────────────────────────────────────────────
 def _parse_lat(token: str) -> float | None:
     token = token.strip()
-    if not token:
+    if len(token) < 2 or token[-1].upper() not in ("N", "S"):
         return None
-    value = float(token[:-1])
+    try:
+        value = float(token[:-1])
+    except ValueError:
+        return None
     return -value if token[-1].upper() == "S" else value
 
 
 def _parse_lon(token: str) -> float | None:
     token = token.strip()
-    if not token:
+    if len(token) < 2 or token[-1].upper() not in ("E", "W"):
         return None
-    value = float(token[:-1])
+    try:
+        value = float(token[:-1])
+    except ValueError:
+        return None
     return -value if token[-1].upper() == "W" else value
 
 
@@ -231,7 +237,10 @@ def _parse_int(token: str, missing: int) -> int | None:
     token = token.strip()
     if not token:
         return None
-    value = int(token)
+    try:
+        value = int(token)
+    except ValueError:
+        return None
     return None if value == missing else value
 
 
@@ -269,7 +278,11 @@ def parse_hurdat2(path: Path) -> Iterator[dict[str, Any]]:
         parts = [p.strip() for p in header.split(",")]
         if len(parts) < 3 or not re.fullmatch(r"(AL|EP|CP)\d{2}\d{4}", parts[0]):
             continue
-        atcf_id, name, row_count = parts[0], parts[1], int(parts[2])
+        try:
+            row_count = int(parts[2])
+        except ValueError:
+            continue
+        atcf_id, name = parts[0], parts[1]
         basin = atcf_id[:2]
         rows: list[dict[str, Any]] = []
         landfall = False
