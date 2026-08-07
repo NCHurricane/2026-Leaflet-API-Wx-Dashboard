@@ -467,11 +467,16 @@ def _mpd_valid_time(code: str, issue_time: str) -> str | None:
     )
     if not match or not issue_match:
         return None
-    issue_date = datetime.strptime(
-        " ".join(issue_match.groups()),
-        "%b %d %Y",
-    ).replace(tzinfo=timezone.utc)
+    try:
+        issue_date = datetime.strptime(
+            " ".join(issue_match.groups()),
+            "%b %d %Y",
+        ).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
     day, hour, minute = (int(part) for part in match.groups())
+    if not 1 <= day <= 31 or not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        return None
     candidates: list[datetime] = []
     for offset in (-1, 0, 1):
         year, month = _month_candidate(issue_date.year, issue_date.month, offset)
@@ -494,6 +499,11 @@ def _parse_mpd_kml(kml_text: str, mpd_id: str) -> list[dict[str, Any]]:
         description = _kml_findtext_local(placemark, "description")
         fields = _mpd_fields(description)
         number = str(fields.get("MPDNumber") or mpd_id).lstrip("0") or "0"
+        if not number.isdecimal():
+            number = str(mpd_id).lstrip("0") or "0"
+        if not number.isdecimal():
+            number = "0"
+        number_value = int(number)
         mpd_type = fields.get("MPDType") or "Heavy rainfall, Flash flooding possible"
         category = _mpd_category(mpd_type)
         valid_start = _mpd_valid_time(fields.get("ValidStart", ""), fields.get("IssueTime", ""))
@@ -501,13 +511,13 @@ def _parse_mpd_kml(kml_text: str, mpd_id: str) -> list[dict[str, Any]]:
         features.append(
             {
                 "type": "Feature",
-                "id": f"wpc-mpd-{number}",
+                "id": f"wpc-mpd-{number_value}",
                 "geometry": geometry,
                 "properties": {
                     "category": category,
                     "color": MPD_COLORS[category],
-                    "label": f"MPD #{int(number):04d} — Flash flooding {category.lower()}",
-                    "mpd_number": int(number),
+                    "label": f"MPD #{number_value:04d} — Flash flooding {category.lower()}",
+                    "mpd_number": number_value,
                     "mpd_type": mpd_type,
                     "issue_time": fields.get("IssueTime"),
                     "valid_start": valid_start,
@@ -615,7 +625,7 @@ def _parse_geojson_single(raw: str, product: dict[str, Any]) -> list[dict[str, A
     except json.JSONDecodeError:
         return []
 
-    if data.get("type") != "Feature":
+    if not isinstance(data, dict) or data.get("type") != "Feature":
         return []
 
     geometry = data.get("geometry") or {}
@@ -650,12 +660,18 @@ def _parse_geojson_fc(raw: str, product: dict[str, Any]) -> list[dict[str, Any]]
     except json.JSONDecodeError:
         return []
 
+    if not isinstance(data, dict) or data.get("type") != "FeatureCollection":
+        return []
     features_in = data.get("features") or []
+    if not isinstance(features_in, list):
+        return []
     features: list[dict[str, Any]] = []
     for index, feature in enumerate(features_in):
-        if feature.get("type") != "Feature":
+        if not isinstance(feature, dict) or feature.get("type") != "Feature":
             continue
         props = feature.get("properties") or {}
+        if not isinstance(props, dict):
+            props = {}
         color = (
             props.get("fill")
             or props.get("stroke")

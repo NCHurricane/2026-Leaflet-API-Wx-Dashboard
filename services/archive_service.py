@@ -112,6 +112,8 @@ def get_archive_alerts(
         dt_to = _parse_archive_dt(date_to)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    if dt_to <= dt_from:
+        raise HTTPException(status_code=400, detail="date_to must be after date_from.")
     if (dt_to - dt_from).total_seconds() > 30 * 24 * 3600:
         raise HTTPException(
             status_code=400, detail="Max alerts archive span is 30 days."
@@ -151,7 +153,12 @@ def _fetch_iem_alerts_range(
     import tempfile
     import zipfile
     from app_core.upstream_ledger import requests as _requests
-    from alerts.alerts_iem_utils import IEM_WATCHWARN_URL, _event_name_from_attrs
+    from alerts.alerts_iem_utils import (
+        IEM_WATCHWARN_URL,
+        _event_name_from_attrs,
+        _iem_ts_to_dt,
+        _state_bbox_filter,
+    )
 
     utc_from = dt_from.astimezone(timezone.utc)
     utc_to = dt_to.astimezone(timezone.utc)
@@ -201,11 +208,19 @@ def _fetch_iem_alerts_range(
             geom = rec.geometry
             if geom is None:
                 continue
+            attrs = rec.attributes
+            issue_dt = _iem_ts_to_dt(str(attrs.get("ISSUED", "")))
+            expire_dt = _iem_ts_to_dt(str(attrs.get("EXPIRED", "")))
+            if not issue_dt or not expire_dt:
+                continue
+            if issue_dt > utc_to or expire_dt < utc_from:
+                continue
+            if state and not _state_bbox_filter(geom, state):
+                continue
             try:
                 geom_json = geom.__geo_interface__
             except Exception:
                 continue
-            attrs = rec.attributes
             event = _event_name_from_attrs(attrs) or str(attrs.get("PHENOM", ""))
 
             def _iem_to_iso(raw: str) -> str:

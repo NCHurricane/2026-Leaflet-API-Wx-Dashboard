@@ -192,8 +192,8 @@ def _event_name_from_attrs(attrs: dict) -> str | None:
     # Prefer an explicit EVENT field if present.
     for key in ("EVENT", "event", "Event"):
         val = attrs.get(key)
-        if val:
-            return str(val).strip()
+        if val and (event_name := str(val).strip()):
+            return event_name
 
     phenom = str(attrs.get("PHENOM", "") or attrs.get("phenomena", "") or "").strip()
     sig = str(attrs.get("SIG", "") or attrs.get("significance", "") or "").strip()
