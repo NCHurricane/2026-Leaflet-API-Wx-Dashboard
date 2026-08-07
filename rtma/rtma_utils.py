@@ -693,13 +693,19 @@ def ensure_rtma_grib(
 
         tmp_path = f"{local_path}.part"
 
-        with requests.get(source.url, timeout=120, stream=True) as response:
-            response.raise_for_status()
-            with open(tmp_path, "wb") as handle:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        handle.write(chunk)
-        os.replace(tmp_path, local_path)
+        try:
+            with requests.get(source.url, timeout=120, stream=True) as response:
+                response.raise_for_status()
+                with open(tmp_path, "wb") as handle:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            handle.write(chunk)
+            os.replace(tmp_path, local_path)
+        finally:
+            try:
+                os.remove(tmp_path)
+            except FileNotFoundError:
+                pass
         if not _looks_like_grib(local_path):
             try:
                 os.remove(local_path)
@@ -782,20 +788,14 @@ def _crop_grid(
     row_idx, col_idx = np.where(mask)
     row_slice = slice(int(row_idx.min()), int(row_idx.max()) + 1)
     col_slice = slice(int(col_idx.min()), int(col_idx.max()) + 1)
-    return (
-        data[row_slice, col_slice],
-        lat[row_slice, col_slice],
-        lon[row_slice, col_slice],
-    )
-
-    data_crop = data[row_slice, col_slice].copy()
+    data_crop = np.ma.array(data[row_slice, col_slice], copy=True)
     lat_crop = lat[row_slice, col_slice]
     lon_crop = lon[row_slice, col_slice]
     # Null out cells outside the actual geographic crop
     oob = (
         (lat_crop < south) | (lat_crop > north) | (lon_crop < west) | (lon_crop > east)
     )
-    data_crop = np.ma.masked_where(oob, np.ma.filled(data_crop, np.nan))
+    data_crop = np.ma.masked_where(oob, data_crop)
     return data_crop, lat_crop, lon_crop
 
 

@@ -304,17 +304,36 @@ def read_mrms_grib2(
     with serialized_grib_decode():
         return _read_mrms_grib2_unlocked(
             grib_path,
+            product=product,
             crop_extent=crop_extent,
             crop_slices=crop_slices,
         )
 
 
+def _select_mrms_data_var(data_vars: list[str], product: str) -> str:
+    product_key = "".join(
+        character for character in str(product or "").lower()
+        if character.isalnum()
+    )
+    if product_key:
+        for variable in data_vars:
+            variable_key = "".join(
+                character for character in str(variable).lower()
+                if character.isalnum()
+            )
+            if variable_key == product_key:
+                return variable
+    return data_vars[0]
+
+
 def _read_mrms_grib2_unlocked(
     grib_path: str,
     *,
+    product: str,
     crop_extent: Optional[List[float]] = None,
     crop_slices: Optional[Tuple[slice, slice]] = None,
 ) -> Tuple[np.ndarray, dict]:
+    ds = None
     try:
         # Open GRIB2 file with xarray/cfgrib.
         # Use in-memory index to avoid stale .idx sidecar warnings and extra disk churn.
@@ -380,7 +399,7 @@ def _read_mrms_grib2_unlocked(
         if lon_coord is not None and np.any(lon_coord > 180):
             lon_coord = lon_coord - 360
 
-        data_da = ds[data_vars[0]]
+        data_da = ds[_select_mrms_data_var(data_vars, product)]
         resolved_crop_slices = crop_slices
 
         # Compute read-time crop slices once and reuse across subsequent frames.
@@ -415,12 +434,16 @@ def _read_mrms_grib2_unlocked(
             "pre_cropped": pre_cropped,
         }
 
-        ds.close()
-
         return data_array, metadata
 
     except Exception as e:
         raise ValueError(f"Failed to read GRIB2 file {grib_path}: {e}")
+    finally:
+        if ds is not None:
+            try:
+                ds.close()
+            except Exception:
+                pass
 
 
 def plot_cities_on_map(ax, extent, style_config, z_cities=30):
