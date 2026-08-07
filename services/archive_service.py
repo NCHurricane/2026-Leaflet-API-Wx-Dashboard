@@ -78,7 +78,8 @@ def _read_archive_cache(path: str) -> dict | None:
     if os.path.isfile(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                cached = json.load(f)
+            return cached if isinstance(cached, dict) else None
         except Exception:
             pass
     return None
@@ -181,6 +182,7 @@ def _fetch_iem_alerts_range(
         return url
 
     resp = None
+    last_error = None
     for use_state in [True, False] if state else [False]:
         try:
             resp = _requests.get(
@@ -188,10 +190,11 @@ def _fetch_iem_alerts_range(
             )
             resp.raise_for_status()
             break
-        except Exception:
+        except Exception as exc:
             resp = None
+            last_error = exc
     if resp is None:
-        return []
+        raise RuntimeError(f"IEM WatchWarn request failed: {last_error}") from last_error
 
     tmpdir = tempfile.mkdtemp(prefix="iem_arc_")
     features = []
