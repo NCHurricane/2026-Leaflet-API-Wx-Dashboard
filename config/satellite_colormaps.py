@@ -55,7 +55,7 @@ def _build_satpy_colorized_ir_clouds():
     return cmap, norm
 
 
-def _load_awips_cmap(filename, subdir, name, vmin, vmax):
+def _load_awips_cmap(filename, name, vmin, vmax):
     """Load an AWIPS-format .cmap XML file and return (ListedColormap, Normalize).
 
     AWIPS .cmap files contain N RGBA colour entries in attribute-style XML
@@ -68,9 +68,6 @@ def _load_awips_cmap(filename, subdir, name, vmin, vmax):
     ----------
     filename : str
         Name of the .cmap file (e.g. ``"IR_Color_Clouds_Summer.cmap"``).
-    subdir : str
-        Slash-separated path under ``config/cmaps/``
-        (e.g. ``"GOES-R/IR"``).
     name : str
         Internal colourmap name for matplotlib.
     vmin, vmax : float
@@ -78,7 +75,7 @@ def _load_awips_cmap(filename, subdir, name, vmin, vmax):
     """
     import xml.etree.ElementTree as ET
 
-    cmap_dir = os.path.join(os.path.dirname(__file__), "cmaps", *subdir.split("/"))
+    cmap_dir = os.path.join(os.path.dirname(__file__), "sat_cmaps")
     cmap_path = os.path.join(cmap_dir, filename)
 
     tree = ET.parse(cmap_path)
@@ -110,32 +107,32 @@ IR_CMAP, IR_NORM = _build_satpy_colorized_ir_clouds()
 # CIRA Clean IR Summer — matches CIRA/RAMMB SLIDER (Dan Lindsey).
 # 2048 entries, gray→cyan→blue→green→yellow.  160–330 K.
 CIRA_IR_CMAP, CIRA_IR_NORM = _load_awips_cmap(
-    "IR_Color_Clouds_Summer.cmap", "GOES-R/IR", "cira_clean_ir", 160.0, 330.0
+    "IR_Color_Clouds_Summer.cmap", "cira_clean_ir", 160.0, 330.0
 )
 
 # CIRA Clean IR Winter — same colour scheme tuned for cooler backgrounds.
 # 2048 entries, 160–330 K.
 CIRA_IR_WINTER_CMAP, CIRA_IR_WINTER_NORM = _load_awips_cmap(
-    "IR_Color_Clouds_Winter.cmap", "GOES-R/IR", "cira_clean_ir_winter", 160.0, 330.0
+    "IR_Color_Clouds_Winter.cmap", "cira_clean_ir_winter", 160.0, 330.0
 )
 
 # Fire Detection 3.9 µm — Chad Gravelle.
 # 2048 entries, gray (cold) → yellow → orange → red (fires).  164–400 K.
 FIRE_DETECT_CMAP, FIRE_DETECT_NORM = _load_awips_cmap(
-    "fire_detection_3.9.cmap", "GOES-R/IR", "fire_detect_3.9", 164.0, 400.0
+    "fire_detection_3.9.cmap", "fire_detect_3.9", 164.0, 400.0
 )
 
 # RAMSDIS Water Vapor 12-bit — Dan Lindsey.
 # 4096 entries, complex multi-colour WV enhancement.  163–330 K.
 RAMSDIS_WV_CMAP, RAMSDIS_WV_NORM = _load_awips_cmap(
-    "ramsdis_WV_12bit.cmap", "GOES-R/IR", "ramsdis_wv", 163.0, 330.0
+    "ramsdis_WV_12bit.cmap", "ramsdis_wv", 163.0, 330.0
 )
 
 # Fog Difference (10.3−3.9 µm) Blue — Dan Lindsey.
 # 2048 entries, gray (non-fog) → shades of blue (liquid water clouds).
 # Applied to Ch13−Ch07 brightness-temperature difference (K).
 FOGDIFF_BLUE_CMAP, FOGDIFF_BLUE_NORM = _load_awips_cmap(
-    "fogdiff_blue.cmap", "GOES-R/IR", "fogdiff_blue", -70.0, 30.0
+    "fogdiff_blue.cmap", "fogdiff_blue", -70.0, 30.0
 )
 
 IR_TPC_CMAP, IR_TPC_NORM = _get_metpy_colormap_with_range("ir_tpc", "turbo", 170, 330)
