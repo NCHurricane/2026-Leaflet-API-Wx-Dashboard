@@ -20,6 +20,9 @@ from services.surface_service import (
 _ARCHIVE_JSON_DIR = os.path.join("cache", "archive", "json")
 os.makedirs(_ARCHIVE_JSON_DIR, exist_ok=True)
 
+_SURFACE_ARCHIVE_AUTO_SOURCES = {"auto", "iem"}
+_SURFACE_SOURCE_ATTR = "surface_source"
+
 _SURFACE_ARCHIVE_PRODUCT_MAP = {
     "station_plot": "Station Plot",
     "temperature": "Temperature",
@@ -88,6 +91,11 @@ def _write_archive_cache(path: str, data: dict) -> None:
             json.dump(data, f, separators=(",", ":"))
     except Exception:
         pass
+
+
+def _surface_frame_source(df) -> str:
+    source = getattr(df, "attrs", {}).get(_SURFACE_SOURCE_ATTR)
+    return str(source or "unknown").strip().lower()
 
 
 def get_archive_alerts(
@@ -272,8 +280,21 @@ def get_archive_surface(
     if region_upper not in STATE_BOUNDS:
         region_upper = "NC"
 
-    source_key = str(source or "iem").strip().lower()
-    source_key = "iem"
+    requested_source = str(source or "iem").strip().lower()
+    if requested_source not in _SURFACE_ARCHIVE_AUTO_SOURCES:
+        raise HTTPException(
+            status_code=400,
+            detail="Surface archive source must be 'auto' or 'iem'.",
+        )
+    # Retain "iem" as a compatibility alias for the established AWC-first
+    # selection with IEM fallback; provenance below reports the actual provider.
+    source_key = "auto"
+
+    if region_upper == "WORLD":
+        raise HTTPException(
+            status_code=400,
+            detail="Historical WORLD surface archive is not supported.",
+        )
 
     network_key = str(network or "ASOS").strip().upper()
     if network_key != "ASOS":
@@ -298,6 +319,7 @@ def get_archive_surface(
         date_from=dt_from.isoformat(),
         date_to=dt_to.isoformat(),
         max_frames=total,
+        source=source_key,
     )
     cached = _read_archive_cache(cache_file)
     if cached is not None:
@@ -310,6 +332,7 @@ def get_archive_surface(
 
     frames = []
     for idx, ts in enumerate(frame_times):
+        df = None
         try:
             df = frame_dfs[idx] if idx < len(frame_dfs) else None
             if df is None:
@@ -318,14 +341,27 @@ def get_archive_surface(
         except Exception:
             stations = []
 
+        frame_source = _surface_frame_source(df)
+
         frames.append(
             {
                 "timestamp": ts.isoformat(),
                 "stations": stations,
                 "product": product_key,
                 "unit": SURFACE_PRODUCTS[product_key]["unit"],
+                "source": frame_source,
             }
         )
+
+    frame_sources = {
+        frame["source"] for frame in frames if frame["source"] != "unknown"
+    }
+    if len(frame_sources) == 1:
+        result_source = next(iter(frame_sources))
+    elif len(frame_sources) > 1:
+        result_source = "mixed"
+    else:
+        result_source = "unknown"
 
     result = {
         "status": "success",
@@ -333,7 +369,7 @@ def get_archive_surface(
         "region": region_upper,
         "product": product_key,
         "product_label": _SURFACE_ARCHIVE_PRODUCT_MAP.get(product_key, product_key),
-        "source": "awc",
+        "source": result_source,
         "network": "ASOS",
         "date_from": dt_from.isoformat(),
         "date_to": dt_to.isoformat(),

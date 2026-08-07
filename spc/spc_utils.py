@@ -1340,7 +1340,10 @@ def fetch_active_watch_items(ttl_seconds: int = 90, with_counties: bool = False)
         watch_num_raw = props.get("num")
         if watch_num_raw is None:
             continue
-        watch_num = int(watch_num_raw)
+        try:
+            watch_num = int(watch_num_raw)
+        except (TypeError, ValueError):
+            continue
         watch_id = f"{watch_num:04d}"
 
         type_code = str(props.get("type") or "").upper()
@@ -1478,7 +1481,10 @@ def fetch_active_md_items(ttl_seconds: int = 90):
         md_num_raw = props.get("num")
         if md_num_raw is None:
             continue
-        md_num = int(md_num_raw)
+        try:
+            md_num = int(md_num_raw)
+        except (TypeError, ValueError):
+            continue
         md_id = f"{md_num:04d}"
 
         def _parse_iso(s: str):

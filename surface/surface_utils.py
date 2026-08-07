@@ -514,6 +514,24 @@ def process_dataframe(df, state_code):
     actual_rename = {k: v for k, v in rename_map.items() if k in df.columns}
     df = df.rename(columns=actual_rename)
 
+    if "station_id" not in df.columns:
+        df["station_id"] = ""
+    df["station_id"] = df["station_id"].fillna("").astype(str)
+
+    if "name" not in df.columns:
+        df["name"] = df["station_id"]
+    else:
+        names = df["name"].fillna("").astype(str).str.strip()
+        df["name"] = names.mask(names.eq(""), df["station_id"])
+
+    if "valid" not in df.columns:
+        df["valid"] = pd.NaT
+    if "network" not in df.columns:
+        df["network"] = "ASOS"
+    else:
+        networks = df["network"].fillna("").astype(str).str.strip()
+        df["network"] = networks.mask(networks.eq(""), "ASOS")
+
     numeric_cols = [
         "air_temperature",
         "dew_point_temperature",
@@ -551,14 +569,13 @@ def process_dataframe(df, state_code):
     df["peak_wind"] = df["wind_gust"].fillna(df["wind_speed"])
     df["wind_chill"] = calc_wind_chill(df["air_temperature"], wspd_safe)
 
-    if df["relative_humidity"].isna().all():
-        if "dew_point_temperature" in df.columns:
-            df["relative_humidity"] = calc_relative_humidity(
-                df["air_temperature"],
-                df["dew_point_temperature"].fillna(df["air_temperature"]),
-            )
-        else:
-            df["relative_humidity"] = 50
+    missing_rh = df["relative_humidity"].isna()
+    if missing_rh.any():
+        calculated_rh = calc_relative_humidity(
+            df["air_temperature"],
+            df["dew_point_temperature"].fillna(df["air_temperature"]),
+        )
+        df.loc[missing_rh, "relative_humidity"] = calculated_rh.loc[missing_rh]
 
     df["heat_index"] = calc_heat_index(
         df["air_temperature"], df["relative_humidity"])
@@ -566,7 +583,7 @@ def process_dataframe(df, state_code):
     wspd_mph = wspd_safe * 1.15078
     cond_cold = (df["air_temperature"] <= 50) & (wspd_mph >= 3)
     cond_hot = df["air_temperature"] >= 80
-    df["feels_like"] = df["air_temperature"]
+    df["feels_like"] = df["air_temperature"].astype(float)
     df.loc[cond_cold, "feels_like"] = df.loc[cond_cold, "wind_chill"]
     df.loc[cond_hot, "feels_like"] = df.loc[cond_hot, "heat_index"]
 
@@ -806,14 +823,24 @@ def _normalize_utc(dt_val):
     return dt_out.astimezone(timezone.utc)
 
 
+_SURFACE_SOURCE_ATTR = "surface_source"
+
+
+def _with_surface_source(df, source):
+    if df is not None and source:
+        df.attrs[_SURFACE_SOURCE_ATTR] = source
+    return df
+
+
 def _select_nearest_station_rows(df, target_dt, max_delta_seconds=75 * 60):
+    source = getattr(df, "attrs", {}).get(_SURFACE_SOURCE_ATTR)
     if (
         df is None
         or df.empty
         or "valid" not in df.columns
         or "station_id" not in df.columns
     ):
-        return pd.DataFrame()
+        return _with_surface_source(pd.DataFrame(), source)
 
     target_ts = pd.Timestamp(_normalize_utc(target_dt))
     if "_valid_ts" in df.columns:
@@ -824,7 +851,7 @@ def _select_nearest_station_rows(df, target_dt, max_delta_seconds=75 * 60):
 
     df_work = df_work.dropna(subset=["_valid_ts", "station_id"])
     if df_work.empty:
-        return pd.DataFrame()
+        return _with_surface_source(pd.DataFrame(), source)
 
     df_work["_delta_seconds"] = (
         (df_work["_valid_ts"] - target_ts).abs().dt.total_seconds()
@@ -836,19 +863,19 @@ def _select_nearest_station_rows(df, target_dt, max_delta_seconds=75 * 60):
     )
     df_work = df_work[df_work["_delta_seconds"] <= max_delta_seconds]
     if df_work.empty:
-        return pd.DataFrame()
+        return _with_surface_source(pd.DataFrame(), source)
 
     out = df_work.drop(
         columns=["_valid_ts", "_delta_seconds"], errors="ignore")
     if "network" not in out.columns:
         out["network"] = "ASOS"
-    return out
+    return _with_surface_source(out, source)
 
 
 def _fetch_iem_state_archive_window(state, start_dt, end_dt):
     state_upper = str(state or "").upper().strip()
     if not state_upper or state_upper in {"CONUS", "WORLD", "AK", "HI"}:
-        return pd.DataFrame()
+        return _with_surface_source(pd.DataFrame(), "iem")
 
     start = _normalize_utc(start_dt)
     end = _normalize_utc(end_dt)
@@ -922,12 +949,12 @@ def _fetch_iem_state_archive_window(state, start_dt, end_dt):
 
             if "network" not in out.columns:
                 out["network"] = "ASOS"
-            return out
+            return _with_surface_source(out, "iem")
         except Exception:
             if attempt < 3:
                 time.sleep(0.6 * (attempt + 1))
 
-    return pd.DataFrame()
+    return _with_surface_source(pd.DataFrame(), "iem")
 
 
 # ---------------------------------------------------------------------------
@@ -1141,21 +1168,21 @@ def _fetch_awc_archive_window(icao_ids: set[str], start_dt, end_dt):
 
     records = _fetch_awc_metar_bulk(icao_ids, hours)
     if not records:
-        return pd.DataFrame()
+        return _with_surface_source(pd.DataFrame(), "awc")
 
     raw_df = _awc_records_to_iem_df(records)
     if raw_df.empty:
-        return pd.DataFrame()
+        return _with_surface_source(pd.DataFrame(), "awc")
 
     df = process_dataframe(raw_df, "CONUS")
     if df is None or df.empty:
-        return pd.DataFrame()
+        return _with_surface_source(pd.DataFrame(), "awc")
 
     ts = pd.to_datetime(df["valid"], utc=True, errors="coerce")
     out = df.assign(_valid_ts=ts).dropna(subset=["_valid_ts", "station_id"])
     if "network" not in out.columns:
         out["network"] = "ASOS"
-    return out
+    return _with_surface_source(out, "awc")
 
 
 def _fetch_awc_current_conus() -> pd.DataFrame:
@@ -1197,7 +1224,7 @@ def _fetch_awc_current_conus() -> pd.DataFrame:
 
 
 def fetch_metar_data_archive_frames(state_code, frame_times_utc, source="iem"):
-    """Fetch surface archive frames with one IEM request per state for the full time span."""
+    """Fetch archive frames with AWC first and an IEM state fallback."""
     frame_times = [
         _normalize_utc(ts) for ts in (frame_times_utc or []) if ts is not None
     ]
@@ -1246,7 +1273,7 @@ def fetch_metar_data_archive_frames(state_code, frame_times_utc, source="iem"):
 
 
 def fetch_metar_data_at_time(state_code, valid_time_utc, source="iem"):
-    """Fetch station observations nearest a target UTC time (IEM-first for archive flows)."""
+    """Fetch station observations nearest a target UTC time."""
     source_key = str(source or "iem").strip().lower()
     target_dt = _normalize_utc(valid_time_utc)
 
