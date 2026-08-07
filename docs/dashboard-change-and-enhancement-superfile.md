@@ -204,6 +204,15 @@ reduction of product warm-cache history, `.venv`, fonts, task tooling, or
 palette-preview content requires a separate decision because it changes
 runtime readiness, reproducibility, rendering, or retained operator tooling.
 
+### Next cleanup session
+
+Preserve Phase 4 checkpoint `54b8387`. The user will guide a deliberate review
+of each remaining project directory and its files; make no removal merely from
+the prior broad audit. After the retained tree has been reviewed together,
+audit `docs/` file by file for superseded, redundant, or still-active material.
+Finally, use this superfile plus any remaining actionable items in retained
+documents to create a new consolidated plan for the work still worth doing.
+
 ## Active Tracks (2026-08-05)
 
 Track numbers preserve the existing roadmap grouping. Track 3 Radar render

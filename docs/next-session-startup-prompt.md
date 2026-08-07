@@ -681,7 +681,13 @@ Previous accepted checkpoint:
   `/rtma` load/scrub also passed.
 
 Next step:
-- Select any further cleanup family through a new bounded review and explicit
-  authorization. Do not remove task tooling/definitions or palette-preview code
-  from this handoff alone.
+- Preserve committed Phase 4 checkpoint `54b8387`.
+- The user will guide the review directory by directory and file by file. Work
+  through each retained area together and decide whether every file is needed;
+  do not infer deletion authorization from the prior broad audit.
+- After the project tree review, inspect `docs/` file by file for cleanup,
+  including superseded or redundant planning/history documents.
+- Then use the superfile and any still-actionable items found in the remaining
+  documents to create a new consolidated plan for the project's remaining
+  work. The project is approaching final closeout.
 ```
