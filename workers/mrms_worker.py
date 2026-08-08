@@ -107,7 +107,6 @@ def _fetch_latest_product_grib(
         result = get_latest_mrms_file(
             product,
             lookback_minutes=lookback_minutes,
-            local_dir=None,
         )
         if result is not None:
             successful_lookback = lookback_minutes
