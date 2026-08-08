@@ -12,6 +12,7 @@ import math
 import multiprocessing
 import os
 import sys
+import tempfile
 import threading
 import time
 import zlib
@@ -327,7 +328,13 @@ def _read_level3_file(file_path: str):
         decompressor = zlib.decompressobj()
         header_block = decompressor.decompress(raw[zlib_start:])
         full_nids = header_block + decompressor.unused_data
-        temp_path = Path(file_path).with_suffix(".nids")
+        descriptor, temp_name = tempfile.mkstemp(
+            prefix=f".{Path(file_path).name}.",
+            suffix=".nids",
+            dir=str(Path(file_path).parent),
+        )
+        os.close(descriptor)
+        temp_path = Path(temp_name)
         temp_path.write_bytes(full_nids)
         try:
             radar = pyart.io.read_nexrad_level3(str(temp_path))

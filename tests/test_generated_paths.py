@@ -2,6 +2,7 @@ from pathlib import Path
 
 from app_core import upstream_ledger
 from app_core.paths import CACHE_ROOT
+from services import archive_service
 from workers import _freshness
 from workers import cache_cleanup_worker
 
@@ -30,6 +31,12 @@ def test_upstream_ledger_path_explicitly_enables_measurement(monkeypatch, tmp_pa
 
 def test_headless_worker_logs_are_under_cache():
     assert _freshness._LOG_DIR == Path(CACHE_ROOT) / "logs" / "scheduled"
+
+
+def test_archive_json_cache_is_under_cache_root():
+    assert Path(archive_service._ARCHIVE_JSON_DIR) == (
+        Path(CACHE_ROOT) / "archive" / "json"
+    )
 
 
 def test_worker_log_rotation_keeps_one_backup(tmp_path):

@@ -29,6 +29,11 @@ project_root = str(Path(__file__).resolve().parent.parent)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+from app_core.atomic_io import (  # noqa: E402
+    atomic_write_bytes,
+    atomic_write_json,
+    atomic_write_text,
+)
 from app_core.upstream_ledger import urlopen  # noqa: E402
 from workers._freshness import is_cache_fresh, mark_run_complete  # noqa: E402
 
@@ -138,11 +143,13 @@ def _json_default(value: object) -> str:
 
 
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as fp:
-        json.dump(payload, fp, ensure_ascii=False, separators=(",", ":"), default=_json_default)
-    tmp.replace(path)
+    atomic_write_json(
+        path,
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=_json_default,
+    )
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -223,16 +230,14 @@ def _fetch_text(url: str, out_path: Path, force: bool) -> str:
         except OSError:
             return ""
     text = body.decode("utf-8", errors="replace")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(text, encoding="utf-8")
+    atomic_write_text(out_path, text)
     _write_json_atomic(meta_path, meta)
     return text
 
 
 def _read_raw_text(raw_path: Path, out_path: Path) -> str:
     text = raw_path.read_text(encoding="utf-8")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(text, encoding="utf-8")
+    atomic_write_text(out_path, text)
     meta = {
         "url": str(raw_path),
         "fetched_at": _utc_now_iso(),
@@ -250,10 +255,7 @@ def _fetch_binary(url: str, out_path: Path, force: bool) -> bool:
         return out_path.exists()
     if body is None:
         return out_path.exists()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out_path.with_suffix(out_path.suffix + ".tmp")
-    tmp.write_bytes(body)
-    tmp.replace(out_path)
+    atomic_write_bytes(out_path, body)
     meta["bytes"] = str(len(body))
     _write_json_atomic(meta_path, meta)
     return True

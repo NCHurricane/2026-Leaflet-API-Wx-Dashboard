@@ -32,6 +32,11 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 from typing import Any  # noqa: E402
 
+from app_core.atomic_io import (  # noqa: E402
+    atomic_write_bytes,
+    atomic_write_json,
+    atomic_write_text,
+)
 from app_core.upstream_ledger import urlopen  # noqa: E402
 from workers._freshness import mark_run_complete  # noqa: E402
 
@@ -181,12 +186,12 @@ def _download_hurdat2_file(
     SOURCE_DIR.mkdir(parents=True, exist_ok=True)
     if source_file is not None:
         text = Path(source_file).read_text(encoding="utf-8", errors="replace")
-        cached.write_text(text, encoding="utf-8")
+        atomic_write_text(cached, text)
         return cached
     if cached.exists() and not force:
         return cached
     text = _request_text(_discover_hurdat2_url(pattern, label))
-    cached.write_text(text, encoding="utf-8")
+    atomic_write_text(cached, text)
     return cached
 
 
@@ -587,8 +592,7 @@ def _download_zip(url: str, dest: Path) -> bool:
             data = resp.read()
     except urllib.error.HTTPError:
         return False
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(data)
+    atomic_write_bytes(dest, data)
     return True
 
 
@@ -647,7 +651,7 @@ def enrich_storm_gis(atcf_id: str, force: bool = False) -> bool:
         payload["advisories"] = []
         payload["hasAdvisories"] = False
         payload["gis_enriched"] = True
-        storm_json.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(storm_json, payload, ensure_ascii=False)
         return True
 
     # One fetch of the archive results page → both the full-advisory list (for the
@@ -665,7 +669,7 @@ def enrich_storm_gis(atcf_id: str, force: bool = False) -> bool:
     adv = _peak_advisory_number(payload, advs)
     if adv is None:
         payload["gis_enriched"] = True
-        storm_json.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(storm_json, payload, ensure_ascii=False)
         return True
 
     from workers.tropical_worker import (
@@ -686,7 +690,7 @@ def enrich_storm_gis(atcf_id: str, force: bool = False) -> bool:
     payload.setdefault("gis_layers", {}).update(layers)
     payload["gis_enriched"] = True
     payload["gis_advisory"] = adv if layers else None
-    storm_json.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    atomic_write_json(storm_json, payload, ensure_ascii=False)
     return True
 
 
@@ -968,11 +972,7 @@ def get_advisory_payload(atcf_id: str, step: str, force: bool = False) -> dict[s
         if payload is None:
             return None
         cache.parent.mkdir(parents=True, exist_ok=True)
-        temporary = cache.with_suffix(cache.suffix + ".tmp")
-        temporary.write_text(
-            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
-        )
-        temporary.replace(cache)
+        atomic_write_json(cache, payload, ensure_ascii=False)
         return payload
 
 
@@ -983,8 +983,6 @@ def run_archive_worker(
     nepac_file: Path | None = None,
 ) -> None:
     """Download HURDAT2 (AL + EP/CP), build the catalog, emit per-storm payloads."""
-    import json
-
     start = time.time()
     sources = download_hurdat2(force=force, atlantic_file=atlantic_file, nepac_file=nepac_file)
 
@@ -1000,9 +998,7 @@ def run_archive_worker(
             storm_dir = STORMS_DIR / storm["atcf_id"]
             storm_dir.mkdir(parents=True, exist_ok=True)
             payload = build_storm_payload(storm)
-            (storm_dir / "storm.json").write_text(
-                json.dumps(payload, ensure_ascii=False), encoding="utf-8"
-            )
+            atomic_write_json(storm_dir / "storm.json", payload, ensure_ascii=False)
             storm_count += 1
 
     # Fold in the in-progress season from NHC's live ATCF b-decks (HURDAT2 lags a
@@ -1016,12 +1012,10 @@ def run_archive_worker(
             )
             storm_dir = STORMS_DIR / storm["atcf_id"]
             storm_dir.mkdir(parents=True, exist_ok=True)
-            (storm_dir / "storm.json").write_text(
-                json.dumps(
-                    build_storm_payload(storm, source=_ATCF_BTK_SOURCE),
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
+            atomic_write_json(
+                storm_dir / "storm.json",
+                build_storm_payload(storm, source=_ATCF_BTK_SOURCE),
+                ensure_ascii=False,
             )
             storm_count += 1
     except Exception as exc:  # current-season fetch is best-effort
@@ -1037,9 +1031,7 @@ def run_archive_worker(
         "source": "HURDAT2",
         "storm_count": storm_count,
     }
-    CATALOG_FILE.write_text(
-        json.dumps(catalog_payload, ensure_ascii=False), encoding="utf-8"
-    )
+    atomic_write_json(CATALOG_FILE, catalog_payload, ensure_ascii=False)
     mark_run_complete("tropical_archive")
     seasons = sum(len(s) for s in ordered.values())
     print(
@@ -1083,9 +1075,10 @@ def refresh_current_season(year: int | None = None) -> int:
         fresh_year.setdefault(storm["basin"], []).append(_catalog_entry(storm))
         storm_dir = STORMS_DIR / storm["atcf_id"]
         storm_dir.mkdir(parents=True, exist_ok=True)
-        (storm_dir / "storm.json").write_text(
-            json.dumps(build_storm_payload(storm, source=_ATCF_BTK_SOURCE), ensure_ascii=False),
-            encoding="utf-8",
+        atomic_write_json(
+            storm_dir / "storm.json",
+            build_storm_payload(storm, source=_ATCF_BTK_SOURCE),
+            ensure_ascii=False,
         )
 
     year_key = str(target_year)
@@ -1097,7 +1090,7 @@ def refresh_current_season(year: int | None = None) -> int:
             year_map.pop(year_key, None)  # season has no storms (yet) in this basin
     catalog_payload["basins"] = {b: basins[b] for b in ("AL", "EP", "CP") if basins.get(b)}
     catalog_payload["updated"] = _utc_now_iso()
-    CATALOG_FILE.write_text(json.dumps(catalog_payload, ensure_ascii=False), encoding="utf-8")
+    atomic_write_json(CATALOG_FILE, catalog_payload, ensure_ascii=False)
     mark_run_complete("tropical_archive")
     print(f"[tropical_archive_worker] current-season refresh: {len(storms)} storm(s) for {year_key}")
     return len(storms)

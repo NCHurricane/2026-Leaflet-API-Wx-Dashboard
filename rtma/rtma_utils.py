@@ -11,7 +11,7 @@ from functools import lru_cache
 
 import cfgrib
 import numpy as np
-from app_core.atomic_io import atomic_write_json
+from app_core.atomic_io import atomic_output_path, atomic_write_json
 from app_core.grib_decode import serialized_grib_decode
 from app_core.upstream_ledger import requests
 from config.geo_config import STATE_BOUNDS
@@ -676,21 +676,18 @@ def ensure_rtma_grib(
         ):
             return local_path
 
-        tmp_path = f"{local_path}.part"
-
-        try:
+        with atomic_output_path(local_path, suffix=".part") as temporary:
             with requests.get(source.url, timeout=120, stream=True) as response:
                 response.raise_for_status()
-                with open(tmp_path, "wb") as handle:
+                with temporary.open("wb") as handle:
                     for chunk in response.iter_content(chunk_size=1024 * 1024):
                         if chunk:
                             handle.write(chunk)
-            os.replace(tmp_path, local_path)
-        finally:
-            try:
-                os.remove(tmp_path)
-            except FileNotFoundError:
-                pass
+            if not _looks_like_grib(str(temporary)):
+                raise ValueError(
+                    "Downloaded payload is not a valid GRIB file: "
+                    f"{os.path.basename(local_path)} from {source.url}"
+                )
         if not _looks_like_grib(local_path):
             try:
                 os.remove(local_path)

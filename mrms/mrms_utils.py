@@ -12,6 +12,7 @@ import threading
 from typing import List, Tuple, Optional
 
 import numpy as np
+from app_core.atomic_io import atomic_output_path
 from app_core.grib_decode import serialized_grib_decode
 
 _LOGGER = logging.getLogger(__name__)
@@ -185,27 +186,13 @@ def decompress_grib2_gz(gz_path: str) -> str:
             if grib_mtime >= gz_mtime and os.path.getsize(grib_path) > 0:
                 return grib_path
 
-        tmp_path = grib_path + ".part"
-        try:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except OSError:
-            pass
-
-        try:
+        with atomic_output_path(grib_path, suffix=".part") as temporary:
             with gzip.open(gz_path, "rb") as f_in:
-                with open(tmp_path, "wb") as f_out:
+                with temporary.open("wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
 
-            if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
+            if not temporary.exists() or temporary.stat().st_size == 0:
                 raise ValueError(f"Decompressed MRMS file is empty: {gz_path}")
-
-            os.replace(tmp_path, grib_path)
-        finally:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
 
     return grib_path
 

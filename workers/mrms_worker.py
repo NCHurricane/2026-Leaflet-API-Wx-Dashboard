@@ -15,7 +15,7 @@ import time
 from collections import defaultdict
 from datetime import timezone
 
-from app_core.atomic_io import atomic_write_json
+from app_core.atomic_io import atomic_output_path, atomic_write_json
 from workers._freshness import is_cache_fresh, mark_run_complete
 
 _CACHE_ROOT = os.path.join(
@@ -146,17 +146,8 @@ def _fetch_latest_product_grib(
 
     # Write latest version
     if local_path != dest_latest:
-        tmp = dest_latest + ".tmp"
-        shutil.move(local_path, tmp)
-        try:
-            os.replace(tmp, dest_latest)
-        except OSError as exc:
-            print(f"[mrms_worker] Failed to replace {dest_latest}: {exc}")
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-            raise
+        with atomic_output_path(dest_latest) as temporary:
+            shutil.move(local_path, temporary)
 
     # Write timestamped version if it doesn't already exist.
     if not os.path.exists(dest_timestamped):
@@ -382,7 +373,8 @@ def _write_mrms_overlay_cache(
     # Copy PNG into the flat overlay cache directory.
     flat_img = flat_overlay_image_path(_CACHE_ROOT, "mrms", path_parts, frame_key)
     os.makedirs(os.path.dirname(flat_img), exist_ok=True)
-    shutil.copy2(png_path, flat_img)
+    with atomic_output_path(flat_img) as temporary:
+        shutil.copy2(png_path, temporary)
 
     flat_overlay_update_index(
         _CACHE_ROOT,

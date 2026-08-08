@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
 import time as _time
+from app_core.atomic_io import atomic_output_path
 from lib.listing_cache import cached_call
 from app_core.upstream_ledger import requests
 
@@ -694,11 +695,16 @@ def download_radar_data(
                         raise RuntimeError(
                             f"File not found in any GCP bucket for key={key}"
                         )
-                    with open(local_path, "wb") as file_handle:
-                        file_handle.write(resp.content)
+                    with atomic_output_path(local_path, suffix=".part") as temporary:
+                        temporary.write_bytes(resp.content)
+                        if not _has_nonempty_file(str(temporary)):
+                            raise ValueError(f"Empty radar download for key={key}")
                 else:
                     bucket = buckets[0]
-                    s3_client.download_file(bucket, key, local_path)
+                    with atomic_output_path(local_path, suffix=".part") as temporary:
+                        s3_client.download_file(bucket, key, str(temporary))
+                        if not _has_nonempty_file(str(temporary)):
+                            raise ValueError(f"Empty radar download for key={key}")
 
                 if _has_nonempty_file(local_path):
                     downloaded += 1

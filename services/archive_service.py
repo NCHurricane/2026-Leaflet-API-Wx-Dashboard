@@ -2,12 +2,15 @@
 
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 import os
 import shutil
 
 from fastapi import HTTPException
 
+from app_core.atomic_io import atomic_write_json
 from app_core.http import validate_archive_range
+from app_core.paths import CACHE_ROOT
 from config.geo_config import STATE_BOUNDS
 from services.alerts_service import enrich_alert_features_geometry
 from services.surface_service import (
@@ -17,7 +20,8 @@ from services.surface_service import (
     fetch_surface_archive_frames,
 )
 
-_ARCHIVE_JSON_DIR = os.path.join("cache", "archive", "json")
+_LOGGER = logging.getLogger(__name__)
+_ARCHIVE_JSON_DIR = os.path.join(CACHE_ROOT, "archive", "json")
 os.makedirs(_ARCHIVE_JSON_DIR, exist_ok=True)
 
 _SURFACE_ARCHIVE_AUTO_SOURCES = {"auto", "iem"}
@@ -88,10 +92,9 @@ def _read_archive_cache(path: str) -> dict | None:
 def _write_archive_cache(path: str, data: dict) -> None:
     """Persist JSON dict to disk."""
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, separators=(",", ":"))
+        atomic_write_json(path, data, separators=(",", ":"))
     except Exception:
-        pass
+        _LOGGER.exception("archive_cache_write_failed", extra={"cache_path": path})
 
 
 def _surface_frame_source(df) -> str:

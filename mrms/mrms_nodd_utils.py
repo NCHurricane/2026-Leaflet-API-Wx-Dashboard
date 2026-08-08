@@ -14,6 +14,7 @@ from typing import List, Tuple, Optional
 from botocore.exceptions import ClientError
 from dateutil import tz
 from config.mrms_config import MRMS_BUCKET, MRMS_PRODUCTS
+from app_core.atomic_io import atomic_output_path
 
 # Consolidated S3 client — shared across all NODD modules
 from lib.s3_utils import get_s3_client  # noqa: E402
@@ -224,28 +225,14 @@ def download_mrms_file(
 
     # Download file
     try:
-        # Download with atomic replace to avoid partial files.
-        tmp_path = local_path + ".part"
-        try:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except OSError:
-            pass
+        # Download with job-owned atomic replacement to avoid cross-request cleanup.
+        with atomic_output_path(local_path, suffix=".part") as temporary:
+            s3_client.download_file(MRMS_BUCKET, s3_key, str(temporary))
 
-        try:
-            s3_client.download_file(MRMS_BUCKET, s3_key, tmp_path)
-
-            if local_path.endswith(".gz") and not _is_valid_gzip_file(tmp_path):
+            if local_path.endswith(".gz") and not _is_valid_gzip_file(str(temporary)):
                 raise ValueError(
                     f"Downloaded MRMS gzip failed integrity validation: {s3_key}"
                 )
-
-            os.replace(tmp_path, local_path)
-        finally:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
 
         return local_path
 

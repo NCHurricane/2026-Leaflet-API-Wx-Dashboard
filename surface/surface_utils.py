@@ -9,7 +9,7 @@ import json
 import gzip
 import time
 import re
-from app_core.atomic_io import atomic_write_json
+from app_core.atomic_io import atomic_output_path, atomic_write_json
 from app_core.upstream_ledger import requests
 import pandas as pd
 import numpy as np
@@ -21,6 +21,11 @@ _WORLD_STATION_NAME_CACHE = {}
 _WORLD_STATION_NAME_CACHE_TS = 0.0
 _STATION_METADATA_TTL_SECONDS = 24 * 3600
 _WORLD_STATION_NAME_CACHE_TTL_SECONDS = _STATION_METADATA_TTL_SECONDS
+
+
+def _write_csv_atomic(frame: pd.DataFrame, path: str) -> None:
+    with atomic_output_path(path, suffix=".part") as temporary:
+        frame.to_csv(temporary, index=False)
 
 
 def calc_wind_chill(temp_f, speed_kts):
@@ -563,7 +568,7 @@ def fetch_metar_data(state_code, use_nws_first=False):
                 return pd.DataFrame()
             df_world = process_dataframe(df_world_raw, state_upper)
             if not df_world.empty:
-                df_world.to_csv(cache_file, index=False)
+                _write_csv_atomic(df_world, cache_file)
             return df_world
         except Exception as e:
             print(f"API Error WORLD: {e}")
@@ -593,7 +598,7 @@ def fetch_metar_data(state_code, use_nws_first=False):
                     df = _filter_supported_network_rows(df)
                     if candidate != cache_file:
                         try:
-                            df.to_csv(cache_file, index=False)
+                            _write_csv_atomic(df, cache_file)
                         except Exception:
                             pass
                     return process_dataframe(df, state_upper)
@@ -607,7 +612,7 @@ def fetch_metar_data(state_code, use_nws_first=False):
         try:
             df_awc = _fetch_awc_current_conus()
             if df_awc is not None and not df_awc.empty:
-                df_awc.to_csv(cache_file, index=False)
+                _write_csv_atomic(df_awc, cache_file)
                 return df_awc
         except Exception as e:
             print(
@@ -642,7 +647,7 @@ def fetch_metar_data(state_code, use_nws_first=False):
         if not all_dfs:
             return pd.DataFrame()
         combined_df = pd.concat(all_dfs, ignore_index=True)
-        combined_df.to_csv(cache_file, index=False)
+        _write_csv_atomic(combined_df, cache_file)
         return combined_df
 
     # Fetch from all supported network types in parallel
@@ -673,7 +678,7 @@ def fetch_metar_data(state_code, use_nws_first=False):
                     )
 
         if not df_processed.empty:
-            df_processed.to_csv(cache_file, index=False)
+            _write_csv_atomic(df_processed, cache_file)
         return df_processed
     except Exception as e:
         print(f"API Error {state_upper}: {e}")

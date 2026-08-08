@@ -31,6 +31,8 @@ import time as _time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from app_core.atomic_io import atomic_output_path
+
 CHUNKS_BUCKET = "unidata-nexrad-level2-chunks"
 
 # Local cache for individual downloaded chunk files, kept between worker runs.
@@ -285,20 +287,15 @@ def assemble_scan(
     path, prefer download_radar_data which uses the incremental local cache.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = out_path.with_suffix(".tmp")
     try:
-        with open(tmp_path, "wb") as fh:
-            for chunk in chunks:
-                obj = s3_client.get_object(Bucket=CHUNKS_BUCKET, Key=chunk["key"])
-                fh.write(obj["Body"].read())
-        os.replace(str(tmp_path), str(out_path))
+        with atomic_output_path(out_path) as temporary:
+            with temporary.open("wb") as fh:
+                for chunk in chunks:
+                    obj = s3_client.get_object(Bucket=CHUNKS_BUCKET, Key=chunk["key"])
+                    fh.write(obj["Body"].read())
         return out_path.exists() and out_path.stat().st_size > 0
     except Exception as exc:
         _log(f"[chunks] assemble failed: {type(exc).__name__}: {exc}")
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except Exception:
-            pass
         return False
 
 
@@ -322,7 +319,8 @@ _CHUNK_DOWNLOAD_WORKERS = 16
 def _download_one_chunk(s3_client, chunk: dict, dest: Path) -> bool:
     try:
         obj = s3_client.get_object(Bucket=CHUNKS_BUCKET, Key=chunk["key"])
-        dest.write_bytes(obj["Body"].read())
+        with atomic_output_path(dest, suffix=".part") as temporary:
+            temporary.write_bytes(obj["Body"].read())
         return True
     except Exception as exc:
         _log(
@@ -366,19 +364,14 @@ def _assemble_from_local_cache(chunk_dir: Path, out_path: Path) -> bool:
     if not chunk_files:
         return False
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out_path.with_suffix(".tmp")
     try:
-        with open(tmp, "wb") as fh:
-            for chunk_file in chunk_files:
-                fh.write(chunk_file.read_bytes())
-        os.replace(str(tmp), str(out_path))
+        with atomic_output_path(out_path) as temporary:
+            with temporary.open("wb") as fh:
+                for chunk_file in chunk_files:
+                    fh.write(chunk_file.read_bytes())
         return out_path.exists() and out_path.stat().st_size > 0
     except Exception as exc:
         _log(f"[chunks] local assemble failed: {type(exc).__name__}: {exc}")
-        try:
-            tmp.unlink(missing_ok=True)
-        except Exception:
-            pass
         return False
 
 

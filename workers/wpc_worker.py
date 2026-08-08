@@ -31,6 +31,7 @@ project_root = str(Path(__file__).resolve().parent.parent)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+from app_core.atomic_io import atomic_write_bytes, atomic_write_json  # noqa: E402
 from app_core.upstream_ledger import urlopen  # noqa: E402
 from workers._freshness import is_cache_fresh, mark_run_complete  # noqa: E402
 from config.wpc_config import (  # noqa: E402
@@ -67,11 +68,12 @@ def _utc_now_iso() -> str:
 
 
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as fp:
-        json.dump(payload, fp, ensure_ascii=False, separators=(",", ":"))
-    tmp.replace(path)
+    atomic_write_json(
+        path,
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -152,10 +154,7 @@ def _fetch_binary(url: str, out_path: Path, force: bool) -> bool:
         return out_path.exists()
     if body is None:
         return out_path.exists()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out_path.with_suffix(out_path.suffix + ".tmp")
-    tmp.write_bytes(body)
-    tmp.replace(out_path)
+    atomic_write_bytes(out_path, body)
     meta["bytes"] = str(len(body))
     _write_json_atomic(meta_path, meta)
     return True
@@ -716,10 +715,7 @@ def _process_surface_layer(
                 return 0, f"raw file missing: {filename}"
             image_bytes = source_path.read_bytes()
             cache_path = CACHE_DIR / product["cache_path"]
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = cache_path.with_suffix(cache_path.suffix + ".tmp")
-            tmp.write_bytes(image_bytes)
-            tmp.replace(cache_path)
+            atomic_write_bytes(cache_path, image_bytes)
         else:
             png_path = CACHE_DIR / "surface" / filename
             if not _fetch_binary(product["url"], png_path, force):

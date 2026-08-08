@@ -23,6 +23,25 @@ def _raw_surface_frame(**overrides):
     return pd.DataFrame(data)
 
 
+def test_surface_csv_failure_preserves_previous_cache(tmp_path, monkeypatch):
+    destination = tmp_path / "data.csv"
+    destination.write_text("retained", encoding="utf-8")
+    frame = _raw_surface_frame()
+
+    def fail_after_partial_write(_self, path, *, index):
+        assert index is False
+        path.write_text("partial", encoding="utf-8")
+        raise RuntimeError("injected csv failure")
+
+    monkeypatch.setattr(pd.DataFrame, "to_csv", fail_after_partial_write)
+
+    with pytest.raises(RuntimeError, match="injected csv failure"):
+        surface_utils._write_csv_atomic(frame, str(destination))
+
+    assert destination.read_text(encoding="utf-8") == "retained"
+    assert not list(tmp_path.glob(".*.part"))
+
+
 def test_process_dataframe_handles_integer_temperature_derived_values():
     actual = surface_utils.process_dataframe(_raw_surface_frame(), "NC")
 
