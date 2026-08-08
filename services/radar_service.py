@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 import os
 import re
 import threading
@@ -12,6 +13,8 @@ from fastapi.responses import FileResponse
 from app_core.http import parse_utc_datetime
 from app_core.paths import BASE_DIR, CACHE_ROOT
 from app_core.refresh_coordinator import get_refresh_coordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 RADAR_SITE_ALIASES = {
     "KILM": "KLTX",
@@ -238,7 +241,7 @@ def _fetch_nws_radar_status() -> dict:
         with urlopen(req, timeout=15) as resp:
             raw = json.loads(resp.read().decode("utf-8", errors="replace"))
     except Exception as exc:
-        print(f"[radar status] NWS fetch failed: {exc}")
+        _LOGGER.warning("NWS radar-status fetch failed (%s)", type(exc).__name__)
         with _NWS_RADAR_STATUS_CACHE_LOCK:
             return _NWS_RADAR_STATUS_CACHE or {}
 
@@ -645,7 +648,7 @@ def get_radar_status_data() -> dict:
             "count": len(status),
         }
     except Exception as exc:
-        print(f"[radar status] Endpoint error: {exc}")
+        _LOGGER.error("Radar-status endpoint failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
@@ -666,8 +669,11 @@ def get_radar_live_sites_data() -> dict:
             nexrad_coords_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(nexrad_coords_module)
             NEXRAD_SITE_COORDINATES = nexrad_coords_module.NEXRAD_SITE_COORDINATES
-        except Exception as e:
-            print(f"Warning: Could not load NEXRAD_SITE_COORDINATES: {e}")
+        except Exception as exc:
+            _LOGGER.warning(
+                "NEXRAD coordinate fallback failed (%s)",
+                type(exc).__name__,
+            )
             NEXRAD_SITE_COORDINATES = {}
 
         configured = set(_radar_live_sites())
@@ -730,7 +736,7 @@ def get_radar_live_sites_data() -> dict:
             "count": len(sites),
         }
     except Exception as exc:
-        print(f"Radar live sites endpoint error: {exc}")
+        _LOGGER.error("Radar live-sites endpoint failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
@@ -744,7 +750,7 @@ def get_radar_live_products_data() -> dict:
             "count": len(catalog),
         }
     except Exception as exc:
-        print(f"Radar products endpoint error: {exc}")
+        _LOGGER.error("Radar products endpoint failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
@@ -814,9 +820,11 @@ def get_radar_live_latest_data(
                 motion=motion,
             )
         except Exception as exc:
-            print(
-                f"[radar_live_fallback] forced latest {site_id}/{product_key} failed: "
-                f"{type(exc).__name__}: {exc}"
+            _LOGGER.warning(
+                "Forced latest radar render failed for %s/%s (%s)",
+                site_id,
+                product_key,
+                type(exc).__name__,
             )
         meta = _radar_live_filter_stale_latest_meta(
             radar_read_latest_frame(CACHE_ROOT, site_id, level_code, cache_product_key),
@@ -834,9 +842,11 @@ def get_radar_live_latest_data(
                 motion=motion,
             )
         except Exception as exc:
-            print(
-                f"[radar_live_fallback] latest {site_id}/{product_key} failed: "
-                f"{type(exc).__name__}: {exc}"
+            _LOGGER.warning(
+                "Latest radar render failed for %s/%s (%s)",
+                site_id,
+                product_key,
+                type(exc).__name__,
             )
         meta = _radar_live_filter_stale_latest_meta(
             radar_read_latest_frame(CACHE_ROOT, site_id, level_code, cache_product_key),
@@ -859,9 +869,11 @@ def get_radar_live_latest_data(
                 ),
             )
         except Exception as exc:
-            print(
-                f"[radar_live_fallback] full latest {site_id}/{product_key} failed: "
-                f"{type(exc).__name__}: {exc}"
+            _LOGGER.warning(
+                "Full latest radar render failed for %s/%s (%s)",
+                site_id,
+                product_key,
+                type(exc).__name__,
             )
         meta = _radar_live_filter_stale_latest_meta(
             radar_read_latest_frame(CACHE_ROOT, site_id, level_code, cache_product_key),
@@ -1002,9 +1014,11 @@ def get_radar_live_frames_data(
                 lookback_hours=requested_hours,
             )
         except Exception as exc:
-            print(
-                f"[radar_live_fallback] frames {site_id}/{product_key} failed: "
-                f"{type(exc).__name__}: {exc}"
+            _LOGGER.warning(
+                "Radar history render failed for %s/%s (%s)",
+                site_id,
+                product_key,
+                type(exc).__name__,
             )
             return 0
 

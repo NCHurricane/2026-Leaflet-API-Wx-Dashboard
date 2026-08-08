@@ -679,13 +679,15 @@ def resolve_tile(
             )
         )
         tile_id = f"{sat_key}/{sector_key}/{channel_key}/{z}/{x}/{y}"
-        print(
-            "[satellite-v2 tile] "
-            f"render_start frame_key={frame_key} tile={tile_id} "
-            f"workers={SATELLITE_V2_LIVE_TILE_RENDER_WORKERS} "
-            f"miss_reason={miss_reason} file_exists={path_exists_before} "
-            f"file_size={path_size_before}",
-            flush=True,
+        logger.info(
+            "Satellite tile render_start frame_key=%s tile=%s workers=%s "
+            "miss_reason=%s file_exists=%s file_size=%s",
+            frame_key,
+            tile_id,
+            SATELLITE_V2_LIVE_TILE_RENDER_WORKERS,
+            miss_reason,
+            path_exists_before,
+            path_size_before,
         )
         logger.info("Submitting tile render: %s", tile_id)
         render_kwargs = {
@@ -742,16 +744,18 @@ def resolve_tile(
         render_stats["supertile_submitted"] = supertile_submitted
         render_stats["supertile_skipped"] = supertile_skipped_in_flight
         render_elapsed = int((time.perf_counter() - render_start) * 1000)
-        print(
-            "[satellite-v2 tile] "
-            f"render_complete frame_key={frame_key} tile={tile_id} "
-            f"cache_status={str(render_stats.get('cache_status') or 'miss').upper()} "
-            f"render_ms={render_elapsed} "
-            f"supertile_submitted={int(render_stats.get('supertile_submitted') or 0)} "
-            f"supertile_rendered={int(render_stats.get('supertile_rendered') or 0)} "
-            f"supertile_skipped={int(render_stats.get('supertile_skipped') or 0)} "
-            f"supertile_invalid={int(render_stats.get('supertile_invalid') or 0)}",
-            flush=True,
+        logger.info(
+            "Satellite tile render_complete frame_key=%s tile=%s cache_status=%s "
+            "render_ms=%s supertile_submitted=%s supertile_rendered=%s "
+            "supertile_skipped=%s supertile_invalid=%s",
+            frame_key,
+            tile_id,
+            str(render_stats.get("cache_status") or "miss").upper(),
+            render_elapsed,
+            int(render_stats.get("supertile_submitted") or 0),
+            int(render_stats.get("supertile_rendered") or 0),
+            int(render_stats.get("supertile_skipped") or 0),
+            int(render_stats.get("supertile_invalid") or 0),
         )
         logger.info("Tile render complete: %s (%sms)", tile_id, render_elapsed)
         cache_status = str(render_stats.get("cache_status") or "miss")

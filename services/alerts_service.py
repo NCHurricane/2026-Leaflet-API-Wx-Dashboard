@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 import urllib.parse
 import urllib.request
@@ -22,6 +23,8 @@ from app_core.upstream_ledger import record_measurement, urlopen
 from app_core.paths import CACHE_ROOT
 from app_core.refresh_coordinator import Submission, get_refresh_coordinator
 from config.alerts_config import GEOMETRY_ENDPOINT_DEFAULTS
+
+_LOGGER = logging.getLogger(__name__)
 
 _LSR_QUERY_URL = (
     "https://mapservices.weather.noaa.gov/vector/rest/services/"
@@ -344,7 +347,10 @@ def enrich_alert_features_geometry(
         )
 
     except Exception as exc:
-        print(f"[WARN] Alert geometry enrichment skipped: {exc}")
+        _LOGGER.warning(
+            "Alert geometry enrichment skipped (%s)",
+            type(exc).__name__,
+        )
 
 
 def _refresh_alerts_cache() -> dict:

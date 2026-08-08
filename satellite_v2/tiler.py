@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import logging
 import os
 import tempfile
 import time
@@ -37,6 +38,8 @@ from satellite_v2._bench_timing import (
 )
 from satellite_v2.providers import download_product_source_frames
 from satellite_v2.renderer import SatelliteTileRenderer
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def lon_lat_to_tile(lon: float, lat: float, z: int) -> tuple[int, int]:
@@ -244,9 +247,14 @@ def _render_warm_zoom_canvas_task(task: dict[str, Any]) -> dict[str, int]:
             tile_size=tile_size,
         )
     except Exception as exc:
-        print(
-            f"[satellite_v2] canvas warm error "
-            f"{sat_id}/{sector}/{channel}/{frame_key}/z{zoom}: {exc}"
+        _LOGGER.warning(
+            "Satellite canvas warm failed for %s/%s/%s/%s/z%s (%s)",
+            sat_id,
+            sector,
+            channel,
+            frame_key,
+            zoom,
+            type(exc).__name__,
         )
         stats["errors"] += len(coords)
         return stats
@@ -476,7 +484,7 @@ def render_frame_tile(
         return target, {"cache_status": "hit", "rendered": 0, "skipped": 1, "errors": 0}
 
     tile_id = f"{sat_key}/{sector_key}/{channel}/{frame_key}/z{z}/{x}/{y}"
-    print(f"[satellite-v2 tile] stage=source_start tile={tile_id}", flush=True)
+    _LOGGER.info("Satellite tile stage=source_start tile=%s", tile_id)
     source_start = time.perf_counter()
     source_files = download_product_source_frames(
         cache_root, sat_key, sector_key, channel, frame
@@ -484,23 +492,23 @@ def render_frame_tile(
     if bench_enabled():
         add_timing_ms("download_ms", (time.perf_counter() - source_start) * 1000.0)
     source_elapsed = int((time.perf_counter() - source_start) * 1000)
-    print(
-        "[satellite-v2 tile] "
-        f"stage=source_complete tile={tile_id} "
-        f"sources={len(source_files)} elapsed_ms={source_elapsed}",
-        flush=True,
+    _LOGGER.info(
+        "Satellite tile stage=source_complete tile=%s sources=%s elapsed_ms=%s",
+        tile_id,
+        len(source_files),
+        source_elapsed,
     )
     source_files_for_renderer: dict[str, str | Path] = dict(source_files)
     renderer_start = time.perf_counter()
-    print(f"[satellite-v2 tile] stage=renderer_start tile={tile_id}", flush=True)
+    _LOGGER.info("Satellite tile stage=renderer_start tile=%s", tile_id)
     renderer = SatelliteTileRenderer.from_sources(
         channel, source_files_for_renderer, sat_id=sat_key
     )
     renderer_elapsed = int((time.perf_counter() - renderer_start) * 1000)
-    print(
-        "[satellite-v2 tile] "
-        f"stage=renderer_ready tile={tile_id} elapsed_ms={renderer_elapsed}",
-        flush=True,
+    _LOGGER.info(
+        "Satellite tile stage=renderer_ready tile=%s elapsed_ms=%s",
+        tile_id,
+        renderer_elapsed,
     )
     stats = {
         "cache_status": "miss",
@@ -556,11 +564,13 @@ def render_frame_tile(
                 f"{sat_key}/{sector_key}/{channel}/{frame_key}/z{z}/{tile_x}/{tile_y}"
             )
             if is_requested_tile:
-                print(
-                    "[satellite-v2 tile] "
-                    f"stage=tile_render_complete tile={current_tile_id} result={result} "
-                    f"render_ms={render_elapsed} total_ms={total_elapsed}",
-                    flush=True,
+                _LOGGER.info(
+                    "Satellite tile stage=tile_render_complete tile=%s result=%s "
+                    "render_ms=%s total_ms=%s",
+                    current_tile_id,
+                    result,
+                    render_elapsed,
+                    total_elapsed,
                 )
             if result == "invalid":
                 if is_requested_tile:
@@ -578,16 +588,16 @@ def render_frame_tile(
         stats["supertile_errors"] += 1
         raise
     total_elapsed = int((time.perf_counter() - started) * 1000)
-    print(
-        "[satellite-v2 tile] "
-        f"stage=supertile_complete tile={tile_id} "
-        f"radius={stats['supertile_radius']} "
-        f"rendered={stats['supertile_rendered']} "
-        f"skipped={stats['supertile_skipped']} "
-        f"invalid={stats['supertile_invalid']} "
-        f"errors={stats['supertile_errors']} "
-        f"total_ms={total_elapsed}",
-        flush=True,
+    _LOGGER.info(
+        "Satellite tile stage=supertile_complete tile=%s radius=%s rendered=%s "
+        "skipped=%s invalid=%s errors=%s total_ms=%s",
+        tile_id,
+        stats["supertile_radius"],
+        stats["supertile_rendered"],
+        stats["supertile_skipped"],
+        stats["supertile_invalid"],
+        stats["supertile_errors"],
+        total_elapsed,
     )
     finish_timing(timing_token, cache_status=str(stats.get("cache_status") or "miss"))
     return target, stats

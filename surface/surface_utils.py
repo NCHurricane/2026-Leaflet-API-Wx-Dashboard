@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 import os
 import json
 import gzip
+import logging
 import time
 import re
 from app_core.atomic_io import atomic_output_path, atomic_write_json
@@ -15,6 +16,8 @@ import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
+
+_LOGGER = logging.getLogger(__name__)
 
 SURFACE_NETWORK_TYPES = ("ASOS", "COOP", "DCP", "RWIS")
 _WORLD_STATION_NAME_CACHE = {}
@@ -255,8 +258,11 @@ def _get_world_station_name_map(force_refresh=False):
         resp.raise_for_status()
         raw = gzip.decompress(resp.content).decode("utf-8", errors="replace")
         payload = json.loads(raw)
-    except Exception as e:
-        print(f"[WARN] WORLD station-name metadata fetch failed: {e}")
+    except Exception as exc:
+        _LOGGER.warning(
+            "WORLD station-name metadata fetch failed (%s)",
+            type(exc).__name__,
+        )
         return _WORLD_STATION_NAME_CACHE
 
     rows = payload if isinstance(
@@ -293,8 +299,8 @@ def _fetch_world_current_observations():
         response = requests.get(url, timeout=60)
         response.raise_for_status()
         df = pd.read_csv(BytesIO(response.content), compression="gzip")
-    except Exception as e:
-        print(f"[WARN] WORLD METAR fetch failed: {e}")
+    except Exception as exc:
+        _LOGGER.warning("WORLD METAR fetch failed (%s)", type(exc).__name__)
         return pd.DataFrame()
 
     if df is None or df.empty:
@@ -485,8 +491,8 @@ def fetch_metar_data(state_code):
             if not df_world.empty:
                 _write_csv_atomic(df_world, cache_file)
             return df_world
-        except Exception as e:
-            print(f"API Error WORLD: {e}")
+        except Exception as exc:
+            _LOGGER.warning("WORLD surface fetch failed (%s)", type(exc).__name__)
             return pd.DataFrame()
 
     # Load individual-state observations from IEM.
@@ -520,9 +526,11 @@ def fetch_metar_data(state_code):
             if df_awc is not None and not df_awc.empty:
                 _write_csv_atomic(df_awc, cache_file)
                 return df_awc
-        except Exception as e:
-            print(
-                f"[surface] AWC CONUS fetch failed, falling back to IEM: {e}")
+        except Exception as exc:
+            _LOGGER.warning(
+                "AWC CONUS fetch failed; falling back to IEM (%s)",
+                type(exc).__name__,
+            )
 
         # Fallback: per-state IEM (may be rate-limited)
         from app_core.refresh_coordinator import get_refresh_coordinator
@@ -547,8 +555,12 @@ def fetch_metar_data(state_code):
                         df_state = future.result()
                         if not df_state.empty:
                             all_dfs.append(df_state)
-                    except Exception as e:
-                        print(f"API Error {state}: {e}")
+                    except Exception as exc:
+                        _LOGGER.warning(
+                            "IEM surface fetch failed for %s (%s)",
+                            state,
+                            type(exc).__name__,
+                        )
 
         if not all_dfs:
             return pd.DataFrame()
@@ -586,8 +598,12 @@ def fetch_metar_data(state_code):
         if not df_processed.empty:
             _write_csv_atomic(df_processed, cache_file)
         return df_processed
-    except Exception as e:
-        print(f"API Error {state_upper}: {e}")
+    except Exception as exc:
+        _LOGGER.warning(
+            "Surface fetch failed for %s (%s)",
+            state_upper,
+            type(exc).__name__,
+        )
         return pd.DataFrame()
 
 

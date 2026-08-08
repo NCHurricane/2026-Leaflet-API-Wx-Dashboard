@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import json
+import logging
 import threading
 import time as _time
 from typing import Any
@@ -18,6 +19,8 @@ from config.refresh_schedules import (
     TROPICAL_INTERMEDIATE_SCHEDULE,
     TROPICAL_ROUTINE_SCHEDULE,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 _TROPICAL_BASINS = {"AL": "Atlantic", "EP": "Eastern Pacific", "CP": "Central Pacific"}
 _TROPICAL_CACHE_DIR = Path(BASE_DIR) / "cache" / "tropical"
@@ -475,7 +478,11 @@ def get_tropical_archive_storm_data(atcf_id: str) -> dict:
                 if fresh is not None:
                     payload = fresh
         except Exception as exc:
-            print(f"[tropical-archive] GIS enrichment failed for {sid}: {exc}")
+            _LOGGER.warning(
+                "Tropical archive GIS enrichment failed for %s (%s)",
+                sid,
+                type(exc).__name__,
+            )
     return payload
 
 

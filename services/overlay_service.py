@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+import logging
 import os
 
 from fastapi import HTTPException
@@ -10,6 +11,8 @@ from app_core.http import parse_utc_datetime
 from app_core.paths import CACHE_ROOT
 from app_core.refresh_coordinator import Submission, get_refresh_coordinator
 from config.geo_config import STATE_BOUNDS
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _start_selected_refresh(
@@ -261,8 +264,11 @@ def get_overlay_frames(
             )
         except Exception as exc:
             label = product if family == "mrms" else f"{region_key}/{stream}/{product}"
-            print(
-                f"[overlay_frames] {family.upper()} on-demand render failed for {label}: {exc}"
+            _LOGGER.warning(
+                "%s on-demand render failed for %s (%s)",
+                family.upper(),
+                label,
+                type(exc).__name__,
             )
             return 0
 

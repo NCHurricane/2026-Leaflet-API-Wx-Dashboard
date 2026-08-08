@@ -2,10 +2,13 @@
 
 from typing import Any, cast
 import json
+import logging
 import os
 import threading
 
 from app_core.paths import CACHE_ROOT
+
+_LOGGER = logging.getLogger(__name__)
 
 _WORLD_BORDERS_CACHE_PATH = os.path.join(CACHE_ROOT, "overlays", "world_borders.geojson")
 _WORLD_BORDERS_CACHE_VERSION = 3
@@ -40,7 +43,7 @@ def get_world_borders_geojson() -> dict:
             with open(_WORLD_BORDERS_CACHE_PATH, "w", encoding="utf-8") as fh:
                 json.dump(data, fh, separators=(",", ":"))
         except Exception as exc:
-            print(f"[world-borders] Cache write failed: {exc}")
+            _LOGGER.warning("World-borders cache write failed (%s)", type(exc).__name__)
         _world_borders_data = data
         return data
 
@@ -67,7 +70,7 @@ def get_us_boundaries_geojson() -> dict:
             with open(_US_BOUNDARIES_CACHE_PATH, "w", encoding="utf-8") as fh:
                 json.dump(data, fh, separators=(",", ":"))
         except Exception as exc:
-            print(f"[us-boundaries] Cache write failed: {exc}")
+            _LOGGER.warning("US-boundaries cache write failed (%s)", type(exc).__name__)
         _us_boundaries_data = data
         return data
 
@@ -114,7 +117,7 @@ def _build_world_borders_geojson() -> dict:
                         }
                     )
     except Exception as exc:
-        print(f"[world-borders] Land/coastline load failed: {exc}")
+        _LOGGER.warning("World land/coastline load failed (%s)", type(exc).__name__)
 
     lake_geometry = None
     try:
@@ -129,7 +132,7 @@ def _build_world_borders_geojson() -> dict:
         if lake_geoms:
             lake_geometry = unary_union(lake_geoms)
     except Exception as exc:
-        print(f"[world-borders] Lake geometry load failed: {exc}")
+        _LOGGER.warning("World lake geometry load failed (%s)", type(exc).__name__)
 
     try:
         borders_shp = shpreader.natural_earth(
@@ -150,7 +153,7 @@ def _build_world_borders_geojson() -> dict:
                     }
                 )
     except Exception as exc:
-        print(f"[world-borders] Border lines load failed: {exc}")
+        _LOGGER.warning("World border-line load failed (%s)", type(exc).__name__)
 
     return {
         "type": "FeatureCollection",
@@ -185,7 +188,7 @@ def _build_us_boundaries_geojson() -> dict:
             if lake_mask.is_empty:
                 lake_mask = lake_geometry
     except Exception as exc:
-        print(f"[us-boundaries] Lake geometry load failed: {exc}")
+        _LOGGER.warning("US lake geometry load failed (%s)", type(exc).__name__)
 
     try:
         state_geoms = load_state_geometries() or {}
@@ -204,7 +207,7 @@ def _build_us_boundaries_geojson() -> dict:
                     }
                 )
     except Exception as exc:
-        print(f"[us-boundaries] State geometry load failed: {exc}")
+        _LOGGER.warning("US state geometry load failed (%s)", type(exc).__name__)
 
     try:
         CensusCounties.load()
@@ -223,7 +226,7 @@ def _build_us_boundaries_geojson() -> dict:
                 }
             )
     except Exception as exc:
-        print(f"[us-boundaries] County geometry load failed: {exc}")
+        _LOGGER.warning("US county geometry load failed (%s)", type(exc).__name__)
 
     return {
         "type": "FeatureCollection",

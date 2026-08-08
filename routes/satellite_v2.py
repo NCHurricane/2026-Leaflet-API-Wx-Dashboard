@@ -1,5 +1,7 @@
 """Satellite v2 API routes."""
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
@@ -14,6 +16,7 @@ from config.satellite_v2_config import (
 from satellite_v2 import service as satellite_v2_service
 
 router = APIRouter()
+_LOGGER = logging.getLogger(__name__)
 
 _TRANSPARENT_PNG_1X1 = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
@@ -53,15 +56,17 @@ def get_satellite_v2_catalog(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        import traceback
-
-        print(
-            "[satellite-v2 catalog] ERROR "
-            f"sat_id={sat_id} sector={sector} channel={channel} "
-            f"hours={hours} max_frames={max_frames} refresh={refresh}: {exc}",
-            flush=True,
+        _LOGGER.error(
+            "Satellite catalog failed sat_id=%s sector=%s channel=%s "
+            "hours=%s max_frames=%s refresh=%s error_type=%s",
+            sat_id,
+            sector,
+            channel,
+            hours,
+            max_frames,
+            refresh,
+            type(exc).__name__,
         )
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -129,18 +134,22 @@ def get_satellite_v2_tile(
     cache_status = str(tile_stats.get("cache_status") or "hit")
     source_label = _satellite_v2_tile_source_label(cache_status)
     validate_ms = int(tile_stats.get("validate_elapsed_ms") or 0)
-    print(
-        "[satellite-v2 tile] "
-        f"source={source_label} "
-        f"cache_status={cache_status.upper()} "
-        f"miss_reason={str(tile_stats.get('miss_reason') or 'none')} "
-        f"validate_ms={validate_ms} "
-        f"elapsed_ms={int(tile_stats.get('elapsed_ms') or 0)} "
-        f"sat_id={tile_stats.get('sat_id') or sat_id} "
-        f"sector={tile_stats.get('sector') or sector} "
-        f"channel={tile_stats.get('channel') or channel} "
-        f"frame_key={frame_key} z={z} x={x} y={y}",
-        flush=True,
+    _LOGGER.info(
+        "Satellite tile source=%s cache_status=%s miss_reason=%s "
+        "validate_ms=%s elapsed_ms=%s sat_id=%s sector=%s channel=%s "
+        "frame_key=%s z=%s x=%s y=%s",
+        source_label,
+        cache_status.upper(),
+        str(tile_stats.get("miss_reason") or "none"),
+        validate_ms,
+        int(tile_stats.get("elapsed_ms") or 0),
+        tile_stats.get("sat_id") or sat_id,
+        tile_stats.get("sector") or sector,
+        tile_stats.get("channel") or channel,
+        frame_key,
+        z,
+        x,
+        y,
     )
 
     if not tile_file.exists():
