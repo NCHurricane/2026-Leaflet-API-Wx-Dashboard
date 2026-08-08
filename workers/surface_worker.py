@@ -19,20 +19,22 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-import numpy as np
-from PIL import Image
-from scipy.spatial import cKDTree
-from rasterio.features import rasterize as _rasterize
-from rasterio.transform import from_bounds as _from_bounds
-from shapely.ops import transform as _shapely_transform
+import numpy as np  # noqa: E402
+from PIL import Image  # noqa: E402
+from scipy.spatial import cKDTree  # noqa: E402
+from rasterio.features import rasterize as _rasterize  # noqa: E402
+from rasterio.transform import from_bounds as _from_bounds  # noqa: E402
+from shapely.ops import transform as _shapely_transform  # noqa: E402
 
-from app_core.render_budget import surface_gradient_render_slot
-from config.geo_config import STATE_BOUNDS
-from config.surface_config import SURFACE_COLOR_ANCHORS
-from lib.geo_utils import build_conus_geometry as _build_conus_geometry
-from lib.geo_utils import build_world_land_geometry as _build_world_land_geometry
+from app_core.render_budget import surface_gradient_render_slot  # noqa: E402
+from config.geo_config import STATE_BOUNDS  # noqa: E402
+from config.surface_config import SURFACE_COLOR_ANCHORS  # noqa: E402
+from lib.geo_utils import build_conus_geometry as _build_conus_geometry  # noqa: E402
+from lib.geo_utils import (  # noqa: E402
+    build_world_land_geometry as _build_world_land_geometry,
+)
 
-from workers._freshness import is_cache_fresh, mark_run_complete
+from workers._freshness import is_cache_fresh, mark_run_complete  # noqa: E402
 
 # Regions to keep warm.  CONUS is the gradient source for all US states;
 # WORLD is the gradient source when the user is at the WORLD view.

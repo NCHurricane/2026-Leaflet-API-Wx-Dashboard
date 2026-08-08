@@ -26,15 +26,15 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-import cartopy.crs as ccrs
-import matplotlib
-import numpy as np
+import cartopy.crs as ccrs  # noqa: E402
+import matplotlib  # noqa: E402
+import numpy as np  # noqa: E402
 
 matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # noqa: E402
 
-from app_core.overlay_cache import (
+from app_core.overlay_cache import (  # noqa: E402
     datetime_from_frame_key,
     frame_key_from_datetime,
     radar_list_frames,
@@ -44,7 +44,7 @@ from app_core.overlay_cache import (
     radar_update_index,
     radar_write_processed_keys,
 )
-from config.radar_config import (
+from config.radar_config import (  # noqa: E402
     LIVE_RADAR_KEEP_FRAMES,
     LIVE_RADAR_L2_DEFAULT_ELEVATION,
     LIVE_RADAR_L2_USE_CHUNKS,
@@ -56,8 +56,12 @@ from config.radar_config import (
     live_radar_target_frames,
     normalize_live_radar_lookback_hours,
 )
-from radar.webgl_artifact import SUPPORTED_PRODUCTS, prune_artifacts, write_artifact
-from workers._freshness import is_cache_fresh, mark_run_complete
+from radar.webgl_artifact import (  # noqa: E402
+    SUPPORTED_PRODUCTS,
+    prune_artifacts,
+    write_artifact,
+)
+from workers._freshness import is_cache_fresh, mark_run_complete  # noqa: E402
 
 _CACHE_ROOT = Path(__file__).resolve().parent.parent / "cache"
 _RADAR_ROOT = _CACHE_ROOT / "radar" / "live"

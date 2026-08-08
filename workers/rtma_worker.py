@@ -31,15 +31,15 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from config.geo_config import STATE_BOUNDS
-from config.rtma_config import (
+from config.geo_config import STATE_BOUNDS  # noqa: E402
+from config.rtma_config import (  # noqa: E402
     RTMA_CITIES_FILE,
     RTMA_STREAMS,
     RTMA_UI_PRODUCTS,
     RTMA_WORKER_REGIONS,
     clamp_stream_hours,
 )
-from workers._freshness import is_cache_fresh, mark_run_complete
+from workers._freshness import is_cache_fresh, mark_run_complete  # noqa: E402
 
 # Skip if successful run happened recently (75% of schedule cadence).
 _FRESH_WINDOW_SEC_BY_STREAM: dict[str, int] = {

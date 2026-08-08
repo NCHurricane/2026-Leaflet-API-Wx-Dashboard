@@ -23,9 +23,9 @@ def test_primary_pages_use_live_settings_archive_tabs():
         html = page_text(page)
         assert_in_order(
             html,
-            f'data-sidebar-tab="live"',
-            f'data-sidebar-tab="settings"',
-            f'data-sidebar-tab="archive"',
+            'data-sidebar-tab="live"',
+            'data-sidebar-tab="settings"',
+            'data-sidebar-tab="archive"',
         )
         assert html.count('data-sidebar-tab="') == 3
         assert html.count('data-sidebar-panel="') == 3

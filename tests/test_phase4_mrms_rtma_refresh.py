@@ -119,10 +119,14 @@ def test_rtma_refresh_is_hourly_and_latest_only(monkeypatch):
 
 def test_main_quiets_pyart_before_route_imports():
     main_source = Path("main.py").read_text(encoding="utf-8")
+    environment_source = Path("app_core/environment.py").read_text(encoding="utf-8")
 
-    quiet_index = main_source.index('_os.environ.setdefault("PYART_QUIET", "1")')
+    environment_index = main_source.index(
+        "from app_core import environment as _environment"
+    )
     route_index = main_source.index("from routes.radar import router as radar_router")
-    assert quiet_index < route_index
+    assert environment_index < route_index
+    assert 'os.environ.setdefault("PYART_QUIET", "1")' in environment_source
 
 
 def test_rtma_rapid_refresh_uses_fifteen_minute_cadence(monkeypatch):

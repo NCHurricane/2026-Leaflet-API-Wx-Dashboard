@@ -21,7 +21,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from workers._freshness import is_cache_fresh, mark_run_complete
+from workers._freshness import is_cache_fresh, mark_run_complete  # noqa: E402
 
 # Only run cleanup if cache hasn't been cleaned in the last 5.5 hours
 # (so a 6-hour interval doesn't trigger cleanup constantly)

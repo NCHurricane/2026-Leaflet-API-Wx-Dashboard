@@ -19,8 +19,8 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from config.mrms_config import MRMS_PRODUCTS
-from workers._freshness import is_cache_fresh, mark_run_complete
+from config.mrms_config import MRMS_PRODUCTS  # noqa: E402
+from workers._freshness import is_cache_fresh, mark_run_complete  # noqa: E402
 
 _CACHE_ROOT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache"

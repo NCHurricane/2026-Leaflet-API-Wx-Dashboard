@@ -33,8 +33,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from config.radar_colortable_utils import _build_colormap, _parse_pal
-from fetch_samples import fetch_samples
+from config.radar_colortable_utils import _build_colormap, _parse_pal  # noqa: E402
+from fetch_samples import fetch_samples  # noqa: E402
 
 app = FastAPI(title="Radar Palette Preview")
 

@@ -1,25 +1,11 @@
-import os as _os
 from contextlib import asynccontextmanager
+import os
 
-import certifi as _certifi
-from dotenv import load_dotenv as _load_dotenv
-
-_load_dotenv()
-
-# Python on macOS ships with no default CA bundle (ssl cafile=None), so plain
-# urllib/pandas HTTPS fetches fail certificate verification. Point OpenSSL at
-# certifi's bundle unless the environment already provides one. Must run
-# before any module builds an SSL context.
-_os.environ.setdefault("SSL_CERT_FILE", _certifi.where())
-_os.environ.setdefault("REQUESTS_CA_BUNDLE", _certifi.where())
-# Py-ART prints a citation banner on every Windows ProcessPool child import.
-_os.environ.setdefault("PYART_QUIET", "1")
-
+from app_core import environment as _environment  # noqa: F401
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI
 import uvicorn
-import os
 from app_core.paths import BASE_DIR, CACHE_ROOT as _CACHE_ROOT, ensure_runtime_dirs
 from app_core.runtime import initialize_runtime, shutdown_runtime
 from app_core.static_assets import CacheStaticFiles
