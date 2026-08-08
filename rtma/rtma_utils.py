@@ -27,8 +27,6 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="cfgrib")
 # NODD S3 public bucket — same path structure as NOMADS, no rate limiting,
 # proper 404/403 for missing objects (no HTML error pages).
 NODD_RTMA_ROOT = "https://noaa-rtma-pds.s3.amazonaws.com"
-# NOMADS kept as fallback reference only.
-NOMADS_RTMA_ROOT = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/rtma/prod"
 REQUEST_TIMEOUT = 30
 _RTMA_CITY_CACHE_SCHEMA = 2
 _GRIB_DOWNLOAD_LOCKS: dict[str, threading.Lock] = {}
@@ -60,10 +58,6 @@ def _miles(values: np.ndarray) -> np.ndarray:
     return values / 1609.344
 
 
-def _inches(values: np.ndarray) -> np.ndarray:
-    return values * 39.3701
-
-
 _TEMP_LEGEND_ANCHORS = [
     (-60, "#00352C"),
     (-20, "#c4c4d4"),
@@ -72,15 +66,6 @@ _TEMP_LEGEND_ANCHORS = [
     (50, "#c4c403"),
     (80, "#c20303"),
     (130, "#000000"),
-]
-
-_RH_ANCHORS = [
-    (0, "#c8a000"),
-    (20, "#f5dd72"),
-    (40, "#69bb6d"),
-    (60, "#0099cc"),
-    (80, "#0055aa"),
-    (100, "#003377"),
 ]
 
 _WIND_ANCHORS = [
