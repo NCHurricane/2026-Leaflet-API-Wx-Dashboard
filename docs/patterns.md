@@ -285,7 +285,8 @@ For RGB composites:
 
 ## Response Shape Pattern
 
-Use `success_payload()` / `error_payload()` helpers for render endpoints.
+Use `error_payload()` for structured request errors and `json_safe()` when an
+endpoint payload may contain NumPy values.
 
 Vector data endpoints (`/api/data/*`) return raw GeoJSON/point payloads suitable for Leaflet consumption.
 

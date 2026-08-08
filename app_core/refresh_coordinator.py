@@ -379,15 +379,6 @@ class RefreshCoordinator:
                 return Submission(False, "failed")
         return Submission(True, "queued")
 
-    def renew_lease(self, key: RefreshKey, lease_seconds: float = 90.0) -> bool:
-        normalized_key = self._normalize_key(key)
-        with self._lock:
-            state = self._states.get(normalized_key)
-            if state is None:
-                return False
-            state.lease_expires_at = time.time() + max(0.0, lease_seconds)
-            return True
-
     def record_presence(
         self,
         *,
