@@ -8,6 +8,7 @@ from routes.rtma import router as rtma_router
 from routes.satellite_v2 import router as satellite_router
 from routes.surface import router as surface_router
 from routes.tropical import router as tropical_router
+from spc import spc_utils
 
 
 def _route_paths(router):
@@ -55,3 +56,26 @@ def test_wave_c_radar_uses_nodd_without_legacy_fallback_files():
     assert read_status()["radar_satellite_default_source"] == "NODD"
     assert not Path("radar/radar_utils.py").exists()
     assert not Path("radar/radar_sites.json").exists()
+
+
+def test_wave_c_spc_keeps_active_parsers_without_legacy_renderer():
+    active_contracts = (
+        "fetch_outlook_geojson",
+        "fetch_fire_wx_geojson",
+        "fetch_reports_rows",
+        "fetch_active_watch_items",
+        "fetch_active_md_items",
+    )
+    for name in active_contracts:
+        assert callable(getattr(spc_utils, name))
+
+    removed_contracts = (
+        "generate_spc_map",
+        "generate_spc_snapshot_from_range",
+        "fetch_significant_geojson",
+        "fetch_active_watch_options",
+        "fetch_active_md_options",
+        "_fetch_active_watch_items_from_spc",
+    )
+    for name in removed_contracts:
+        assert not hasattr(spc_utils, name)
