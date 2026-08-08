@@ -3,6 +3,7 @@ from pathlib import Path
 
 from mrms import publication as mrms_publication
 from rtma import overlay_publication as rtma_publication
+from satellite_v2 import meteosat_prefetch_worker, rapid_worker, worker_support
 from tropical import product_data as tropical_product_data
 from workers import tropical_worker
 
@@ -22,6 +23,14 @@ def test_cross_worker_product_helpers_have_public_domain_owners():
 def test_tropical_worker_compatibility_names_resolve_to_product_contracts():
     assert inspect.getmodule(tropical_worker._parse_advisory) is tropical_product_data
     assert inspect.getmodule(tropical_worker._parse_track) is tropical_product_data
+
+
+def test_satellite_workers_share_one_lifecycle_helper_contract():
+    assert rapid_worker._parse_jobs is worker_support.parse_jobs
+    assert meteosat_prefetch_worker._parse_jobs is worker_support.parse_jobs
+    assert rapid_worker._worker_lock is worker_support.worker_lock
+    assert meteosat_prefetch_worker._worker_lock is worker_support.worker_lock
+    assert worker_support.parse_jobs("goes19:MESO1") == (("goes19", "MESO1"),)
 
 
 def test_production_code_does_not_import_private_product_worker_helpers():

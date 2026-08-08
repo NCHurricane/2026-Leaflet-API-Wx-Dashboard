@@ -400,6 +400,7 @@ cache/
 | `satellite_v2/renderer.py`     | Source-raster loading, Web Mercator reprojection, PNG alpha policy, composite dispatch |
 | `satellite_v2/composites.py`   | RGB recipes, including solar-aware/Rayleigh-corrected GOES GeoColor                     |
 | `satellite_v2/cache.py`        | Versioned catalog/source/tile cache paths and tile validation                            |
+| `satellite_v2/worker_support.py` | Shared Satellite worker cache-root, lock, timing, and job parsing contracts            |
 | `alerts/alerts_utils.py`       | `fetch_active_alerts_with_source()`                                           |
 | `spc/spc_utils.py`             | `fetch_outlook_geojson()`, `fetch_fire_wx_geojson()`                          |
 | `radar/radar_nodd_utils.py`    | NODD radar key listing + downloads with race-tolerant retries                 |

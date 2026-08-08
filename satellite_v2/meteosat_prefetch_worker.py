@@ -16,10 +16,8 @@ from __future__ import annotations
 import logging
 
 import argparse
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import json
-import os
 from pathlib import Path
 import shutil
 import time
@@ -40,9 +38,14 @@ from config.satellite_v2_config import (
 from satellite_v2.cache import namespace_root, source_path
 from satellite_v2.models import SourceFrame
 from satellite_v2.providers import download_product_source_frames, list_recent_frames
+from satellite_v2.worker_support import (
+    format_elapsed as _format_elapsed,
+    parse_jobs as _parse_jobs,
+    resolve_cache_root as _resolve_cache_root,
+    worker_lock as _worker_lock,
+)
 from workers._freshness import is_cache_fresh, mark_run_complete, redirect_stdio_to_log
 
-_BASE_DIR = Path(__file__).resolve().parent.parent
 _WORKER_NAME = "satellite_v2_meteosat_prefetch"
 
 # Pseudo-channel directory each instrument's shared source bundle lives under
@@ -56,44 +59,11 @@ _FCI_MANIFEST_NAME = "manifest.json"
 _FRAME_KEY_FORMAT = "%Y%m%dT%H%M%SZ"
 
 
-def _resolve_cache_root() -> Path:
-    configured = os.environ.get("WX_DASHBOARD_CACHE_ROOT") or os.environ.get(
-        "WX_SATELLITE_V2_CACHE_ROOT"
-    )
-    return Path(configured or (_BASE_DIR / "cache")).expanduser().resolve()
 
 
 _CACHE_ROOT = str(_resolve_cache_root())
-_WORKER_STATE_DIR = Path(_CACHE_ROOT) / ".workers"
 
 
-def _format_elapsed(seconds: float) -> str:
-    total = max(0, int(round(float(seconds))))
-    minutes, secs = divmod(total, 60)
-    hours, minutes = divmod(minutes, 60)
-    return f"{hours}h {minutes}m {secs}s"
-
-
-@contextmanager
-def _worker_lock(worker_name: str):
-    _WORKER_STATE_DIR.mkdir(parents=True, exist_ok=True)
-    lock_path = _WORKER_STATE_DIR / f"{worker_name}.lock"
-    try:
-        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
-        logging.getLogger(__name__).info(f"[{worker_name}] skipped: lock exists at {lock_path}")
-        yield False
-        return
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(datetime.now(timezone.utc).isoformat())
-            handle.write("\n")
-        yield True
-    finally:
-        try:
-            lock_path.unlink()
-        except FileNotFoundError:
-            pass
 
 
 def _frame_source_dir(sat_id: str, sector: str, frame_key: str) -> Path:
@@ -310,16 +280,6 @@ def run_satellite_v2_meteosat_prefetch_worker(
     return totals
 
 
-def _parse_jobs(value: str | None) -> tuple[tuple[str, str], ...] | None:
-    if not value:
-        return None
-    jobs: list[tuple[str, str]] = []
-    for raw in value.split(","):
-        if ":" not in raw:
-            raise ValueError("--jobs entries must be formatted as sat_id:sector")
-        sat_id, sector = (part.strip() for part in raw.split(":", 1))
-        jobs.append((normalize_sat_id(sat_id), normalize_sector(sector)))
-    return tuple(jobs)
 
 
 def main() -> None:
