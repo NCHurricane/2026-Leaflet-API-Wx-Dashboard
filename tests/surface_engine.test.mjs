@@ -6,6 +6,7 @@ globalThis.window = {
 };
 
 const { createSurfaceEngine } = await import('../frontend/pages/surface/surface-engine.js');
+const TEST_COLOR_ANCHORS = [[-60, '#00352C'], [130, '#000000']];
 
 function deferred() {
     let resolve;
@@ -73,6 +74,7 @@ test('Surface live load filters selected networks and updates product legend and
             cache_state: 'fresh',
             timestamp,
             timestamp_source: 'station_valid',
+            color_anchors: TEST_COLOR_ANCHORS,
             stations: [station('airport'), station('coop', 'COOP')],
         };
     });
@@ -85,6 +87,7 @@ test('Surface live load filters selected networks and updates product legend and
     assert.deepEqual(harness.renderCalls.at(-1).stations.map((item) => item.id), ['airport']);
     assert.equal(harness.renderCalls.at(-1).options.product, 'temperature');
     assert.equal(harness.renderCalls.at(-1).options.gradientEnabled, false);
+    assert.deepEqual(harness.renderCalls.at(-1).options.colorAnchors, TEST_COLOR_ANCHORS);
     assert.match(harness.legend.html, /Surface: Temperature/);
     assert.match(harness.legend.html, /2 stations/);
     assert.deepEqual(harness.stationCounts, [2]);
@@ -95,6 +98,20 @@ test('Surface live load filters selected networks and updates product legend and
     });
     assert.match(harness.status.messages.at(-1).message, /2 stations/);
     assert.equal(harness.engine.hasStations, true);
+});
+
+test('Surface rejects a response without its authoritative palette', async () => {
+    const harness = createHarness(async () => ({
+        cache_state: 'fresh',
+        timestamp: new Date().toISOString(),
+        stations: [station('airport')],
+    }));
+
+    await harness.engine.load(view());
+
+    assert.equal(harness.renderCalls.length, 0);
+    assert.match(harness.status.messages.at(-1).message, /missing color_anchors/);
+    assert.equal(harness.status.messages.at(-1).state, 'error');
 });
 
 test('Surface gradient uses the retained source region and ASOS-only interpolation stations', async () => {
@@ -111,6 +128,7 @@ test('Surface gradient uses the retained source region and ASOS-only interpolati
         return {
             cache_state: 'fresh',
             timestamp: new Date().toISOString(),
+            color_anchors: TEST_COLOR_ANCHORS,
             stations: [station('airport'), station('coop', 'COOP')],
         };
     });
@@ -138,7 +156,11 @@ test('Surface archive frame cancels an unresolved live load and remains authorit
 
     const archiveStation = station('archive');
     harness.engine.renderArchiveFrame(
-        { timestamp: '2026-08-05T12:00:00Z', stations: [archiveStation] },
+        {
+            timestamp: '2026-08-05T12:00:00Z',
+            color_anchors: TEST_COLOR_ANCHORS,
+            stations: [archiveStation],
+        },
         view({ gradientEnabled: true }),
     );
 
@@ -151,6 +173,7 @@ test('Surface archive frame cancels an unresolved live load and remains authorit
     live.resolve({
         cache_state: 'fresh',
         timestamp: new Date().toISOString(),
+        color_anchors: TEST_COLOR_ANCHORS,
         stations: [station('late-live')],
     });
     await pending;

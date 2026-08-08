@@ -12,6 +12,8 @@ import pytest
 
 from app_core.refresh_coordinator import RefreshCoordinator, RefreshPolicy, Submission
 from app_core.render_budget import surface_gradient_render_slot
+from config.surface_config import SURFACE_COLOR_ANCHORS, TEMPERATURE_GRADIENT_ANCHORS
+from routes.surface import get_surface_products
 import services.surface_service as surface_service
 import workers.surface_worker as surface_worker
 
@@ -33,6 +35,35 @@ class _RecordingCoordinator:
 
     def record_presence(self, **_kwargs):
         return None
+
+
+def test_surface_palette_has_one_authoritative_full_temperature_definition():
+    expected = (
+        (-60, "#00352C"),
+        (-40, "#80b1b1"),
+        (-20, "#c4c4d4"),
+        (0, "#570057"),
+        (2, "#ff69b4"),
+        (10, "#c5939b"),
+        (20, "#8db1bd"),
+        (32, "#0000ff"),
+        (34, "#009400"),
+        (40, "#004600"),
+        (50, "#c4c403"),
+        (60, "#c78203"),
+        (80, "#c20303"),
+        (100, "#bbbbbb"),
+        (130, "#000000"),
+    )
+    assert TEMPERATURE_GRADIENT_ANCHORS == expected
+
+    products = get_surface_products()["products"]
+    for product in ("temperature", "feels_like", "dew_point"):
+        assert SURFACE_COLOR_ANCHORS[product] is TEMPERATURE_GRADIENT_ANCHORS
+        assert tuple(products[product]["color_anchors"]) == expected
+        assert surface_worker._SURFACE_GRADIENT_PRODUCTS[product]["anchors"] is (
+            TEMPERATURE_GRADIENT_ANCHORS
+        )
 
 
 def _write_stale_gradient(tmp_path):

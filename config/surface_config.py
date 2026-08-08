@@ -1,13 +1,10 @@
-import numpy as np
-from matplotlib.colors import LinearSegmentedColormap
-
+"""Authoritative Surface color palettes shared by services and workers."""
 
 TEMPERATURE_MIN_F = -60
 TEMPERATURE_MAX_F = 130
-TEMPERATURE_STEP_F = 2
 
 
-TEMPERATURE_GRADIENT_ANCHORS = [
+TEMPERATURE_GRADIENT_ANCHORS = (
     (-60, "#00352C"),  # dark blue-green
     (-40, "#80b1b1"),  # light blue-green
     (-20, "#c4c4d4"),  # lavender
@@ -23,65 +20,62 @@ TEMPERATURE_GRADIENT_ANCHORS = [
     (80, "#c20303"),  # red
     (100, "#bbbbbb"),  # white
     (130, "#000000"),  # black
-]
+)
 
+RELATIVE_HUMIDITY_GRADIENT_ANCHORS = (
+    (0, "#c8a000"),
+    (20, "#f5dd72"),
+    (40, "#69bb6d"),
+    (60, "#0099cc"),
+    (80, "#0055aa"),
+    (100, "#003377"),
+)
 
-def _hex_to_rgb(hex_color):
-    hex_color = hex_color.lstrip("#")
-    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+WIND_GRADIENT_ANCHORS = (
+    (0, "#b0d4f0"),
+    (10, "#70b0e0"),
+    (20, "#3090d0"),
+    (30, "#f5dd72"),
+    (45, "#ff9d2e"),
+    (60, "#ff4f4f"),
+)
 
+ALTIMETER_GRADIENT_ANCHORS = (
+    (29.5, "#5b1a8f"),
+    (30.0, "#2a6db3"),
+    (30.2, "#2ca58d"),
+    (30.4, "#f5dd72"),
+    (30.6, "#ff9d2e"),
+    (30.8, "#bf2c2c"),
+)
 
-def _rgb_to_hex(rgb):
-    return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+MSLP_GRADIENT_ANCHORS = (
+    (990, "#5b1a8f"),
+    (1000, "#2a6db3"),
+    (1010, "#2ca58d"),
+    (1020, "#f5dd72"),
+    (1030, "#ff9d2e"),
+    (1040, "#bf2c2c"),
+)
 
+VISIBILITY_GRADIENT_ANCHORS = (
+    (0, "#7f1d1d"),
+    (1, "#b45309"),
+    (3, "#d97706"),
+    (5, "#65a30d"),
+    (7, "#16a34a"),
+    (10, "#0ea5e9"),
+)
 
-def _interpolate_hex(start_hex, end_hex, fraction):
-    start_rgb = _hex_to_rgb(start_hex)
-    end_rgb = _hex_to_rgb(end_hex)
-    out_rgb = tuple(
-        int(round(start_rgb[i] + (end_rgb[i] - start_rgb[i]) * fraction))
-        for i in range(3)
-    )
-    return _rgb_to_hex(out_rgb)
-
-
-def build_temperature_gradient_levels_colors():
-    """Build a 2°F-stepped palette from TEMPERATURE_MIN_F..TEMPERATURE_MAX_F."""
-    temps = np.arange(TEMPERATURE_MIN_F, TEMPERATURE_MAX_F + 1, TEMPERATURE_STEP_F)
-    colors = []
-
-    for temp in temps:
-        for idx in range(len(TEMPERATURE_GRADIENT_ANCHORS) - 1):
-            t0, c0 = TEMPERATURE_GRADIENT_ANCHORS[idx]
-            t1, c1 = TEMPERATURE_GRADIENT_ANCHORS[idx + 1]
-            if t0 <= temp <= t1:
-                if t1 == t0:
-                    colors.append(c0)
-                else:
-                    frac = (temp - t0) / (t1 - t0)
-                    colors.append(_interpolate_hex(c0, c1, frac))
-                break
-        else:
-            if temp < TEMPERATURE_GRADIENT_ANCHORS[0][0]:
-                colors.append(TEMPERATURE_GRADIENT_ANCHORS[0][1])
-            else:
-                colors.append(TEMPERATURE_GRADIENT_ANCHORS[-1][1])
-
-    return temps, colors
-
-
-def build_temperature_colormap(cmap_name="custom_temp"):
-    levels, colors = build_temperature_gradient_levels_colors()
-    cmap = LinearSegmentedColormap.from_list(
-        cmap_name,
-        list(zip(np.linspace(0, 1, len(colors)), colors)),
-    )
-    return cmap, levels
-
-
-TEMPERATURE_COLORMAP, TEMPERATURE_LEVELS = build_temperature_colormap()
-
-# Feels Like uses the same colorbar as Temperature.
-FEELS_LIKE_COLORMAP = TEMPERATURE_COLORMAP
-FEELS_LIKE_MIN_F = TEMPERATURE_MIN_F
-FEELS_LIKE_MAX_F = TEMPERATURE_MAX_F
+SURFACE_COLOR_ANCHORS = {
+    "station_plot": TEMPERATURE_GRADIENT_ANCHORS,
+    "temperature": TEMPERATURE_GRADIENT_ANCHORS,
+    "feels_like": TEMPERATURE_GRADIENT_ANCHORS,
+    "dew_point": TEMPERATURE_GRADIENT_ANCHORS,
+    "relative_humidity": RELATIVE_HUMIDITY_GRADIENT_ANCHORS,
+    "wind_speed": WIND_GRADIENT_ANCHORS,
+    "wind_gust": WIND_GRADIENT_ANCHORS,
+    "altimeter": ALTIMETER_GRADIENT_ANCHORS,
+    "mslp": MSLP_GRADIENT_ANCHORS,
+    "visibility": VISIBILITY_GRADIENT_ANCHORS,
+}

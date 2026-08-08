@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from config.surface_config import SURFACE_COLOR_ANCHORS
 from services.surface_service import (
     SURFACE_PRODUCTS,
     get_surface_data,
@@ -15,7 +16,10 @@ router = APIRouter()
 def get_surface_products():
     return {
         "status": "success",
-        "products": SURFACE_PRODUCTS,
+        "products": {
+            key: {**metadata, "color_anchors": SURFACE_COLOR_ANCHORS[key]}
+            for key, metadata in SURFACE_PRODUCTS.items()
+        },
         "count": len(SURFACE_PRODUCTS),
     }
 

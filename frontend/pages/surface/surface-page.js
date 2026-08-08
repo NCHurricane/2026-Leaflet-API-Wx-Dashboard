@@ -6,8 +6,8 @@ import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260808a';
-import { createSurfaceEngine } from './surface-engine.js?v=20260725e';
-import { baseDistKm, createSurfaceRenderer } from './surface-render.js';
+import { createSurfaceEngine } from './surface-engine.js?v=20260808a';
+import { baseDistKm, createSurfaceRenderer } from './surface-render.js?v=20260808a';
 
 const byId = (id) => document.getElementById(id);
 const SELECT_PRODUCT_MESSAGE = 'Select a surface product to load observations.';

@@ -26,26 +26,9 @@ export const SURFACE_PRODUCT_UNITS = Object.freeze(
     Object.fromEntries(SURFACE_PRODUCTS.map(({ key, unit }) => [key, unit])),
 );
 
-// Client-side colormap anchors (mirror of the server-side _SURFACE_PRODUCTS).
-export const SURFACE_COLORMAPS = Object.freeze({
-    temperature: [[-60, '#00352C'], [-20, '#c4c4d4'], [0, '#570057'], [32, '#0000ff'], [50, '#c4c403'], [80, '#c20303'], [130, '#000000']],
-    feels_like: [[-60, '#00352C'], [-20, '#c4c4d4'], [0, '#570057'], [32, '#0000ff'], [50, '#c4c403'], [80, '#c20303'], [130, '#000000']],
-    dew_point: [[-60, '#00352C'], [-20, '#c4c4d4'], [0, '#570057'], [32, '#0000ff'], [50, '#c4c403'], [80, '#c20303'], [130, '#000000']],
-    relative_humidity: [[0, '#c8a000'], [20, '#f5dd72'], [40, '#69bb6d'], [60, '#0099cc'], [80, '#0055aa'], [100, '#003377']],
-    wind_speed: [[0, '#b0d4f0'], [10, '#70b0e0'], [20, '#3090d0'], [30, '#f5dd72'], [45, '#ff9d2e'], [60, '#ff4f4f']],
-    wind_gust: [[0, '#b0d4f0'], [10, '#70b0e0'], [20, '#3090d0'], [30, '#f5dd72'], [45, '#ff9d2e'], [60, '#ff4f4f']],
-    altimeter: [[29.5, '#5b1a8f'], [30.0, '#2a6db3'], [30.2, '#2ca58d'], [30.4, '#f5dd72'], [30.6, '#ff9d2e'], [30.8, '#bf2c2c']],
-    mslp: [[990, '#5b1a8f'], [1000, '#2a6db3'], [1010, '#2ca58d'], [1020, '#f5dd72'], [1030, '#ff9d2e'], [1040, '#bf2c2c']],
-    visibility: [[0, '#7f1d1d'], [1, '#b45309'], [3, '#d97706'], [5, '#65a30d'], [7, '#16a34a'], [10, '#0ea5e9']],
-});
-
 // Fixed seam-dissolving blur for the client-canvas gradient fallback; the
 // worker PNG path never blurs, so this is not user-adjustable.
 const FALLBACK_BLUR_SCALE = 1.0;
-
-// Temporary 32F isotherm diagnostic on the client-canvas gradient fallback.
-const FREEZING_ISOTHERM_ENABLED = true;
-const FREEZING_ISOTHERM_PRODUCTS = new Set(['temperature', 'feels_like', 'dew_point']);
 
 const VALUE_MARKER_OFFSET_X_PX = 0;
 const VALUE_MARKER_OFFSET_Y_PX = -15;
@@ -292,9 +275,8 @@ function interpolateHexColor(hex1, hex2, frac) {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
-export function colorAtValue(value, product) {
-    const anchors = SURFACE_COLORMAPS[product] || SURFACE_COLORMAPS.temperature;
-    if (!anchors.length) return '#cccccc';
+export function colorAtValue(value, anchors) {
+    if (!Array.isArray(anchors) || !anchors.length) return '#cccccc';
 
     const min = anchors[0][0];
     const max = anchors[anchors.length - 1][0];
@@ -309,56 +291,6 @@ export function colorAtValue(value, product) {
         }
     }
     return anchors[anchors.length - 1][1];
-}
-
-function drawIsothermFromGrid(ctx, grid, cols, rows, cellWidth, cellHeight, threshold) {
-    const lerpPoint = (a, b, va, vb) => {
-        if (va === vb) return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-        const t = (threshold - va) / (vb - va);
-        return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-    };
-
-    ctx.save();
-    ctx.strokeStyle = 'rgba(0, 22, 122, 0.9)';
-    ctx.lineWidth = 0.75;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-
-    for (let row = 0; row < rows - 1; row += 1) {
-        for (let col = 0; col < cols - 1; col += 1) {
-            const v00 = grid[row][col];
-            const v10 = grid[row][col + 1];
-            const v01 = grid[row + 1][col];
-            const v11 = grid[row + 1][col + 1];
-            if (![v00, v10, v01, v11].every((v) => Number.isFinite(v))) continue;
-
-            const x0 = col * cellWidth;
-            const y0 = row * cellHeight;
-            const x1 = (col + 1) * cellWidth;
-            const y1 = (row + 1) * cellHeight;
-            const points = [];
-            const crosses = (a, b) => (a - threshold) * (b - threshold) <= 0 && a !== b;
-
-            if (crosses(v00, v10)) points.push(lerpPoint([x0, y0], [x1, y0], v00, v10));
-            if (crosses(v10, v11)) points.push(lerpPoint([x1, y0], [x1, y1], v10, v11));
-            if (crosses(v01, v11)) points.push(lerpPoint([x0, y1], [x1, y1], v01, v11));
-            if (crosses(v00, v01)) points.push(lerpPoint([x0, y0], [x0, y1], v00, v01));
-
-            if (points.length === 2) {
-                ctx.moveTo(points[0][0], points[0][1]);
-                ctx.lineTo(points[1][0], points[1][1]);
-            } else if (points.length === 4) {
-                ctx.moveTo(points[0][0], points[0][1]);
-                ctx.lineTo(points[1][0], points[1][1]);
-                ctx.moveTo(points[2][0], points[2][1]);
-                ctx.lineTo(points[3][0], points[3][1]);
-            }
-        }
-    }
-
-    ctx.stroke();
-    ctx.restore();
 }
 
 export function gradientImageUrl(meta) {
@@ -487,7 +419,7 @@ export function createSurfaceRenderer(mapCore) {
             for (let col = 0; col < cols; col += 1) {
                 const val = grid[row][col];
                 if (val !== null && !Number.isNaN(val)) {
-                    offCtx.fillStyle = colorAtValue(val, view.product);
+                    offCtx.fillStyle = colorAtValue(val, view.colorAnchors);
                     offCtx.fillRect(col * cellWidth, row * cellHeight, Math.ceil(cellWidth), Math.ceil(cellHeight));
                 }
             }
@@ -499,10 +431,6 @@ export function createSurfaceRenderer(mapCore) {
         ctx.drawImage(offscreen, 0, 0);
         ctx.filter = 'none';
         ctx.globalAlpha = 1.0;
-
-        if (FREEZING_ISOTHERM_ENABLED && FREEZING_ISOTHERM_PRODUCTS.has(view.product)) {
-            drawIsothermFromGrid(ctx, grid, cols, rows, cellWidth, cellHeight, 32);
-        }
 
         return leaflet.imageOverlay(canvas.toDataURL(), bounds, {
             opacity: 1.0,

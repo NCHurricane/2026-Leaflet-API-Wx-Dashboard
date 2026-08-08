@@ -1,5 +1,5 @@
 import { createRequestGate } from '../../core/api.js';
-import { SURFACE_COLORMAPS, SURFACE_PRODUCT_LABELS, SURFACE_PRODUCT_UNITS } from './surface-render.js';
+import { SURFACE_PRODUCT_LABELS, SURFACE_PRODUCT_UNITS } from './surface-render.js?v=20260808a';
 
 const GRADIENT_META_TTL_MS = 5 * 60 * 1000;
 const STALE_THRESHOLD_MS = 90 * 60 * 1000;
@@ -23,9 +23,25 @@ function formatTick(value) {
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function legendHtml(product, stationCount) {
-    const anchors = SURFACE_COLORMAPS[product];
-    if (!anchors?.length) return '';
+function normalizeColorAnchors(rawAnchors, product) {
+    if (!Array.isArray(rawAnchors) || rawAnchors.length < 2) {
+        throw new Error(`Surface ${product} response is missing color_anchors.`);
+    }
+    const anchors = rawAnchors.map((anchor) => {
+        const value = Number(anchor?.[0]);
+        const color = String(anchor?.[1] || '');
+        if (!Number.isFinite(value) || !/^#[0-9a-f]{6}$/i.test(color)) {
+            throw new Error(`Surface ${product} response has invalid color_anchors.`);
+        }
+        return [value, color];
+    });
+    if (anchors.some((anchor, index) => index > 0 && anchor[0] <= anchors[index - 1][0])) {
+        throw new Error(`Surface ${product} color_anchors are not strictly increasing.`);
+    }
+    return anchors;
+}
+
+function legendHtml(product, stationCount, anchors) {
 
     const label = SURFACE_PRODUCT_LABELS[product] || product.replace(/_/g, ' ');
     const unit = SURFACE_PRODUCT_UNITS[product] || '';
@@ -67,6 +83,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
     let gradientStations = [];
     let gradientProduct = null;
     let gradientRegion = null;
+    let colorAnchors = null;
     let lastView = null;
 
     function filteredStations(view) {
@@ -169,6 +186,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
                 && gradientRegion === gradientSourceRegion(view.region)
                 ? gradientStations
                 : null,
+            colorAnchors,
         });
     }
 
@@ -188,6 +206,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
             );
             if (!gate.isCurrent(request.sequence)) return;
 
+            colorAnchors = normalizeColorAnchors(data?.color_anchors, view.product);
             stations = Array.isArray(data?.stations) ? data.stations : [];
             lastView = { ...view };
             const gradientKey = gradientMetaKey(view.product, view.region);
@@ -197,7 +216,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
                 gradientPendingKeys.delete(gradientKey);
             }
             renderView(lastView);
-            legend.setHtml(legendHtml(view.product, stations.length));
+            legend.setHtml(legendHtml(view.product, stations.length, colorAnchors));
             onStationCount?.(stations.length);
 
             const refreshStates = new Set(['refreshing', 'stale_refreshing', 'backoff']);
@@ -217,9 +236,10 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
                     const refreshed = await api.fetchJson(baseUrl, { signal: request.signal });
                     data = refreshed;
                     if (refreshStates.has(data?.cache_state)) continue;
+                    colorAnchors = normalizeColorAnchors(data?.color_anchors, view.product);
                     stations = Array.isArray(data?.stations) ? data.stations : [];
                     renderView(lastView);
-                    legend.setHtml(legendHtml(view.product, stations.length));
+                    legend.setHtml(legendHtml(view.product, stations.length, colorAnchors));
                     onStationCount?.(stations.length);
                     break;
                 }
@@ -321,6 +341,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
         gate.cancel();
         gradientPendingKeys.clear();
         stations = [];
+        colorAnchors = null;
         lastView = null;
         renderer.clear();
         legend.clear();
@@ -331,9 +352,10 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
     function renderArchiveFrame(frame, view) {
         gate.cancel();
         stations = Array.isArray(frame?.stations) ? frame.stations : [];
+        colorAnchors = normalizeColorAnchors(frame?.color_anchors, view.product);
         lastView = { ...view, gradientEnabled: false };
         renderView(lastView);
-        legend.setHtml(legendHtml(view.product, stations.length));
+        legend.setHtml(legendHtml(view.product, stations.length, colorAnchors));
         onStationCount?.(stations.length);
         status.setDataInfo({ timestamp: frame?.timestamp, provider: 'IEM' });
         status.setMessage(`Surface archive: ${stations.length} stations.`, 'success');

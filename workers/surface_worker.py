@@ -28,6 +28,7 @@ from shapely.ops import transform as _shapely_transform
 
 from app_core.render_budget import surface_gradient_render_slot
 from config.geo_config import STATE_BOUNDS
+from config.surface_config import SURFACE_COLOR_ANCHORS
 from lib.geo_utils import build_conus_geometry as _build_conus_geometry
 from lib.geo_utils import build_world_land_geometry as _build_world_land_geometry
 
@@ -62,113 +63,47 @@ _SURFACE_GRADIENT_PRODUCTS: dict[str, dict] = {
     "temperature": {
         "col": "air_temperature",
         "unit": "degF",
-        "anchors": [
-            (-60, "#00352C"),
-            (-20, "#c4c4d4"),
-            (0, "#570057"),
-            (32, "#0000ff"),
-            (50, "#c4c403"),
-            (80, "#c20303"),
-            (130, "#000000"),
-        ],
+        "anchors": SURFACE_COLOR_ANCHORS["temperature"],
     },
     "feels_like": {
         "col": "feels_like",
         "unit": "degF",
-        "anchors": [
-            (-60, "#00352C"),
-            (-20, "#c4c4d4"),
-            (0, "#570057"),
-            (32, "#0000ff"),
-            (50, "#c4c403"),
-            (80, "#c20303"),
-            (130, "#000000"),
-        ],
+        "anchors": SURFACE_COLOR_ANCHORS["feels_like"],
     },
     "dew_point": {
         "col": "dew_point_temperature",
         "unit": "degF",
-        "anchors": [
-            (-60, "#00352C"),
-            (-20, "#c4c4d4"),
-            (0, "#570057"),
-            (32, "#0000ff"),
-            (50, "#c4c403"),
-            (80, "#c20303"),
-            (130, "#000000"),
-        ],
+        "anchors": SURFACE_COLOR_ANCHORS["dew_point"],
     },
     "relative_humidity": {
         "col": "relative_humidity",
         "unit": "%",
-        "anchors": [
-            (0, "#c8a000"),
-            (20, "#f5dd72"),
-            (40, "#69bb6d"),
-            (60, "#0099cc"),
-            (80, "#0055aa"),
-            (100, "#003377"),
-        ],
+        "anchors": SURFACE_COLOR_ANCHORS["relative_humidity"],
     },
     "wind_speed": {
         "col": "wind_speed",
         "unit": "kt",
-        "anchors": [
-            (0, "#b0d4f0"),
-            (10, "#70b0e0"),
-            (20, "#3090d0"),
-            (30, "#f5dd72"),
-            (45, "#ff9d2e"),
-            (60, "#ff4f4f"),
-        ],
+        "anchors": SURFACE_COLOR_ANCHORS["wind_speed"],
     },
     "wind_gust": {
         "col": "peak_wind",
         "unit": "kt",
-        "anchors": [
-            (0, "#b0d4f0"),
-            (10, "#70b0e0"),
-            (20, "#3090d0"),
-            (30, "#f5dd72"),
-            (45, "#ff9d2e"),
-            (60, "#ff4f4f"),
-        ],
+        "anchors": SURFACE_COLOR_ANCHORS["wind_gust"],
     },
     "altimeter": {
         "col": "altimeter",
         "unit": "inHg",
-        "anchors": [
-            (29.5, "#5b1a8f"),
-            (30.0, "#2a6db3"),
-            (30.2, "#2ca58d"),
-            (30.4, "#f5dd72"),
-            (30.6, "#ff9d2e"),
-            (30.8, "#bf2c2c"),
-        ],
+        "anchors": SURFACE_COLOR_ANCHORS["altimeter"],
     },
     "mslp": {
         "col": "mean_sea_level_pressure",
         "unit": "hPa",
-        "anchors": [
-            (990, "#5b1a8f"),
-            (1000, "#2a6db3"),
-            (1010, "#2ca58d"),
-            (1020, "#f5dd72"),
-            (1030, "#ff9d2e"),
-            (1040, "#bf2c2c"),
-        ],
+        "anchors": SURFACE_COLOR_ANCHORS["mslp"],
     },
     "visibility": {
         "col": "visibility",
         "unit": "mi",
-        "anchors": [
-            (0, "#7f1d1d"),
-            (1, "#b45309"),
-            (3, "#d97706"),
-            (5, "#65a30d"),
-            (7, "#16a34a"),
-            (10, "#0ea5e9"),
-        ],
+        "anchors": SURFACE_COLOR_ANCHORS["visibility"],
     },
 }
 

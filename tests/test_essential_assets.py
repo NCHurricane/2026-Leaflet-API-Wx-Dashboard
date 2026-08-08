@@ -141,6 +141,21 @@ def test_split_page_css_excludes_unreachable_monolith_blocks():
     assert "#weather-tropical-hub" not in workspace_css
 
 
+def test_surface_frontend_uses_server_palette_without_fallback_isotherm():
+    renderer = (
+        ROOT / "frontend/pages/surface/surface-render.js"
+    ).read_text(encoding="utf-8")
+    engine = (
+        ROOT / "frontend/pages/surface/surface-engine.js"
+    ).read_text(encoding="utf-8")
+
+    assert "SURFACE_COLORMAPS" not in renderer
+    assert "drawIsothermFromGrid" not in renderer
+    assert "FREEZING_ISOTHERM" not in renderer
+    assert "colorAtValue(val, view.colorAnchors)" in renderer
+    assert "normalizeColorAnchors(data?.color_anchors" in engine
+
+
 def test_all_mapped_radar_palettes_parse_with_valid_colors():
     assert set(_PAL_FILENAMES.values()) == {
         path.name for path in _COLORTABLE_DIR.glob("*.pal")

@@ -12,6 +12,7 @@ from app_core.atomic_io import atomic_write_json
 from app_core.http import validate_archive_range
 from app_core.paths import CACHE_ROOT
 from config.geo_config import STATE_BOUNDS
+from config.surface_config import SURFACE_COLOR_ANCHORS
 from services.alerts_service import enrich_alert_features_geometry
 from services.surface_service import (
     SURFACE_PRODUCTS,
@@ -344,7 +345,15 @@ def get_archive_surface(
     )
     cached = _read_archive_cache(cache_file)
     if cached is not None:
-        return cached
+        anchors = SURFACE_COLOR_ANCHORS[product_key]
+        return {
+            **cached,
+            "color_anchors": anchors,
+            "frames": [
+                {**frame, "color_anchors": anchors}
+                for frame in cached.get("frames", [])
+            ],
+        }
 
     try:
         frame_dfs = fetch_surface_archive_frames(region_upper, frame_times, source_key)
@@ -370,6 +379,7 @@ def get_archive_surface(
                 "stations": stations,
                 "product": product_key,
                 "unit": SURFACE_PRODUCTS[product_key]["unit"],
+                "color_anchors": SURFACE_COLOR_ANCHORS[product_key],
                 "source": frame_source,
             }
         )
@@ -390,6 +400,7 @@ def get_archive_surface(
         "region": region_upper,
         "product": product_key,
         "product_label": _SURFACE_ARCHIVE_PRODUCT_MAP.get(product_key, product_key),
+        "color_anchors": SURFACE_COLOR_ANCHORS[product_key],
         "source": result_source,
         "network": "ASOS",
         "date_from": dt_from.isoformat(),

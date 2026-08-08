@@ -11,65 +11,20 @@ from fastapi import HTTPException
 from app_core.atomic_io import atomic_write_json
 from app_core.paths import CACHE_ROOT
 from app_core.refresh_coordinator import Submission, get_refresh_coordinator
+from config.surface_config import SURFACE_COLOR_ANCHORS
 from surface import surface_utils
 
-try:
-    from config.surface_config import TEMPERATURE_GRADIENT_ANCHORS as _TEMP_ANCHORS
-except Exception:
-    _TEMP_ANCHORS = [
-        (-60, "#00352C"),
-        (-20, "#c4c4d4"),
-        (0, "#570057"),
-        (32, "#0000ff"),
-        (50, "#c4c403"),
-        (80, "#c20303"),
-        (130, "#000000"),
-    ]
-
-_WIND_ANCHORS = [
-    (0, "#b0d4f0"),
-    (10, "#70b0e0"),
-    (20, "#3090d0"),
-    (30, "#f5dd72"),
-    (45, "#ff9d2e"),
-    (60, "#ff4f4f"),
-]
-_RH_ANCHORS = [
-    (0, "#c8a000"),
-    (20, "#f5dd72"),
-    (40, "#69bb6d"),
-    (60, "#0099cc"),
-    (80, "#0055aa"),
-    (100, "#003377"),
-]
-_PRESSURE_ANCHORS = [
-    (990, "#5b1a8f"),
-    (1000, "#2a6db3"),
-    (1010, "#2ca58d"),
-    (1020, "#f5dd72"),
-    (1030, "#ff9d2e"),
-    (1040, "#bf2c2c"),
-]
-_VISIBILITY_ANCHORS = [
-    (0, "#7f1d1d"),
-    (1, "#b45309"),
-    (3, "#d97706"),
-    (5, "#65a30d"),
-    (7, "#16a34a"),
-    (10, "#0ea5e9"),
-]
-
 SURFACE_PRODUCTS = {
-    "station_plot": {"col": "air_temperature", "unit": "\u00b0F", "anchors": "temp"},
-    "temperature": {"col": "air_temperature", "unit": "\u00b0F", "anchors": "temp"},
-    "feels_like": {"col": "feels_like", "unit": "\u00b0F", "anchors": "temp"},
-    "dew_point": {"col": "dew_point_temperature", "unit": "\u00b0F", "anchors": "temp"},
-    "relative_humidity": {"col": "relative_humidity", "unit": "%", "anchors": "rh"},
-    "wind_speed": {"col": "wind_speed", "unit": "kt", "anchors": "wind"},
-    "wind_gust": {"col": "peak_wind", "unit": "kt", "anchors": "wind"},
-    "altimeter": {"col": "altimeter", "unit": "inHg", "anchors": "pressure"},
-    "mslp": {"col": "mean_sea_level_pressure", "unit": "hPa", "anchors": "pressure"},
-    "visibility": {"col": "visibility", "unit": "mi", "anchors": "visibility"},
+    "station_plot": {"col": "air_temperature", "unit": "\u00b0F"},
+    "temperature": {"col": "air_temperature", "unit": "\u00b0F"},
+    "feels_like": {"col": "feels_like", "unit": "\u00b0F"},
+    "dew_point": {"col": "dew_point_temperature", "unit": "\u00b0F"},
+    "relative_humidity": {"col": "relative_humidity", "unit": "%"},
+    "wind_speed": {"col": "wind_speed", "unit": "kt"},
+    "wind_gust": {"col": "peak_wind", "unit": "kt"},
+    "altimeter": {"col": "altimeter", "unit": "inHg"},
+    "mslp": {"col": "mean_sea_level_pressure", "unit": "hPa"},
+    "visibility": {"col": "visibility", "unit": "mi"},
 }
 
 _SURFACE_CACHE_TTL_SECONDS = 300
@@ -168,17 +123,7 @@ def build_surface_stations(df, product: str) -> list:
         return []
 
     col = meta["col"]
-    anchors_key = meta["anchors"]
-    if anchors_key == "temp":
-        anchors = _TEMP_ANCHORS
-    elif anchors_key == "wind":
-        anchors = _WIND_ANCHORS
-    elif anchors_key == "pressure":
-        anchors = _PRESSURE_ANCHORS
-    elif anchors_key == "visibility":
-        anchors = _VISIBILITY_ANCHORS
-    else:
-        anchors = _RH_ANCHORS
+    anchors = SURFACE_COLOR_ANCHORS[product]
 
     if col not in df.columns:
         return []
@@ -267,6 +212,7 @@ def _refresh_surface_region(
             "stations": stations,
             "product": product,
             "unit": product_config["unit"],
+            "color_anchors": SURFACE_COLOR_ANCHORS[product],
             "region": region_upper,
             "count": len(stations),
             "timestamp": source_ts,
@@ -335,6 +281,7 @@ def get_surface_data(
                 if not force_refresh and age < _SURFACE_CACHE_TTL_SECONDS:
                     return {
                         **cached,
+                        "color_anchors": SURFACE_COLOR_ANCHORS[product_lower],
                         "cache_state": "fresh",
                         "refreshing": False,
                         "retry_after_seconds": None,
@@ -355,6 +302,7 @@ def get_surface_data(
         )
         return {
             **cached,
+            "color_anchors": SURFACE_COLOR_ANCHORS[product_lower],
             "cache_state": cache_state,
             "refreshing": refreshing,
             "retry_after_seconds": submission.retry_after_seconds,
@@ -369,6 +317,7 @@ def get_surface_data(
         "stations": [],
         "product": product_lower,
         "unit": SURFACE_PRODUCTS[product_lower]["unit"],
+        "color_anchors": SURFACE_COLOR_ANCHORS[product_lower],
         "region": region_upper,
         "count": 0,
         "timestamp": None,
