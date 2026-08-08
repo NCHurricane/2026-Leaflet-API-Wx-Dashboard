@@ -91,7 +91,6 @@ test('Surface live load filters selected networks and updates product legend and
     assert.deepEqual(harness.status.dataInfo, {
         timestamp,
         provider: 'IEM',
-        source: 'Station observation valid time',
         stale: false,
     });
     assert.match(harness.status.messages.at(-1).message, /2 stations/);

@@ -387,7 +387,7 @@ export function createWaterEngine({ api, mapCore, legend, status, detailRoot, pa
                 : `${stations.length} cached NOAA ${names} gauge${stations.length === 1 ? '' : 's'} loaded.`;
             setMessage(`${cachePrefix}${data?.message || countText}${staleSuffix}`);
             const latest = stations.map(latestTimestamp).filter(Boolean).sort((a, b) => b.getTime() - a.getTime())[0];
-            if (latest) status?.setDataInfo?.({ timestamp: latest.getTime(), provider: 'NOAA', source: 'Observed river, coastal, and marine stations' });
+            if (latest) status?.setDataInfo?.({ timestamp: latest.getTime(), provider: 'NOAA' });
             const retryAfterSeconds = Number(data?.retry_after_seconds);
             if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 && data?.cache_state !== 'fresh') {
                 scheduleReload(Math.max(500, retryAfterSeconds * 1000));

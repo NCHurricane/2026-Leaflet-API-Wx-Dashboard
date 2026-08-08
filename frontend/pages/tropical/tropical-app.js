@@ -4,7 +4,7 @@ import { createMapCore } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
 import { loadDefaultSettings } from '../../core/settings.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
-import { createStatusReporter } from '../../core/status.js?v=20260725e';
+import { createStatusReporter } from '../../core/status.js?v=20260808a';
 
 const byId = (id) => document.getElementById(id);
 const L = window.L;
@@ -16,7 +16,7 @@ const legend = createLegendHost(byId('weather-colorbar'), { align: 'left' });
 const status = createStatusReporter({
     globalTimestamp: byId('global-timestamp'), message: byId('weather-tropical-status'),
     updated: byId('tropical-updated'), age: byId('tropical-age'),
-    provider: byId('tropical-provider'), source: byId('tropical-source'),
+    provider: byId('tropical-provider'),
 });
 const sidebarTabs = createSidebarTabs(byId('tropical-sidebar-tabs'), { defaultTab: 'live' });
 
@@ -81,9 +81,8 @@ function _setTropicalLegend(title, bodyHtml, meta = '') {
 }
 function setStatus(message) { status.setMessage(message); }
 function _isTypeEnabled(type) { return type === 'tropical'; }
-function _setViewerTimestamp(value) { if (value) status.setDataInfo({ timestamp: value, provider: 'NOAA NHC', source: 'Tropical' }); }
-function _setReliability(_type, _label, provider, timestamp) { status.setDataInfo({ timestamp, provider, source: _label }); }
-function _setTimestampSource(_type, source, timestamp) { status.setDataInfo({ timestamp, provider: 'NOAA NHC', source }); }
+function _setViewerTimestamp(value) { if (value) status.setDataInfo({ timestamp: value, provider: 'NOAA NHC' }); }
+function _setReliability(_type, _label, provider, timestamp) { status.setDataInfo({ timestamp, provider }); }
 function _setSystemInspectorVisible(visible) {
     const rail = byId('tropical-system-inspector');
     const reopen = byId('tropical-system-open');
@@ -669,7 +668,6 @@ function _addGraticule() {
 function _applyOutlookReliability() {
     if (!_tropicalOutlookIssuedTime) return;
     _setReliability('tropical', 'Tropical Weather Outlook', 'NOAA NHC', _tropicalOutlookIssuedTime);
-    _setTimestampSource('tropical', 'Graphical Tropical Weather Outlook', _tropicalOutlookIssuedTime);
     _setViewerTimestamp(_tropicalOutlookIssuedTime);
 }
 
@@ -1509,7 +1507,6 @@ function _loadArchiveFix(index, options = {}) {
 
     const fixTimestamp = _archiveFixTimestamp(feature);
     _setReliability('tropical', 'Best Track — HURDAT2', 'NOAA NHC', fixTimestamp);
-    _setTimestampSource('tropical', 'Best Track — HURDAT2', fixTimestamp);
     _setTropicalArchiveStatus(`${_tropicalArchiveStormName || ''} — Fix ${index + 1}/${fixes.length}`);
 }
 
@@ -1576,8 +1573,8 @@ function configureProductModules() {
         setStorms: (storms) => { _tropicalStorms = storms; }, selectStorm: _selectTropicalStormCard,
         setTimeoutFn: (callback, delay) => setTimeout(callback, delay),
         syncLayerPills: (keys, toggles) => keys.forEach((key) => { const input = byId('wx-tropical-inspector-layers')?.querySelector(`[data-tc-layer="${key}"]`); if (input) input.checked = !!toggles[key]; }),
-        updateLiveStormMetadata: (data) => { const updated = data.updated || Date.now(); _setReliability('tropical', 'Tropical Cyclones', 'NOAA NHC', updated); _setTimestampSource('tropical', 'NHC Public Advisory', updated); },
-        updateArchiveAdvisoryMetadata: (advisory, step, atcfId) => { const label = `Advisory ${advisory.advisoryStep || step}`; const issuedAt = advisory.issued_at || null; _setReliability('tropical', `${label} — NHC Archive`, 'NOAA NHC', issuedAt); _setTimestampSource('tropical', `${label} — NHC Archive`, issuedAt); _setTropicalArchiveStatus(`${_tropicalArchiveStormName || atcfId} — ${label}`); },
+        updateLiveStormMetadata: (data) => { const updated = data.updated || Date.now(); _setReliability('tropical', 'Tropical Cyclones', 'NOAA NHC', updated); },
+        updateArchiveAdvisoryMetadata: (advisory, step, atcfId) => { const label = `Advisory ${advisory.advisoryStep || step}`; const issuedAt = advisory.issued_at || null; _setReliability('tropical', `${label} — NHC Archive`, 'NOAA NHC', issuedAt); _setTropicalArchiveStatus(`${_tropicalArchiveStormName || atcfId} — ${label}`); },
         updateArchiveStormMetadata: (data) => _setViewerTimestamp(data.updated || Date.now()),
         regionFitBottomPaddingPx: REGION_FIT_BOTTOM_PADDING_PX, watchWarningEvent: (code) => _TROPICAL_WW_EVENT[code], windClass: _tropicalWindClass, escapeHtml,
     });

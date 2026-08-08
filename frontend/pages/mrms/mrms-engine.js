@@ -296,7 +296,6 @@ export function createMrmsEngine({ api, mapCore, legend, status, paneName = '' }
         status.setDataInfo({
             timestamp: Number.isFinite(tsMs) ? new Date(tsMs).toISOString() : null,
             provider: 'NOAA MRMS',
-            source: frame?.full_name || frame?.product || 'MRMS overlay',
         });
         return tsMs;
     }

@@ -226,7 +226,6 @@ export function createWpcEngine({ api, mapCore, legend, status, onEmptyMessage, 
         status.setDataInfo({
             timestamp: Number.isFinite(tsMs) ? new Date(tsMs).toISOString() : null,
             provider: 'NOAA/WPC',
-            source: 'WPC cache updated',
         });
     }
 

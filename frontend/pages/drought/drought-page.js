@@ -4,7 +4,7 @@ import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js?v=20260725e';
+import { createStatusReporter } from '../../core/status.js?v=20260808a';
 import { createDroughtEngine } from './drought-engine.js';
 
 const byId = (id) => document.getElementById(id);
@@ -66,7 +66,6 @@ async function initialize() {
         updated: byId('drought-updated'),
         age: byId('drought-age'),
         provider: byId('drought-provider'),
-        source: byId('drought-source'),
     });
     const engine = createDroughtEngine({ api, mapCore, legend, status });
     let dates = [];

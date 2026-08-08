@@ -4,7 +4,7 @@ import { renderProductNav } from '../../core/nav.js';
 import { createScrubber } from '../../core/scrubber.js';
 import { loadDefaultSettings } from '../../core/settings.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
-import { createStatusReporter } from '../../core/status.js?v=20260725e';
+import { createStatusReporter } from '../../core/status.js?v=20260808a';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from '../alerts/alerts-config.js?v=20260719a';
 import { createAlertDetail } from '../alerts/alerts-detail.js?v=20260804a';
 import { classifyLsrEvent, createAlertsEngine } from '../alerts/alerts-engine.js?v=20260803a';
@@ -254,7 +254,7 @@ async function initialize() {
     const status = createStatusReporter({
         globalTimestamp: byId('global-timestamp'), message: byId('workspace-message'),
         updated: byId('workspace-updated'), age: byId('workspace-age'),
-        provider: byId('workspace-provider'), source: byId('workspace-source'),
+        provider: byId('workspace-provider'),
     });
     const legendTray = createTabbedLegendTray(
         byId('workspace-legends'),

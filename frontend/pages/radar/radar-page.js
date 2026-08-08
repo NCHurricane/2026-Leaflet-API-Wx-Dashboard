@@ -5,7 +5,7 @@ import { renderProductNav } from '../../core/nav.js';
 import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js?v=20260725e';
+import { createStatusReporter } from '../../core/status.js?v=20260808a';
 import { createRadarEngine } from './radar-engine.js?v=20260729b';
 
 const byId = (id) => document.getElementById(id);
@@ -62,7 +62,6 @@ async function initialize() {
         updated: byId('radar-updated'),
         age: byId('radar-age'),
         provider: byId('radar-provider'),
-        source: byId('radar-source'),
     });
 
     let catalog = { sites: [], products: {} };

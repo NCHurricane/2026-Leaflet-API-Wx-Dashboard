@@ -546,7 +546,7 @@ export function createRadarEngine(options) {
         trimOverlayPool(record.key);
         if (index >= 0) onFrameIndex?.(index);
         const ts = frame.timestamp;
-        status.setDataInfo({ timestamp: ts, provider: 'NEXRAD', source: frame.source || 'live cache' });
+        status.setDataInfo({ timestamp: ts, provider: 'NEXRAD' });
         message(`${frame.site || getSelection().site} ${frame.product || getSelection().product} ${new Date(ts).toLocaleString()}.`);
         if (tracksVisible) void loadStormTracks(ts);
         syncWebgl();

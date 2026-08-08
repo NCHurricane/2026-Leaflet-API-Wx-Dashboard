@@ -4,7 +4,7 @@ import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js?v=20260725e';
+import { createStatusReporter } from '../../core/status.js?v=20260808a';
 import { createWaterEngine } from './water-engine.js?v=20260804a';
 
 const byId = (id) => document.getElementById(id);
@@ -21,7 +21,7 @@ async function initialize() {
     const status = createStatusReporter({
         globalTimestamp: byId('global-timestamp'), message: byId('weather-water-status'),
         updated: byId('water-updated'), age: byId('water-age'),
-        provider: byId('water-provider'), source: byId('water-source'),
+        provider: byId('water-provider'),
     });
     const engine = createWaterEngine({
         api, mapCore, legend, status,

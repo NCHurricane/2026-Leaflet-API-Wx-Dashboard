@@ -523,7 +523,7 @@ export function createAlertsEngine(options) {
                     knownAlertIds = new Set([...(knownAlertIds || []), ...nextIds]);
                 }
                 const updated = mapPayload?._updated || new Date().toISOString();
-                status.setDataInfo({ timestamp: updated, provider: 'NWS / IEM', source: mapPayload?._source || 'alerts cache' });
+                status.setDataInfo({ timestamp: updated, provider: 'NWS / IEM' });
                 return true;
             };
 
@@ -672,7 +672,7 @@ export function createAlertsEngine(options) {
         const data = await api.fetchJson(`/api/archive/alerts?${params}`, { cache: 'no-store' });
         if (seq !== archiveSequence) return [];
         const frames = sliceArchive(data?.features || [], data?.date_from || fromValue, data?.date_to || toValue);
-        status.setDataInfo({ timestamp: data?.date_to || toValue, provider: 'IEM', source: data?._source || 'archive' });
+        status.setDataInfo({ timestamp: data?.date_to || toValue, provider: 'IEM' });
         status.setMessage(`${frames.length} archive frame${frames.length === 1 ? '' : 's'} loaded.`);
         return frames;
     }
@@ -681,7 +681,7 @@ export function createAlertsEngine(options) {
         fullBaseFeatures = activeFeatures(frame?.features || []);
         displayBaseFeatures = fullBaseFeatures;
         renderAlerts();
-        status.setDataInfo({ timestamp: frame?.timestamp, provider: 'IEM', source: 'alerts archive' });
+        status.setDataInfo({ timestamp: frame?.timestamp, provider: 'IEM' });
     }
 
     function clear() {

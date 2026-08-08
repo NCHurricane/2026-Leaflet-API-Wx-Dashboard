@@ -117,17 +117,6 @@ export const SAT_DISPLAY_NAMES = Object.freeze({
     meteosat11: 'Meteosat-11 RSS',
 });
 
-export const SAT_SOURCES = Object.freeze({
-    goes18: 'NOAA',
-    goes19: 'NOAA',
-    gk2a: 'KMA via NOAA',
-    gmgsi: 'NOAA multi-satellite mosaic',
-    himawari9: 'JMA',
-    meteosat12: 'EUMETSAT',
-    meteosat9: 'EUMETSAT',
-    meteosat11: 'EUMETSAT',
-});
-
 export function frameIndexForReload(frames, preferredFrameKey = '') {
     if (!Array.isArray(frames) || !frames.length) return 0;
     const preferredKey = String(preferredFrameKey || '');

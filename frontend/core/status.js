@@ -21,7 +21,7 @@ function formatAge(value) {
 }
 
 export function createStatusReporter(elements = {}) {
-    const { age, globalTimestamp, message, updated, provider, source } = elements;
+    const { age, globalTimestamp, message, updated, provider } = elements;
     let globalTimestampTime = null;
     let globalTimestampState = null;
 
@@ -68,7 +68,6 @@ export function createStatusReporter(elements = {}) {
             const parts = ensureGlobalTimestamp();
             if (parts.time) parts.time.textContent = `Last Updated: ${formatted}`;
             if (provider) provider.textContent = info.provider || '—';
-            if (source) source.textContent = info.source || '—';
             if (info.updateState !== false) {
                 writeDataState(
                     info.stale ? 'Stale data' : 'Ready',
@@ -88,7 +87,6 @@ export function createStatusReporter(elements = {}) {
             }
             if (globalTimestamp) globalTimestamp.dataset.stateTone = '';
             if (provider) provider.textContent = '—';
-            if (source) source.textContent = '—';
         },
     });
 }

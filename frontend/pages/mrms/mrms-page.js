@@ -5,7 +5,7 @@ import { renderProductNav } from '../../core/nav.js';
 import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js?v=20260725e';
+import { createStatusReporter } from '../../core/status.js?v=20260808a';
 import { createMrmsEngine, formatValidTimeLabel, timestampMs } from './mrms-engine.js?v=20260804b';
 
 const byId = (id) => document.getElementById(id);
@@ -137,7 +137,6 @@ async function initialize() {
         updated: byId('mrms-updated'),
         age: byId('mrms-age'),
         provider: byId('mrms-provider'),
-        source: byId('mrms-source'),
     });
     const engine = createMrmsEngine({ api, mapCore, legend, status });
 

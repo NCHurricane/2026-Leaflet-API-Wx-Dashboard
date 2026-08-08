@@ -1,7 +1,6 @@
 import { createSatelliteAnimator } from '../satellite/satellite-anim.js?v=20260731c';
 import {
     SAT_DISPLAY_NAMES,
-    SAT_SOURCES,
     createSatelliteEngine,
 } from '../satellite/satellite-engine.js?v=20260731a';
 import { workspaceFrameIndexAtOrBefore } from './workspace-timeline.js?v=20260803b';
@@ -95,7 +94,6 @@ export function createWorkspaceSatellite({
             status.setDataInfo({
                 timestamp: frame.timestamp_utc || null,
                 provider: `${SAT_DISPLAY_NAMES[selection().satId] || selection().satId} — ${selection().channel}`,
-                source: SAT_SOURCES[selection().satId] || 'NOAA',
             });
             status.setDataState('Ready', 'fresh');
         },

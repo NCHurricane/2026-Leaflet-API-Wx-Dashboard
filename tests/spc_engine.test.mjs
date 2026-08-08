@@ -138,7 +138,6 @@ test('SPC supplemental load deduplicates watches and owns MD/watch legend and st
     assert.deepEqual(harness.status.dataInfo, {
         timestamp: '2026-08-07T14:00:00.000Z',
         provider: 'NOAA SPC',
-        source: 'SPC product time',
         stale: false,
     });
 
@@ -183,7 +182,6 @@ test('SPC CIG overlays retain raw payloads while excluding placeholders and CIG 
     assert.match(harness.legend.html, /Tornado Outlook/);
     assert.match(harness.legend.html, /Intensity/);
     assert.equal(harness.emptyMessages.at(-1), null);
-    assert.equal(harness.status.dataInfo.source, 'SPC outlook issued');
     assert.equal(harness.status.dataInfo.timestamp, '2026-08-07T13:00:00.000Z');
 });
 

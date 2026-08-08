@@ -120,7 +120,6 @@ test('WPC vector load owns its layer, legend, opacity, and forecast detail callb
     assert.deepEqual(harness.status.dataInfo, {
         timestamp: '2026-08-07T12:00:00.000Z',
         provider: 'NOAA/WPC',
-        source: 'WPC cache updated',
     });
     assert.deepEqual(harness.status.dataStates.at(-1), { message: 'Fresh data', state: 'fresh' });
 

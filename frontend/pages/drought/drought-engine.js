@@ -159,7 +159,6 @@ export function createDroughtEngine({ api, mapCore, legend, status }) {
             status.setDataInfo({
                 timestamp: `${date}T12:00:00Z`,
                 provider: 'USDM / NDMC',
-                source: 'U.S. Drought Monitor valid date',
             });
             status.setMessage(`U.S. Drought Monitor valid ${date}.`, 'success');
             return { date, stats };

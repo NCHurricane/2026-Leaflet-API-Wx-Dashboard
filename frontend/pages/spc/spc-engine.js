@@ -715,7 +715,6 @@ export function createSpcEngine({ api, renderer, legend, status, onCount, onEmpt
                     ? new Date(displayTimestampMs).toISOString()
                     : null,
                 provider: 'NOAA SPC',
-                source: issuedRaw ? 'SPC outlook issued' : 'SPC product time',
                 stale,
             });
             status.setMessage(

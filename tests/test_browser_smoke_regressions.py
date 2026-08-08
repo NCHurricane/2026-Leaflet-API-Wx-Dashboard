@@ -38,7 +38,8 @@ def test_spc_and_tropical_poll_background_refreshes() -> None:
     assert "geojson?.cache_state === 'refreshing'" in spc_engine
     assert "refreshAttempt: refreshAttempt + 1" in spc_engine
     assert "Warming SPC Day" in spc_engine
-    assert "SPC outlook issued" in spc_engine
+    assert "const issuedRaw = latestTimestampValue(" in spc_engine
+    assert "const displayTimestampRaw = issuedRaw ||" in spc_engine
     assert "STALE_CACHE_STATES.has" in spc_engine
     assert "STALE_THRESHOLD_MS" not in spc_engine
     assert "if (data.refreshing && refreshAttempt < 30)" in tropical_engine

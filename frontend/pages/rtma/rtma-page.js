@@ -5,7 +5,7 @@ import { renderProductNav } from '../../core/nav.js';
 import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js?v=20260725e';
+import { createStatusReporter } from '../../core/status.js?v=20260808a';
 import {
     STREAM_MAX_HOURS,
     baseDistKm,
@@ -73,7 +73,6 @@ async function initialize() {
         updated: byId('rtma-updated'),
         age: byId('rtma-age'),
         provider: byId('rtma-provider'),
-        source: byId('rtma-source'),
     });
     const engine = createRtmaEngine({ api, mapCore, legend, status });
 

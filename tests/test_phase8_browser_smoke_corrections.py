@@ -177,6 +177,10 @@ def test_global_timestamp_has_independent_data_state_line() -> None:
 
 
 def test_all_pages_receive_the_shared_timestamp_state_assets() -> None:
+    status = (ROOT / "frontend/core/status.js").read_text(encoding="utf-8")
+    assert "info.source" not in status
+    assert "provider, source" not in status
+
     page_entries = {
         "alerts": "alerts-page.js",
         "drought": "drought-page.js",
@@ -197,4 +201,5 @@ def test_all_pages_receive_the_shared_timestamp_state_assets() -> None:
         script = (page_dir / entry_name).read_text(encoding="utf-8")
         assert "core.css?v=20260730b" in markup
         assert f"/frontend/pages/{page_name}/{entry_name}?v=" in markup
-        assert "status.js?v=20260725e" in script
+        assert "status.js?v=20260808a" in script
+        assert f"source: byId('{page_name}-source')" not in script

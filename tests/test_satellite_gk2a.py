@@ -29,10 +29,6 @@ def test_gk2a_exposes_only_proven_products():
     root = Path(__file__).resolve().parents[1]
     page = (root / "frontend/pages/satellite/satellite.html").read_text("utf-8")
     script = (root / "frontend/pages/satellite/satellite-page.js").read_text("utf-8")
-    engine = (root / "frontend/pages/satellite/satellite-engine.js").read_text(
-        "utf-8"
-    )
-
     assert 'data-satellite-sat="gk2a"' in page
     assert '<option value="asia-pacific">Asia-Pacific</option>' in page
     assert "gk2a: new Set([" in script
@@ -43,7 +39,6 @@ def test_gk2a_exposes_only_proven_products():
     assert "'GeoColor', 'GeoColorBlkMar', 'TrueColor', 'NaturalColor'" in script
     assert "'DayCloudPhase', 'DaySnowFog'" in script
     assert "'gk2a:FullDisk': 'asia-pacific'" in script
-    assert "gk2a: 'KMA via NOAA'" in engine
 
 
 def test_gk2a_ami_capability_filter_includes_only_valid_composites():

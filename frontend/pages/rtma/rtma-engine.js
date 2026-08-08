@@ -464,7 +464,6 @@ export function createRtmaEngine({
         status.setDataInfo({
             timestamp: Number.isFinite(tsMs) ? new Date(tsMs).toISOString() : null,
             provider: `NOAA ${stream || 'RTMA'}`,
-            source: title,
         });
         status.setMessage(`RTMA ${title} valid ${formatValidTimeLabel(tsMs)}.${note}`, tone);
     }
@@ -582,7 +581,6 @@ export function createRtmaEngine({
                 status.setDataInfo({
                     timestamp: Number.isFinite(tsMs) ? new Date(tsMs).toISOString() : null,
                     provider: `NOAA ${stream}`,
-                    source: data?.full_name || product,
                 });
                 status.setMessage(`RTMA ${data?.full_name || product} — overlay cache not yet built (markers only).`);
             }
@@ -796,7 +794,6 @@ export function createRtmaEngine({
         status.setDataInfo({
             timestamp: Number.isFinite(tsMs) ? new Date(tsMs).toISOString() : null,
             provider: `NOAA ${frame.stream}`,
-            source: title,
         });
         status.setMessage(`RTMA ${title} (${renderNote}) ${formatValidTimeLabel(tsMs)}.`);
         return true;

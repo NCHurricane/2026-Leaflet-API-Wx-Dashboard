@@ -5,10 +5,9 @@ import { renderProductNav } from '../../core/nav.js';
 import { createScrubber } from '../../core/scrubber.js?v=20260730b';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js?v=20260725e';
+import { createStatusReporter } from '../../core/status.js?v=20260808a';
 import {
     SAT_DISPLAY_NAMES,
-    SAT_SOURCES,
     createSatelliteEngine,
     formatFrameLabel,
     frameIndexForReload,
@@ -318,7 +317,6 @@ async function initialize() {
         updated: byId('satellite-updated'),
         age: byId('satellite-age'),
         provider: byId('satellite-provider'),
-        source: byId('satellite-source'),
     });
     const engine = createSatelliteEngine({ api, clientId: SATELLITE_CLIENT_ID });
 
@@ -371,7 +369,6 @@ async function initialize() {
         status.setDataInfo({
             timestamp: frame?.timestamp_utc || null,
             provider: `${SAT_DISPLAY_NAMES[satId] || satId} — ${channel}`,
-            source: SAT_SOURCES[satId] || 'NOAA',
             updateState: false,
         });
     }

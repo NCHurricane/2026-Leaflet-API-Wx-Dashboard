@@ -236,9 +236,6 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
             status.setDataInfo({
                 timestamp: data?.timestamp,
                 provider: 'IEM',
-                source: data?.timestamp_source === 'station_valid' || !data?.timestamp_source
-                    ? 'Station observation valid time'
-                    : String(data.timestamp_source),
                 stale,
             });
             status.setMessage(

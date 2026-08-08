@@ -5,7 +5,7 @@ import { renderProductNav } from '../../core/nav.js';
 import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
-import { createStatusReporter } from '../../core/status.js?v=20260725e';
+import { createStatusReporter } from '../../core/status.js?v=20260808a';
 import { createSurfaceEngine } from './surface-engine.js?v=20260725e';
 import { baseDistKm, createSurfaceRenderer } from './surface-render.js';
 
@@ -56,7 +56,6 @@ async function initialize() {
         updated: byId('surface-updated'),
         age: byId('surface-age'),
         provider: byId('surface-provider'),
-        source: byId('surface-source'),
     });
     const renderer = createSurfaceRenderer(mapCore);
     const engine = createSurfaceEngine({
