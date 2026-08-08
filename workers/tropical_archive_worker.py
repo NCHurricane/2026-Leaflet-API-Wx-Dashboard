@@ -22,6 +22,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import weakref
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -68,7 +69,9 @@ _ARCHIVE_RESULTS_URL = "https://www.nhc.noaa.gov/gis/archive_forecast_results.ph
 _SYNOPTIC_HHMM = {"0000", "0600", "1200", "1800"}
 _CYCLONE_STATUS = {"HU", "TS", "TD", "SS", "SD"}
 _ADVISORY_CACHE_LOCKS_GUARD = threading.Lock()
-_ADVISORY_CACHE_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+_ADVISORY_CACHE_LOCKS: weakref.WeakValueDictionary[
+    tuple[str, str], threading.Lock
+] = weakref.WeakValueDictionary()
 
 # HURDAT2 2-letter status codes → short STORMTYPE codes the frontend classifier
 # (_tropicalCategoryKey in frontend/pages/tropical/tropical-app.js) understands on best-track features,

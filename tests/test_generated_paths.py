@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from app_core import upstream_ledger
@@ -53,6 +54,30 @@ def test_worker_log_rotation_keeps_one_backup(tmp_path):
 def test_generated_diagnostics_have_bounded_retention():
     policies = dict(cache_cleanup_worker._RETENTION_POLICIES)
 
+    assert "tropical" not in policies
+    assert "tropical/archive" not in policies
+    assert policies["tropical/basins"] == 7 * 24
+    assert policies["tropical/storms"] == 7 * 24
     assert policies["archive"] == 7 * 24
     assert policies["logs"] == 7 * 24
     assert policies["metrics"] == 7 * 24
+
+
+def test_cleanup_preserves_tropical_archive_history(tmp_path, monkeypatch):
+    archive = tmp_path / "tropical" / "archive" / "storms" / "AL011851.json"
+    current = tmp_path / "tropical" / "storms" / "AL012026.json"
+    archive.parent.mkdir(parents=True)
+    current.parent.mkdir(parents=True)
+    archive.write_text("{}", encoding="utf-8")
+    current.write_text("{}", encoding="utf-8")
+    old = 1
+    os.utime(archive, (old, old))
+    os.utime(current, (old, old))
+
+    monkeypatch.setattr(cache_cleanup_worker, "_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setattr(cache_cleanup_worker, "mark_run_complete", lambda *_args: None)
+
+    cache_cleanup_worker.run_cache_cleanup_worker(force=True)
+
+    assert archive.exists()
+    assert not current.exists()

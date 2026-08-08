@@ -22,6 +22,7 @@ NWPS_GAUGE_URL = "https://api.water.noaa.gov/nwps/v1/gauges/{identifier}"
 NWPS_GAUGE_PAGE_URL = "https://water.noaa.gov/gauges/{identifier}"
 COOPS_DATA_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
 WATER_CACHE_TTL_SEC = 180
+WATER_CACHE_MAX_ENTRIES = 128
 WATER_DETAIL_CACHE_TTL_SEC = 5 * 60
 WATER_DETAIL_CACHE_MAX_ENTRIES = 512
 WATER_RIV_GAUGES_CACHE_MAX_AGE_SEC = 30 * 60
@@ -29,7 +30,8 @@ WATER_INDEX_RETRY_AFTER_SEC = 2.0
 WATER_REQUIRED_NETWORKS = frozenset({"river", "coastal", "buoy"})
 WATER_RIV_GAUGES_INDEX_FILE = Path(__file__).resolve().parent.parent / "cache" / "water" / "riv_gauges.json"
 
-_WATER_CACHE: dict[str, tuple[float, dict]] = {}
+_WATER_CACHE: OrderedDict[str, tuple[float, dict]] = OrderedDict()
+_WATER_CACHE_LOCK = threading.RLock()
 _WATER_DETAIL_CACHE: OrderedDict[str, tuple[float, dict]] = OrderedDict()
 _WATER_DETAIL_CACHE_LOCK = threading.RLock()
 _DETAIL_PROVIDER_LOCKS = {
@@ -59,18 +61,32 @@ def _read_json_request(req: urllib.request.Request, timeout: int = 20, retries: 
 
 
 def _cache_get(key: str) -> dict | None:
-    cached = _WATER_CACHE.get(key)
-    if not cached:
-        return None
-    ts, data = cached
-    if time.monotonic() - ts > WATER_CACHE_TTL_SEC:
-        _WATER_CACHE.pop(key, None)
-        return None
-    return data
+    with _WATER_CACHE_LOCK:
+        cached = _WATER_CACHE.get(key)
+        if not cached:
+            return None
+        ts, data = cached
+        if time.monotonic() - ts > WATER_CACHE_TTL_SEC:
+            _WATER_CACHE.pop(key, None)
+            return None
+        _WATER_CACHE.move_to_end(key)
+        return data
 
 
 def _cache_set(key: str, data: dict) -> dict:
-    _WATER_CACHE[key] = (time.monotonic(), data)
+    now = time.monotonic()
+    with _WATER_CACHE_LOCK:
+        expired = [
+            cache_key
+            for cache_key, (cached_at, _payload) in _WATER_CACHE.items()
+            if now - cached_at > WATER_CACHE_TTL_SEC
+        ]
+        for cache_key in expired:
+            _WATER_CACHE.pop(cache_key, None)
+        _WATER_CACHE[key] = (now, data)
+        _WATER_CACHE.move_to_end(key)
+        while len(_WATER_CACHE) > WATER_CACHE_MAX_ENTRIES:
+            _WATER_CACHE.popitem(last=False)
     return data
 
 

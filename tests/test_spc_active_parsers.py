@@ -352,6 +352,28 @@ def test_active_products_preserve_product_specific_empty_success(
     assert result["_updated"] is None
 
 
+def test_active_cache_canonicalizes_watch_types_and_evicts_lru(monkeypatch):
+    calls = []
+
+    def load(**kwargs):
+        calls.append(kwargs)
+        return {"selection": kwargs["watch_types"]}
+
+    monkeypatch.setattr(spc_service, "_get_spc_active_uncached", load)
+    monkeypatch.setattr(spc_service, "_SPC_ACTIVE_CACHE_MAX_ENTRIES", 2)
+
+    first = spc_service.get_spc_active(watch_types="SVR,TOR")
+    equivalent = spc_service.get_spc_active(watch_types="tornado,severe")
+    spc_service.get_spc_active(watch_types="TOR")
+    spc_service.get_spc_active(watch_types="SVR")
+
+    assert first is equivalent
+    assert calls[0]["watch_types"] == "tor,svr"
+    assert len(calls) == 3
+    assert len(spc_service._SPC_ACTIVE_CACHE) == 2
+    assert {key[2] for key in spc_service._SPC_ACTIVE_CACHE} == {"tor", "svr"}
+
+
 def test_reports_preserve_legitimate_empty_success(monkeypatch):
     monkeypatch.setattr(
         spc_utils,

@@ -1,5 +1,6 @@
 """Tropical cyclone current and archive services."""
 
+from collections import OrderedDict
 from pathlib import Path
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -30,6 +31,10 @@ _TROPICAL_ARCHIVE_WARM_PROVIDER = "tropical-archive-warm"
 _TROPICAL_ARCHIVE_WARM_WINDOW = 5
 _TROPICAL_ARCHIVE_WARM_LOCK = threading.RLock()
 _TROPICAL_ARCHIVE_WARM_TARGETS: dict[str, dict[str, object]] = {}
+_TROPICAL_ARCHIVE_WARM_COMPLETED_MAX_ENTRIES = 256
+_TROPICAL_ARCHIVE_WARM_COMPLETED: OrderedDict[
+    str, dict[str, object]
+] = OrderedDict()
 
 
 def _run_tropical_worker_once(
@@ -571,7 +576,13 @@ def _tropical_archive_advisory_is_cached(sid: str, step: str) -> bool:
 def _tropical_archive_warm_status(sid: str) -> dict[str, object]:
     steps = _tropical_archive_advisory_steps(sid)
     with _TROPICAL_ARCHIVE_WARM_LOCK:
-        target = dict(_TROPICAL_ARCHIVE_WARM_TARGETS.get(sid) or {})
+        target = dict(
+            _TROPICAL_ARCHIVE_WARM_TARGETS.get(sid)
+            or _TROPICAL_ARCHIVE_WARM_COMPLETED.get(sid)
+            or {}
+        )
+        if sid in _TROPICAL_ARCHIVE_WARM_COMPLETED:
+            _TROPICAL_ARCHIVE_WARM_COMPLETED.move_to_end(sid)
     full = bool(target.get("full"))
     anchor = str(target.get("anchor") or (steps[0] if steps else ""))
     targets = _tropical_archive_target_steps(steps, full=full, anchor=anchor)
@@ -592,6 +603,24 @@ def _tropical_archive_warm_status(sid: str) -> dict[str, object]:
         "retry_after_seconds": state.get("retry_after_seconds"),
         "error_type": state.get("error_type"),
     }
+
+
+def _retire_tropical_archive_warm_target(
+    sid: str,
+    status: dict[str, object],
+) -> None:
+    with _TROPICAL_ARCHIVE_WARM_LOCK:
+        target = dict(_TROPICAL_ARCHIVE_WARM_TARGETS.pop(sid, None) or {})
+        _TROPICAL_ARCHIVE_WARM_COMPLETED[sid] = {
+            "full": status.get("mode") == "full",
+            "anchor": str(target.get("anchor") or ""),
+        }
+        _TROPICAL_ARCHIVE_WARM_COMPLETED.move_to_end(sid)
+        while (
+            len(_TROPICAL_ARCHIVE_WARM_COMPLETED)
+            > _TROPICAL_ARCHIVE_WARM_COMPLETED_MAX_ENTRIES
+        ):
+            _TROPICAL_ARCHIVE_WARM_COMPLETED.popitem(last=False)
 
 
 def _run_tropical_archive_warm(sid: str) -> dict[str, object]:
@@ -625,6 +654,7 @@ def _run_tropical_archive_warm(sid: str) -> dict[str, object]:
         if upgraded_to_full and len(targets) < len(steps):
             continue
         status = _tropical_archive_warm_status(sid)
+        _retire_tropical_archive_warm_target(sid, status)
         return {
             **status,
             "source_timestamp": datetime.now(timezone.utc).isoformat(),
@@ -650,6 +680,7 @@ def start_tropical_archive_warm_data(
         raise HTTPException(status_code=400, detail="Invalid archive warm anchor.")
 
     with _TROPICAL_ARCHIVE_WARM_LOCK:
+        _TROPICAL_ARCHIVE_WARM_COMPLETED.pop(sid, None)
         target = _TROPICAL_ARCHIVE_WARM_TARGETS.setdefault(
             sid,
             {"full": False, "anchor": anchor_step},
@@ -660,6 +691,7 @@ def start_tropical_archive_warm_data(
 
     status = _tropical_archive_warm_status(sid)
     if status["complete"]:
+        _retire_tropical_archive_warm_target(sid, status)
         return status
     coordinator = get_refresh_coordinator()
     submission = coordinator.submit(

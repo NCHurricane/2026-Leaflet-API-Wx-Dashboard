@@ -1,5 +1,8 @@
+import gc
 import json
 import os
+import weakref
+from collections import OrderedDict
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 
@@ -140,6 +143,11 @@ def test_archive_warm_prefetches_window_then_full_storm_sequentially(
     )
     monkeypatch.setattr(tropical_service, "get_refresh_coordinator", lambda: coordinator)
     monkeypatch.setattr(tropical_service, "_TROPICAL_ARCHIVE_WARM_TARGETS", {})
+    monkeypatch.setattr(
+        tropical_service,
+        "_TROPICAL_ARCHIVE_WARM_COMPLETED",
+        OrderedDict(),
+    )
     monkeypatch.setattr(tropical_service._time, "sleep", lambda _seconds: None)
 
     window = tropical_service.start_tropical_archive_warm_data(
@@ -153,6 +161,7 @@ def test_archive_warm_prefetches_window_then_full_storm_sequentially(
     assert window["cached"] == 5
     assert window["total"] == 5
     assert window["complete"] is True
+    assert tropical_service._TROPICAL_ARCHIVE_WARM_TARGETS == {}
 
     full = tropical_service.start_tropical_archive_warm_data(
         sid,
@@ -166,6 +175,8 @@ def test_archive_warm_prefetches_window_then_full_storm_sequentially(
     assert full["cached"] == 7
     assert full["total"] == 7
     assert full["complete"] is True
+    assert tropical_service._TROPICAL_ARCHIVE_WARM_TARGETS == {}
+    assert tropical_service.get_tropical_archive_warm_status_data(sid)["mode"] == "full"
 
 
 def test_archive_warm_window_fills_forward_at_start_of_storm():
@@ -213,7 +224,7 @@ def test_archive_advisory_cache_is_atomic_and_deduplicates_concurrent_reads(
     monkeypatch.setattr(
         tropical_archive_worker,
         "_ADVISORY_CACHE_LOCKS",
-        {},
+        weakref.WeakValueDictionary(),
     )
     monkeypatch.setattr(
         tropical_archive_worker,
@@ -239,6 +250,8 @@ def test_archive_advisory_cache_is_atomic_and_deduplicates_concurrent_reads(
     ]
     assert cache.exists()
     assert not cache.with_suffix(".json.tmp").exists()
+    gc.collect()
+    assert len(tropical_archive_worker._ADVISORY_CACHE_LOCKS) == 0
 
 
 def test_archive_advisory_issuance_normalizes_to_offset_aware_iso():

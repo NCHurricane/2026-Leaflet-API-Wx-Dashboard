@@ -1,5 +1,6 @@
 """SPC cache and active product helpers."""
 
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -14,8 +15,27 @@ from config.refresh_schedules import SPC_OUTLOOK_SCHEDULES
 
 
 _SPC_ACTIVE_TTL_SECONDS = 90.0
-_SPC_ACTIVE_CACHE: dict[tuple[str, str, str], tuple[float, dict]] = {}
+_SPC_ACTIVE_CACHE_MAX_ENTRIES = 64
+_SPC_ACTIVE_CACHE: OrderedDict[
+    tuple[str, str, str], tuple[float, dict]
+] = OrderedDict()
 _SPC_ACTIVE_CACHE_LOCK = Lock()
+
+
+def _canonical_watch_types(value: str) -> str:
+    tokens = {
+        token.strip().lower()
+        for token in str(value or "all").split(",")
+        if token.strip()
+    }
+    if not tokens or "all" in tokens:
+        return "all"
+    canonical = []
+    if tokens & {"tor", "tornado"}:
+        canonical.append("tor")
+    if tokens & {"svr", "severe"}:
+        canonical.append("svr")
+    return ",".join(canonical) or "none"
 
 
 def _parse_iso(value: object) -> datetime | None:
@@ -459,21 +479,31 @@ def get_spc_active(
     watch_types: str = "all",
 ) -> dict:
     """Return active watches/MDs from one shared 90-second application TTL."""
+    product_key = (product or "watches").strip().lower()
+    if product_key == "md":
+        product_key = "mds"
+    watch_types_key = _canonical_watch_types(watch_types)
     cache_key = (
-        (product or "watches").strip().lower(),
+        product_key,
         (watch_mode or "polygon").strip().lower(),
-        (watch_types or "all").strip().lower(),
+        watch_types_key,
     )
     now = time.monotonic()
     with _SPC_ACTIVE_CACHE_LOCK:
         cached = _SPC_ACTIVE_CACHE.get(cache_key)
         if cached and now - cached[0] < _SPC_ACTIVE_TTL_SECONDS:
+            _SPC_ACTIVE_CACHE.move_to_end(cache_key)
             return cached[1]
+        if cached:
+            _SPC_ACTIVE_CACHE.pop(cache_key, None)
     payload = _get_spc_active_uncached(
-        product=product,
+        product=product_key,
         watch_mode=watch_mode,
-        watch_types=watch_types,
+        watch_types=watch_types_key,
     )
     with _SPC_ACTIVE_CACHE_LOCK:
         _SPC_ACTIVE_CACHE[cache_key] = (time.monotonic(), payload)
+        _SPC_ACTIVE_CACHE.move_to_end(cache_key)
+        while len(_SPC_ACTIVE_CACHE) > _SPC_ACTIVE_CACHE_MAX_ENTRIES:
+            _SPC_ACTIVE_CACHE.popitem(last=False)
     return payload

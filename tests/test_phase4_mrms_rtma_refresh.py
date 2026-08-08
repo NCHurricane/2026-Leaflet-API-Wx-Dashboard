@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import gc
 import os
 import threading
 import time
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import json
@@ -20,6 +22,23 @@ import services.rtma_service as rtma_service
 import workers.mrms_live_worker as mrms_live_worker
 import workers.mrms_worker as mrms_worker
 import workers.rtma_live_worker as rtma_live_worker
+
+
+def test_rtma_lock_registries_release_unused_paths(monkeypatch):
+    download_locks = weakref.WeakValueDictionary()
+    derived_locks = weakref.WeakValueDictionary()
+    monkeypatch.setattr(rtma_utils, "_GRIB_DOWNLOAD_LOCKS", download_locks)
+    monkeypatch.setattr(rtma_utils, "_DERIVED_CACHE_LOCKS", derived_locks)
+
+    first = rtma_utils._grib_download_lock("one.grib2")
+    assert rtma_utils._grib_download_lock("one.grib2") is first
+    second = rtma_utils._derived_cache_lock("two.grib2")
+    assert rtma_utils._derived_cache_lock("two.grib2") is second
+
+    del first, second
+    gc.collect()
+    assert len(download_locks) == 0
+    assert len(derived_locks) == 0
 
 
 class _RecordingCoordinator:

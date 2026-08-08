@@ -5,6 +5,7 @@ import json
 import os
 import threading
 import time
+import weakref
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -29,9 +30,13 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="cfgrib")
 NODD_RTMA_ROOT = "https://noaa-rtma-pds.s3.amazonaws.com"
 REQUEST_TIMEOUT = 30
 _RTMA_CITY_CACHE_SCHEMA = 2
-_GRIB_DOWNLOAD_LOCKS: dict[str, threading.Lock] = {}
+_GRIB_DOWNLOAD_LOCKS: weakref.WeakValueDictionary[str, threading.Lock] = (
+    weakref.WeakValueDictionary()
+)
 _GRIB_DOWNLOAD_LOCKS_GUARD = threading.Lock()
-_DERIVED_CACHE_LOCKS: dict[str, threading.Lock] = {}
+_DERIVED_CACHE_LOCKS: weakref.WeakValueDictionary[str, threading.Lock] = (
+    weakref.WeakValueDictionary()
+)
 _DERIVED_CACHE_LOCKS_GUARD = threading.Lock()
 
 REGION_PREFIXES = {

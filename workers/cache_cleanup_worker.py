@@ -39,7 +39,10 @@ _RETENTION_POLICIES = [
     ("mrms", 24),       # Keep 1 day of MRMS data
     ("overlays", 48),   # Keep 2 days of rendered overlays
     ("spc", 7 * 24),    # Keep 7 days of SPC data
-    ("tropical", 7 * 24),  # Keep 7 days of tropical data
+    # Keep immutable tropical/archive history. Only current-product trees use
+    # the seven-day cleanup window.
+    ("tropical/basins", 7 * 24),
+    ("tropical/storms", 7 * 24),
     ("surface", 7 * 24),   # Keep 7 days of surface gradients
     ("drought", 7 * 24),   # Keep 7 days of drought data
     ("archive", 7 * 24),   # Keep 7 days of generated archive data

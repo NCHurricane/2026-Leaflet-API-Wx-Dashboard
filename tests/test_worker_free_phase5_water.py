@@ -236,6 +236,28 @@ def test_station_detail_cache_deduplicates_and_is_bounded(monkeypatch):
     assert list(water_service._WATER_DETAIL_CACHE) == ["detail:2", "detail:3"]
 
 
+def test_station_index_cache_is_locked_ttl_lru(monkeypatch):
+    with water_service._WATER_CACHE_LOCK:
+        water_service._WATER_CACHE.clear()
+    monkeypatch.setattr(water_service, "WATER_CACHE_MAX_ENTRIES", 2)
+
+    water_service._cache_set("first", {"value": 1})
+    water_service._cache_set("second", {"value": 2})
+    assert water_service._cache_get("first") == {"value": 1}
+    water_service._cache_set("third", {"value": 3})
+
+    with water_service._WATER_CACHE_LOCK:
+        assert list(water_service._WATER_CACHE) == ["first", "third"]
+        water_service._WATER_CACHE["expired"] = (
+            time.monotonic() - water_service.WATER_CACHE_TTL_SEC - 1,
+            {"value": 0},
+        )
+    water_service._cache_set("fourth", {"value": 4})
+    with water_service._WATER_CACHE_LOCK:
+        assert "expired" not in water_service._WATER_CACHE
+        assert len(water_service._WATER_CACHE) == 2
+
+
 def test_station_detail_failure_enters_provider_backoff():
     water_service._WATER_DETAIL_CACHE.clear()
     water_service._DETAIL_PROVIDER_BACKOFF.clear()
