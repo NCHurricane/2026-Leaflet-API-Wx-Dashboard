@@ -13,7 +13,6 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from config.satellite_colormaps import IR_CMAP, IR_NORM
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -548,25 +547,6 @@ def _geocolor_black_marble(
     return np.clip(blended, 0.0, 1.0).astype(np.float32)
 
 
-def _day_night_hybrid(channels: dict[str, np.ndarray]) -> np.ndarray:
-    day_rgb = _true_color(channels)
-    bt13 = channels["Channel13"]
-    ir_rgba = IR_CMAP(IR_NORM(bt13)).astype(np.float32)
-    result = np.array(day_rgb, copy=True)
-    night_mask = day_rgb[:, :, 0] < 0.05
-    result[night_mask] = ir_rgba[:, :, :3][night_mask]
-    return np.clip(result, 0.0, 1.0).astype(np.float32)
-
-
-def _sandwich(channels: dict[str, np.ndarray]) -> np.ndarray:
-    visible = visible_reflectance(channels["Channel02"])
-    base_rgb = _rgb(visible, visible, visible)
-    bt13 = channels["Channel13"]
-    ir_rgba = IR_CMAP(IR_NORM(bt13)).astype(np.float32)
-    alpha = np.clip((273.0 - bt13) / 50.0, 0.0, 0.85).astype(np.float32)
-    return np.clip(ir_rgba[:, :, :3] * alpha[:, :, np.newaxis] + base_rgb * (1.0 - alpha[:, :, np.newaxis]), 0.0, 1.0).astype(np.float32)
-
-
 def render_composite_rgb(
     product_key: str,
     channels: dict[str, np.ndarray],
@@ -600,10 +580,6 @@ def render_composite_rgb(
             satellite_height_km,
             instrument,
         )
-    if product_key == "DayNightHybrid":
-        return _day_night_hybrid(channels)
-    if product_key == "Sandwich":
-        return _sandwich(channels)
     if product_key == "FireTemperature":
         red = gamma_correction(
             normalize(channels["Channel07"] - 273.15, 0.0, 60.0), 0.4)
@@ -615,54 +591,11 @@ def render_composite_rgb(
                           channels["Channel13"], -42.2, 6.7)
         blue = 1.0 - normalize(channels["Channel08"] - 273.15, -64.65, -29.25)
         return _rgb(red, green, blue)
-    if product_key == "WaterVapor":
-        red = 1.0 - normalize(channels["Channel13"] - 273.15, -70.86, 5.81)
-        green = 1.0 - normalize(channels["Channel08"] - 273.15, -58.49, -30.48)
-        blue = 1.0 - normalize(channels["Channel10"] - 273.15, -28.03, -12.12)
-        return _rgb(red, green, blue)
-    if product_key == "DifferentialWaterVapor":
-        red = 1.0 - \
-            gamma_correction(
-                normalize(channels["Channel10"] - channels["Channel08"], -3.0, 30.0), 0.2587)
-        green = 1.0 - \
-            gamma_correction(
-                normalize(channels["Channel10"] - 273.15, -60.0, 5.0), 0.4)
-        blue = 1.0 - \
-            gamma_correction(
-                normalize(channels["Channel08"] - 273.15, -64.65, -29.25), 0.4)
-        return _rgb(red, green, blue)
-    if product_key == "DayConvection":
-        red = normalize(channels["Channel08"] -
-                        channels["Channel10"], -35.0, 5.0)
-        green = normalize(channels["Channel07"] -
-                          channels["Channel13"], -5.0, 60.0)
-        blue = normalize(reflectance(
-            channels["Channel05"]) - reflectance(channels["Channel02"]), -0.75, 0.25)
-        return _rgb(red, green, blue)
-    if product_key == "DayCloudConvection":
-        red = gamma_correction(
-            normalize(reflectance(channels["Channel02"]), 0.0, 1.0), 1.7)
-        green = gamma_correction(
-            normalize(reflectance(channels["Channel02"]), 0.0, 1.0), 1.7)
-        blue = 1.0 - normalize(channels["Channel13"] - 273.15, -70.15, 49.85)
-        return _rgb(red, green, blue)
     if product_key == "DayCloudPhase":
         red = 1.0 - normalize(channels["Channel13"] - 273.15, -53.5, 7.5)
         green = normalize(reflectance(channels["Channel02"]), 0.0, 0.78)
         blue = normalize(reflectance(channels["Channel05"]), 0.01, 0.59)
         return _rgb(red, green, blue)
-    if product_key == "DayCloudPhaseEUMETSAT":
-        return _rgb(
-            normalize(reflectance(channels["Channel05"]), 0.0, 0.5),
-            normalize(reflectance(channels["Channel06"]), 0.0, 0.5),
-            normalize(reflectance(channels["Channel02"]), 0.0, 1.0),
-        )
-    if product_key == "DayLandCloud":
-        return _rgb(
-            normalize(reflectance(channels["Channel05"]), 0.0, 0.975),
-            normalize(reflectance(channels["Channel03"]), 0.0, 1.086),
-            normalize(reflectance(channels["Channel02"]), 0.0, 1.0),
-        )
     if product_key == "DayLandCloudFire":
         return _rgb(reflectance(channels["Channel06"]), reflectance(channels["Channel03"]), reflectance(channels["Channel02"]))
     if product_key == "DaySnowFog":
@@ -728,33 +661,6 @@ def render_composite_rgb(
             normalize(channels["Channel13"] -
                       channels["Channel11"], -4.0, 5.0),
             normalize(channels["Channel07"] - 273.15, -30.1, 29.8),
-        )
-    if product_key == "SplitWindowDifference":
-        data = normalize(channels["Channel15"] -
-                         channels["Channel13"], -10.0, 10.0)
-        return _rgb(data, data, data)
-    if product_key == "NightFogDifference":
-        data = 1.0 - \
-            normalize(channels["Channel13"] -
-                      channels["Channel07"], -90.0, 15.0)
-        return _rgb(data, data, data)
-    if product_key == "BlowingSnow":
-        gamma = 1.0 / 0.7
-        return _rgb(
-            gamma_correction(normalize(reflectance(
-                channels["Channel02"]), 0.0, 0.5), gamma),
-            normalize(reflectance(channels["Channel05"]), 0.0, 0.2),
-            gamma_correction(
-                normalize(channels["Channel07"] - channels["Channel13"], 0.0, 30.0), gamma),
-        )
-    if product_key == "SeaSpray":
-        gamma = 1.0 / 0.6
-        return _rgb(
-            normalize(channels["Channel07"] - channels["Channel13"], 0.0, 5.0),
-            gamma_correction(normalize(reflectance(
-                channels["Channel03"]), 0.01, 0.09), gamma),
-            gamma_correction(normalize(reflectance(
-                channels["Channel02"]), 0.02, 0.12), gamma),
         )
     if product_key == "RocketPlume":
         return _rgb(
