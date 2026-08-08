@@ -406,5 +406,4 @@ def _read_mrms_grib2_unlocked(
                 _LOGGER.warning(
                     "Failed to close MRMS dataset for %s",
                     grib_path,
-                    exc_info=True,
                 )

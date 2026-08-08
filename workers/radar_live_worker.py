@@ -7,6 +7,8 @@ overlay cache schema.
 
 from __future__ import annotations
 
+import logging
+
 import json
 import math
 import multiprocessing
@@ -1197,18 +1199,18 @@ def _render_overlay_png(
             )
 
         if profile and t_start:
-            print(f"[PROFILE] Render {out_path.name}:")
-            print(f"  Figure setup: {(t_fig - t_start)*1000:.1f}ms")
-            print(f"  Data masking: {(t_mask - t_fig)*1000:.1f}ms")
-            print(f"  Sweep select: {(t_sweep - t_mask)*1000:.1f}ms")
-            print(f"  PPI plot: {(t_plot - t_sweep)*1000:.1f}ms")
-            print(f"  Save PNG: {(t_save - t_plot)*1000:.1f}ms")
-            print(f"  Close fig: {(t_close - t_save)*1000:.1f}ms")
-            print(f"  TOTAL: {(t_close - t_start)*1000:.1f}ms")
+            logging.getLogger(__name__).debug(f"[PROFILE] Render {out_path.name}:")
+            logging.getLogger(__name__).info(f"  Figure setup: {(t_fig - t_start)*1000:.1f}ms")
+            logging.getLogger(__name__).info(f"  Data masking: {(t_mask - t_fig)*1000:.1f}ms")
+            logging.getLogger(__name__).info(f"  Sweep select: {(t_sweep - t_mask)*1000:.1f}ms")
+            logging.getLogger(__name__).info(f"  PPI plot: {(t_plot - t_sweep)*1000:.1f}ms")
+            logging.getLogger(__name__).info(f"  Save PNG: {(t_save - t_plot)*1000:.1f}ms")
+            logging.getLogger(__name__).info(f"  Close fig: {(t_close - t_save)*1000:.1f}ms")
+            logging.getLogger(__name__).info(f"  TOTAL: {(t_close - t_start)*1000:.1f}ms")
 
         return out_path.exists() and out_path.stat().st_size > 0
     except Exception as exc:
-        print(f"[radar_live_worker] render failed: {type(exc).__name__}: {exc}")
+        logging.getLogger(__name__).warning(f"[radar_live_worker] render failed: {type(exc).__name__}: {type(exc).__name__}")
         try:
             plt.close("all")
         except Exception:
@@ -1340,9 +1342,9 @@ def _render_overlay_png_reusing_mesh(
                 plt.close(figure_to_close)
             except Exception:
                 pass
-        print(
+        logging.getLogger(__name__).warning(
             f"[radar_live_worker] Reusable Radar render failed for "
-            f"{out_path.name}: {exc}"
+            f"{out_path.name}: {type(exc).__name__}"
         )
         return False
 
@@ -1456,9 +1458,9 @@ def _publish_webgl_artifact(
             product_key,
         )
     except Exception as exc:
-        print(
+        logging.getLogger(__name__).info(
             f"[radar_live_worker] WebGL artifact skipped for "
-            f"{site}/{product_key}/{frame_key}: {type(exc).__name__}: {exc}"
+            f"{site}/{product_key}/{frame_key}: {type(exc).__name__}: {type(exc).__name__}"
         )
         return None
 
@@ -1711,7 +1713,7 @@ def _render_site_product(
     use_parallel = len(unprocessed_files) > 1 and num_workers != 1
 
     if use_parallel:
-        print(
+        logging.getLogger(__name__).info(
             f"[radar_live_worker] {site}/{product_key}: "
             f"rendering {len(unprocessed_files)} frames in parallel ({num_workers} workers)"
         )
@@ -1809,7 +1811,7 @@ def _render_site_product(
                     )
                 cached += 1
             except Exception as exc:
-                print(f"[radar_live_worker] Failed to finalize {frame_key}: {exc}")
+                logging.getLogger(__name__).warning(f"[radar_live_worker] Failed to finalize {frame_key}: {type(exc).__name__}")
             finally:
                 try:
                     Path(temp_render_path).unlink(missing_ok=True)
@@ -1908,12 +1910,12 @@ def _render_site_product(
 
                 t_frame_total = time.time() - t_frame_start
                 if should_profile:
-                    print(f"[PROFILE] Frame {frame_key} ({site}/{product_key}):")
-                    print(f"  Read radar file: {t_read*1000:.1f}ms")
-                    print("  Render to PNG: (see above)")
-                    print(f"  Atomic finalize: {t_finalize*1000:.1f}ms")
-                    print(f"  Update index: {t_index*1000:.1f}ms")
-                    print(f"  FRAME TOTAL: {t_frame_total*1000:.1f}ms")
+                    logging.getLogger(__name__).debug(f"[PROFILE] Frame {frame_key} ({site}/{product_key}):")
+                    logging.getLogger(__name__).info(f"  Read radar file: {t_read*1000:.1f}ms")
+                    logging.getLogger(__name__).info("  Render to PNG: (see above)")
+                    logging.getLogger(__name__).info(f"  Atomic finalize: {t_finalize*1000:.1f}ms")
+                    logging.getLogger(__name__).info(f"  Update index: {t_index*1000:.1f}ms")
+                    logging.getLogger(__name__).info(f"  FRAME TOTAL: {t_frame_total*1000:.1f}ms")
                     profile_first_frame = False
 
                 if product_key in SUPPORTED_PRODUCTS:
@@ -1928,8 +1930,8 @@ def _render_site_product(
                 cached += 1
             except Exception as exc:
                 processed_keys.discard(source_key)
-                print(
-                    f"[radar_live_worker] Failed to finalize {frame_key}: {exc}"
+                logging.getLogger(__name__).warning(
+                    f"[radar_live_worker] Failed to finalize {frame_key}: {type(exc).__name__}"
                 )
             finally:
                 try:
@@ -1938,7 +1940,7 @@ def _render_site_product(
                     pass
 
     if read_failures:
-        print(
+        logging.getLogger(__name__).warning(
             f"[radar_live_worker] {site}/{product_key} skipped unreadable files: {read_failures}"
         )
 
@@ -2121,9 +2123,9 @@ def _render_site_l2_products(
                 state["cached"] += 1
             except Exception as exc:
                 failed_products.add(product_key)
-                print(
+                logging.getLogger(__name__).warning(
                     f"[radar_live_worker] Failed to finalize "
-                    f"{site}/{product_key}/{result.get('frame_key')}: {exc}"
+                    f"{site}/{product_key}/{result.get('frame_key')}: {type(exc).__name__}"
                 )
             finally:
                 if temp_render_path:
@@ -2197,9 +2199,9 @@ def _run_radar_live_worker_unbounded(
                     total_failed += int(failed)
                 except Exception as exc:
                     total_failed += len(l2_products)
-                    print(
+                    logging.getLogger(__name__).warning(
                         f"[radar_live_worker] {site_id}/Level II batch failed: "
-                        f"{type(exc).__name__}: {exc}"
+                        f"{type(exc).__name__}: {type(exc).__name__}"
                     )
 
         for product_key, product_cfg in LIVE_RADAR_PRODUCTS.items():
@@ -2229,15 +2231,15 @@ def _run_radar_live_worker_unbounded(
                 total_cached += int(cached)
             except Exception as exc:
                 total_failed += 1
-                print(
+                logging.getLogger(__name__).warning(
                     f"[radar_live_worker] {site_id}/{product_key} failed: "
-                    f"{type(exc).__name__}: {exc}"
+                    f"{type(exc).__name__}: {type(exc).__name__}"
                 )
 
-    print(f"[radar_live_worker] completed - cached frames: {total_cached}")
+    logging.getLogger(__name__).info(f"[radar_live_worker] completed - cached frames: {total_cached}")
 
     if total_failed and not total_cached:
-        print("[radar_live_worker] All renders failed - cache not marked fresh")
+        logging.getLogger(__name__).warning("[radar_live_worker] All renders failed - cache not marked fresh")
     else:
         mark_run_complete("radar_live")
         if run_l3:
@@ -2344,6 +2346,10 @@ def run_radar_live_site_product(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the radar live worker once.")

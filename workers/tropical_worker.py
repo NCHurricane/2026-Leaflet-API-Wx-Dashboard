@@ -6,6 +6,8 @@ cache/tropical so the browser and FastAPI routes never poll NHC directly.
 
 from __future__ import annotations
 
+import logging
+
 import argparse
 import fnmatch
 import hashlib
@@ -608,9 +610,7 @@ def _parse_gtwo_kml(kml_text: str) -> dict[str, Any]:
 def _parse_gtwo_kmz(kmz_path: Path) -> dict[str, Any] | None:
     try:
         with zipfile.ZipFile(kmz_path) as zf:
-            kml_name = next(
-                (n for n in zf.namelist() if n.lower().endswith(".kml")), ""
-            )
+            kml_name = next((n for n in zf.namelist() if n.lower().endswith(".kml")), "")
             if not kml_name:
                 return None
             kml_bytes = zf.read(kml_name)
@@ -730,7 +730,9 @@ def _parse_initial_wind_extent_kml(kml_text: str) -> dict[str, Any] | None:
 def _parse_initial_wind_extent_kmz(kmz_path: Path) -> dict[str, Any] | None:
     try:
         with zipfile.ZipFile(kmz_path) as zf:
-            kml_name = next((n for n in zf.namelist() if n.lower().endswith(".kml")), "")
+            kml_name = next(
+                (n for n in zf.namelist() if n.lower().endswith(".kml")), ""
+            )
             if not kml_name:
                 return None
             kml_bytes = zf.read(kml_name)
@@ -1427,7 +1429,7 @@ def run_tropical_worker(
     if (raw_path is None and storms_path is None and not force
             and not targeted
             and is_cache_fresh("tropical", _FRESH_WINDOW_SEC)):
-        print("[tropical_worker] Cache fresh - skipping run")
+        logging.getLogger(__name__).info("[tropical_worker] Cache fresh - skipping run")
         return {"status": "current", "scopes": []}
 
     start = time.time()
@@ -1501,17 +1503,17 @@ def run_tropical_worker(
         # usable was cached, so leave the freshness sentinel untouched and let
         # the next scheduled run retry. Partial successes still mark complete
         # so a few bad storms don't cause NHC request hammering.
-        print("[tropical_worker] Core fetches failed - cache not marked fresh")
+        logging.getLogger(__name__).warning("[tropical_worker] Core fetches failed - cache not marked fresh")
     elif not targeted:
         mark_run_complete("tropical")
     else:
-        print("[tropical_worker] Targeted refresh complete - global freshness unchanged")
-    print(
+        logging.getLogger(__name__).info("[tropical_worker] Targeted refresh complete - global freshness unchanged")
+    logging.getLogger(__name__).warning(
         f"[tropical_worker] Complete in {time.time() - start:.2f}s "
         f"({len(storms)} active storm(s), {len(errors)} error(s))"
     )
     for err in errors:
-        print(f"[tropical_worker] {err}")
+        logging.getLogger(__name__).info(f"[tropical_worker] {err}")
     if current_fetch_failed and refresh_advisories:
         raise RuntimeError("Tropical current-storm refresh failed")
     advisory_times = [
@@ -1536,6 +1538,10 @@ def run_tropical_worker(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     parser = argparse.ArgumentParser(description="Run the NHC tropical cache worker once.")
     parser.add_argument("--force", action="store_true", help="Bypass freshness gate.")
     parser.add_argument(

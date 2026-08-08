@@ -73,11 +73,11 @@ def load_state_geometries():
                 if stusps and len(stusps) == 2:
                     states[stusps] = record.geometry
             if states:
-                print(f"Loaded {len(states)} states from Census Cartographic Boundaries 2025")
+                logging.getLogger(__name__).info(f"Loaded {len(states)} states from Census Cartographic Boundaries 2025")
                 _STATE_GEOM_CACHE = states
                 return states
         except Exception as e:
-            print(f"[WARN] Error loading Cartographic Boundary state shapefile: {e}")
+            logging.getLogger(__name__).warning(f"[WARN] Error loading Cartographic Boundary state shapefile: {type(e).__name__}")
 
     # Fallback to TIGER/Line 2025 state boundaries (full resolution, Census Bureau)
     tiger_path = os.path.join(_SHARED_SHAPEFILE_DIR, "tl_2025_us_state.shp")
@@ -90,11 +90,11 @@ def load_state_geometries():
                 if stusps and len(stusps) == 2:
                     states[stusps] = record.geometry
             if states:
-                print(f"Loaded {len(states)} states from TIGER/Line 2025")
+                logging.getLogger(__name__).info(f"Loaded {len(states)} states from TIGER/Line 2025")
                 _STATE_GEOM_CACHE = states
                 return states
         except Exception as e:
-            print(f"[WARN] Error loading TIGER state shapefile: {e}")
+            logging.getLogger(__name__).warning(f"[WARN] Error loading TIGER state shapefile: {type(e).__name__}")
 
     # Fallback to Natural Earth 10m
     shpfile = shpreader.natural_earth(
@@ -221,18 +221,18 @@ class CensusCounties:
         shp_path = os.path.join(cache_dir, f"{cls.FILENAME}.shp")
 
         if not os.path.exists(shp_path):
-            print("⬇️  Downloading High-Res Census Counties (500k)...")
+            logging.getLogger(__name__).info("⬇️  Downloading High-Res Census Counties (500k)...")
             try:
                 r = requests.get(cls.SHAPEFILE_URL)
                 r.raise_for_status()
                 with zipfile.ZipFile(io.BytesIO(r.content)) as z:
                     z.extractall(cache_dir)
-                print("Download complete.")
+                logging.getLogger(__name__).info("Download complete.")
             except Exception as e:
-                print(f"[WARN] Error downloading Census shapefile: {e}")
+                logging.getLogger(__name__).warning(f"[WARN] Error downloading Census shapefile: {type(e).__name__}")
                 return
 
-        print("Loading Census Geometries...")
+        logging.getLogger(__name__).info("Loading Census Geometries...")
         try:
             _configure_pyshp_logging()
             reader = shpreader.Reader(shp_path)
@@ -253,9 +253,9 @@ class CensusCounties:
                 if fips:
                     cls._fips_map[fips] = record.geometry
                     cls._records_map[fips] = record
-            print(f"Loaded {len(cls._fips_map)} counties.")
+            logging.getLogger(__name__).info(f"Loaded {len(cls._fips_map)} counties.")
         except Exception as e:
-            print(f"[WARN] Error loading Census shapefile: {e}")
+            logging.getLogger(__name__).warning(f"[WARN] Error loading Census shapefile: {type(e).__name__}")
             cls._feature = None
 
     @classmethod

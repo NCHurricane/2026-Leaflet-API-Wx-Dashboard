@@ -23,6 +23,8 @@ re-downloads once the end-of-volume (type E) chunk has been received.
 
 from __future__ import annotations
 
+import logging
+
 import os
 import re
 import shutil
@@ -57,13 +59,12 @@ _VCP_SCAN_TIME_CACHE: dict[str, dict[str, str]] = {}
 _PREFIX_CACHE_TTL_SECONDS = 30.0
 _PREFIX_CACHE: dict[str, tuple[float, list[str]]] = {}
 _PREFIX_CACHE_LOCK = threading.Lock()
+_LOGGER = logging.getLogger(__name__)
 
 
 def _log(msg: str) -> None:
-    try:
-        print(msg)
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        print(msg.encode("ascii", errors="replace").decode("ascii"))
+    log = _LOGGER.warning if "failed" in msg.lower() else _LOGGER.info
+    log("%s", msg)
 
 
 def _parse_chunk_key(key: str) -> dict | None:
@@ -103,7 +104,7 @@ def _list_site_chunks(s3_client, site: str, max_keys: int = 1000) -> list[dict]:
         chunks.sort(key=lambda c: (c["scan_dt"], c["seq"]))
         return chunks
     except Exception as exc:
-        _log(f"[chunks] list failed for {site}: {type(exc).__name__}: {exc}")
+        _log(f"[chunks] list failed for {site} ({type(exc).__name__})")
         return []
 
 
@@ -131,7 +132,7 @@ def _list_site_prefixes(s3_client, site: str) -> list[str]:
                 if name.isdigit():
                     prefixes.append(name)
     except Exception as exc:
-        _log(f"[chunks] prefix list failed for {site}: {type(exc).__name__}: {exc}")
+        _log(f"[chunks] prefix list failed for {site} ({type(exc).__name__})")
     prefixes.sort(key=int)
     if prefixes:
         with _PREFIX_CACHE_LOCK:
@@ -154,7 +155,7 @@ def _list_chunks_in_prefix(s3_client, site: str, vcp: str) -> list[dict]:
                     parsed["size"] = obj.get("Size", 0)
                     chunks.append(parsed)
     except Exception as exc:
-        _log(f"[chunks] list failed for {site}/{vcp}: {type(exc).__name__}: {exc}")
+        _log(f"[chunks] list failed for {site}/{vcp} ({type(exc).__name__})")
     return chunks
 
 
@@ -315,7 +316,7 @@ def assemble_scan(
                     fh.write(obj["Body"].read())
         return out_path.exists() and out_path.stat().st_size > 0
     except Exception as exc:
-        _log(f"[chunks] assemble failed: {type(exc).__name__}: {exc}")
+        _log(f"[chunks] assemble failed ({type(exc).__name__})")
         return False
 
 
@@ -345,7 +346,7 @@ def _download_one_chunk(s3_client, chunk: dict, dest: Path) -> bool:
     except Exception as exc:
         _log(
             f"[chunks] chunk download failed {chunk['key']}: "
-            f"{type(exc).__name__}: {exc}"
+            f"{type(exc).__name__}"
         )
         return False
 
@@ -391,7 +392,7 @@ def _assemble_from_local_cache(chunk_dir: Path, out_path: Path) -> bool:
                     fh.write(chunk_file.read_bytes())
         return out_path.exists() and out_path.stat().st_size > 0
     except Exception as exc:
-        _log(f"[chunks] local assemble failed: {type(exc).__name__}: {exc}")
+        _log(f"[chunks] local assemble failed ({type(exc).__name__})")
         return False
 
 

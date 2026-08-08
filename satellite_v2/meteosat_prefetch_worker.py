@@ -13,6 +13,8 @@ past the task interval. Frames older than the keep window are pruned.
 
 from __future__ import annotations
 
+import logging
+
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -79,7 +81,7 @@ def _worker_lock(worker_name: str):
     try:
         fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
-        print(f"[{worker_name}] skipped: lock exists at {lock_path}")
+        logging.getLogger(__name__).info(f"[{worker_name}] skipped: lock exists at {lock_path}")
         yield False
         return
     try:
@@ -150,9 +152,9 @@ def _prune_stale_sources(sat_id: str, sector: str, keep_hours: int) -> int:
                 shutil.rmtree(str(frame_dir))
                 pruned += 1
             except OSError as exc:
-                print(
+                logging.getLogger(__name__).warning(
                     f"[{_WORKER_NAME}] prune failed {frame_dir.name}: "
-                    f"{type(exc).__name__}: {exc}"
+                    f"{type(exc).__name__}: {type(exc).__name__}"
                 )
     return pruned
 
@@ -203,7 +205,7 @@ def _prefetch_one_job(
     newest = list(reversed(missing[-max(1, int(newest_count)):]))
     backfill = [f for f in missing[: max(0, int(backfill_count))] if f not in newest]
     to_download = newest + backfill
-    print(
+    logging.getLogger(__name__).warning(
         f"[{worker_name}] {sat_key}/{sector_key}: cataloged={len(frames)} "
         f"already_cached={totals['cached']} missing={len(missing)} "
         f"downloading={[f.frame_key for f in to_download]}"
@@ -211,7 +213,7 @@ def _prefetch_one_job(
 
     for frame in to_download:
         if should_continue is not None and not should_continue():
-            print(
+            logging.getLogger(__name__).info(
                 f"[{worker_name}] {sat_key}/{sector_key}: "
                 "stopped after selection changed"
             )
@@ -226,15 +228,15 @@ def _prefetch_one_job(
                 frame=frame,
             )
             totals["downloaded"] += 1
-            print(
+            logging.getLogger(__name__).info(
                 f"[{worker_name}] {sat_key}/{sector_key}/{frame.frame_key}: "
                 f"downloaded elapsed={_format_elapsed(time.perf_counter() - frame_start)}"
             )
         except Exception as exc:
             totals["errors"] += 1
-            print(
+            logging.getLogger(__name__).warning(
                 f"[{worker_name}] {sat_key}/{sector_key}/{frame.frame_key} failed: "
-                f"{type(exc).__name__}: {exc}"
+                f"{type(exc).__name__}: {type(exc).__name__}"
             )
 
     totals["pruned"] = _prune_stale_sources(sat_key, sector_key, keep_hours)
@@ -254,7 +256,7 @@ def run_satellite_v2_meteosat_prefetch_worker(
 ) -> dict[str, int]:
     fresh_window = int(SATELLITE_V2_METEOSAT_PREFETCH_FRESH_WINDOW_SECONDS)
     if not force and is_cache_fresh(worker_name, fresh_window):
-        print(f"[{worker_name}] skipped: fresh sentinel within {fresh_window}s")
+        logging.getLogger(__name__).info(f"[{worker_name}] skipped: fresh sentinel within {fresh_window}s")
         return {"jobs": 0, "downloaded": 0, "errors": 0, "pruned": 0}
 
     selected_jobs = tuple(jobs or SATELLITE_V2_METEOSAT_PREFETCH_JOBS)
@@ -288,9 +290,9 @@ def run_satellite_v2_meteosat_prefetch_worker(
                 )
             except Exception as exc:
                 totals["errors"] += 1
-                print(
+                logging.getLogger(__name__).warning(
                     f"[{worker_name}] {sat_id}/{sector} job failed: "
-                    f"{type(exc).__name__}: {exc}"
+                    f"{type(exc).__name__}: {type(exc).__name__}"
                 )
                 continue
             totals["jobs"] += 1
@@ -299,7 +301,7 @@ def run_satellite_v2_meteosat_prefetch_worker(
             totals["pruned"] += int(stats.get("pruned") or 0)
         # Mark complete even when nothing was missing; the run did its check.
         mark_run_complete(worker_name)
-        print(
+        logging.getLogger(__name__).warning(
             f"[{worker_name}] complete jobs={totals['jobs']} "
             f"downloaded={totals['downloaded']} errors={totals['errors']} "
             f"pruned={totals['pruned']} "
@@ -347,4 +349,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     main()

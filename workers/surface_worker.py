@@ -7,6 +7,8 @@ so product switches do not require client-side interpolation work.
 
 from __future__ import annotations
 
+import logging
+
 import json
 import os
 import sys
@@ -306,7 +308,7 @@ def _region_land_mask(
                 dtype=np.uint8,
             )
         except Exception as _mask_err:
-            print(
+            logging.getLogger(__name__).warning(
                 f"[surface_worker] {mask_label} mask failed "
                 f"(continuing without clip): {_mask_err}"
             )
@@ -372,7 +374,7 @@ def _build_surface_gradients(
     timestamp_iso: str | None = None,
 ) -> dict[str, dict]:
     if df is None or df.empty:
-        print(f"[surface_worker] gradient [{region}]: no source data")
+        logging.getLogger(__name__).info(f"[surface_worker] gradient [{region}]: no source data")
         return {}
 
     _cleanup_stale_gradient_temp_files(region)
@@ -381,7 +383,7 @@ def _build_surface_gradients(
     df_work = df.copy()
     for col in ("longitude", "latitude"):
         if col not in df_work.columns:
-            print(f"[surface_worker] gradient: missing column {col}")
+            logging.getLogger(__name__).warning(f"[surface_worker] gradient: missing column {col}")
             return {}
         df_work[col] = np.asarray(df_work[col], dtype=np.float64)
 
@@ -394,7 +396,7 @@ def _build_surface_gradients(
         try:
             col = cfg["col"]
             if col not in df_work.columns:
-                print(
+                logging.getLogger(__name__).warning(
                     f"[surface_worker] gradient {product}: missing source column {col}"
                 )
                 continue
@@ -409,7 +411,7 @@ def _build_surface_gradients(
             lats = lats[mask]
 
             if vals.size < 20:
-                print(
+                logging.getLogger(__name__).info(
                     f"[surface_worker] gradient {product}: too few points ({vals.size})"
                 )
                 continue
@@ -417,7 +419,7 @@ def _build_surface_gradients(
             grid, bounds = _interpolate_surface_grid(
                 lons, lats, vals, region=region)
             if grid is None or bounds is None:
-                print(
+                logging.getLogger(__name__).warning(
                     f"[surface_worker] gradient {product}: interpolation failed")
                 continue
 
@@ -439,11 +441,11 @@ def _build_surface_gradients(
                 region=region,
             )
             elapsed = _time.perf_counter() - t0
-            print(
+            logging.getLogger(__name__).info(
                 f"[surface_worker] gradient [{region}] {product}: {int(vals.size)} points in {elapsed:.1f}s"
             )
         except Exception as exc:
-            print(f"[surface_worker] gradient {product} error: {exc}")
+            logging.getLogger(__name__).warning(f"[surface_worker] gradient {product} error: {type(exc).__name__}")
     return rendered
 
 
@@ -481,23 +483,23 @@ def render_surface_gradient(
 def run_surface_worker(force: bool = False, products: list[str] | None = None) -> None:
     """Fetch METAR data and pre-render CONUS and WORLD gradient caches."""
     if not force and is_cache_fresh("surface", _FRESH_WINDOW_SEC):
-        print("[surface_worker] Cache fresh — skipping run")
+        logging.getLogger(__name__).info("[surface_worker] Cache fresh — skipping run")
         return
 
     try:
         selected_products = _normalize_product_selection(products)
     except ValueError as exc:
-        print(f"[surface_worker] {exc}")
+        logging.getLogger(__name__).info(f"[surface_worker] {type(exc).__name__}")
         return
 
     if selected_products:
-        print(
+        logging.getLogger(__name__).info(
             f"[surface_worker] gradient filter active: {sorted(selected_products)}")
 
     try:
         from surface import surface_utils
     except Exception as exc:
-        print(f"[surface_worker] Import error: {exc}")
+        logging.getLogger(__name__).warning(f"[surface_worker] Import error: {type(exc).__name__}")
         return
 
     region_dfs: dict[str, object] = {}
@@ -507,12 +509,12 @@ def run_surface_worker(force: bool = False, products: list[str] | None = None) -
             df = surface_utils.fetch_metar_data(region)
             elapsed = _time.perf_counter() - t0
             rows = len(df) if df is not None and not df.empty else 0
-            print(
+            logging.getLogger(__name__).info(
                 f"[surface_worker] {region}: {rows} stations in {elapsed:.1f}s")
             if df is not None and not df.empty:
                 region_dfs[region] = df
         except Exception as exc:
-            print(f"[surface_worker] {region} error: {exc}")
+            logging.getLogger(__name__).warning(f"[surface_worker] {region} error: {type(exc).__name__}")
 
     for reg in ("CONUS", "WORLD"):
         df = region_dfs.get(reg)
@@ -524,15 +526,19 @@ def run_surface_worker(force: bool = False, products: list[str] | None = None) -
                     region=reg,
                 )
         else:
-            print(f"[surface_worker] gradient [{reg}]: skipped (no dataframe)")
+            logging.getLogger(__name__).info(f"[surface_worker] gradient [{reg}]: skipped (no dataframe)")
 
     if region_dfs:
         mark_run_complete("surface")
     else:
-        print("[surface_worker] All METAR fetches failed — cache not marked fresh")
+        logging.getLogger(__name__).warning("[surface_worker] All METAR fetches failed — cache not marked fresh")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     import argparse
 
     parser = argparse.ArgumentParser(

@@ -11,6 +11,8 @@ Test mode: python -m workers.wpc_worker --force --raw-dir path/with/ero_day1.kmz
 
 from __future__ import annotations
 
+import logging
+
 import argparse
 import calendar
 import html
@@ -1057,7 +1059,7 @@ def run_wpc_worker(
 ) -> None:
     """Refresh all enabled WPC ERO, QPF, and winter layers."""
     if not force and not product_ids and is_cache_fresh("wpc", _FRESH_WINDOW_SEC):
-        print("[wpc_worker] Cache fresh — skipping run")
+        logging.getLogger(__name__).info("[wpc_worker] Cache fresh — skipping run")
         return
 
     start = time.time()
@@ -1107,24 +1109,28 @@ def run_wpc_worker(
             )
             any_success = True
             total += count
-            print(f"[wpc_worker] {product['id']}: {count} feature(s)")
+            logging.getLogger(__name__).info(f"[wpc_worker] {product['id']}: {count} feature(s)")
 
     if any_success and not product_ids:
         mark_run_complete("wpc")
     elif any_success:
-        print("[wpc_worker] Targeted refresh complete — global freshness unchanged")
+        logging.getLogger(__name__).info("[wpc_worker] Targeted refresh complete — global freshness unchanged")
     else:
-        print("[wpc_worker] No layer succeeded — cache not marked fresh")
+        logging.getLogger(__name__).info("[wpc_worker] No layer succeeded — cache not marked fresh")
 
-    print(
+    logging.getLogger(__name__).warning(
         f"[wpc_worker] Complete in {time.time() - start:.2f}s "
         f"({total} feature(s), {len(errors)} error(s))"
     )
     for err in errors:
-        print(f"[wpc_worker] {err}")
+        logging.getLogger(__name__).info(f"[wpc_worker] {err}")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     parser = argparse.ArgumentParser(description="Run the WPC cache worker once.")
     parser.add_argument("--force", action="store_true", help="Bypass freshness gate.")
     parser.add_argument(

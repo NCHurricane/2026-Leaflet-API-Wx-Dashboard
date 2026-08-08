@@ -7,6 +7,8 @@ Format: GRIB2
 Update Frequency: Every 2 minutes
 """
 
+import logging
+
 import os
 import gzip
 from datetime import datetime, timedelta
@@ -61,7 +63,7 @@ def construct_s3_prefix(product: str, dt: datetime) -> str:
     date_str = dt.strftime("%Y%m%d")
     prefix = f"{s3_product_prefix}/{date_str}/"
 
-    print(f"[DEBUG] MRMS S3 prefix for {product} on {date_str}: {prefix}")
+    logging.getLogger(__name__).info(f"[DEBUG] MRMS S3 prefix for {product} on {date_str}: {prefix}")
     return prefix
 
 
@@ -134,7 +136,7 @@ def list_mrms_files(
 
     # List objects in each date prefix
     for prefix in date_prefixes:
-        print(f"[DEBUG] Checking S3 prefix: {prefix}")
+        logging.getLogger(__name__).info(f"[DEBUG] Checking S3 prefix: {prefix}")
 
         try:
             paginator = s3_client.get_paginator("list_objects_v2")
@@ -144,7 +146,7 @@ def list_mrms_files(
             for page in pages:
                 page_count += 1
                 if "Contents" not in page:
-                    print(
+                    logging.getLogger(__name__).info(
                         f"[DEBUG] No contents in page {page_count} for {prefix}")
                     continue
 
@@ -158,16 +160,16 @@ def list_mrms_files(
                         files.append((key, file_dt))
 
             if page_count == 0:
-                print(f"[DEBUG] No pages returned for {prefix}")
+                logging.getLogger(__name__).info(f"[DEBUG] No pages returned for {prefix}")
             else:
-                print(
+                logging.getLogger(__name__).info(
                     f"[DEBUG] Found {len([f for f in files if prefix in f[0]])} matching files in {prefix}"
                 )
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "")
             if error_code != "NoSuchKey":
-                print(f"Error listing S3 prefix {prefix}: {e}")
+                logging.getLogger(__name__).warning(f"Error listing S3 prefix {prefix}: {type(e).__name__}")
             continue
 
     # Sort by datetime
@@ -213,10 +215,10 @@ def download_mrms_file(
                 is_valid_cached = _is_valid_gzip_file(local_path)
 
             if is_valid_cached:
-                print(f"[DEBUG] Using cached MRMS file: {local_path}")
+                logging.getLogger(__name__).info(f"[DEBUG] Using cached MRMS file: {local_path}")
                 return local_path
 
-            print(f"[DEBUG] Removing corrupt cached MRMS file: {local_path}")
+            logging.getLogger(__name__).warning(f"[DEBUG] Removing corrupt cached MRMS file: {local_path}")
         # Remove empty/partial files so they can be downloaded cleanly.
         try:
             os.remove(local_path)

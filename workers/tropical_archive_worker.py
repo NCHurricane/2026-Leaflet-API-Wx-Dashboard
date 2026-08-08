@@ -15,6 +15,8 @@ catalog is rebuilt only when the source HURDAT2 file changes (or on ``--force``)
 
 from __future__ import annotations
 
+import logging
+
 import argparse
 import re
 import sys
@@ -413,7 +415,7 @@ def parse_current_season_btk(year: int) -> Iterator[dict[str, Any]]:
         try:
             storm = parse_atcf_btk(_request_text(_ATCF_BTK_INDEX_URL + filename))
         except Exception as exc:  # one bad file must not drop the rest of the season
-            print(f"[tropical_archive_worker] b-deck {filename} skipped: {exc}")
+            logging.getLogger(__name__).info(f"[tropical_archive_worker] b-deck {filename} skipped: {type(exc).__name__}")
             continue
         if storm:
             yield storm
@@ -1022,7 +1024,7 @@ def run_archive_worker(
             )
             storm_count += 1
     except Exception as exc:  # current-season fetch is best-effort
-        print(f"[tropical_archive_worker] current-season b-decks skipped: {exc}")
+        logging.getLogger(__name__).info(f"[tropical_archive_worker] current-season b-decks skipped: {type(exc).__name__}")
 
     # Stable basin order (AL, EP, CP) for a predictable dropdown.
     ordered = {b: catalog[b] for b in ("AL", "EP", "CP") if b in catalog}
@@ -1037,7 +1039,7 @@ def run_archive_worker(
     atomic_write_json(CATALOG_FILE, catalog_payload, ensure_ascii=False)
     mark_run_complete("tropical_archive")
     seasons = sum(len(s) for s in ordered.values())
-    print(
+    logging.getLogger(__name__).info(
         f"[tropical_archive_worker] Complete in {time.time() - start:.2f}s "
         f"({storm_count} storms; basins {list(ordered)}; {seasons} basin-seasons)"
     )
@@ -1063,13 +1065,13 @@ def refresh_current_season(year: int | None = None) -> int:
     try:
         storms = list(parse_current_season_btk(target_year))
     except Exception as exc:
-        print(f"[tropical_archive_worker] current-season refresh skipped: {exc}")
+        logging.getLogger(__name__).info(f"[tropical_archive_worker] current-season refresh skipped: {type(exc).__name__}")
         return 0
 
     try:
         catalog_payload = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        print(f"[tropical_archive_worker] catalog unreadable, refresh skipped: {exc}")
+        logging.getLogger(__name__).warning(f"[tropical_archive_worker] catalog unreadable, refresh skipped: {type(exc).__name__}")
         return 0
     basins = catalog_payload.get("basins") or {}
 
@@ -1095,11 +1097,15 @@ def refresh_current_season(year: int | None = None) -> int:
     catalog_payload["updated"] = _utc_now_iso()
     atomic_write_json(CATALOG_FILE, catalog_payload, ensure_ascii=False)
     mark_run_complete("tropical_archive")
-    print(f"[tropical_archive_worker] current-season refresh: {len(storms)} storm(s) for {year_key}")
+    logging.getLogger(__name__).info(f"[tropical_archive_worker] current-season refresh: {len(storms)} storm(s) for {year_key}")
     return len(storms)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     parser = argparse.ArgumentParser(description="Build the tropical archive (HURDAT2) cache.")
     parser.add_argument("--force", action="store_true", help="Re-download the source files.")
     parser.add_argument(

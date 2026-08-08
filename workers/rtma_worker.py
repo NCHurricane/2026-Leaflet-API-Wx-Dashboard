@@ -22,6 +22,8 @@ discovered and downloaded in their own pass.
 
 from __future__ import annotations
 
+import logging
+
 import os
 import sys
 import time as _time
@@ -144,8 +146,8 @@ def _render_overlay_for_source(
             lon_1d=lon_1d,
         )
     except Exception as exc:
-        print(
-            f"[rtma_worker] Overlay render ERROR {region}/{stream}/{product}/{frame_key}: {exc}"
+        logging.getLogger(__name__).warning(
+            f"[rtma_worker] Overlay render ERROR {region}/{stream}/{product}/{frame_key}: {type(exc).__name__}"
         )
         return None
 
@@ -154,7 +156,7 @@ def _render_overlay_for_source(
         flat_overlay_prune_frames(cache_root, "rtma", path_parts, keep_n)
 
         # Return metadata for batch index/processed_keys update.
-        print(f"[rtma_worker] Overlay OK {region}/{stream}/{product}/{frame_key}")
+        logging.getLogger(__name__).info(f"[rtma_worker] Overlay OK {region}/{stream}/{product}/{frame_key}")
         return {
             "path_parts": path_parts,
             "frame_key": frame_key,
@@ -168,8 +170,8 @@ def _render_overlay_for_source(
             "timestamp": render_meta.get("timestamp") or source.valid_time.isoformat(),
         }
     except Exception as exc:
-        print(
-            f"[rtma_worker] Overlay prune ERROR {region}/{stream}/{product}/{frame_key}: {exc}"
+        logging.getLogger(__name__).warning(
+            f"[rtma_worker] Overlay prune ERROR {region}/{stream}/{product}/{frame_key}: {type(exc).__name__}"
         )
         return None
 
@@ -177,7 +179,7 @@ def _render_overlay_for_source(
 def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> None:
     selected_streams = [s for s in streams if s in RTMA_STREAMS]
     if not selected_streams:
-        print("[rtma_worker] No valid RTMA streams selected - skipping run")
+        logging.getLogger(__name__).info("[rtma_worker] No valid RTMA streams selected - skipping run")
         return
 
     streams_to_run: list[str] = []
@@ -185,7 +187,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
         freshness_window = _FRESH_WINDOW_SEC_BY_STREAM.get(stream, 11 * 60)
         worker_name = _worker_name_for_stream(stream)
         if not force and is_cache_fresh(worker_name, freshness_window):
-            print(f"[rtma_worker] {stream} cache fresh - skipping stream")
+            logging.getLogger(__name__).info(f"[rtma_worker] {stream} cache fresh - skipping stream")
             continue
         streams_to_run.append(stream)
 
@@ -206,7 +208,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
             frame_key_from_datetime,
         )
     except Exception as exc:
-        print(f"[rtma_worker] Import error: {exc}")
+        logging.getLogger(__name__).warning(f"[rtma_worker] Import error: {type(exc).__name__}")
         return
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -214,7 +216,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
     cities_path = os.path.join(repo_root, "data", RTMA_CITIES_FILE)
 
     if not os.path.exists(cities_path):
-        print(f"[rtma_worker] Missing data/{RTMA_CITIES_FILE} - aborting")
+        logging.getLogger(__name__).warning(f"[rtma_worker] Missing data/{RTMA_CITIES_FILE} - aborting")
         return
 
     all_product_keys = [p for p in _PRELOAD_PRODUCTS if p in PRODUCTS]
@@ -314,9 +316,9 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                         ensure_rtma_grib(cache_root, source)
                     except Exception as exc:
                         failed += len(stream_products)
-                        print(
+                        logging.getLogger(__name__).warning(
                             f"[rtma_worker] GRIB download ERROR "
-                            f"{region}/{stream}/{source.data_key}: {exc}"
+                            f"{region}/{stream}/{source.data_key}: {type(exc).__name__}"
                         )
                         continue
 
@@ -334,15 +336,15 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                             )
                             ok += 1
                             stream_ok[stream] += 1
-                            print(
+                            logging.getLogger(__name__).info(
                                 f"[rtma_worker] {region}/{stream}/{product}/"
                                 f"{source.data_key}: {meta.get('feature_count', 0)} pts"
                             )
                         except Exception as exc:
                             failed += 1
-                            print(
+                            logging.getLogger(__name__).warning(
                                 f"[rtma_worker] GeoJSON ERROR "
-                                f"{region}/{stream}/{product}/{source.data_key}: {exc}"
+                                f"{region}/{stream}/{product}/{source.data_key}: {type(exc).__name__}"
                             )
 
                     # ── Overlay PNG pre-render for this frame ─────────────────
@@ -395,7 +397,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                                 lat_1d_cache = lat_arr
                                 lon_1d_cache = lon_arr
                         except Exception as exc:
-                            print(f"[rtma_worker] Failed to precompute lat/lon: {exc}")
+                            logging.getLogger(__name__).warning(f"[rtma_worker] Failed to precompute lat/lon: {type(exc).__name__}")
 
                     # Collect metadata for batch index/processed_keys update (one write per source).
                     overlay_metadata = []
@@ -431,13 +433,13 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                                 keep_n=keep_n,
                             )
                         except Exception as exc:
-                            print(
+                            logging.getLogger(__name__).warning(
                                 f"[rtma_worker] Batch index update ERROR "
-                                f"{region}/{stream}/{source.data_key}: {exc}"
+                                f"{region}/{stream}/{source.data_key}: {type(exc).__name__}"
                             )
 
     elapsed = _time.perf_counter() - t0
-    print(
+    logging.getLogger(__name__).warning(
         "[rtma_worker] done "
         f"ok={ok} skipped={skipped} failed={failed} in {elapsed:.1f}s"
     )
@@ -462,6 +464,10 @@ def run_rtma_rapid_worker(force: bool = False) -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the RTMA worker once.")

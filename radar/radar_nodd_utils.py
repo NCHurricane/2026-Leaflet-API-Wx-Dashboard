@@ -1,7 +1,8 @@
+
+import logging
 from datetime import datetime, timedelta, timezone
 import os
 import re
-import traceback
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
@@ -10,13 +11,12 @@ from app_core.atomic_io import atomic_output_path
 from lib.listing_cache import cached_call
 from app_core.upstream_ledger import requests
 
-def _log(msg: str):
-    """Windows-safe print: strip non-BMP / surrogate chars before writing."""
-    try:
-        print(msg)
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        safe = msg.encode("ascii", errors="replace").decode("ascii")
-        print(safe)
+_LOGGER = logging.getLogger(__name__)
+
+
+def _log(msg: str) -> None:
+    log = _LOGGER.warning if "[WARN]" in msg or "[ERROR]" in msg else _LOGGER.info
+    log("%s", msg)
 
 
 NEXRAD_LEVEL2_BUCKET = "unidata-nexrad-level2"
@@ -298,7 +298,7 @@ def list_nexrad_files(
             except Exception as e:
                 _log(
                     f"[WARN] Level2 list failed provider={provider} "
-                    f"prefix={prefix}: {type(e).__name__}: {e}"
+                    f"prefix={prefix} ({type(e).__name__})"
                 )
 
     # ------------------------------------------------------------------
@@ -466,7 +466,7 @@ def list_nexrad_files(
                     _log(
                         f"[WARN] Level3 archive list failed "
                         f"provider={provider} prefix={prefix}: "
-                        f"{type(e).__name__}: {e}"
+                        f"{type(e).__name__}"
                     )
 
         # Flat key fallback (common on AWS L3 archive): TLX_N0Q_YYYY_MM_DD_HH_MM_SS
@@ -508,7 +508,7 @@ def list_nexrad_files(
                         _log(
                             f"[WARN] Level3 flat list failed provider={provider} "
                             f"prefix={flat_prefix} marker={marker}: "
-                            f"{type(e).__name__}: {e}"
+                            f"{type(e).__name__}"
                         )
 
     # ------------------------------------------------------------------
@@ -629,8 +629,7 @@ def download_radar_data(
             f"[TIMER] listing took {_time.perf_counter() - _t_list:.2f}s  ({len(keys)} keys, provider={provider})"
         )
     except Exception as e:
-        _log(f"[ERROR] NODD list_nexrad_files failed: {type(e).__name__}: {e}")
-        traceback.print_exc()
+        _log(f"[ERROR] NODD list_nexrad_files failed ({type(e).__name__})")
         raise
 
     total_files = len(keys)
@@ -717,17 +716,20 @@ def download_radar_data(
                     downloaded += 1
                     download_succeeded = True
                     _log(
-                        f"[INFO] NODD radar download race-resolved: {type(e).__name__}: {e} | provider={provider} key={key}"
+                        f"[INFO] NODD radar download race-resolved "
+                        f"({type(e).__name__}) | provider={provider} key={key}"
                     )
                     break
 
                 if attempt >= DOWNLOAD_RETRY_ATTEMPTS:
                     _log(
-                        f"[WARN] NODD radar download failed after retries: {type(e).__name__}: {e} | provider={provider} key={key}"
+                        f"[WARN] NODD radar download failed after retries "
+                        f"({type(e).__name__}) | provider={provider} key={key}"
                     )
             except Exception as e:
                 _log(
-                    f"[WARN] NODD radar download failed: {type(e).__name__}: {e} | provider={provider} key={key}"
+                    f"[WARN] NODD radar download failed ({type(e).__name__}) "
+                    f"| provider={provider} key={key}"
                 )
                 break
 
@@ -742,4 +744,3 @@ def download_radar_data(
     _log(f"[TIMER] _enforce_cache_size took {_time.perf_counter() - _t_cache:.2f}s")
     _log(f"[TIMER] download_radar_data TOTAL {_time.perf_counter() - _t_total:.2f}s")
     return save_dir, total_files, downloaded
-

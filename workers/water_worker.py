@@ -7,6 +7,8 @@ enrichment where needed.
 
 from __future__ import annotations
 
+import logging
+
 import argparse
 from datetime import datetime, timezone
 import json
@@ -82,7 +84,7 @@ REQUIRED_NETWORKS = ("river", "coastal", "buoy")
 
 
 def _log(message: str) -> None:
-    print(f"[water_worker] {message}", flush=True)
+    logging.getLogger(__name__).info(f"[water_worker] {message}", )
 
 
 def _write_json_atomic(path: Path, payload: dict) -> None:
@@ -545,4 +547,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     main()

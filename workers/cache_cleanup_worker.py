@@ -11,6 +11,8 @@ Scheduled to run every 6 hours to keep the cache at a manageable size.
 
 from __future__ import annotations
 
+import logging
+
 import os
 import sys
 import time as _time
@@ -88,7 +90,7 @@ def _remove_old_files(directory: str, max_age_hours: int) -> int:
                 except (OSError, FileNotFoundError):
                     pass
     except Exception as exc:
-        print(f"[cache_cleanup] Error in {directory}: {exc}")
+        logging.getLogger(__name__).warning(f"[cache_cleanup] Error in {directory}: {type(exc).__name__}")
 
     return removed_count
 
@@ -121,7 +123,7 @@ def _remove_temp_files(directory: str, patterns: list[str]) -> int:
                         except (OSError, FileNotFoundError):
                             pass
     except Exception as exc:
-        print(f"[cache_cleanup] Error removing temps in {directory}: {exc}")
+        logging.getLogger(__name__).warning(f"[cache_cleanup] Error removing temps in {directory}: {type(exc).__name__}")
 
     return removed_count
 
@@ -130,10 +132,10 @@ def run_cache_cleanup_worker(force: bool = False) -> None:
     """Clean up old cache files to prevent disk space exhaustion."""
 
     if not force and is_cache_fresh("cache_cleanup", _FRESH_WINDOW_SEC):
-        print("[cache_cleanup] Cache fresh — skipping cleanup")
+        logging.getLogger(__name__).info("[cache_cleanup] Cache fresh — skipping cleanup")
         return
 
-    print("[cache_cleanup] Starting cleanup...")
+    logging.getLogger(__name__).info("[cache_cleanup] Starting cleanup...")
     t0 = _time.perf_counter()
 
     total_removed = 0
@@ -144,17 +146,17 @@ def run_cache_cleanup_worker(force: bool = False) -> None:
         if os.path.isdir(cache_path):
             removed = _remove_old_files(cache_path, max_age_hours)
             if removed > 0:
-                print(f"  {cache_subdir}: removed {removed} old files (>{max_age_hours}h)")
+                logging.getLogger(__name__).info(f"  {cache_subdir}: removed {removed} old files (>{max_age_hours}h)")
                 total_removed += removed
 
     # Remove all temp files across entire cache
     temp_removed = _remove_temp_files(_CACHE_ROOT, _TEMP_PATTERNS)
     if temp_removed > 0:
-        print(f"  temp files: removed {temp_removed} orphaned files")
+        logging.getLogger(__name__).info(f"  temp files: removed {temp_removed} orphaned files")
         total_removed += temp_removed
 
     elapsed = _time.perf_counter() - t0
-    print(f"[cache_cleanup] Complete: removed {total_removed} files in {elapsed:.1f}s")
+    logging.getLogger(__name__).info(f"[cache_cleanup] Complete: removed {total_removed} files in {elapsed:.1f}s")
 
     mark_run_complete("cache_cleanup")
 
@@ -173,4 +175,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     main()

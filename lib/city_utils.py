@@ -1,3 +1,5 @@
+
+import logging
 import os
 import json
 import cartopy.crs as ccrs
@@ -32,7 +34,7 @@ def load_cities(filename="us-cities.json"):
 
     # Fallback to us-cities.json if the requested file doesn't exist
     if not os.path.exists(cities_path) and filename != "us-cities.json":
-        print(f"[WARN] {filename} not found, falling back to us-cities.json")
+        logging.getLogger(__name__).warning(f"[WARN] {filename} not found, falling back to us-cities.json")
         cities_path = os.path.join(_DATA_DIR, "us-cities.json")
 
     cached = _CITIES_CACHE.get(cities_path)
@@ -43,7 +45,7 @@ def load_cities(filename="us-cities.json"):
         with open(cities_path, "r") as f:
             raw_data = json.load(f)
     except Exception as e:
-        print(f"[WARN] Could not load city data from {filename}: {e}")
+        logging.getLogger(__name__).warning(f"[WARN] Could not load city data from {filename}: {type(e).__name__}")
         return []
 
     cities = []
@@ -62,7 +64,7 @@ def load_cities(filename="us-cities.json"):
     elif isinstance(raw_data, list):
         cities = raw_data
     else:
-        print(f"[WARN] Unknown city data format in {filename}")
+        logging.getLogger(__name__).warning(f"[WARN] Unknown city data format in {filename}")
         return []
 
     def _city_priority(city):

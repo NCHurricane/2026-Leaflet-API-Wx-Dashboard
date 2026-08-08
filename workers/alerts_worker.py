@@ -5,6 +5,8 @@ Produces:
   - cache/alerts/national_display_low.geojson (simplified variant for low-zoom rendering)
 """
 
+import logging
+
 import json
 import os
 import sys
@@ -253,7 +255,7 @@ def run_alerts_worker(
       - national.geojson: legacy backward-compatible symlink to full
     """
     if not force and is_cache_fresh("alerts", _FRESH_WINDOW_SEC):
-        print("[alerts_worker] Cache fresh — skipping run")
+        logging.getLogger(__name__).info("[alerts_worker] Cache fresh — skipping run")
         return
     worker_start = time.perf_counter()
     measurement_fields = {
@@ -351,7 +353,7 @@ def run_alerts_worker(
                 "reused_feature_count": processed_cache_metrics["cache_hits"],
             },
         )
-        print(
+        logging.getLogger(__name__).info(
             f"[alerts_worker] Complete in {total_elapsed:.2f}s\n"
             f"  Fetch: {fetch_elapsed:.2f}s | "
             f"Enrich: {enrich_elapsed:.2f}s | "
@@ -370,10 +372,7 @@ def run_alerts_worker(
         mark_run_complete("alerts")
         return summary
     except Exception as exc:
-        print(f"[alerts_worker] Error: {exc}")
-        import traceback
-
-        traceback.print_exc()
+        logging.getLogger(__name__).warning(f"[alerts_worker] Error: {type(exc).__name__}")
         return None
     finally:
         context.close()
@@ -428,6 +427,10 @@ def measure_alerts_worker_twice() -> list[dict]:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the alerts worker once.")

@@ -7,6 +7,8 @@ Full Disk and CONUS stay live-rendered/cache-assisted by default.
 
 from __future__ import annotations
 
+import logging
+
 import argparse
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager, nullcontext
@@ -113,7 +115,7 @@ def _worker_lock(worker_name: str):
     try:
         fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
-        print(f"[{worker_name}] skipped: lock exists at {lock_path}")
+        logging.getLogger(__name__).info(f"[{worker_name}] skipped: lock exists at {lock_path}")
         yield False
         return
     try:
@@ -146,7 +148,7 @@ def _warm_one_job(
     channel_key = normalize_channel(channel)
     zooms = _zooms_for_sector(sector_key)
     if not zooms:
-        print(f"[{worker_name}] skip {sat_key}/{sector_key}/{channel_key}: no zooms")
+        logging.getLogger(__name__).info(f"[{worker_name}] skip {sat_key}/{sector_key}/{channel_key}: no zooms")
         return {"cataloged": 0, "frames": 0, "rendered": 0, "skipped": 0, "errors": 0}
 
     job_start = time.perf_counter()
@@ -168,14 +170,14 @@ def _warm_one_job(
         "skipped": 0,
         "errors": 0,
     }
-    print(
+    logging.getLogger(__name__).info(
         f"[{worker_name}] {sat_key}/{sector_key}/{channel_key}: "
         f"cataloged={len(frames)} warming={len(newest)} zooms={zooms} "
         f"tile_workers={tile_workers} bounds={'frame/default' if tile_bounds is None else tile_bounds}"
     )
     for frame in newest:
         if should_continue is not None and not should_continue():
-            print(
+            logging.getLogger(__name__).info(
                 f"[{worker_name}] {sat_key}/{sector_key}/{channel_key}: "
                 "stopped after selection changed"
             )
@@ -197,7 +199,7 @@ def _warm_one_job(
         totals["rendered"] += int(stats.get("rendered") or 0)
         totals["skipped"] += int(stats.get("skipped") or 0)
         totals["errors"] += int(stats.get("errors") or 0)
-        print(
+        logging.getLogger(__name__).warning(
             f"[{worker_name}] {sat_key}/{sector_key}/{channel_key}/"
             f"{frame.get('frame_key')}: rendered={stats.get('rendered')} "
             f"skipped={stats.get('skipped')} invalid={stats.get('invalid')} "
@@ -215,7 +217,7 @@ def _warm_one_job(
             hours=hours,
             max_frames=max_frames,
         )
-    print(
+    logging.getLogger(__name__).info(
         f"[{worker_name}] {sat_key}/{sector_key}/{channel_key}: "
         f"done elapsed={_format_elapsed(time.perf_counter() - job_start)}"
     )
@@ -237,7 +239,7 @@ def run_satellite_v2_rapid_worker(
 ) -> dict[str, int]:
     fresh_window = int(SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS)
     if not force and is_cache_fresh(worker_name, fresh_window):
-        print(f"[{worker_name}] skipped: fresh sentinel within {fresh_window}s")
+        logging.getLogger(__name__).info(f"[{worker_name}] skipped: fresh sentinel within {fresh_window}s")
         return {"jobs": 0, "frames": 0, "rendered": 0, "skipped": 0, "errors": 0}
 
     selected_jobs = tuple(jobs or SATELLITE_V2_RAPID_WORKER_JOBS)
@@ -286,7 +288,7 @@ def run_satellite_v2_rapid_worker(
                 if should_continue is not None and not should_continue():
                     break
         mark_run_complete(worker_name)
-        print(
+        logging.getLogger(__name__).warning(
             f"[{worker_name}] complete jobs={totals['jobs']} frames={totals['frames']} "
             f"rendered={totals['rendered']} skipped={totals['skipped']} "
             f"errors={totals['errors']} elapsed={_format_elapsed(time.perf_counter() - run_start)}"
@@ -321,4 +323,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     main()

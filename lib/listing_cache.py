@@ -1,3 +1,5 @@
+
+import logging
 from collections import OrderedDict
 from threading import Lock
 import time
@@ -91,7 +93,7 @@ def load_json_config(directory, filename, default=None):
         with open(path, "r") as f:
             return json.load(f)
     except Exception as e:
-        print(f"WARNING: Could not load {filename}: {e}")
+        logging.getLogger(__name__).warning(f"WARNING: Could not load {filename}: {type(e).__name__}")
         return default
 
 

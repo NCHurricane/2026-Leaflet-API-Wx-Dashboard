@@ -7,6 +7,8 @@ The active product is tracked via FastAPI app.state.active_mrms_product.
 Only ONE product is refreshed at a time (active product pivots on user request).
 """
 
+import logging
+
 import json
 import os
 import shutil
@@ -81,7 +83,7 @@ def _prune_old_frames(product_cache_dir: str, max_age_hours: int = 12) -> None:
             mtime = os.path.getmtime(filepath)
             if now - mtime > max_age_sec:
                 os.remove(filepath)
-                print(f"[mrms_worker] Pruned old frame: {filename}")
+                logging.getLogger(__name__).info(f"[mrms_worker] Pruned old frame: {filename}")
         except OSError:
             pass
 
@@ -107,7 +109,7 @@ def _fetch_latest_product_grib(
         if result is not None:
             successful_lookback = lookback_minutes
             if lookback_minutes > 30:
-                print(
+                logging.getLogger(__name__).info(
                     f"[mrms_worker] {product} found using extended "
                     f"lookback ({lookback_minutes} min)"
                 )
@@ -154,8 +156,8 @@ def _fetch_latest_product_grib(
         try:
             shutil.copy2(dest_latest, dest_timestamped)
         except OSError as exc:
-            print(
-                f"[mrms_worker] Failed to create timestamped copy {dest_timestamped}: {exc}"
+            logging.getLogger(__name__).warning(
+                f"[mrms_worker] Failed to create timestamped copy {dest_timestamped}: {type(exc).__name__}"
             )
 
     # Prune old timestamped files (keep max 12 hours).
@@ -186,13 +188,13 @@ def _run_mrms_worker_unlocked(
     # Gate per-product so a product switch always triggers a fresh download.
     sentinel_name = f"mrms_{selected_product}"
     if not force and is_cache_fresh(sentinel_name, _FRESH_WINDOW_SEC):
-        print(f"[mrms_worker] {selected_product} cache fresh — skipping run")
+        logging.getLogger(__name__).info(f"[mrms_worker] {selected_product} cache fresh — skipping run")
         return {"status": "current", "product": selected_product}
 
     try:
         from mrms.mrms_nodd_utils import get_latest_mrms_file
     except Exception as exc:
-        print(f"[mrms_worker] Import error: {exc}")
+        logging.getLogger(__name__).warning(f"[mrms_worker] Import error: {type(exc).__name__}")
         raise
 
     try:
@@ -208,7 +210,7 @@ def _run_mrms_worker_unlocked(
         dest, file_dt, _lookback_minutes, advanced, source_key = fetched
         product_cache_dir = os.path.join(_MRMS_CACHE, selected_product)
 
-        print(
+        logging.getLogger(__name__).info(
             f"[mrms_worker] {selected_product} cached at "
             f"{file_dt.strftime('%Y-%m-%d %H:%M UTC')}"
         )
@@ -237,7 +239,7 @@ def _run_mrms_worker_unlocked(
             "source_timestamp": source_timestamp,
         }
     except Exception as exc:
-        print(f"[mrms_worker] Error fetching {selected_product}: {exc}")
+        logging.getLogger(__name__).warning(f"[mrms_worker] Error fetching {selected_product}: {type(exc).__name__}")
         raise
 
 
@@ -294,19 +296,19 @@ def _prewarm_conus_png(
             png_path,
             tile_frame_key=tile_frame_key,
         )
-        print(
+        logging.getLogger(__name__).info(
             f"[mrms_worker] Pre-warmed CONUS PNG for {product} in {_t.time() - t0:.1f}s"
         )
     except Exception as exc:
-        print(f"[mrms_worker] Pre-warm failed for {product} (non-fatal): {exc}")
+        logging.getLogger(__name__).warning(f"[mrms_worker] Pre-warm failed for {product} (non-fatal): {type(exc).__name__}")
         return
 
     if file_dt is not None:
         try:
             _write_mrms_overlay_cache(product, png_path, file_dt)
         except Exception as exc:
-            print(
-                f"[mrms_worker] Overlay cache write failed for {product} (non-fatal): {exc}"
+            logging.getLogger(__name__).warning(
+                f"[mrms_worker] Overlay cache write failed for {product} (non-fatal): {type(exc).__name__}"
             )
 
 
@@ -403,7 +405,7 @@ def _write_mrms_overlay_cache(
     if keep_n is not None:
         flat_overlay_prune_frames(_CACHE_ROOT, "mrms", path_parts, keep_n)
 
-    print(f"[mrms_worker] Overlay cache updated: {product} @ {frame_key}")
+    logging.getLogger(__name__).info(f"[mrms_worker] Overlay cache updated: {product} @ {frame_key}")
 
 
 def _render_mrms_png_standalone_unbounded(
@@ -446,9 +448,9 @@ def _render_mrms_png_standalone_unbounded(
 
             write_tile_source(data, lat, lon, product, tile_frame_key)
         except Exception as exc:
-            print(
+            logging.getLogger(__name__).warning(
                 f"[mrms_worker] Native tile source failed for "
-                f"{product} {tile_frame_key} (non-fatal): {exc}"
+                f"{product} {tile_frame_key} (non-fatal): {type(exc).__name__}"
             )
 
     data, actual_bounds = warp_array_to_mercator(
@@ -498,6 +500,10 @@ def _render_mrms_png_standalone(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the MRMS worker once.")

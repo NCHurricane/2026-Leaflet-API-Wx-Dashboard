@@ -103,7 +103,8 @@ def redirect_stdio_to_log(log_name: str) -> None:
             fallback.parent.mkdir(parents=True, exist_ok=True)
             with open(fallback, "a", encoding="utf-8") as fb:
                 fb.write(
-                    f"{datetime.now().isoformat()} redirect_stdio_to_log({log_name!r}) failed: {exc}\n"
+                    f"{datetime.now().isoformat()} redirect_stdio_to_log({log_name!r}) "
+                    f"failed ({type(exc).__name__})\n"
                 )
         except Exception:
             pass

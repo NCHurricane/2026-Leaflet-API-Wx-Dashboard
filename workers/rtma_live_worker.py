@@ -8,6 +8,8 @@ to PNG overlays for scrubber playback. API calls this to populate frames
 on-demand when user requests animation.
 """
 
+import logging
+
 import os
 import sys
 import time as _time
@@ -77,8 +79,8 @@ def _render_rtma_frame_to_overlay(
             stream=stream,
         )
     except Exception as exc:
-        print(
-            f"[rtma_live] Overlay render ERROR {region}/{stream}/{product}/{frame_key}: {exc}"
+        logging.getLogger(__name__).warning(
+            f"[rtma_live] Overlay render ERROR {region}/{stream}/{product}/{frame_key}: {type(exc).__name__}"
         )
         return False
 
@@ -108,10 +110,10 @@ def _render_rtma_frame_to_overlay(
             keep_n=30,
         )
 
-        print(f"[rtma_live] {region}/{stream}/{product} frame {frame_key} rendered OK")
+        logging.getLogger(__name__).info(f"[rtma_live] {region}/{stream}/{product} frame {frame_key} rendered OK")
         return True
     except Exception as exc:
-        print(f"[rtma_live] Overlay index update ERROR {region}/{stream}/{product}/{frame_key}: {exc}")
+        logging.getLogger(__name__).warning(f"[rtma_live] Overlay index update ERROR {region}/{stream}/{product}/{frame_key}: {type(exc).__name__}")
         return False
 
 
@@ -158,7 +160,7 @@ def run_rtma_live_product(
         from rtma.rtma_utils import iter_rtma_sources_within_hours
         from config.rtma_config import clamp_stream_hours
     except Exception as exc:
-        print(f"[rtma_live] Import error: {exc}")
+        logging.getLogger(__name__).warning(f"[rtma_live] Import error: {type(exc).__name__}")
         return 0
 
     # Discover available sources within lookback window
@@ -173,11 +175,11 @@ def run_rtma_live_product(
             )
         )
     except Exception as exc:
-        print(f"[rtma_live] Source discovery failed for {region}/{stream}/{product}: {exc}")
+        logging.getLogger(__name__).warning(f"[rtma_live] Source discovery failed for {region}/{stream}/{product}: {type(exc).__name__}")
         return 0
 
     if not sources:
-        print(f"[rtma_live] No sources found for {region}/{stream}/{product}")
+        logging.getLogger(__name__).info(f"[rtma_live] No sources found for {region}/{stream}/{product}")
         return 0
 
     # Optionally limit to latest only or max count
@@ -200,7 +202,7 @@ def run_rtma_live_product(
             cached += 1
 
     elapsed = _time.perf_counter() - t0
-    print(
+    logging.getLogger(__name__).info(
         f"[rtma_live] {region}/{stream}/{product} made "
         f"{cached}/{len(sources)} frames available in {elapsed:.1f}s"
     )
@@ -212,6 +214,10 @@ def run_rtma_live_product(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the RTMA live worker once.")
@@ -237,4 +243,4 @@ if __name__ == "__main__":
         force=args.force,
         max_hours=args.hours,
     )
-    print(f"Cached {cached} frames")
+    logging.getLogger(__name__).info(f"Cached {cached} frames")

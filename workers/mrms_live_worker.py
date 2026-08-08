@@ -8,6 +8,8 @@ for scrubber playback. API cache-miss fallback calls this to populate
 frames on-demand when user requests animation.
 """
 
+import logging
+
 import os
 import sys
 import tempfile
@@ -141,11 +143,11 @@ def _render_mrms_frame_to_overlay(
         _write_mrms_overlay_cache(product, temp_png, file_dt, keep_n=None)
 
         frame_key = file_dt.strftime("%Y_%m_%d_%H_%M_%S")
-        print(f"[mrms_live] {product} frame {frame_key} rendered OK")
+        logging.getLogger(__name__).info(f"[mrms_live] {product} frame {frame_key} rendered OK")
         return True
     except Exception as exc:
         frame_key = file_dt.strftime("%Y_%m_%d_%H_%M_%S")
-        print(f"[mrms_live] Failed to render {product} frame {frame_key}: {exc}")
+        logging.getLogger(__name__).warning(f"[mrms_live] Failed to render {product} frame {frame_key}: {type(exc).__name__}")
         return False
     finally:
         if temp_png:
@@ -201,7 +203,7 @@ def run_mrms_live_product(
     try:
         upstream = _discover_upstream_gribs(product, max_hours=max_hours)
     except Exception as exc:
-        print(f"[mrms_live] Upstream history discovery failed for {product}: {exc}")
+        logging.getLogger(__name__).warning(f"[mrms_live] Upstream history discovery failed for {product}: {type(exc).__name__}")
         upstream = []
 
     if upstream:
@@ -214,7 +216,7 @@ def run_mrms_live_product(
             )
         ]
     if not candidates:
-        print(f"[mrms_live] No GRIBs found for {product}")
+        logging.getLogger(__name__).info(f"[mrms_live] No GRIBs found for {product}")
         return 0
 
     # Optionally limit to latest only or max count
@@ -256,16 +258,16 @@ def run_mrms_live_product(
             try:
                 grib_path = download_mrms_file(source_key, product_cache_dir)
             except Exception as exc:
-                print(
+                logging.getLogger(__name__).warning(
                     f"[mrms_live] Failed to download {product} "
-                    f"{file_dt.isoformat()}: {exc}"
+                    f"{file_dt.isoformat()}: {type(exc).__name__}"
                 )
                 continue
         if _render_mrms_frame_to_overlay(grib_path, product, file_dt, _CACHE_ROOT):
             cached += 1
 
     elapsed = _time.perf_counter() - t0
-    print(
+    logging.getLogger(__name__).info(
         f"[mrms_live] {product} rendered {cached}/{attempted} frames in {elapsed:.1f}s"
     )
 
@@ -276,6 +278,10 @@ def run_mrms_live_product(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the MRMS live worker once.")
@@ -291,4 +297,4 @@ if __name__ == "__main__":
     cached = run_mrms_live_product(
         args.product, force=args.force, max_hours=args.hours
     )
-    print(f"Cached {cached} frames")
+    logging.getLogger(__name__).info(f"Cached {cached} frames")

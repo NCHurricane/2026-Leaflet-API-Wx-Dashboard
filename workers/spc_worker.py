@@ -1,5 +1,7 @@
 """Background worker: fetches SPC outlook GeoJSON and writes to cache/spc/."""
 
+import logging
+
 import os
 import sys
 import time
@@ -62,7 +64,7 @@ def run_spc_worker(
 ) -> dict:
     """Fetch selected SPC outlooks, or the legacy complete matrix."""
     if not force and not product_ids and is_cache_fresh("spc", _FRESH_WINDOW_SEC):
-        print("[spc_worker] Cache fresh — skipping run")
+        logging.getLogger(__name__).info("[spc_worker] Cache fresh — skipping run")
         return {"status": "current", "products": []}
     from concurrent.futures import ThreadPoolExecutor
     from spc.spc_utils import (
@@ -115,18 +117,18 @@ def run_spc_worker(
     for cache_name, success, error_msg in results:
         if not success:
             errors += 1
-            print(f"[spc_worker] {cache_name}: {error_msg}")
+            logging.getLogger(__name__).warning(f"[spc_worker] {cache_name}: {error_msg}")
 
-    print(
+    logging.getLogger(__name__).warning(
         f"[spc_worker] SPC cache refresh complete in {time.time() - start:.2f}s "
         f"({errors} error(s))"
     )
     if errors == len(tasks):
-        print("[spc_worker] All fetches failed — cache not marked fresh")
+        logging.getLogger(__name__).warning("[spc_worker] All fetches failed — cache not marked fresh")
     elif not product_ids:
         mark_run_complete("spc")
     else:
-        print("[spc_worker] Targeted refresh complete — global freshness unchanged")
+        logging.getLogger(__name__).info("[spc_worker] Targeted refresh complete — global freshness unchanged")
     if errors:
         raise RuntimeError(f"{errors} of {len(tasks)} SPC product refreshes failed")
     return {
@@ -137,6 +139,10 @@ def run_spc_worker(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the SPC worker once.")
