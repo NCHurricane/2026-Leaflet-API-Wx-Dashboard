@@ -9,6 +9,7 @@ from routes.satellite_v2 import router as satellite_router
 from routes.surface import router as surface_router
 from routes.tropical import router as tropical_router
 from spc import spc_utils
+from surface import surface_utils
 
 
 def _route_paths(router):
@@ -79,3 +80,25 @@ def test_wave_c_spc_keeps_active_parsers_without_legacy_renderer():
     )
     for name in removed_contracts:
         assert not hasattr(spc_utils, name)
+
+
+def test_wave_c_surface_keeps_data_paths_without_legacy_exporter():
+    active_contracts = (
+        "process_dataframe",
+        "fetch_metar_data",
+        "fetch_metar_data_archive_frames",
+        "fetch_metar_data_at_time",
+        "calc_relative_humidity",
+    )
+    for name in active_contracts:
+        assert callable(getattr(surface_utils, name))
+
+    removed_contracts = (
+        "generate_surface_map",
+        "plot_cities",
+        "get_weather_symbol_index",
+        "_add_geometry_patch",
+        "_is_gradient_parameter",
+    )
+    for name in removed_contracts:
+        assert not hasattr(surface_utils, name)
