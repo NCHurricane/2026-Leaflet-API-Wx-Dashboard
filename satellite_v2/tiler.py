@@ -20,7 +20,6 @@ from config.satellite_v2_config import (
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
-    source_channels_for_product,
 )
 from satellite_v2.cache import (
     clear_negative_tile_marker,
@@ -38,25 +37,6 @@ from satellite_v2._bench_timing import (
 )
 from satellite_v2.providers import download_product_source_frames
 from satellite_v2.renderer import SatelliteTileRenderer
-
-
-_WARM_TILE_RENDERER: SatelliteTileRenderer | None = None
-
-
-def _initialize_warm_tile_worker(
-    channel_key: str,
-    source_files: dict[str, str],
-    sat_id: str | None = None,
-) -> None:
-    global _WARM_TILE_RENDERER
-    source_file_paths: dict[str, str | Path] = {
-        str(channel): Path(path) for channel, path in source_files.items()
-    }
-    _WARM_TILE_RENDERER = SatelliteTileRenderer.from_sources(
-        channel_key,
-        source_file_paths,
-        sat_id=sat_id,
-    )
 
 
 def lon_lat_to_tile(lon: float, lat: float, z: int) -> tuple[int, int]:
@@ -221,45 +201,6 @@ def _target_needs_live_render(target: Path, overwrite: bool) -> tuple[bool, bool
     return True, target_was_invalid
 
 
-def _render_warm_tile_task(task: dict[str, Any]) -> dict[str, int]:
-    if _WARM_TILE_RENDERER is None:
-        raise RuntimeError("Satellite v2 warm tile worker was not initialized.")
-
-    target = tile_path(
-        task["cache_root"],
-        task["sat_id"],
-        task["sector"],
-        task["channel"],
-        task["frame_key"],
-        int(task["z"]),
-        int(task["x"]),
-        int(task["y"]),
-    )
-    target_was_invalid = target.exists() and not is_valid_tile_file(target)
-    if (
-        target.exists()
-        and is_valid_tile_file(target)
-        and not bool(task.get("overwrite"))
-    ):
-        return {"rendered": 0, "skipped": 1, "errors": 0, "repaired": 0, "invalid": 0}
-
-    result = _render_tile_to_target(
-        _WARM_TILE_RENDERER,
-        target,
-        int(task["z"]),
-        int(task["x"]),
-        int(task["y"]),
-        target_was_invalid,
-    )
-    return {
-        "rendered": 1 if result == "rendered" else 0,
-        "skipped": 0,
-        "errors": 0,
-        "repaired": 1 if result == "rendered" and target_was_invalid else 0,
-        "invalid": 1 if result == "invalid" else 0,
-    }
-
-
 def _merge_tile_stats(total: dict[str, int], part: dict[str, int]) -> None:
     for key in ("rendered", "skipped", "errors", "repaired", "invalid"):
         total[key] += int(part.get(key) or 0)
@@ -379,114 +320,6 @@ def _render_warm_zoom_canvas_task(task: dict[str, Any]) -> dict[str, int]:
             except OSError:
                 pass
 
-    return stats
-
-
-def warm_frame_tiles(
-    cache_root: str | Path,
-    sat_id: str,
-    sector: str,
-    channel_key: str,
-    frame: dict,
-    zooms: Iterable[int],
-    overwrite: bool = False,
-    render_workers: int = 1,
-    tile_bounds: Mapping[str, float] | Sequence[float] | None = None,
-    tile_buffer: int = 0,
-) -> dict[str, int]:
-    sat_key = normalize_sat_id(sat_id)
-    sector_key = normalize_sector(sector)
-    channel = normalize_channel(channel_key)
-    frame_key = str(frame.get("frame_key") or "")
-    if not frame_key:
-        raise ValueError("Satellite v2 frame is missing frame_key.")
-
-    source_files = download_product_source_frames(
-        cache_root, sat_key, sector_key, channel, frame
-    )
-    stats = {"rendered": 0, "skipped": 0, "errors": 0, "repaired": 0, "invalid": 0}
-    tasks: list[dict[str, Any]] = []
-
-    for zoom in [int(value) for value in zooms]:
-        for x, y in planning_tile_coords(
-            sector_key, zoom, bounds=tile_bounds, buffer_tiles=tile_buffer
-        ):
-            target = tile_path(
-                cache_root, sat_key, sector_key, channel, frame_key, zoom, x, y
-            )
-            if target.exists() and is_valid_tile_file(target) and not overwrite:
-                stats["skipped"] += 1
-                continue
-
-            tasks.append(
-                {
-                    "cache_root": str(cache_root),
-                    "sat_id": sat_key,
-                    "sector": sector_key,
-                    "channel": channel,
-                    "frame_key": frame_key,
-                    "z": zoom,
-                    "x": x,
-                    "y": y,
-                    "overwrite": overwrite,
-                }
-            )
-
-    if not tasks:
-        return stats
-
-    worker_count = max(1, min(int(render_workers or 1), len(tasks)))
-    source_file_map = {key: str(path) for key, path in source_files.items()}
-    if worker_count <= 1:
-        source_files_for_renderer: dict[str, str | Path] = dict(source_files)
-        renderer = SatelliteTileRenderer.from_sources(
-            channel, source_files_for_renderer, sat_id=sat_key
-        )
-        for task in tasks:
-            try:
-                target = tile_path(
-                    task["cache_root"],
-                    task["sat_id"],
-                    task["sector"],
-                    task["channel"],
-                    task["frame_key"],
-                    int(task["z"]),
-                    int(task["x"]),
-                    int(task["y"]),
-                )
-                target_was_invalid = target.exists() and not is_valid_tile_file(target)
-                if target.exists() and is_valid_tile_file(target) and not overwrite:
-                    stats["skipped"] += 1
-                    continue
-                result = _render_tile_to_target(
-                    renderer,
-                    target,
-                    int(task["z"]),
-                    int(task["x"]),
-                    int(task["y"]),
-                    target_was_invalid,
-                )
-                if result == "rendered":
-                    stats["rendered"] += 1
-                    if target_was_invalid:
-                        stats["repaired"] += 1
-                else:
-                    stats["invalid"] += 1
-            except Exception:
-                stats["errors"] += 1
-        return stats
-
-    with ProcessPoolExecutor(
-        max_workers=worker_count,
-        initializer=_initialize_warm_tile_worker,
-        initargs=(channel, source_file_map, sat_key),
-    ) as pool:
-        futures = [pool.submit(_render_warm_tile_task, task) for task in tasks]
-        for future in as_completed(futures):
-            try:
-                _merge_tile_stats(stats, future.result())
-            except Exception:
-                stats["errors"] += 1
     return stats
 
 
