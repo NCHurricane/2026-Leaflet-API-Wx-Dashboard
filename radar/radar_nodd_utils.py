@@ -1,4 +1,3 @@
-from lib.font_utils import register_montserrat_fonts
 from datetime import datetime, timedelta, timezone
 import os
 import re
@@ -9,15 +8,6 @@ from urllib.parse import quote
 import time as _time
 from lib.listing_cache import cached_call
 from app_core.upstream_ledger import requests
-
-try:
-    from . import radar_utils as thredds_radar_utils
-except ImportError:
-    import radar_utils as thredds_radar_utils
-
-
-register_montserrat_fonts()
-
 
 def _log(msg: str):
     """Windows-safe print: strip non-BMP / surrogate chars before writing."""
@@ -32,7 +22,6 @@ NEXRAD_LEVEL2_BUCKET = "unidata-nexrad-level2"
 NEXRAD_LEVEL3_BUCKET = "unidata-nexrad-level3"
 NEXRAD_LEVEL2_GCP_BUCKET = "gcp-public-data-nexrad-l2"
 NEXRAD_LEVEL3_GCP_BUCKET = "gcp-public-data-nexrad-l3"
-NEXRAD_LEVEL3_GCP_REALTIME_BUCKET = "gcp-public-data-nexrad-l3-realtime"
 CACHE_MAX_BYTES = 20 * 1024 * 1024 * 1024
 DOWNLOAD_RETRY_ATTEMPTS = 3
 DOWNLOAD_RETRY_SLEEP_SECONDS = 0.12
@@ -40,17 +29,6 @@ LEVEL2_SOURCE_SPOOL = "_VOLUME"
 LATEST_LISTING_CACHE_TTL_SECONDS = 30
 ARCHIVE_LISTING_CACHE_TTL_SECONDS = 120
 
-
-LEVEL3_PREFIX_PATTERNS = [
-    "NIDS/{station}/{product}/",
-    "NIDS/{station_short}/{product}/",
-    "{station}_{product}_",
-    "{station_short}_{product}_",
-    "{product}/{station}/{year}/{month:02d}/{day:02d}/",
-    "{product}/{station_short}/{year}/{month:02d}/{day:02d}/",
-    "{year}/{month:02d}/{day:02d}/{station}/{product}/",
-    "{year}/{month:02d}/{day:02d}/{station_short}/{product}/",
-]
 
 LEVEL3_DAY_PREFIX_PATTERNS = [
     "{product}/{station}/{year}/{month:02d}/{day:02d}/",

@@ -1,6 +1,5 @@
 from config.radar_config import L3_PRODUCTS
 from config.style_config import resolve_radar_style_config
-from lib.font_utils import register_montserrat_fonts
 from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 import matplotlib.image as mpimg
 from dateutil import tz
@@ -34,7 +33,6 @@ from alerts import alerts_utils
 from lib.listing_cache import (
     cached_call,
     load_json_config as _load_json_config_raw,
-    check_dependencies as _check_deps_raw,
 )
 
 matplotlib.use("Agg")
@@ -71,30 +69,7 @@ except ImportError:
     )
 
 
-# --- 1. REQUIREMENTS CHECK ---
-def check_dependencies():
-    """Verifies that all required libraries are installed."""
-    required = {
-        "streamlit": "streamlit",
-        "pyart": "arm-pyart",
-        "metpy": "metpy",
-        "siphon": "siphon",
-        "cartopy": "cartopy",
-        "imageio": "imageio",
-        "matplotlib": "matplotlib",
-        "numpy": "numpy",
-    }
-    return _check_deps_raw(required)
-
-
-# Define the list for the dashboard to check
-MISSING_LIB_LIST = check_dependencies()
-
-# Ensure all Montserrat weights are available to Matplotlib.
-register_montserrat_fonts()
-
-
-# --- 2. CONFIG LOADERS ---
+# --- 1. CONFIG LOADERS ---
 def load_json_config(filename, default):
     """Loads a JSON configuration file from the script directory."""
     return _load_json_config_raw(
