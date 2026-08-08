@@ -128,13 +128,6 @@ RAMSDIS_WV_CMAP, RAMSDIS_WV_NORM = _load_awips_cmap(
     "ramsdis_WV_12bit.cmap", "ramsdis_wv", 163.0, 330.0
 )
 
-# Fog Difference (10.3−3.9 µm) Blue — Dan Lindsey.
-# 2048 entries, gray (non-fog) → shades of blue (liquid water clouds).
-# Applied to Ch13−Ch07 brightness-temperature difference (K).
-FOGDIFF_BLUE_CMAP, FOGDIFF_BLUE_NORM = _load_awips_cmap(
-    "fogdiff_blue.cmap", "fogdiff_blue", -70.0, 30.0
-)
-
 IR_TPC_CMAP, IR_TPC_NORM = _get_metpy_colormap_with_range("ir_tpc", "turbo", 170, 330)
 
 IR_TV1_CMAP, IR_TV1_NORM = _get_metpy_colormap_with_range("ir_tv1", "turbo", 170, 330)

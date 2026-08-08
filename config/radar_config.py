@@ -3,17 +3,6 @@
 import math
 import os
 
-L2_PRODUCTS = {
-    "REF": "Reflectivity",
-    "VEL": "Velocity",
-    "SRV": "Storm-Relative Velocity",
-    "SW": "Spectrum Width",
-    "ZDR": "Differential Reflectivity",
-    "RHO": "Correlation Coefficient",
-    "KDP": "Specific Differential Phase",
-    "PHI": "Differential Phase",
-}
-
 L3_PRODUCTS = {
     "N0B": "Super-Res Base Reflectivity",
     "N0G": "Super-Res Base Velocity",
@@ -365,7 +354,6 @@ LIVE_RADAR_PRESENCE_LEASE_SEC = 180
 # up to one volume-interval (~5-6 min) of early visibility into the *current*
 # in-progress scan. Not worth the added discovery/latency complexity for now.
 LIVE_RADAR_L2_USE_CHUNKS = False
-LIVE_RADAR_TILE_WORKER_INTERVAL_MIN = 5
 LIVE_RADAR_KEEP_FRAMES = 45
 LIVE_RADAR_MIN_LOOKBACK_HOURS = 0.5
 LIVE_RADAR_MAX_LOOKBACK_HOURS = 12.0

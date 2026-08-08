@@ -948,9 +948,6 @@ MRMS_TILE_RENDER_VERSION = "mrms-v1"
 MRMS_TILE_SIZE = 256
 MRMS_TILE_MIN_ZOOM = 7
 
-# Archive depth (MRMS data available from ~2015+ depending on product)
-MRMS_ARCHIVE_START = "2015-01-01"
-
 # ═════════════════════════════════════════════════════════════════════════════
 # SUB-PRODUCT DROPDOWN DEFINITIONS (consumed by frontend)
 # ═════════════════════════════════════════════════════════════════════════════

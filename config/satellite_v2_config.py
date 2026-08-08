@@ -583,20 +583,6 @@ SATELLITE_V2_INTERPRETIVE_LEGENDS = {
     },
 }
 
-SATELLITE_V2_HIGH_RES_PRODUCTS = {
-    "Channel01",
-    "Channel02",
-    "Channel03",
-    "Channel13",
-    "GeoColor",
-    "GeoColorBlkMar",
-    "TrueColor",
-    "NaturalColor",
-    "Dust",
-    "RocketPlume",
-}
-
-
 @dataclass(frozen=True)
 class SatelliteV2Product:
     channel_key: str
@@ -857,14 +843,6 @@ def satellite_v2_render_version_for_satellite(sat_id: str | None) -> str:
         return SATELLITE_V2_RENDER_VERSION_METEOSAT12
     return SATELLITE_V2_RENDER_VERSION
 
-SATELLITE_V2_PRIMARY_PRODUCTS = (
-    "Channel02",
-    "Channel09RAMSDIS",
-    "Channel13",
-    "GeoColor",
-    "GeoColorBlkMar",
-)
-
 # Max zoom levels the frontend is allowed to request.
 # These are request ceilings. Live rendering, supertiles, and any narrow
 # rapid-sector warming decide what is actually generated ahead of time.
@@ -1110,11 +1088,6 @@ def aws_product_prefix_for_sector(sector: str) -> str:
     if sector_key in {"MESO1", "MESO2"}:
         return "ABI-L2-CMIPM"
     return "ABI-L2-CMIPC"
-
-
-def channel_token(channel_key: str) -> str:
-    product = SATELLITE_V2_PRODUCTS[normalize_channel(channel_key)]
-    return f"C{product.channel_number:02d}"
 
 
 def source_channels_for_product(channel_key: str) -> tuple[str, ...]:

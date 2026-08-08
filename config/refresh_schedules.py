@@ -8,7 +8,6 @@ from zoneinfo import ZoneInfo
 
 
 UTC = timezone.utc
-CHICAGO = ZoneInfo("America/Chicago")
 EASTERN = ZoneInfo("America/New_York")
 
 

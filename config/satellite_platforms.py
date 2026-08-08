@@ -107,15 +107,3 @@ def platform_descriptor(sat_id: str) -> dict:
     if desc is None:
         raise ValueError(f"Unknown satellite platform: '{sat_id}'")
     return desc
-
-
-def platform_sectors(sat_id: str) -> list[str]:
-    return list(platform_descriptor(sat_id)["sectors"])
-
-
-def platform_default_sector(sat_id: str) -> str:
-    return str(platform_descriptor(sat_id)["default_sector"])
-
-
-def platform_is_implemented(sat_id: str) -> bool:
-    return bool(platform_descriptor(sat_id).get("implemented", False))
