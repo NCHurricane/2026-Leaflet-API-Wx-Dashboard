@@ -119,6 +119,28 @@ def test_landing_and_leaflet_css_have_no_disconnected_legacy_assets():
     assert "images/marker-icon.png" not in leaflet_css
 
 
+def test_split_page_css_excludes_unreachable_monolith_blocks():
+    tropical_css = (ROOT / "frontend/pages/tropical/tropical.css").read_text(
+        encoding="utf-8"
+    )
+    water_css = (ROOT / "frontend/pages/water/water.css").read_text(
+        encoding="utf-8"
+    )
+    workspace_css = (ROOT / "frontend/pages/workspace/workspace.css").read_text(
+        encoding="utf-8"
+    )
+
+    for css in (tropical_css, water_css, workspace_css):
+        assert ".weather-header" not in css
+        assert ".weather-shell" not in css
+
+    assert "#wx-section-water" not in tropical_css
+    assert ".workspace-shell" not in tropical_css
+    assert "#weather-tropical-hub" not in water_css
+    assert ".workspace-shell" not in water_css
+    assert "#weather-tropical-hub" not in workspace_css
+
+
 def test_all_mapped_radar_palettes_parse_with_valid_colors():
     assert set(_PAL_FILENAMES.values()) == {
         path.name for path in _COLORTABLE_DIR.glob("*.pal")
