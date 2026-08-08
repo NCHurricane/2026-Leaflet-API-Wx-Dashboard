@@ -15,11 +15,9 @@ import numpy as np
 from app_core.atomic_io import atomic_output_path, atomic_write_json
 from app_core.grib_decode import serialized_grib_decode
 from app_core.upstream_ledger import requests
+from app_core.weather_math import calc_relative_humidity
 from config.geo_config import STATE_BOUNDS
 from config.surface_config import TEMPERATURE_GRADIENT_ANCHORS
-from surface.surface_utils import (
-    calc_relative_humidity,
-)
 import warnings
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="cfgrib")

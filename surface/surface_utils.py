@@ -12,6 +12,7 @@ import time
 import re
 from app_core.atomic_io import atomic_output_path, atomic_write_json
 from app_core.upstream_ledger import requests
+from app_core.weather_math import calc_relative_humidity
 import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -40,15 +41,6 @@ def calc_wind_chill(temp_f, speed_kts):
         + (0.4275 * temp_f * np.power(speed_mph, 0.16))
     )
     return wc
-
-
-def calc_relative_humidity(t_f, td_f):
-    t_c = (t_f - 32) * 5 / 9
-    td_c = (td_f - 32) * 5 / 9
-    es = 6.112 * np.exp((17.67 * t_c) / (t_c + 243.5))
-    e = 6.112 * np.exp((17.67 * td_c) / (td_c + 243.5))
-    rh = (e / es) * 100
-    return np.clip(rh, 0, 100)
 
 
 def calc_heat_index(t_f, rh):

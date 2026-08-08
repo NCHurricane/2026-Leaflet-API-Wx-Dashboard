@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from app_core.weather_math import calc_relative_humidity
+
 from surface import surface_utils
 
 
@@ -59,7 +61,7 @@ def test_process_dataframe_fills_only_missing_relative_humidity_rows():
     )
 
     actual = surface_utils.process_dataframe(raw, "NC")
-    expected_rh = surface_utils.calc_relative_humidity(
+    expected_rh = calc_relative_humidity(
         pd.Series([90.0]), pd.Series([70.0])
     ).iat[0]
 
