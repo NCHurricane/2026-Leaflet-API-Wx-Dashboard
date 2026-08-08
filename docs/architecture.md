@@ -145,8 +145,8 @@ The current coordinator supports one application process. `WEB_CONCURRENCY` and
 `UVICORN_WORKERS` above 1 are rejected, and CLI multi-worker launches are
 unsupported until persistent cross-process leases/provider state exist.
 Existing direct-write OS tasks are not safe to overlap with migrated paths.
-`workers/scheduler.py` is now a compatibility lifecycle hook and registers no
-broad fixed jobs; `WX_INPROC_WORKERS` no longer restores that legacy schedule.
+There is no in-process worker scheduler; `WX_INPROC_WORKERS` no longer restores
+the retired fixed schedule.
 
 The post-refactor deployability target is cross-platform:
 
@@ -390,7 +390,6 @@ cache/
 | `app_core/refresh_coordinator.py` | Bounded request refresh, leases, provider policies, backoff, and status     |
 | `app_core/atomic_io.py`        | Unique-temp atomic text/JSON publication                                       |
 | `config/refresh_schedules.py`  | Issuance boundaries and due-window policy for Phase 3 products                  |
-| `workers/scheduler.py`         | APScheduler setup and lifecycle                                               |
 | `workers/alerts_worker.py`     | NWS alerts fetch → cache                                                      |
 | `workers/spc_worker.py`        | SPC outlook fetch → cache                                                     |
 | `workers/rtma_worker.py`       | RTMA points + pre-render overlay refresh                                      |

@@ -55,12 +55,11 @@ graceful shutdown belong to the coordinator. Phase 1 is explicitly
 single-process; persistent coordination is required before multi-worker Uvicorn
 or optional OS warmers can safely share ownership.
 
-`workers/scheduler.py` is a compatibility lifecycle hook and does not restore a
-broad APScheduler profile. Existing direct-write Windows task definitions are
-not coordinator-compatible. Migrated heavy cold paths return an explicit
-warming response and let the client poll local cache; Surface uses one
-observation key per region and fans one upstream response into all product
-cache artifacts.
+There is no in-process scheduler compatibility layer. Existing direct-write
+Windows task definitions are not coordinator-compatible. Migrated heavy cold
+paths return an explicit warming response and let the client poll local cache;
+Surface uses one observation key per region and fans one upstream response into
+all product cache artifacts.
 
 Supervisor requirements:
 

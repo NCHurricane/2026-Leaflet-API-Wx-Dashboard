@@ -6,7 +6,7 @@ from pathlib import Path
 from app_core import runtime
 from routes import health
 from services import tropical_service
-from workers import optional_warmer, scheduler
+from workers import optional_warmer
 
 
 class _FakeCoordinator:
@@ -34,11 +34,6 @@ def test_application_maintenance_owns_cache_cleanup() -> None:
     assert payload["key"] == ("maintenance", "cache-cleanup")
     assert payload["interval_seconds"] == 6 * 60 * 60
     assert coordinator.calls[1] == ("start", {})
-
-
-def test_scheduler_registers_no_fixed_worker_jobs(capsys) -> None:
-    scheduler.start_scheduler()
-    assert "no fixed worker schedule registered" in capsys.readouterr().out
 
 
 def test_health_reports_application_sources_caches_and_maintenance(monkeypatch) -> None:
