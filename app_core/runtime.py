@@ -7,22 +7,9 @@ from typing import Callable
 
 from satellite_v2 import service as satellite_v2_service
 
-_stderr_cap = StringIO()
-sys.stderr, _real_stderr = _stderr_cap, sys.stderr
-from radar import radar_utils as radar_thredds_utils  # noqa: E402
-
-sys.stderr = _real_stderr
-del _stderr_cap, _real_stderr
-
-USING_NODD = False
-radar_utils = None
 _SCHEDULER_AVAILABLE = False
 start_scheduler: Callable[[], None] | None = None
 stop_scheduler: Callable[[], None] | None = None
-
-
-def is_using_nodd() -> bool:
-    return USING_NODD
 
 
 def _start_application_maintenance(refresh_coordinator) -> None:
@@ -41,31 +28,27 @@ def _start_application_maintenance(refresh_coordinator) -> None:
 
 def initialize_runtime() -> None:
     """Load optional runtime modules at startup with timing."""
-    global USING_NODD, radar_utils
     global _SCHEDULER_AVAILABLE
     global start_scheduler, stop_scheduler
 
     startup_events = []
 
-    # 1. Initialize NODD modules
+    # 1. Validate the live Radar NODD provider import.
     _t0 = _time.time()
     old_stderr = sys.stderr
     try:
         sys.stderr = StringIO()
 
-        from radar import radar_nodd_utils as radar_nodd
+        from radar import radar_nodd_utils as _radar_nodd
 
-        sys.stderr = old_stderr
-
-        radar_utils = radar_nodd
-        USING_NODD = True
+        del _radar_nodd
         startup_events.append(("[OK] NODD modules", _time.time() - _t0))
     except Exception as import_error:
-        sys.stderr = old_stderr
-        radar_utils = radar_thredds_utils
         startup_events.append(
-            (f"[WARN] NODD fallback to THREDDS: {import_error}", _time.time() - _t0)
+            (f"[WARN] NODD modules unavailable: {import_error}", _time.time() - _t0)
         )
+    finally:
+        sys.stderr = old_stderr
 
     # 2. Start the application-owned refresh coordinator. Phase 1 supports one
     # application process until persistent cross-process leases are available.

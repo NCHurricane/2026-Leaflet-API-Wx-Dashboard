@@ -5,7 +5,6 @@ import json
 from fastapi import APIRouter
 
 from app_core.paths import BASE_PATH
-from app_core.runtime import is_using_nodd
 
 router = APIRouter()
 
@@ -15,7 +14,7 @@ def read_status():
     return {
         "status": "Weather System Online",
         "version": "2026.1",
-        "radar_satellite_default_source": "NODD" if is_using_nodd() else "THREDDS",
+        "radar_satellite_default_source": "NODD",
     }
 
 

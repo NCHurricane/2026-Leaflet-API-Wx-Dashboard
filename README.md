@@ -54,9 +54,7 @@ Suggested branch protections on `main`:
 
 - Cartopy-based map rendering
 - Optional pre-rendered basemap caches for surface and radar
-- Data source fallback logic for radar/satellite:
-  - NODD (AWS/GCP) when available
-  - THREDDS fallback for robustness
+- NOAA NODD public-bucket discovery for live Radar Level 2 and Level 3 data
 
 ### Ops Features
 
@@ -66,7 +64,7 @@ Suggested branch protections on `main`:
 ## Tech Stack
 
 - Backend: FastAPI, Uvicorn
-- Data access: requests, boto3 (unsigned public bucket access), Siphon
+- Data access: requests, boto3 (unsigned public bucket access)
 - Geospatial/science: Cartopy, Shapely, PyProj, MetPy, Py-ART, xarray, netCDF4, cfgrib
 - Image/video: Matplotlib, Pillow, imageio[ffmpeg]
 - Frontend: HTML5, CSS, vanilla JavaScript
@@ -76,7 +74,6 @@ Suggested branch protections on `main`:
 - NWS API
 - Iowa Environmental Mesonet (IEM)
 - NOAA Open Data Dissemination (NODD) via AWS/GCP public buckets
-- UCAR THREDDS
 - NOAA MRMS public S3 bucket (`noaa-mrms-pds`)
 
 ## Architecture at a Glance

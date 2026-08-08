@@ -1,6 +1,8 @@
+from pathlib import Path
+
 from routes.alerts import router as alerts_router
 from routes.archive import router as archive_router
-from routes.core import router as core_router
+from routes.core import read_status, router as core_router
 from routes.radar import router as radar_router
 from routes.rtma import router as rtma_router
 from routes.satellite_v2 import router as satellite_router
@@ -47,3 +49,9 @@ def test_batch_c_active_archive_and_core_routes_remain_registered():
     assert "/api/archive/surface" in _route_paths(archive_router)
     assert "/api/status" in _route_paths(core_router)
     assert "/api/user-settings/defaults" in _route_paths(core_router)
+
+
+def test_wave_c_radar_uses_nodd_without_legacy_fallback_files():
+    assert read_status()["radar_satellite_default_source"] == "NODD"
+    assert not Path("radar/radar_utils.py").exists()
+    assert not Path("radar/radar_sites.json").exists()

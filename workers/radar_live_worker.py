@@ -1045,7 +1045,7 @@ def _figure_size_for_extent(
     """Compute figure size from bounds. Returns (width, height) in inches.
 
     bounds: [min_lon, max_lon, min_lat, max_lat]
-    base_height: height in inches (default 7.2 matches radar_utils)
+    base_height: height in inches (default 7.2 matches the live Radar layout)
     projection: cartopy CRS used for aspect ratio in projection coordinates.
     """
     ratio = _compute_extent_ratio(bounds, projection=projection)

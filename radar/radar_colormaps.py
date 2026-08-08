@@ -304,44 +304,6 @@ def create_grs_precip_total_cmap():
     return _from_breakpoints("ROC_PRECIP_TOTAL", 0.0, 20.0, breaks, colors)
 
 
-def create_grs_hca_style():
-    """
-    Hydrometeor Classification style (categorical classes).
-    Returns cmap, norm, ticks, labels (for external use).
-    """
-    labels = [
-        "Biological",
-        "AP/Clutter",
-        "Ice Crystals",
-        "Dry Snow",
-        "Wet Snow",
-        "Light Rain",
-        "Heavy Rain",
-        "Big Drops",
-        "Graupel",
-        "Hail",
-    ]
-
-    colors = [
-        (170 / 255, 0 / 255, 170 / 255),
-        (130 / 255, 130 / 255, 130 / 255),
-        (110 / 255, 180 / 255, 255 / 255),
-        (40 / 255, 120 / 255, 255 / 255),
-        (80 / 255, 210 / 255, 255 / 255),
-        (70 / 255, 210 / 255, 90 / 255),
-        (255 / 255, 220 / 255, 0 / 255),
-        (255 / 255, 150 / 255, 0 / 255),
-        (235 / 255, 70 / 255, 0 / 255),
-        (215 / 255, 0 / 255, 0 / 255),
-    ]
-
-    cmap = mcolors.ListedColormap(colors, name="ROC_HCA")
-    ticks = list(range(1, 11))
-    bounds = [x - 0.5 for x in range(1, 12)]
-    norm = mcolors.BoundaryNorm(bounds, cmap.N)
-    return cmap, norm, ticks, labels
-
-
 def create_grs_hca_cmap():
     """Hydrometeor Classification colormap (discrete category bands).
 
