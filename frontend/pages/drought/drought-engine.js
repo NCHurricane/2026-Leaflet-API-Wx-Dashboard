@@ -115,7 +115,9 @@ export function createDroughtEngine({ api, mapCore, legend, status }) {
     }
 
     async function load(options = {}) {
+        const request = gate.begin();
         const availableDates = await loadDates();
+        if (!gate.isCurrent(request.sequence)) return null;
         const date = options.date || availableDates[0];
         if (!date) throw new Error('No U.S. Drought Monitor dates are available.');
         const categories = Array.isArray(options.categories) ? options.categories : [...ALL_CATEGORIES];
@@ -123,7 +125,6 @@ export function createDroughtEngine({ api, mapCore, legend, status }) {
             ? String(options.stateCode).toUpperCase()
             : null;
         const opacity = Math.max(0.1, Math.min(1, Number(options.opacity) || 0.75));
-        const request = gate.begin();
         status.setMessage(`Loading U.S. Drought Monitor for ${date}…`);
 
         try {
