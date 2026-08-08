@@ -77,30 +77,6 @@ def load_cities(filename="us-cities.json"):
     return cities
 
 
-def filter_cities_by_density(cities, density=5):
-    """Return a subset of *cities* based on a 1–10 density scale.
-
-    Higher density → more cities shown.  Cities are selected by rank so the
-    most important ones always appear first.
-    """
-    if not cities or density < 1:
-        return cities
-    if density >= 10:
-        return cities
-
-    ratio = density / 10.0
-    num_to_show = max(1, int(len(cities) * ratio))
-
-    def _city_priority(x):
-        try:
-            return float(x.get("rank"))
-        except (ValueError, TypeError):
-            return 9999
-
-    sorted_cities = sorted(cities, key=_city_priority)
-    return sorted_cities[:num_to_show]
-
-
 # ═════════════════════════════════════════════════════════════════════════════
 # PLOTTING
 # ═════════════════════════════════════════════════════════════════════════════

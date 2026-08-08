@@ -64,13 +64,6 @@ def cached_call(
     return list(value) if isinstance(value, list) else value
 
 
-def cache_stats():
-    now_ts = time.time()
-    with _LOCK:
-        _prune_expired(now_ts)
-        return {"entries": len(_CACHE)}
-
-
 # ═════════════════════════════════════════════════════════════════════════════
 # SHARED HELPERS — formerly duplicated across radar, lightning, etc.
 # ═════════════════════════════════════════════════════════════════════════════

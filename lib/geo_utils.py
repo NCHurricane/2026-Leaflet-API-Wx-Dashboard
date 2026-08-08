@@ -30,7 +30,6 @@ from config.geo_config import STATES_FULL
 
 _STATE_GEOM_CACHE = None
 _CONUS_GEOM_CACHE = None
-_INTL_BOUNDARY_GEOM_CACHE = None
 _WORLD_LAND_GEOM_CACHE = None
 
 
@@ -146,37 +145,6 @@ def build_conus_geometry():
     return _CONUS_GEOM_CACHE
 
 
-def get_international_boundaries():
-    """Load and cache US international boundary lines from TIGER/Line.
-
-    Returns international boundaries (US-Canada, US-Mexico, maritime) from
-    TIGER/Line 2025 for high-detail border visualization.
-
-    Returns:
-        shapely.geometry.base.BaseGeometry or None
-    """
-    global _INTL_BOUNDARY_GEOM_CACHE
-    if _INTL_BOUNDARY_GEOM_CACHE is not None:
-        return _INTL_BOUNDARY_GEOM_CACHE
-
-    tiger_path = os.path.join(_SHARED_SHAPEFILE_DIR, "tl_2025_us_internationalboundary.shp")
-    if not os.path.exists(tiger_path):
-        return None
-
-    try:
-        _configure_pyshp_logging()
-        reader = shpreader.Reader(tiger_path)
-        geoms = [geom for geom in reader.geometries() if geom is not None]
-        if geoms:
-            _INTL_BOUNDARY_GEOM_CACHE = unary_union(geoms)
-            print(f"Loaded international boundaries from TIGER/Line 2025")
-            return _INTL_BOUNDARY_GEOM_CACHE
-    except Exception as e:
-        print(f"[WARN] Error loading TIGER international boundaries: {e}")
-
-    return None
-
-
 def build_world_land_geometry():
     """Build and cache a global land polygon union from Natural Earth.
 
@@ -229,8 +197,6 @@ class CensusCounties:
     _fips_map = {}
     _records_map = {}
     _feature = None
-    _state_feature_map = {}
-    _state_multi_feature_map = {}
 
     SHAPEFILE_URL = (
         "https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_county_500k.zip"
@@ -238,112 +204,10 @@ class CensusCounties:
     FILENAME = "cb_2025_us_county_500k"
 
     @classmethod
-    def _state_county_shapefile_path(cls, state_abbr):
-        state = str(state_abbr or "").strip().upper()
-        if not state:
-            return ""
-        return os.path.join(
-            _SHARED_SHAPEFILE_DIR,
-            "counties",
-            state,
-            f"counties_{state}.shp",
-        )
-
-    @classmethod
-    def _load_feature_from_shp(cls, shp_path):
-        if not shp_path or not os.path.exists(shp_path):
-            return None
-
-        try:
-            _configure_pyshp_logging()
-            reader = shpreader.Reader(shp_path)
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore", message=".*Possible issue encountered.*"
-                )
-                warnings.filterwarnings(
-                    "ignore", message=".*polygon interior holes.*"
-                )
-                geometries = list(reader.geometries())
-            if not geometries:
-                return None
-            return ShapelyFeature(geometries, ccrs.PlateCarree())
-        except Exception as exc:
-            print(f"[WARN] Error loading county shapefile {shp_path}: {exc}")
-            return None
-
-    @classmethod
     def get_feature(cls):
         """Return a Cartopy ``ShapelyFeature`` of all counties."""
         cls.load()
         return cls._feature
-
-    @classmethod
-    def get_feature_for_state(cls, state_abbr):
-        """Return county feature for a single state, with national fallback."""
-        state = str(state_abbr or "").strip().upper()
-        if not state:
-            return cls.get_feature()
-
-        cached = cls._state_feature_map.get(state)
-        if cached is not None:
-            return cached
-
-        state_shp = cls._state_county_shapefile_path(state)
-        feature = cls._load_feature_from_shp(state_shp)
-        if feature is None:
-            feature = cls.get_feature()
-
-        cls._state_feature_map[state] = feature
-        return feature
-
-    @classmethod
-    def get_feature_for_states(cls, state_abbr_list):
-        """Return merged county feature for multiple states, with fallback."""
-        if not state_abbr_list:
-            return cls.get_feature()
-
-        states = sorted(
-            {
-                str(state or "").strip().upper()
-                for state in state_abbr_list
-                if str(state or "").strip()
-            }
-        )
-        if not states:
-            return cls.get_feature()
-
-        cache_key = tuple(states)
-        cached = cls._state_multi_feature_map.get(cache_key)
-        if cached is not None:
-            return cached
-
-        geoms = []
-        for state in states:
-            shp_path = cls._state_county_shapefile_path(state)
-            if not shp_path or not os.path.exists(shp_path):
-                continue
-            try:
-                reader = shpreader.Reader(shp_path)
-                with warnings.catch_warnings():
-                    warnings.filterwarnings(
-                        "ignore", message=".*Possible issue encountered.*"
-                    )
-                    warnings.filterwarnings(
-                        "ignore", message=".*polygon interior holes.*"
-                    )
-                    geoms.extend(list(reader.geometries()))
-            except Exception as exc:
-                print(
-                    f"[WARN] Error reading state county shapefile {shp_path}: {exc}")
-
-        if geoms:
-            feature = ShapelyFeature(geoms, ccrs.PlateCarree())
-        else:
-            feature = cls.get_feature()
-
-        cls._state_multi_feature_map[cache_key] = feature
-        return feature
 
     @classmethod
     def load(cls):
