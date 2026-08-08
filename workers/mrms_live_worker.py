@@ -92,9 +92,9 @@ def _render_mrms_frame_to_overlay(
 
     Returns True on success, False on failure.
     """
-    from workers.mrms_worker import (
-        _render_mrms_png_standalone,
-        _write_mrms_overlay_cache,
+    from mrms.publication import (
+        render_mrms_png_standalone,
+        write_mrms_overlay_cache,
     )
     from app_core.overlay_cache import (
         flat_overlay_image_path,
@@ -104,8 +104,8 @@ def _render_mrms_frame_to_overlay(
 
     _CONUS_EXTENT = [-130.0, -60.0, 21.0, 52.0]  # [west, east, south, north]
 
-    # Dedup BEFORE rendering: _write_mrms_overlay_cache also skips processed
-    # frames, but only after the expensive GRIB decode + warp has already run.
+    # Dedup before rendering; publication also skips processed frames, but only
+    # after the expensive GRIB decode and warp have already run.
     dt_utc = (
         file_dt if file_dt.tzinfo is not None else file_dt.replace(tzinfo=timezone.utc)
     )
@@ -131,7 +131,7 @@ def _render_mrms_frame_to_overlay(
         os.close(descriptor)
 
         # Render GRIB to PNG
-        _render_mrms_png_standalone(
+        render_mrms_png_standalone(
             grib_path,
             product,
             _CONUS_EXTENT,
@@ -140,7 +140,7 @@ def _render_mrms_frame_to_overlay(
         )
 
         # Write to overlay cache (handles index updates)
-        _write_mrms_overlay_cache(product, temp_png, file_dt, keep_n=None)
+        write_mrms_overlay_cache(product, temp_png, file_dt, keep_n=None)
 
         frame_key = file_dt.strftime("%Y_%m_%d_%H_%M_%S")
         logging.getLogger(__name__).info(f"[mrms_live] {product} frame {frame_key} rendered OK")

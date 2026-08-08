@@ -41,6 +41,7 @@ from config.rtma_config import (  # noqa: E402
     RTMA_WORKER_REGIONS,
     clamp_stream_hours,
 )
+from rtma.overlay_publication import render_overlay_for_source  # noqa: E402
 from workers._freshness import is_cache_fresh, mark_run_complete  # noqa: E402
 
 # Skip if successful run happened recently (75% of schedule cadence).
@@ -89,91 +90,6 @@ def _product_supported_on_stream(product: str, stream: str) -> bool:
     if product == "temperature_change_24h" and stream != "rtma_hourly":
         return False
     return True
-
-
-def _render_overlay_for_source(
-    cache_root: str,
-    source,
-    region: str,
-    stream: str,
-    product: str,
-    keep_n: int = 30,
-    lat_1d=None,
-    lon_1d=None,
-) -> dict | None:
-    """Render a full-extent PNG overlay for *source* and write into flat cache.
-
-    Returns metadata dict on success (for batch index update), None on failure.
-    Does NOT update the index or processed_keys directly — those are batched per-source.
-
-    lat_1d, lon_1d: Optional pre-computed 1D latitude/longitude arrays for Mercator warp
-                    optimization (reused across products for the same source).
-    """
-    from app_core.overlay_cache import (
-        flat_overlay_image_path,
-        flat_overlay_prune_frames,
-        flat_overlay_read_processed_keys,
-        frame_key_from_datetime,
-    )
-    from rtma.rtma_utils import ensure_rtma_grib, _render_rtma_png_standalone
-
-    path_parts = (region.upper(), stream, product)
-    frame_key = frame_key_from_datetime(source.valid_time)
-
-    # Dedup: skip if this source key is already recorded as processed.
-    processed_keys = flat_overlay_read_processed_keys(cache_root, "rtma", path_parts)
-    if source.data_key in processed_keys:
-        img_path = flat_overlay_image_path(cache_root, "rtma", path_parts, frame_key)
-        if os.path.exists(img_path) and os.path.getsize(img_path) > 0:
-            return None  # already fresh, no update needed
-
-    bounds = _REGION_BOUNDS_CACHE.get(region, [-125, -70, 21, 52])
-    crop_extent = [float(b) for b in bounds]
-
-    try:
-        img_path = flat_overlay_image_path(cache_root, "rtma", path_parts, frame_key)
-        grib_path = ensure_rtma_grib(cache_root, source)
-        _out_path, actual_bounds, render_meta = _render_rtma_png_standalone(
-            grib_path,
-            product,
-            crop_extent,
-            img_path,
-            cache_root=cache_root,
-            source=source,
-            region=region,
-            stream=stream,
-            lat_1d=lat_1d,
-            lon_1d=lon_1d,
-        )
-    except Exception as exc:
-        logging.getLogger(__name__).warning(
-            f"[rtma_worker] Overlay render ERROR {region}/{stream}/{product}/{frame_key}: {type(exc).__name__}"
-        )
-        return None
-
-    try:
-        # Prune old frames (lightweight, per-product is fine).
-        flat_overlay_prune_frames(cache_root, "rtma", path_parts, keep_n)
-
-        # Return metadata for batch index/processed_keys update.
-        logging.getLogger(__name__).info(f"[rtma_worker] Overlay OK {region}/{stream}/{product}/{frame_key}")
-        return {
-            "path_parts": path_parts,
-            "frame_key": frame_key,
-            "data_key": source.data_key,
-            "bounds": actual_bounds,
-            "full_name": render_meta.get("full_name", ""),
-            "units": render_meta.get("units", ""),
-            "legend": render_meta.get("legend"),
-            "vmin": render_meta.get("vmin"),
-            "vmax": render_meta.get("vmax"),
-            "timestamp": render_meta.get("timestamp") or source.valid_time.isoformat(),
-        }
-    except Exception as exc:
-        logging.getLogger(__name__).warning(
-            f"[rtma_worker] Overlay prune ERROR {region}/{stream}/{product}/{frame_key}: {type(exc).__name__}"
-        )
-        return None
 
 
 def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> None:
@@ -402,7 +318,7 @@ def _run_rtma_worker_for_streams(streams: list[str], force: bool = False) -> Non
                     # Collect metadata for batch index/processed_keys update (one write per source).
                     overlay_metadata = []
                     for product in missing_overlays:
-                        metadata = _render_overlay_for_source(
+                        metadata = render_overlay_for_source(
                             cache_root,
                             source,
                             region,

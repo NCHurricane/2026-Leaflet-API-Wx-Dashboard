@@ -1,0 +1,1 @@
+"""Tropical product-domain helpers."""

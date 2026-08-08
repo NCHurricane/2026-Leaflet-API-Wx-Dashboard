@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 
 import app_core.overlay_cache as overlay_cache
+import mrms.publication as mrms_publication
 from mrms.mrms_utils import warp_array_to_mercator
 from rtma.rtma_utils import _warp_to_latlon_grid
-import workers.mrms_worker as mrms_worker
 
 
 def test_mercator_warp_has_stable_bounds_and_orientation():
@@ -106,7 +106,7 @@ def test_mrms_overlay_cache_preserves_rendered_bounds(tmp_path, monkeypatch):
     )
 
     captured = []
-    monkeypatch.setattr(mrms_worker, "_CACHE_ROOT", str(tmp_path / "cache"))
+    monkeypatch.setattr(mrms_publication, "CACHE_ROOT", str(tmp_path / "cache"))
     monkeypatch.setattr(
         overlay_cache,
         "flat_overlay_read_processed_keys",
@@ -128,7 +128,7 @@ def test_mrms_overlay_cache_preserves_rendered_bounds(tmp_path, monkeypatch):
         lambda *_args, **_kwargs: None,
     )
 
-    mrms_worker._write_mrms_overlay_cache(
+    mrms_publication.write_mrms_overlay_cache(
         "Refl_BaseQC",
         str(png_path),
         datetime(2026, 8, 7, 12, tzinfo=timezone.utc),
@@ -137,4 +137,3 @@ def test_mrms_overlay_cache_preserves_rendered_bounds(tmp_path, monkeypatch):
 
     assert len(captured) == 1
     assert captured[0]["bounds"] == rendered_bounds
-

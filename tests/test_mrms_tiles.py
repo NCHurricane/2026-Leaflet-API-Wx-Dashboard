@@ -164,11 +164,11 @@ def test_history_render_builds_tile_source_during_existing_decode(
 ):
     render_calls = []
     monkeypatch.setattr(
-        "workers.mrms_worker._render_mrms_png_standalone",
+        "mrms.publication.render_mrms_png_standalone",
         lambda *args, **kwargs: render_calls.append((args, kwargs)),
     )
     monkeypatch.setattr(
-        "workers.mrms_worker._write_mrms_overlay_cache",
+        "mrms.publication.write_mrms_overlay_cache",
         lambda *args, **kwargs: None,
     )
 

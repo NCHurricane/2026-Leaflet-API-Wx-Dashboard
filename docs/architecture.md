@@ -389,6 +389,9 @@ cache/
 | `services/*.py`                | Product cache, render, worker-fallback, and serialization logic               |
 | `app_core/refresh_coordinator.py` | Bounded request refresh, leases, provider policies, backoff, and status     |
 | `app_core/atomic_io.py`        | Unique-temp atomic text/JSON publication                                       |
+| `mrms/publication.py`          | Shared MRMS render and flat-overlay publication contracts                     |
+| `rtma/overlay_publication.py`  | Shared RTMA source-to-overlay publication contract                            |
+| `tropical/product_data.py`     | Shared Tropical GIS and advisory parsing contracts                            |
 | `config/refresh_schedules.py`  | Issuance boundaries and due-window policy for Phase 3 products                  |
 | `workers/alerts_worker.py`     | NWS alerts fetch → cache                                                      |
 | `workers/spc_worker.py`        | SPC outlook fetch → cache                                                     |

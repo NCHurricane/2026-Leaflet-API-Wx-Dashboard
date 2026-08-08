@@ -6,8 +6,8 @@ from pathlib import Path
 import threading
 
 import app_core.overlay_cache as overlay_cache
+import mrms.publication as mrms_publication
 import workers.mrms_live_worker as mrms_live_worker
-import workers.mrms_worker as mrms_worker
 
 
 FRAME_TIME = datetime(2026, 8, 7, 12, tzinfo=timezone.utc)
@@ -49,10 +49,10 @@ def test_mrms_live_render_uses_unique_paths_for_concurrent_same_frame(
         barrier.wait(timeout=2)
         _write_render_artifacts(output_path)
 
-    monkeypatch.setattr(mrms_worker, "_render_mrms_png_standalone", render)
+    monkeypatch.setattr(mrms_publication, "render_mrms_png_standalone", render)
     monkeypatch.setattr(
-        mrms_worker,
-        "_write_mrms_overlay_cache",
+        mrms_publication,
+        "write_mrms_overlay_cache",
         lambda _product, path, _file_dt, **_kwargs: published_paths.append(path),
     )
 
@@ -81,15 +81,15 @@ def test_mrms_live_render_removes_png_and_sidecars_after_success(
     _disable_processed_frame_dedup(monkeypatch)
     published = []
     monkeypatch.setattr(
-        mrms_worker,
-        "_render_mrms_png_standalone",
+        mrms_publication,
+        "render_mrms_png_standalone",
         lambda _grib, _product, _extent, path, **_kwargs: _write_render_artifacts(
             path
         ),
     )
     monkeypatch.setattr(
-        mrms_worker,
-        "_write_mrms_overlay_cache",
+        mrms_publication,
+        "write_mrms_overlay_cache",
         lambda _product, path, _file_dt, **_kwargs: published.append(path),
     )
 
@@ -116,8 +116,8 @@ def test_mrms_live_render_removes_partial_artifacts_after_failure(
         raise RuntimeError("render interrupted")
 
     monkeypatch.setattr(
-        mrms_worker,
-        "_render_mrms_png_standalone",
+        mrms_publication,
+        "render_mrms_png_standalone",
         fail_render,
     )
 

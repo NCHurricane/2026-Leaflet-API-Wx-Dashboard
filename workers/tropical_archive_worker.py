@@ -677,20 +677,24 @@ def enrich_storm_gis(atcf_id: str, force: bool = False) -> bool:
         atomic_write_json(storm_json, payload, ensure_ascii=False)
         return True
 
-    from workers.tropical_worker import (
-        _FIVE_DAY_LAYER_KINDS,
-        _FORECAST_WIND_RADII_LAYER_KINDS,
-        _extract_gis_layers_from_zip,
+    from tropical.product_data import (
+        FIVE_DAY_LAYER_KINDS,
+        FORECAST_WIND_RADII_LAYER_KINDS,
+        extract_gis_layers_from_zip,
     )
 
     gis_dir = STORMS_DIR / sid / "gis"
     layers: dict[str, Any] = {}
     five_day = gis_dir / f"{sid.lower()}_5day_{adv}.zip"
     if _download_zip(f"{_GIS_ARCHIVE_BASE}{sid.lower()}_5day_{adv}.zip", five_day):
-        layers.update(_extract_gis_layers_from_zip(five_day, _FIVE_DAY_LAYER_KINDS, sid, gis_dir))
+        layers.update(extract_gis_layers_from_zip(five_day, FIVE_DAY_LAYER_KINDS, sid, gis_dir))
     fcst = gis_dir / f"{sid.lower()}_fcst_{adv}.zip"
     if _download_zip(f"{_GIS_ARCHIVE_BASE}{sid.lower()}_fcst_{adv}.zip", fcst):
-        layers.update(_extract_gis_layers_from_zip(fcst, _FORECAST_WIND_RADII_LAYER_KINDS, sid, gis_dir))
+        layers.update(
+            extract_gis_layers_from_zip(
+                fcst, FORECAST_WIND_RADII_LAYER_KINDS, sid, gis_dir
+            )
+        )
 
     payload.setdefault("gis_layers", {}).update(layers)
     payload["gis_enriched"] = True
@@ -845,15 +849,15 @@ def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
     intermediate). Intermediates have their own public advisory (``public_a``) and
     GIS, but inherit the full advisory's forecast/discussion text.
     """
-    from workers.tropical_worker import (
-        _FIVE_DAY_LAYER_KINDS,
-        _FORECAST_WIND_RADII_LAYER_KINDS,
-        _extract_gis_layers_from_zip,
-        _parse_advisory,
-        _parse_initial_wind_extent_kml,
-        _parse_peak_surge_kml,
-        _parse_storm_surge_kml,
-        _parse_track,
+    from tropical.product_data import (
+        FIVE_DAY_LAYER_KINDS,
+        FORECAST_WIND_RADII_LAYER_KINDS,
+        extract_gis_layers_from_zip,
+        parse_advisory,
+        parse_initial_wind_extent_kml,
+        parse_peak_surge_kml,
+        parse_storm_surge_kml,
+        parse_track,
     )
 
     sid = atcf_id.upper()
@@ -878,8 +882,8 @@ def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
     }
     texts = {code: _fetch_archive_text(url) for code, url in text_urls.items()}
 
-    advisory = _parse_advisory(texts["TCP"]) if texts["TCP"] else {}
-    track = _parse_track(texts["TCM"]) if texts["TCM"] else []
+    advisory = parse_advisory(texts["TCP"]) if texts["TCP"] else {}
+    track = parse_track(texts["TCM"]) if texts["TCM"] else []
     issued_match = _ISSUED_RE.search(texts["TCP"] or "")
     issued = issued_match.group(0) if issued_match else ""
 
@@ -897,10 +901,16 @@ def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
     layers: dict[str, Any] = {}
     five = gis_dir / f"{bid}_5day_{step}.zip"
     if _download_zip(f"{_GIS_ARCHIVE_BASE}{bid}_5day_{step}.zip", five):
-        layers.update(_extract_gis_layers_from_zip(five, _FIVE_DAY_LAYER_KINDS, sid, gis_dir))
+        layers.update(
+            extract_gis_layers_from_zip(five, FIVE_DAY_LAYER_KINDS, sid, gis_dir)
+        )
     fcst = gis_dir / f"{bid}_fcst_{step}.zip"
     if _download_zip(f"{_GIS_ARCHIVE_BASE}{bid}_fcst_{step}.zip", fcst):
-        layers.update(_extract_gis_layers_from_zip(fcst, _FORECAST_WIND_RADII_LAYER_KINDS, sid, gis_dir))
+        layers.update(
+            extract_gis_layers_from_zip(
+                fcst, FORECAST_WIND_RADII_LAYER_KINDS, sid, gis_dir
+            )
+        )
 
     # Storm Surge Watch/Warning + Peak Storm Surge are separate KML products (only
     # issued for U.S.-coast-threatening advisories), not part of the 5-day zip.
@@ -915,11 +925,11 @@ def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
         peak = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/peakSurge/{sid}_PeakStormSurge_{parent_step}adv.kml")
 
     if ssww:
-        coll = _parse_storm_surge_kml(ssww)
+        coll = parse_storm_surge_kml(ssww)
         if coll and coll.get("features"):
             layers["storm_surge"] = {"cache_path": "", "feature_count": len(coll["features"]), "source_path": "NHC wsurge", "geojson": coll}
     if peak:
-        coll = _parse_peak_surge_kml(peak)
+        coll = parse_peak_surge_kml(peak)
         if coll and coll.get("features"):
             layers["peak_surge"] = {"cache_path": "", "feature_count": len(coll["features"]), "source_path": "NHC peakSurge", "geojson": coll}
 
@@ -929,7 +939,7 @@ def build_advisory_payload(atcf_id: str, step: str) -> dict[str, Any] | None:
         parent_step = step[:-1]
         iwe = _fetch_url_text(f"https://www.nhc.noaa.gov/gis/forecast/{sid}_initialwindextent_{parent_step}adv.kml")
     if iwe:
-        coll = _parse_initial_wind_extent_kml(iwe)
+        coll = parse_initial_wind_extent_kml(iwe)
         if coll and coll.get("features"):
             layers["initial_wind_extent"] = {"cache_path": "", "feature_count": len(coll["features"]), "source_path": "NHC initialwindextent", "geojson": coll}
 

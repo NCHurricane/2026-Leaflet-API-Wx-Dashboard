@@ -76,6 +76,11 @@ The supported runtime is one application process. Do not add multi-worker
 ownership or persistent leases unless deployment requirements change and a new
 coordination design is approved.
 
+Workers, services, and archive paths share product-domain helpers through
+named contracts in `mrms/publication.py`, `rtma/overlay_publication.py`, and
+`tropical/product_data.py`; product code must not import private helpers from a
+worker module.
+
 ## Storm Track Projection Pattern
 
 Storm-track base line is point-driven (map clicks append points), then a drag

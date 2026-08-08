@@ -531,9 +531,9 @@ def get_rtma_data(
 
     if product != "wind_direction":
         try:
-            from workers.rtma_worker import _render_overlay_for_source
+            from rtma.overlay_publication import render_overlay_for_source
 
-            _render_overlay_for_source(
+            render_overlay_for_source(
                 CACHE_ROOT,
                 source,
                 region_key,

@@ -297,12 +297,12 @@ def get_mrms_data(
     )
 
     try:
-        from workers.mrms_worker import _write_mrms_overlay_cache
+        from mrms.publication import write_mrms_overlay_cache
 
         frame_dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         if frame_dt.tzinfo is None:
             frame_dt = frame_dt.replace(tzinfo=timezone.utc)
-        _write_mrms_overlay_cache(product, png_path, frame_dt)
+        write_mrms_overlay_cache(product, png_path, frame_dt)
     except Exception:
         pass
 
