@@ -11,6 +11,19 @@ MAX_ARCHIVE_SPAN_DAYS = {
 }
 
 
+def parse_optional_utc_datetime(value: object) -> datetime | None:
+    """Parse an optional ISO datetime and normalize it to aware UTC."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def json_safe(value):
     """Convert nested API payload values into FastAPI JSON-compatible types."""
 

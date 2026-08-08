@@ -9,6 +9,7 @@ import time
 
 from fastapi import HTTPException
 
+from app_core.http import parse_optional_utc_datetime
 from app_core.paths import CACHE_ROOT
 from app_core.refresh_coordinator import Submission, get_refresh_coordinator
 from config.refresh_schedules import SPC_OUTLOOK_SCHEDULES
@@ -36,16 +37,6 @@ def _canonical_watch_types(value: str) -> str:
     if tokens & {"svr", "severe"}:
         canonical.append("svr")
     return ",".join(canonical) or "none"
-
-
-def _parse_iso(value: object) -> datetime | None:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
 
 
 def _refresh_spc_product(cache_name: str) -> dict:
@@ -169,8 +160,8 @@ def get_spc_outlook(day: int = 1, hazard: str = "cat") -> dict:
     schedule = SPC_OUTLOOK_SCHEDULES.get(cache_name)
     if refresh_submission is None and schedule and schedule.refresh_due(
         now=datetime.now(timezone.utc),
-        source_issued_at=_parse_iso(data.get("_issued")),
-        last_checked_at=_parse_iso(data.get("_updated")),
+        source_issued_at=parse_optional_utc_datetime(data.get("_issued")),
+        last_checked_at=parse_optional_utc_datetime(data.get("_updated")),
     ):
         refresh_submission = _start_spc_product_refresh(cache_name)
     data["cache_state"] = (

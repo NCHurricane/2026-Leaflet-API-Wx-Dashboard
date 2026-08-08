@@ -576,25 +576,6 @@ def fetch_metar_data(state_code):
 
         df_processed = process_dataframe(df_raw, state_upper)
 
-        # Enrich station names for each network
-        if not df_processed.empty and "network" in df_processed.columns:
-            for network_type in SURFACE_NETWORK_TYPES:
-                network_id = f"{state_upper}_{network_type}"
-                station_names = _get_station_names(network_id)
-                if station_names:
-                    # Fill missing names for this network
-                    mask = (df_processed["network"] == network_type) & (
-                        (df_processed["name"].isna()) | (
-                            df_processed["name"] == "")
-                    )
-                    df_processed.loc[mask, "name"] = df_processed.loc[
-                        mask, "station_id"
-                    ].map(
-                        lambda x: station_names.get(
-                            x.strip() if isinstance(x, str) else x, ""
-                        )
-                    )
-
         if not df_processed.empty:
             _write_csv_atomic(df_processed, cache_file)
         return df_processed

@@ -12,6 +12,7 @@ from email.utils import parsedate_to_datetime
 from typing import Optional
 from urllib.parse import urljoin
 
+from app_core.http import parse_optional_utc_datetime
 from app_core.upstream_ledger import requests
 
 from lib.geo_utils import CensusCounties
@@ -801,14 +802,8 @@ def fetch_active_watch_items(ttl_seconds: int = 90, with_counties: bool = False)
         else:
             watch_type = f"Watch ({type_code})" if type_code else "Watch"
 
-        def _parse_iso(s: str):
-            try:
-                return datetime.fromisoformat(s.replace("Z", "+00:00")) if s else None
-            except Exception:
-                return None
-
-        issue_utc = _parse_iso(str(props.get("utc_issued") or ""))
-        expire_utc = _parse_iso(str(props.get("utc_expired") or ""))
+        issue_utc = parse_optional_utc_datetime(props.get("utc_issued"))
+        expire_utc = parse_optional_utc_datetime(props.get("utc_expired"))
 
         if expire_utc and expire_utc < now:
             continue
@@ -908,14 +903,8 @@ def fetch_active_md_items(ttl_seconds: int = 90):
             continue
         md_id = f"{md_num:04d}"
 
-        def _parse_iso(s: str):
-            try:
-                return datetime.fromisoformat(s.replace("Z", "+00:00")) if s else None
-            except Exception:
-                return None
-
-        issue_utc = _parse_iso(str(props.get("issue") or ""))
-        expire_utc = _parse_iso(str(props.get("expire") or ""))
+        issue_utc = parse_optional_utc_datetime(props.get("issue"))
+        expire_utc = parse_optional_utc_datetime(props.get("expire"))
 
         if expire_utc and expire_utc < now:
             continue

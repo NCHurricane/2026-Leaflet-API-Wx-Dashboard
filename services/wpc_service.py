@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
+from app_core.http import parse_optional_utc_datetime
 from app_core.paths import CACHE_ROOT
 from app_core.refresh_coordinator import Submission, get_refresh_coordinator
 from config.refresh_schedules import wpc_schedule_for
@@ -47,16 +48,6 @@ def _product_status(product: dict) -> dict:
     return _read_json_file(os.path.join(_WPC_STATUS, f"{product['id']}.json"))
 
 
-def _parse_iso(value: object) -> datetime | None:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
-
-
 def _cache_state(
     cache_file: str,
     product: dict,
@@ -70,13 +61,13 @@ def _cache_state(
         return age_seconds, age_seconds >= 90.0
     payload = payload or _read_json_file(cache_file)
     last_checked_at = (
-        _parse_iso(status.get("checked_at"))
+        parse_optional_utc_datetime(status.get("checked_at"))
         if status.get("status") != "error"
         else None
     )
     stale = wpc_schedule_for(product).refresh_due(
         now=datetime.now(timezone.utc),
-        source_issued_at=_parse_iso(payload.get("updated")),
+        source_issued_at=parse_optional_utc_datetime(payload.get("updated")),
         last_checked_at=last_checked_at,
     )
     return age_seconds, stale
