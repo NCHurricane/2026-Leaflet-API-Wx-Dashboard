@@ -101,9 +101,22 @@ def test_retained_montserrat_fonts_are_complete_and_readable():
 
     core_css = (ROOT / "frontend/core/core.css").read_text(encoding="utf-8")
     landing_css = (ROOT / "css/shared.css").read_text(encoding="utf-8")
-    for css in (core_css, landing_css):
-        assert "Montserrat-VariableFont_wght.ttf" in css
-        assert "Montserrat-Italic-VariableFont_wght.ttf" in css
+    assert "Montserrat-VariableFont_wght.ttf" in core_css
+    assert "Montserrat-Italic-VariableFont_wght.ttf" in core_css
+    assert "Montserrat-VariableFont_wght.ttf" in landing_css
+    assert "Montserrat-Italic-VariableFont_wght.ttf" not in landing_css
+
+
+def test_landing_and_leaflet_css_have_no_disconnected_legacy_assets():
+    landing_css = (ROOT / "css/shared.css").read_text(encoding="utf-8")
+    leaflet_css = (ROOT / "frontend/lib/leaflet/leaflet.css").read_text(
+        encoding="utf-8"
+    )
+
+    assert ".banner-logo" not in landing_css
+    assert "images/layers.png" not in leaflet_css
+    assert "images/layers-2x.png" not in leaflet_css
+    assert "images/marker-icon.png" not in leaflet_css
 
 
 def test_all_mapped_radar_palettes_parse_with_valid_colors():
@@ -180,4 +193,3 @@ def test_canonical_pages_and_reachable_javascript_imports_exist():
                 f"{script.relative_to(ROOT)} -> {reference}"
             )
             script_queue.append(imported)
-
