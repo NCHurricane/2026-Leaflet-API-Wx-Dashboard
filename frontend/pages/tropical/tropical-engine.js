@@ -323,7 +323,7 @@
         }
 
         async function loadArchiveAdvisory(atcfId, step, options = {}) {
-            if (!atcfId || !step) return;
+            if (!atcfId || !step) return false;
 
             const requestSeq = context.nextRequestSeq();
             context.setArchiveStatus(`Loading advisory ${step}…`);
@@ -333,7 +333,7 @@
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
                 const advisory = await resp.json();
-                if (!context.canApplyResponse(requestSeq)) return;
+                if (!context.canApplyResponse(requestSeq)) return false;
 
                 const base = context.getArchiveStormBase() || {};
                 const merged = {
@@ -347,10 +347,12 @@
                 };
                 context.renderArchiveAdvisory(merged, advisory, options);
                 context.updateArchiveAdvisoryMetadata(advisory, step, atcfId);
+                return true;
             } catch (err) {
-                if (!context.isCurrentRequest(requestSeq)) return;
+                if (!context.isCurrentRequest(requestSeq)) return false;
                 console.error('[tropical-archive] Advisory load error:', err);
                 context.setArchiveStatus(`Advisory error: ${err.message}`);
+                return false;
             }
         }
 
@@ -372,10 +374,11 @@
                 context.prepareArchiveStorm(data, atcfId);
                 if (data.hasAdvisories && Array.isArray(data.advisories) && data.advisories.length) {
                     context.prepareArchiveAdvisoryMode(data.advisories);
-                    await loadArchiveAdvisory(atcfId, data.advisories[0], {
+                    const applied = await loadArchiveAdvisory(atcfId, data.advisories[0], {
                         fit: true,
                         initial: true,
                     });
+                    if (!applied) return;
                     context.startArchiveWarm('window', data.advisories[0]);
                     return;
                 }
