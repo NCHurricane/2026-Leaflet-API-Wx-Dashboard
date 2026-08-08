@@ -229,62 +229,6 @@ def _build_rgba_from_values(
     return rgba
 
 
-# Maximum allowed deviation from the local neighbor median, per product.
-# A station whose value differs from its K-nearest-neighbor median by more
-# than this threshold is treated as an outlier and dropped before IDW.
-_OUTLIER_THRESHOLDS: dict[str, float] = {
-    "temperature": 50.0,  # °F
-    "feels_like": 18.0,  # °F  (wider — wind/humidity amplify apparent spread)
-    "dew_point": 15.0,  # °F
-    "relative_humidity": 25.0,  # %
-    "wind_speed": 20.0,  # kt
-    "wind_gust": 25.0,  # kt
-    # inHg  (synoptic gradients are large; only catch sensor faults)
-    "altimeter": 1.0,
-    "mslp": 8.0,  # hPa
-    "visibility": 5.0,  # mi
-}
-
-_OUTLIER_NEIGHBORS = 8  # neighbors used for local median comparison
-
-
-def _filter_spatial_outliers(
-    lons: np.ndarray,
-    lats: np.ndarray,
-    vals: np.ndarray,
-    product: str,
-    cos_lat: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Drop stations whose value deviates from the local neighbor median
-    by more than the product-specific threshold.
-    Returns filtered (lons, lats, vals).
-    """
-    threshold = _OUTLIER_THRESHOLDS.get(product)
-    if threshold is None or len(vals) < _OUTLIER_NEIGHBORS + 1:
-        return lons, lats, vals
-
-    sx = lons * cos_lat * 111.0
-    sy = lats * 111.0
-    tree = cKDTree(np.column_stack([sx, sy]))
-
-    k = min(_OUTLIER_NEIGHBORS, len(vals) - 1)
-    _, idxs = tree.query(np.column_stack(
-        [sx, sy]), k=k + 1)  # +1 includes self
-    # idxs[:, 0] is the point itself; skip it
-    neighbor_idxs = idxs[:, 1:]
-    neighbor_vals = vals[neighbor_idxs]  # (N, k)
-    local_medians = np.median(neighbor_vals, axis=1)
-
-    keep = np.abs(vals - local_medians) <= threshold
-    n_dropped = int((~keep).sum())
-    if n_dropped:
-        print(
-            f"[surface_worker] outlier filter {product}: "
-            f"dropped {n_dropped}/{len(vals)} stations"
-        )
-    return lons[keep], lats[keep], vals[keep]
-
-
 def _lat_to_merc_y(lat_deg: np.ndarray) -> np.ndarray:
     lat_rad = np.radians(np.clip(lat_deg, -85.0, 85.0))
     return np.log(np.tan(np.pi / 4.0 + lat_rad / 2.0))

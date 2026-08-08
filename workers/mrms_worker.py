@@ -64,10 +64,6 @@ def set_active_product(product: str) -> None:
     _active_product = product
 
 
-def get_active_product() -> str:
-    return _active_product
-
-
 def _prune_old_frames(product_cache_dir: str, max_age_hours: int = 12) -> None:
     """Delete timestamped GRIB files older than max_age_hours."""
     if not os.path.isdir(product_cache_dir):

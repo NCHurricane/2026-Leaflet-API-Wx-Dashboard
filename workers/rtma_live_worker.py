@@ -211,13 +211,6 @@ def run_rtma_live_product(
     return cached
 
 
-def run_rtma_live_worker(force: bool = False) -> None:
-    """Background worker (optional) to keep live frames fresh."""
-    # For now, this is a no-op. Frames are rendered on-demand by API.
-    # In the future, could proactively warm popular products.
-    pass
-
-
 if __name__ == "__main__":
     import argparse
 

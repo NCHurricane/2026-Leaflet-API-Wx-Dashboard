@@ -592,14 +592,6 @@ def _download_zip(url: str, dest: Path) -> bool:
     return True
 
 
-def _list_archive_advisories(atcf_id: str, year: int) -> list[str]:
-    """Full (non-intermediate) 5-day advisory numbers present in the GIS archive."""
-    url = _ARCHIVE_RESULTS_URL.format(id=atcf_id.lower(), year=year)
-    html = _request_text(url)
-    advs = re.findall(rf"{re.escape(atcf_id.lower())}_5day_(\d+)\.zip", html)
-    return sorted(set(advs))
-
-
 def _peak_advisory_number(payload: dict[str, Any], advs: list[str]) -> str | None:
     """Pick the archived advisory issued nearest the storm's peak intensity.
 

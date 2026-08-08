@@ -53,7 +53,6 @@ _STREAM_WORKER_NAME: dict[str, str] = {
 }
 
 _PRELOAD_REGIONS = list(RTMA_WORKER_REGIONS)
-_PRELOAD_STREAMS = list(RTMA_STREAMS)
 _PRELOAD_PRODUCTS = list(RTMA_UI_PRODUCTS)
 
 # Preload region bounds to avoid repeated lookups during overlay rendering.
