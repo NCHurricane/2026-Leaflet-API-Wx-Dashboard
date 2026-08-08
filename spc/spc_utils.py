@@ -1,10 +1,14 @@
 import csv
 import html
 import io
+import json
+import random
 import re
+import time
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from typing import Optional
 from urllib.parse import urljoin
 
@@ -17,30 +21,62 @@ SPC_BASE = "https://www.spc.noaa.gov"
 IEM_BASE = "https://mesonet.agron.iastate.edu"
 _IEM_TEXT_TIMEOUT_SECONDS = 4
 _IEM_TEXT_RETRIES = 1
+_RETRY_BASE_DELAY_SECONDS = 0.5
+_RETRY_JITTER_SECONDS = 0.25
+_RETRY_MAX_DELAY_SECONDS = 30.0
 
 _DAY12_HAZARDS = {"cat", "torn", "wind",
                   "hail", "cigtorn", "cigwind", "cighail"}
 _DAY3_HAZARDS = {"cat", "prob", "sig"}
 
+def _retry_delay_seconds(response, attempt: int) -> float:
+    retry_after = None
+    if response is not None:
+        retry_after = (getattr(response, "headers", None) or {}).get("Retry-After")
+    if retry_after:
+        try:
+            delay = float(retry_after)
+        except (TypeError, ValueError):
+            try:
+                retry_at = parsedate_to_datetime(str(retry_after))
+                if retry_at.tzinfo is None:
+                    retry_at = retry_at.replace(tzinfo=timezone.utc)
+                delay = (retry_at - datetime.now(timezone.utc)).total_seconds()
+            except (TypeError, ValueError, OverflowError):
+                delay = -1.0
+        if delay >= 0:
+            return min(delay, _RETRY_MAX_DELAY_SECONDS)
+
+    backoff = _RETRY_BASE_DELAY_SECONDS * (2 ** max(0, attempt))
+    jitter = random.uniform(0.0, _RETRY_JITTER_SECONDS)
+    return min(backoff + jitter, _RETRY_MAX_DELAY_SECONDS)
+
+
 def _request_text(url: str, timeout: int = 20, retries: int = 3) -> str:
     last_error = None
-    for _ in range(max(1, retries)):
+    attempts = max(1, retries)
+    for attempt in range(attempts):
+        response = None
         try:
             response = requests.get(url, timeout=timeout)
             if response.status_code in {429, 500, 502, 503, 504}:
                 last_error = RuntimeError(
                     f"HTTP {response.status_code} for {url}")
+                if attempt + 1 < attempts:
+                    time.sleep(_retry_delay_seconds(response, attempt))
                 continue
             response.raise_for_status()
             return response.text
         except Exception as exc:
             last_error = exc
+            if attempt + 1 < attempts:
+                time.sleep(_retry_delay_seconds(response, attempt))
     raise RuntimeError(f"Unable to fetch {url}: {last_error}")
 
 
 def _request_json(url: str, timeout: int = 20, retries: int = 3):
     text = _request_text(url, timeout=timeout, retries=retries)
-    return requests.models.complexjson.loads(text)
+    return json.loads(text)
 
 
 def _cached_text(namespace: str, key: str, url: str, ttl_seconds: int = 90) -> str:

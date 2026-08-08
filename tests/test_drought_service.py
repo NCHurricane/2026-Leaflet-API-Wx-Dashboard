@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import date, timedelta
+import inspect
 import json
 
 from fastapi import HTTPException
 import pytest
 
 import services.drought_service as drought_service
+from routes import drought as drought_routes
 
 
 class _Response:
@@ -59,8 +60,8 @@ def test_latest_drought_geojson_uses_release_date_and_caches_valid_payload(
     )
     monkeypatch.setattr(drought_service, "urlopen", fake_urlopen)
 
-    first = asyncio.run(drought_service.get_drought_geojson("latest"))
-    second = asyncio.run(drought_service.get_drought_geojson("2026-08-04"))
+    first = drought_service.get_drought_geojson("latest")
+    second = drought_service.get_drought_geojson("2026-08-04")
 
     assert first.body == raw
     assert second.body == raw
@@ -95,7 +96,7 @@ def test_drought_geojson_rejects_malformed_provider_payload(
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(drought_service.get_drought_geojson("2026-08-04"))
+        drought_service.get_drought_geojson("2026-08-04")
 
     assert exc_info.value.status_code == 503
     assert "invalid" in str(exc_info.value.detail).lower()
@@ -122,7 +123,7 @@ def test_drought_geojson_replaces_invalid_cached_payload(
     monkeypatch.setattr(drought_service, "CACHE_ROOT", str(tmp_path))
     monkeypatch.setattr(drought_service, "urlopen", fake_urlopen)
 
-    response = asyncio.run(drought_service.get_drought_geojson("2026-08-04"))
+    response = drought_service.get_drought_geojson("2026-08-04")
 
     assert response.body == valid
     assert calls == [True]
@@ -160,12 +161,8 @@ def test_drought_state_stats_normalize_provider_rows_and_cache_result(
     monkeypatch.setattr(drought_service, "CACHE_ROOT", str(tmp_path))
     monkeypatch.setattr(drought_service, "urlopen", fake_urlopen)
 
-    first = asyncio.run(
-        drought_service.get_drought_state_stats("2026-08-04", " nc ")
-    )
-    second = asyncio.run(
-        drought_service.get_drought_state_stats("2026-08-04", "NC")
-    )
+    first = drought_service.get_drought_state_stats("2026-08-04", " nc ")
+    second = drought_service.get_drought_state_stats("2026-08-04", "NC")
 
     assert first == second
     assert first == {
@@ -213,9 +210,7 @@ def test_drought_state_stats_accept_legitimate_empty_provider_rows(
         lambda *_args, **_kwargs: next(responses),
     )
 
-    payload = asyncio.run(
-        drought_service.get_drought_state_stats("2026-08-04", "NC")
-    )
+    payload = drought_service.get_drought_state_stats("2026-08-04", "NC")
 
     assert payload["cumulative"] == {
         "D0-D4": 0.0,
@@ -265,9 +260,7 @@ def test_drought_state_stats_reject_malformed_provider_payloads(
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(
-            drought_service.get_drought_state_stats("2026-08-04", "NC")
-        )
+        drought_service.get_drought_state_stats("2026-08-04", "NC")
 
     assert exc_info.value.status_code == 503
     assert "invalid" in str(exc_info.value.detail).lower()
@@ -301,9 +294,7 @@ def test_drought_state_stats_replaces_invalid_cached_payload(
     monkeypatch.setattr(drought_service, "CACHE_ROOT", str(tmp_path))
     monkeypatch.setattr(drought_service, "urlopen", fake_urlopen)
 
-    payload = asyncio.run(
-        drought_service.get_drought_state_stats("2026-08-04", "NC")
-    )
+    payload = drought_service.get_drought_state_stats("2026-08-04", "NC")
 
     assert payload["state"] == "NC"
     assert calls == [True, True]
@@ -324,8 +315,13 @@ def test_drought_state_stats_validate_request_values(
     status_code,
 ):
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(
-            drought_service.get_drought_state_stats(date_value, state)
-        )
+        drought_service.get_drought_state_stats(date_value, state)
 
     assert exc_info.value.status_code == status_code
+
+
+def test_drought_network_handlers_are_synchronous():
+    assert not inspect.iscoroutinefunction(drought_service.get_drought_geojson)
+    assert not inspect.iscoroutinefunction(drought_service.get_drought_state_stats)
+    assert not inspect.iscoroutinefunction(drought_routes.get_drought_geojson)
+    assert not inspect.iscoroutinefunction(drought_routes.get_drought_state_stats)

@@ -140,7 +140,7 @@ def get_drought_dates() -> dict:
     return {"dates": dates, "latest": dates[0]}
 
 
-async def get_drought_geojson(date: str = "latest") -> Response:
+def get_drought_geojson(date: str = "latest") -> Response:
     """Proxy USDM GeoJSON for the given valid date."""
     if date == "latest":
         date = _latest_usdm_date().isoformat()
@@ -186,7 +186,7 @@ async def get_drought_geojson(date: str = "latest") -> Response:
     return Response(content=raw, media_type="application/json")
 
 
-async def get_drought_state_stats(date: str = "latest", state: str = "NC") -> dict:
+def get_drought_state_stats(date: str = "latest", state: str = "NC") -> dict:
     """Return cached USDM state stats for a specific valid date."""
     state_code = str(state or "").strip().upper()
     if not re.fullmatch(r"[A-Z]{2}", state_code):

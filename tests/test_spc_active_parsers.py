@@ -53,6 +53,54 @@ def test_outlook_and_fire_fetchers_preserve_geojson_and_product_urls(monkeypatch
     ]
 
 
+def test_request_text_honors_retry_after_before_retrying(monkeypatch):
+    responses = iter(
+        [
+            SimpleNamespace(
+                status_code=429,
+                headers={"Retry-After": "2"},
+                text="rate limited",
+                raise_for_status=lambda: None,
+            ),
+            SimpleNamespace(
+                status_code=200,
+                headers={},
+                text="ok",
+                raise_for_status=lambda: None,
+            ),
+        ]
+    )
+    sleeps = []
+    monkeypatch.setattr(spc_utils.requests, "get", lambda *_args, **_kwargs: next(responses))
+    monkeypatch.setattr(spc_utils.time, "sleep", sleeps.append)
+
+    assert spc_utils._request_text("https://example.test", retries=2) == "ok"
+    assert sleeps == [2.0]
+
+
+def test_request_text_uses_bounded_backoff_and_jitter(monkeypatch):
+    response = SimpleNamespace(
+        status_code=503,
+        headers={},
+        text="unavailable",
+        raise_for_status=lambda: None,
+    )
+    sleeps = []
+    monkeypatch.setattr(spc_utils.requests, "get", lambda *_args, **_kwargs: response)
+    monkeypatch.setattr(spc_utils.random, "uniform", lambda *_args: 0.125)
+    monkeypatch.setattr(spc_utils.time, "sleep", sleeps.append)
+
+    with pytest.raises(RuntimeError, match="HTTP 503"):
+        spc_utils._request_text("https://example.test", retries=3)
+
+    assert sleeps == [0.625, 1.125]
+
+
+def test_request_json_uses_stdlib_json_decoder(monkeypatch):
+    monkeypatch.setattr(spc_utils, "_request_text", lambda *_args, **_kwargs: '{"ok": true}')
+    assert spc_utils._request_json("https://example.test") == {"ok": True}
+
+
 def test_outlook_and_fire_bulletin_and_impacts_fixtures():
     outlook_html = """
         <html><pre>Day 1 Convective Outlook\nIssued 1200 UTC\n...SUMMARY...\nSevere storms.</pre></html>

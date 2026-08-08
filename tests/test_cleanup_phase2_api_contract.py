@@ -99,6 +99,7 @@ def test_wave_c_surface_keeps_data_paths_without_legacy_exporter():
         "get_weather_symbol_index",
         "_add_geometry_patch",
         "_is_gradient_parameter",
+        "fetch_nws_current_observations",
     )
     for name in removed_contracts:
         assert not hasattr(surface_utils, name)

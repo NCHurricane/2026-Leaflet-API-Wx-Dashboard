@@ -33,10 +33,10 @@ def get_drought_dates():
 
 
 @router.get("/api/data/drought")
-async def get_drought_geojson(date: str = "latest"):
-    return await get_drought_geojson_payload(date=date)
+def get_drought_geojson(date: str = "latest"):
+    return get_drought_geojson_payload(date=date)
 
 
 @router.get("/api/data/drought/state-stats")
-async def get_drought_state_stats(date: str = "latest", state: str = "NC"):
-    return await get_drought_state_stats_payload(date=date, state=state)
+def get_drought_state_stats(date: str = "latest", state: str = "NC"):
+    return get_drought_state_stats_payload(date=date, state=state)

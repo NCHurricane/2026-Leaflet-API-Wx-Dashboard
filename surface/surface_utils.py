@@ -1,4 +1,4 @@
-from config.geo_config import STATES_FULL, STATE_BOUNDS
+from config.geo_config import STATES_FULL
 from metpy.units import units
 from metpy.calc import wind_components
 from datetime import datetime, timezone, timedelta
@@ -459,95 +459,10 @@ def process_dataframe(df, state_code):
     return df
 
 
-def fetch_nws_current_observations(state_code):
-    """
-    Fetch current surface observations from NWS API (api.weather.gov).
-    Returns DataFrame in the same format as IEM METAR data for compatibility.
-    Falls back gracefully if NWS is unavailable or sparse.
-    """
-    if state_code.upper() not in STATES_FULL:
-        return pd.DataFrame()
-
-    state_bounds = STATE_BOUNDS.get(state_code.upper())
-    if not state_bounds:
-        return pd.DataFrame()
-
-    # STATE_BOUNDS format: [west, east, south, north]
-    west, east, south, north = state_bounds
-    center_lat = (north + south) / 2.0
-    center_lon = (east + west) / 2.0
-
-    try:
-        # NWS gridpoint endpoint
-        gridpoint_url = (
-            f"https://api.weather.gov/points/{center_lat:.2f},{center_lon:.2f}"
-        )
-        resp = requests.get(gridpoint_url, timeout=10)
-        resp.raise_for_status()
-        gridpoint_data = resp.json()
-
-        # Extract grid point ID for observations
-        if "properties" not in gridpoint_data:
-            return pd.DataFrame()
-
-        grid_id = gridpoint_data["properties"].get("gridId")
-        grid_x = gridpoint_data["properties"].get("gridX")
-        grid_y = gridpoint_data["properties"].get("gridY")
-
-        if not (grid_id and grid_x is not None and grid_y is not None):
-            return pd.DataFrame()
-
-        # Fetch observations from that grid point
-        obs_url = f"https://api.weather.gov/gridpoints/{grid_id}/{grid_x},{grid_y}/observations/latest"
-        obs_resp = requests.get(obs_url, timeout=10)
-        obs_resp.raise_for_status()
-        obs_data = obs_resp.json()
-
-        if "features" not in obs_data or not obs_data["features"]:
-            return pd.DataFrame()
-
-        # Convert NWS format to METAR-like format for compatibility
-        records = []
-        for feature in obs_data["features"]:
-            props = feature.get("properties", {})
-            if not props:
-                continue
-
-            # Extract key fields and standardize names
-            record = {
-                "station": props.get("station", "").split("/")[-1],
-                "name": props.get("name", ""),  # NWS may include station name
-                "tmpf": props.get("temperature"),
-                "dwpf": props.get("dewpoint"),
-                "relh": props.get("relativeHumidity"),
-                "drct": props.get("windDirection"),
-                "sknt": props.get("windSpeed"),
-                "vsby": props.get("visibility"),
-                "alti": props.get("seaLevelPressure"),
-                "mslp": props.get("seaLevelPressure"),
-                "gust": props.get("windGust"),
-                "valid": props.get("timestamp"),
-            }
-            if pd.notna(record["tmpf"]) and pd.notna(record["dwpf"]):
-                record["feelsx"] = record["tmpf"]
-            records.append(record)
-
-        if not records:
-            return pd.DataFrame()
-
-        df = pd.DataFrame(records)
-        return process_dataframe(df, state_code)
-
-    except Exception as e:
-        print(f"[WARN] NWS current fetch failed for {state_code.upper()}: {e}")
-        return pd.DataFrame()
-
-
-def fetch_metar_data(state_code, use_nws_first=False):
+def fetch_metar_data(state_code):
     """
     Fetch current METAR observations for a state.
-    Uses IEM by default. When use_nws_first=True, tries NWS first for
-    current-mode flows, then falls back to IEM.
+    Uses IEM for individual states and Aviation Weather for CONUS/WORLD.
     """
     state_upper = str(state_code or "").upper().strip() or "NC"
 
@@ -574,16 +489,7 @@ def fetch_metar_data(state_code, use_nws_first=False):
             print(f"API Error WORLD: {e}")
             return pd.DataFrame()
 
-    # Try NWS first for current data
-    if use_nws_first:
-        try:
-            df_nws = fetch_nws_current_observations(state_upper)
-            if not df_nws.empty and len(df_nws) > 5:
-                return df_nws
-        except Exception:
-            pass
-
-    # Fall back to IEM
+    # Load individual-state observations from IEM.
     cache_dir, cache_file = get_cache_path(state_upper)
     base_path = os.path.dirname(os.path.abspath(__file__))
     legacy_cache_file = os.path.join(
@@ -1143,21 +1049,7 @@ def fetch_metar_data_archive_frames(state_code, frame_times_utc, source="iem"):
 
 def fetch_metar_data_at_time(state_code, valid_time_utc, source="iem"):
     """Fetch station observations nearest a target UTC time."""
-    source_key = str(source or "iem").strip().lower()
     target_dt = _normalize_utc(valid_time_utc)
-
-    # NWS and aviationweather are near-real-time sources; use NWS opportunistically
-    # for recent targets, then fall back to IEM.
-    if source_key in {"nws", "aviationweather", "auto"}:
-        age_seconds = abs(
-            (datetime.now(timezone.utc) - target_dt).total_seconds())
-        if age_seconds <= 2 * 3600:
-            try:
-                df_nws = fetch_nws_current_observations(state_code)
-                if df_nws is not None and not df_nws.empty and len(df_nws) > 5:
-                    return df_nws
-            except Exception:
-                pass
 
     state = str(state_code or "").upper().strip() or "NC"
 

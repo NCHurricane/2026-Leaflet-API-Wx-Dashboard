@@ -237,8 +237,8 @@ def test_dated_drought_cache_is_immutable(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(drought_service, "CACHE_ROOT", str(tmp_path))
     monkeypatch.setattr(drought_service, "urlopen", _urlopen)
 
-    first = asyncio.run(drought_service.get_drought_geojson("2026-07-14"))
-    second = asyncio.run(drought_service.get_drought_geojson("2026-07-14"))
+    first = drought_service.get_drought_geojson("2026-07-14")
+    second = drought_service.get_drought_geojson("2026-07-14")
 
     assert first.body == second.body
     assert len(calls) == 1
