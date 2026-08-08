@@ -96,7 +96,7 @@ def _lat_to_tile_y(lat: float, z: int) -> float:
     return (1.0 - math.asinh(math.tan(rad)) / math.pi) / 2.0 * (2**z)
 
 
-def _tile_range(
+def tile_range(
     z: int, west: float, south: float, east: float, north: float
 ) -> tuple[int, int, int, int]:
     x_min = max(0, int(_lon_to_tile_x(west, z)))
@@ -134,7 +134,7 @@ def render_view(
     out_path: Path,
 ) -> None:
     west, south, east, north = bounds
-    x_min, y_min, x_max, y_max = _tile_range(z, west, south, east, north)
+    x_min, y_min, x_max, y_max = tile_range(z, west, south, east, north)
     print(
         f"  rendering z{z} tiles x{x_min}-{x_max} y{y_min}-{y_max} "
         f"({(x_max - x_min + 1) * (y_max - y_min + 1)} tiles)"

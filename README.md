@@ -7,7 +7,6 @@ A FastAPI-powered weather visualization dashboard for personal weather operation
 - Radar
 - Satellite
 - MRMS
-- Lightning
 
 The app combines a Python API backend with static HTML/CSS/JS frontends and generates map images/animations on demand.
 
@@ -48,7 +47,6 @@ Suggested branch protections on `main`:
 - Radar (Level 2 and Level 3, current and archive)
 - GOES satellite imagery (current and archive)
 - MRMS products from NOAA public data
-- Lightning visualizations (heatmap, points, animation)
 
 ### Rendering and Performance
 

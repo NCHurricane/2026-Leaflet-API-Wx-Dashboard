@@ -276,6 +276,26 @@ def _is_scan_complete(chunks: list[dict]) -> bool:
     return any(c["ctype"] == "E" for c in chunks)
 
 
+def list_site_chunks(s3_client, site: str, max_keys: int = 1000) -> list[dict]:
+    """Public diagnostic contract for listing a site's Level II chunks."""
+    return _list_site_chunks(s3_client, site, max_keys=max_keys)
+
+
+def group_chunks_by_scan(chunks: list[dict]) -> dict[str, list[dict]]:
+    """Public diagnostic contract for grouping chunks into radar scans."""
+    return _group_by_scan(chunks)
+
+
+def assembled_scan_filename(scan_prefix: str) -> str:
+    """Public diagnostic contract for the assembled Level II filename."""
+    return _scan_assembled_filename(scan_prefix)
+
+
+def scan_is_complete(chunks: list[dict]) -> bool:
+    """Public diagnostic contract for the end-of-volume completeness gate."""
+    return _is_scan_complete(chunks)
+
+
 def assemble_scan(
     s3_client,
     chunks: list[dict],

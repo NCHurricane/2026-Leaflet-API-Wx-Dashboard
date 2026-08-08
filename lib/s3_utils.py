@@ -2,7 +2,7 @@
 Shared AWS S3 client utilities for all NODD data access.
 
 Provides a single unsigned S3 client factory with retry/timeout configuration
-used by satellite, radar, MRMS, and lightning modules.
+used by satellite, radar, and MRMS modules.
 """
 
 import importlib

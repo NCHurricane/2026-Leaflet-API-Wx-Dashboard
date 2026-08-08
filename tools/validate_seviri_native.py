@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO_ROOT / "tools"))
 from config.satellite_v2_config import source_channels_for_product  # noqa: E402
 from satellite_v2.renderer import SatelliteTileRenderer, SourceRaster  # noqa: E402
 from satellite_v2.seviri_nat import load_seviri_raster  # noqa: E402
-from validate_ahi_native import _tile_range, fetch_basemap  # noqa: E402
+from validate_ahi_native import fetch_basemap, tile_range  # noqa: E402
 
 
 def _newest_nat(out_dir: Path) -> Path:
@@ -54,7 +54,7 @@ def _ghost_view(
     out_path: Path,
 ) -> None:
     west, south, east, north = bounds
-    x_min, y_min, x_max, y_max = _tile_range(z, west, south, east, north)
+    x_min, y_min, x_max, y_max = tile_range(z, west, south, east, north)
     tiles = (x_max - x_min + 1) * (y_max - y_min + 1)
     print(f"  rendering z{z} x{x_min}-{x_max} y{y_min}-{y_max} ({tiles} tiles)")
     satellite = renderer.render_zoom_canvas(z, x_min, y_min, x_max, y_max)

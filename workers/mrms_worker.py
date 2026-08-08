@@ -28,7 +28,7 @@ _active_product: str = "Refl_BaseQC"
 _PRODUCT_REFRESH_LOCKS: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 
 # Skip if a successful refresh happened within the last ~11 min
-# (75% of the 15 min Task Scheduler interval).
+# (75% of the optional 15-minute warmer cadence).
 _FRESH_WINDOW_SEC = 11 * 60
 
 

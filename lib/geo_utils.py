@@ -3,7 +3,7 @@ Shared geospatial utilities for the Weather Dashboard.
 
 Centralises US state geometry loading, CONUS geometry building, country-level
 geometry, and the Census county shapefile class so every module (surface,
-satellite, radar, MRMS, alerts, lightning) shares a single cached copy instead
+satellite, radar, MRMS, and alerts) shares a single cached copy instead
 of maintaining independent duplicates.
 """
 

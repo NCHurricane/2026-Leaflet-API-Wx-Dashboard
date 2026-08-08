@@ -65,7 +65,7 @@ def cached_call(
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# SHARED HELPERS — formerly duplicated across radar, lightning, etc.
+# SHARED HELPERS — provider listing cache shared across product families.
 # ═════════════════════════════════════════════════════════════════════════════
 
 
