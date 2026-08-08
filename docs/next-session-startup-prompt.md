@@ -28,19 +28,23 @@ Current boundary:
 
 - The repository-wide retained-tree audit and the documentation consolidation
   are complete.
-- Audit findings are candidates, not authorization to delete or refactor.
-- No whole tracked application source file was found safe for immediate
-  deletion.
+- Cleanup Waves A through E are complete through implementation checkpoint
+  `273f35d`; do not restart them from the historical candidate lists.
+- The final cleanup gate passes 604 Python tests plus 42 subtests, all 36 Node
+  behavior tests, repo-wide Ruff/compile/diff checks, affected API/runtime
+  probes, and controlled Chrome checks for the UI/CSS slices.
+- Audit findings remain historical evidence, not authorization for additional
+  deletion or refactoring beyond the completed cleanup program.
 - Preserve unrelated dirty work. Do not commit unless explicitly asked.
 - Greenfield NCH Weather Studio is a separate project.
 
 Default next discussion:
 
-- Select one Cleanup Wave A safety-net family and the bounded cleanup/correction
-  it protects.
-- Recommended options are route serialization plus `/api/mrms/products`, or
-  Surface normalization/archive coverage plus its confirmed correctness issues.
-- State exact scope, dependencies, verification, and exclusions before editing.
+- Select one bounded item from the approved current-dashboard enhancement
+  ledger in section 4 of the canonical superfile.
+- State exact scope, dependencies, verification, rollback/fallback behavior,
+  and exclusions before editing. Cleanup completion alone does not authorize an
+  enhancement family.
 
 Decisions that must not drift:
 
@@ -61,6 +65,11 @@ Decisions that must not drift:
 - Keep `tl_2025_us_state.*`; only the separate dead international-boundary
   bundle is a removal candidate.
 - Persistent cross-process leases are closed unless deployment changes.
+- Surface's 32 °F isotherm and disconnected `*-source` UI are removed. Surface
+  colors come from the full authoritative server palette; do not restore a
+  simplified browser palette.
+- Unused Leaflet stock-image references were removed rather than restoring the
+  missing vendored images.
 
 Validation language must stay exact:
 
@@ -76,8 +85,6 @@ and proceed within the selected authorization.
 
 ---
 
-If the prior session did not commit the documentation consolidation, review its
-diff before selecting new implementation work. The consolidation should show
-the eight source documents as renames into the dated archive, plus new active
-superfile/startup content and corrections to the documentation index,
-architecture, patterns, and ignored local token guide.
+The documentation consolidation and Cleanup Waves A through E are committed.
+If Git state contradicts this handoff, stop and reconcile the unexpected state
+before selecting enhancement work.

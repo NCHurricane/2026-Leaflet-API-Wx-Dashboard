@@ -332,6 +332,19 @@ inspection, and route probes; do not infer browser success.
 **Validation:** style/static checks, full suites, asset integrity, and visual
 browser comparison where CSS or controls change.
 
+**Completion status (2026-08-08):** Cleanup Waves A through E are complete.
+The validated implementation checkpoint is `273f35d`. Wave E removed the
+unused Leaflet stock-image references and Surface 32 °F isotherm, retained the
+full authoritative server Surface palette, reduced verified legacy CSS after
+controlled Chrome comparisons, removed the scheduler compatibility hook,
+standardized structured logging and direct-worker bootstraps, established
+public MRMS/RTMA/Tropical product contracts, consolidated Satellite worker
+support and shared normalization/weather math, and refreshed the retained
+diagnostic tools. The final gate passes 604 Python tests plus 42 subtests, 36
+JavaScript tests, repo-wide Ruff/compile/diff checks, direct worker/tool entry
+points, affected API probes, and the controlled-browser checks required by the
+UI slices. Temporary listeners were closed after every runtime breakpoint.
+
 ## 4. Approved current-dashboard enhancement ledger
 
 These items may be selected after the cleanup foundation is stable. Selection
