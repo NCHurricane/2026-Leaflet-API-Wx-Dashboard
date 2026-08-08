@@ -31,12 +31,6 @@
 }
 .wpc-check input { width: 16px; height: 16px; margin: 0; }
 
-.wpc-panel-note {
-    margin: 0 0 4px;
-    color: var(--core-muted);
-    font-size: 0.74rem;
-}
-
 .wpc-refresh {
     width: 100%;
     padding: 10px;

@@ -38,7 +38,6 @@ let _activeOutlookFeature = null;
 let _outlookFeatureMap = {};
 let _tropicalMapViewMode = 'outlook';
 let _tropicalOutlookIssuedTime = null;
-let _scrubberPlaybackSpeedIndex = 2;
 let _selectedTropicalBasins = new Set(['WORLD']);
 let _tropicalBasinFeedSeq = 0;
 let _tropicalArchiveWarmPollTimer = null;
@@ -1366,10 +1365,6 @@ function _renderTropicalAdvisorySummaryHead(data, head, summary) {
 
 function _renderArchiveScrubberBar() {
     _tropicalPageController?.renderArchiveScrubberBar?.();
-}
-
-function _hideArchiveScrubberBar() {
-    _tropicalPageController?.hideArchiveScrubberBar?.();
 }
 
 function _stopArchiveScrubPlay() {

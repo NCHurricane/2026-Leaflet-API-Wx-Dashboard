@@ -69,7 +69,7 @@ input {
 .core-nav-link:hover, .core-nav-link.is-active { color: #06111f; background: var(--core-accent); }
 
 .core-field { display: grid; gap: 5px; }
-.core-field > label, .core-label {
+.core-field > label {
     color: var(--core-muted);
     font-size: 0.72rem;
     font-weight: 800;
