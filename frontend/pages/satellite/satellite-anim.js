@@ -23,6 +23,7 @@ const TILE_SIZE = 256;
 export function createSatelliteAnimator({
     mapCore,
     apiUrl,
+    clientId = '',
     getSelection,
     getCatalog,
     onFrameVisible = null,
@@ -79,6 +80,7 @@ export function createSatelliteAnimator({
             rv: String(getCatalog()?.render_version || 'products'),
             t: String(tileRefreshToken || 0),
         });
+        if (clientId) params.set('client_id', clientId);
         return apiUrl(`/api/satellite-v2/tile/{z}/{x}/{y}?${params.toString()}`);
     }
 

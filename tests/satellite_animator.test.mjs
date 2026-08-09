@@ -5,7 +5,7 @@ import { createSatelliteAnimator } from '../frontend/pages/satellite/satellite-a
 
 globalThis.requestAnimationFrame = (callback) => callback();
 
-function createHarness() {
+function createHarness({ clientId = '' } = {}) {
     const layers = new Set();
     const createdLayers = [];
     const pane = { style: {} };
@@ -64,6 +64,7 @@ function createHarness() {
     const animator = createSatelliteAnimator({
         mapCore: { map, leaflet },
         apiUrl: (path) => path,
+        clientId,
         getSelection: () => ({ ...selection }),
         getCatalog: () => ({ render_version: 'test-v1', max_native_zoom: 5 }),
         onFrameVisible: (frameKey) => visibleFrames.push(frameKey),
@@ -110,6 +111,16 @@ test('Satellite animator lets a newer frame defeat an older pending tile wait', 
     assert.equal(secondLayer.opacity, 0.65);
     harness.animator.destroy();
     assert.equal(harness.layers.size, 0);
+});
+
+test('Satellite tile requests carry their page ownership id', async () => {
+    const harness = createHarness({ clientId: 'page-owner' });
+    harness.animator.setFrames([{ frame_key: 'frame-a', max_native_zoom: 5 }]);
+
+    assert.equal(await harness.animator.showFrame(0), true);
+    assert.match(harness.createdLayers[0].url, /client_id=page-owner/);
+
+    harness.animator.destroy();
 });
 
 test('Satellite teardown aborts active neighbor prefetch and removes its pooled layer', async () => {

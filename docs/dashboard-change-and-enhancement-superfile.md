@@ -76,6 +76,12 @@ Status vocabulary:
 - Publishers must expose either the previous complete artifact or the next
   complete artifact. New or changed writers use unique temporary paths,
   bounded locks, and atomic replacement.
+- Satellite tile routes await their bounded render futures on a Satellite-owned
+  request executor rather than AnyIO's shared synchronous-request workers.
+  Standalone and Workspace tile URLs carry page ownership; changing selection
+  or leaving the page releases it. Work still waiting for the heavy-render slot
+  stops when no page owns the selection, while an already-running render may
+  finish and atomically publish its reusable cache artifact.
 
 ### 2.3 Product contracts to preserve
 
@@ -490,12 +496,23 @@ Testing batch:
 13. Separate Mesoscale Discussion and Storm Report pills.
 14. RTMA Wind Speed should select Wind Direction; Direction remains independently
     removable and follows Wind Speed in the control order.
-15. **Confirmed 2026-08-08:** a cold Meteosat-12 Channel 13 render continued
-    after switching away from Satellite, and Tropical did not load until that
-    request finished. The synchronous tile route waits on its render future;
-    diagnose request-thread starvation, page-switch cancellation/ownership, and
-    isolation of unrelated page/static requests without weakening bounded
-    render ownership or cache publication.
+15. **Corrected 2026-08-09 after the confirmed 2026-08-08 smoke failure:**
+    Satellite tile waits no longer occupy AnyIO's shared synchronous-request
+    workers. Tile and prefetch requests carry the same per-page client identity
+    as the catalog; teardown releases selection ownership, queued heavy renders
+    stop when no other page owns that selection, and a render that already owns
+    the heavy slot may finish and retain its completed cache artifact. On the
+    restarted listener, nine simultaneous uncached Meteosat tile requests
+    (eight renders and one legitimate off-disk tile) left `/api/status`,
+    `/tropical`, and cache-busted CSS responsive in 23 ms, 111 ms, and 109 ms.
+    A release probe returned all ten abandoned tile requests as
+    `CANCELLED` in about one second and retained exactly the already-running
+    artifact. Controlled Chrome selected Meteosat-12 Full Disk, forced uncached
+    z7 work from a fresh process, and reached a fully loaded Tropical DOM in
+    3.083 seconds with no captured console warnings/errors. Final owner smoke
+    loaded Meteosat-12 Channel 13 current/past frames, then switched to another
+    page while past-frame work was active; both frame loading and immediate
+    cross-page navigation passed.
 16. Determine whether MRMS blocks current display on full animation warming.
 17. Research zooming MESH to the location behind `Largest Hail`.
 18. Consider dual useful units in `mrms-legend-units`.
@@ -520,10 +537,17 @@ Testing batch:
     nearest-time filtering, CONUS has no historical IEM fallback, and the service
     caches empty provider frames as `status: success`. Complete the bounded
     product contract in section 4.7 when that enhancement is selected.
-28. Measure Meteosat selection-to-first-useful-tile latency by separating source
-    download, decode, and render time. One Meteosat-12 Full Disk prefetch recorded
-    `jobs=1 downloaded=3 errors=0 pruned=27 elapsed=0h 2m 39s`; treat that as an
-    observation, not an optimization baseline, and preserve output parity.
+28. **Measured 2026-08-09:** tile responses and logs now expose source/download,
+    decode/renderer construction, and final tile render/publication separately.
+    Three uncached z6 Meteosat-12 Channel 13 tiles from distinct cached-source
+    frames recorded median HTTP `3.021 s`, source resolution `7 ms`, decode
+    `2.948 s`, and render/publication `52 ms` (decode range `2.919-3.787 s`).
+    The earlier `jobs=1 downloaded=3 errors=0 pruned=27 elapsed=0h 2m 39s`
+    result came from the source-prefetch worker, which does not decode or render
+    tiles; its old total also includes catalog/prune overhead and cannot be
+    reconstructed more finely. Future source-prefetch runs now report explicit
+    `download_ms`. Keep both observations separate and preserve output parity;
+    neither is by itself an optimization baseline.
 
 ## 6. Version 2 lane
 
@@ -615,6 +639,11 @@ Cleanup Waves A through E are complete. The default next decision is to select
 one bounded item from the approved current-dashboard enhancement ledger in
 section 4. The ledger order does not establish priority or authorization; name
 the selected family and define its exact implementation boundary before editing.
+
+The post-cleanup Satellite cross-page blocking prerequisite and separate
+Meteosat stage measurement are complete. They do not select a Section 4 family;
+Radar WebGL remains listed first without priority, and Surface Archive remains
+available independently in section 4.7.
 
 Before starting, confirm current Git status, inspect only the named paths and
 their callers, define validation and rollback/fallback behavior, state explicit

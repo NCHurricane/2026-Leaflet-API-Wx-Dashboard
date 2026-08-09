@@ -3,7 +3,7 @@
 from contextlib import contextmanager
 import os
 import threading
-from typing import Iterator
+from typing import Callable, Iterator
 
 
 def _configured_slots(name: str, default: int = 1) -> int:
@@ -22,13 +22,24 @@ _SURFACE_GRADIENT_SLOTS = threading.BoundedSemaphore(
 
 
 @contextmanager
-def heavy_render_slot() -> Iterator[None]:
-    """Serialize memory-heavy render families unless explicitly configured."""
-    _HEAVY_RENDER_SLOTS.acquire()
+def heavy_render_slot(
+    should_continue: Callable[[], bool] | None = None,
+) -> Iterator[bool]:
+    """Serialize memory-heavy renders, with optional queued-work cancellation."""
+    acquired = False
+    if should_continue is None:
+        _HEAVY_RENDER_SLOTS.acquire()
+        acquired = True
+    else:
+        while should_continue():
+            if _HEAVY_RENDER_SLOTS.acquire(timeout=0.05):
+                acquired = True
+                break
     try:
-        yield
+        yield acquired
     finally:
-        _HEAVY_RENDER_SLOTS.release()
+        if acquired:
+            _HEAVY_RENDER_SLOTS.release()
 
 
 @contextmanager

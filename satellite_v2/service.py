@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+from concurrent.futures import CancelledError, Future, ThreadPoolExecutor, TimeoutError
+from functools import partial
 import logging
 import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
@@ -59,6 +61,10 @@ _ON_DEMAND_TILE_RENDER_POOL = ThreadPoolExecutor(
     max_workers=SATELLITE_V2_LIVE_TILE_RENDER_WORKERS,
     thread_name_prefix="sat-v2-live",
 )
+_TILE_REQUEST_WAIT_POOL = ThreadPoolExecutor(
+    max_workers=SATELLITE_V2_LIVE_TILE_RENDER_WORKERS,
+    thread_name_prefix="sat-v2-request",
+)
 _IN_FLIGHT_TILE_RENDERS: dict[Path, Future] = {}
 _IN_FLIGHT_TILE_RENDERS_LOCK = threading.RLock()
 _SATELLITE_SELECTIONS: dict[str, tuple[tuple[str, str, str], float]] = {}
@@ -85,6 +91,32 @@ def _record_satellite_selection(
             selection,
             now + _SATELLITE_SELECTION_TTL_SECONDS,
         )
+
+
+def release_satellite_selection(client_id: str | None) -> None:
+    normalized_client_id = str(client_id or "").strip()[:128]
+    if not normalized_client_id:
+        return
+    with _SATELLITE_SELECTIONS_LOCK:
+        _SATELLITE_SELECTIONS.pop(normalized_client_id, None)
+
+
+def _satellite_client_owns_selection(
+    client_id: str | None, selection: tuple[str, str, str]
+) -> bool:
+    normalized_client_id = str(client_id or "").strip()[:128]
+    if not normalized_client_id:
+        return True
+    now = time.monotonic()
+    with _SATELLITE_SELECTIONS_LOCK:
+        active = _SATELLITE_SELECTIONS.get(normalized_client_id)
+        if active is None:
+            return False
+        active_selection, expires_at = active
+        if expires_at <= now:
+            _SATELLITE_SELECTIONS.pop(normalized_client_id, None)
+            return False
+        return active_selection == selection
 
 
 def _satellite_selection_is_active(selection: tuple[str, str, str]) -> bool:
@@ -123,21 +155,42 @@ def _wait_for_live_tile_idle(
         time.sleep(0.05)
 
 
-def _render_tile_with_budget(**render_kwargs: Any):
+class _TileRenderCancelled(RuntimeError):
+    pass
+
+
+def _render_tile_with_budget(
+    render_should_continue: Callable[[], bool] | None = None,
+    **render_kwargs: Any,
+):
     from app_core.render_budget import heavy_render_slot
 
-    with heavy_render_slot():
+    with heavy_render_slot(should_continue=render_should_continue) as acquired:
+        if not acquired:
+            raise _TileRenderCancelled("Satellite tile render ownership ended.")
         return render_frame_tile(**render_kwargs)
 
 
-def _submit_tile_render(target: Path, **render_kwargs: Any) -> tuple[Future, bool]:
+def _submit_tile_render(
+    target: Path,
+    *,
+    client_id: str | None = None,
+    selection: tuple[str, str, str] | None = None,
+    **render_kwargs: Any,
+) -> tuple[Future, bool]:
     key = target.resolve()
     with _IN_FLIGHT_TILE_RENDERS_LOCK:
         existing = _IN_FLIGHT_TILE_RENDERS.get(key)
         if existing is not None:
             return existing, False
+        render_should_continue = (
+            (lambda: _satellite_selection_is_active(selection))
+            if str(client_id or "").strip() and selection is not None
+            else None
+        )
         future = _ON_DEMAND_TILE_RENDER_POOL.submit(
             _render_tile_with_budget,
+            render_should_continue=render_should_continue,
             render_supertile=False,
             **render_kwargs,
         )
@@ -150,7 +203,7 @@ def _submit_tile_render(target: Path, **render_kwargs: Any) -> tuple[Future, boo
             if completed.cancelled():
                 return
             error = completed.exception()
-            if error is not None:
+            if error is not None and not isinstance(error, _TileRenderCancelled):
                 logger.warning("Satellite tile render failed for %s: %s", key, error)
 
         future.add_done_callback(_release)
@@ -162,6 +215,30 @@ def _provider_name_for_sat(sat_id: str) -> str:
         return str(platform_descriptor(sat_id).get("provider") or "unknown")
     except ValueError:
         return "unknown"
+
+
+def _cancelled_tile_stats(
+    *,
+    started: float,
+    path_exists_before: bool,
+    path_size_before: int,
+    sat_id: str,
+    sector: str,
+    channel: str,
+    frame_key: str,
+) -> dict[str, Any]:
+    return {
+        "cache_status": "cancelled",
+        "miss_reason": "selection-released",
+        "tile_exists_before": path_exists_before,
+        "tile_size_before": path_size_before,
+        "elapsed_ms": int((time.perf_counter() - started) * 1000),
+        "provider": _provider_name_for_sat(sat_id),
+        "frame_key": frame_key,
+        "sat_id": sat_id,
+        "sector": sector,
+        "channel": channel,
+    }
 
 
 def _run_selected_satellite_accelerator(
@@ -262,7 +339,17 @@ def _activate_satellite_accelerator(
 
 
 def shutdown_live_tile_pool() -> None:
+    _TILE_REQUEST_WAIT_POOL.shutdown(wait=False, cancel_futures=True)
     _ON_DEMAND_TILE_RENDER_POOL.shutdown(wait=False, cancel_futures=True)
+
+
+async def resolve_tile_async(**kwargs: Any) -> tuple[Path, dict[str, Any]]:
+    """Wait for a tile outside AnyIO's shared synchronous-request workers."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        _TILE_REQUEST_WAIT_POOL,
+        partial(resolve_tile, **kwargs),
+    )
 
 
 def _format_number(value: float) -> str:
@@ -572,6 +659,7 @@ def resolve_tile(
     allow_render: bool = True,
     render_neighbors: bool = True,
     frame_override: dict[str, Any] | None = None,
+    client_id: str | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Resolve a cached tile or render the requested tile before returning.
 
@@ -583,6 +671,7 @@ def resolve_tile(
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
     channel_key = normalize_channel(channel)
+    selection = (sat_key, sector_key, channel_key)
     path = tile_path(cache_root, sat_key, sector_key, channel_key, frame_key, z, x, y)
     validate_start = time.perf_counter()
     try:
@@ -645,6 +734,16 @@ def resolve_tile(
                 )
                 finish_timing(timing_token, cache_status=cache_status)
             return path, stats
+        if not _satellite_client_owns_selection(client_id, selection):
+            return path, _cancelled_tile_stats(
+                started=started,
+                path_exists_before=path_exists_before,
+                path_size_before=path_size_before,
+                sat_id=sat_key,
+                sector=sector_key,
+                channel=channel_key,
+                frame_key=frame_key,
+            )
         if is_negative_tile_cached(path):
             cache_status = "invalid"
             stats = {
@@ -705,9 +804,39 @@ def resolve_tile(
                 else None
             ),
         }
-        future, _ = _submit_tile_render(path, **render_kwargs)
+        future, _ = _submit_tile_render(
+            path,
+            client_id=client_id,
+            selection=selection,
+            **render_kwargs,
+        )
         render_start = time.perf_counter()
-        path, render_stats = future.result()
+        while True:
+            if not _satellite_client_owns_selection(client_id, selection):
+                return path, _cancelled_tile_stats(
+                    started=started,
+                    path_exists_before=path_exists_before,
+                    path_size_before=path_size_before,
+                    sat_id=sat_key,
+                    sector=sector_key,
+                    channel=channel_key,
+                    frame_key=frame_key,
+                )
+            try:
+                path, render_stats = future.result(timeout=0.1)
+                break
+            except TimeoutError:
+                continue
+            except (CancelledError, _TileRenderCancelled):
+                return path, _cancelled_tile_stats(
+                    started=started,
+                    path_exists_before=path_exists_before,
+                    path_size_before=path_size_before,
+                    sat_id=sat_key,
+                    sector=sector_key,
+                    channel=channel_key,
+                    frame_key=frame_key,
+                )
         supertile_submitted = 0
         supertile_skipped_in_flight = 0
         neighbor_coords = (
@@ -722,6 +851,8 @@ def resolve_tile(
             )
             _, submitted = _submit_tile_render(
                 neighbor_target,
+                client_id=client_id,
+                selection=selection,
                 cache_root=cache_root,
                 sat_id=sat_key,
                 sector=sector_key,
@@ -781,6 +912,15 @@ def resolve_tile(
                 "supertile_invalid": int(render_stats.get("supertile_invalid") or 0),
                 "supertile_errors": int(render_stats.get("supertile_errors") or 0),
                 "supertile_radius": int(render_stats.get("supertile_radius") or 0),
+                "download_elapsed_ms": int(
+                    render_stats.get("download_elapsed_ms") or 0
+                ),
+                "decode_elapsed_ms": int(
+                    render_stats.get("decode_elapsed_ms") or 0
+                ),
+                "render_elapsed_ms": int(
+                    render_stats.get("render_elapsed_ms") or 0
+                ),
             }
         )
     elif bench_context is not None:

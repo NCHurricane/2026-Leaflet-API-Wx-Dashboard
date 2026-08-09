@@ -194,6 +194,21 @@ export function createSatelliteEngine({ api, clientId = '' }) {
         return data;
     }
 
+    function releaseSelection({ beacon = false } = {}) {
+        if (!clientId) return false;
+        const params = new URLSearchParams({ client_id: clientId });
+        const url = api.apiUrl(`/api/satellite-v2/selection/release?${params.toString()}`);
+        if (beacon && typeof globalThis.navigator?.sendBeacon === 'function') {
+            return globalThis.navigator.sendBeacon(url);
+        }
+        void fetch(url, {
+            method: 'POST',
+            cache: 'no-store',
+            keepalive: beacon,
+        }).catch(() => {});
+        return true;
+    }
+
     function interpretiveLegendHtml(title, items) {
         const rows = (Array.isArray(items) ? items : [])
             .filter((item) => item?.color && item?.label)
@@ -283,5 +298,6 @@ export function createSatelliteEngine({ api, clientId = '' }) {
         fetchFrameSet,
         fetchLegend,
         legendHtmlFor,
+        releaseSelection,
     });
 }

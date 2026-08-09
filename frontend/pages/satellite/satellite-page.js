@@ -11,8 +11,8 @@ import {
     createSatelliteEngine,
     formatFrameLabel,
     frameIndexForReload,
-} from './satellite-engine.js?v=20260731a';
-import { createSatelliteAnimator } from './satellite-anim.js?v=20260731c';
+} from './satellite-engine.js?v=20260809a';
+import { createSatelliteAnimator } from './satellite-anim.js?v=20260809a';
 
 const byId = (id) => document.getElementById(id);
 const SELECT_CHAIN_MESSAGE = 'Pick a satellite, sector, and product to load imagery.';
@@ -325,6 +325,7 @@ async function initialize() {
     const animator = createSatelliteAnimator({
         mapCore,
         apiUrl: api.apiUrl,
+        clientId: SATELLITE_CLIENT_ID,
         getSelection: activeSelection,
         getCatalog: () => catalog,
         onFrameVisible(frameKey) {
@@ -410,6 +411,7 @@ async function initialize() {
             loadController.abort();
             loadController = null;
         }
+        engine.releaseSelection();
         frames = [];
         catalog = null;
         visibleFrameKey = '';
@@ -818,6 +820,7 @@ async function initialize() {
     if (!activeChannel()) status.setMessage(SELECT_CHAIN_MESSAGE);
 
     window.addEventListener('beforeunload', () => {
+        engine.releaseSelection({ beacon: true });
         clearInterval(autoUpdateTimer);
         if (lookbackReloadTimer) clearTimeout(lookbackReloadTimer);
         sidebarTabs.destroy();

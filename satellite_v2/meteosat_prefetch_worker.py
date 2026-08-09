@@ -143,7 +143,14 @@ def _prefetch_one_job(
 ) -> dict[str, int]:
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
-    totals = {"cataloged": 0, "downloaded": 0, "cached": 0, "errors": 0, "pruned": 0}
+    totals = {
+        "cataloged": 0,
+        "downloaded": 0,
+        "cached": 0,
+        "errors": 0,
+        "pruned": 0,
+        "download_elapsed_ms": 0,
+    }
 
     frames = list_recent_frames(
         sat_id=sat_key,
@@ -208,6 +215,10 @@ def _prefetch_one_job(
                 f"[{worker_name}] {sat_key}/{sector_key}/{frame.frame_key} failed: "
                 f"{type(exc).__name__}: {type(exc).__name__}"
             )
+        finally:
+            totals["download_elapsed_ms"] += int(
+                (time.perf_counter() - frame_start) * 1000
+            )
 
     totals["pruned"] = _prune_stale_sources(sat_key, sector_key, keep_hours)
     return totals
@@ -227,7 +238,13 @@ def run_satellite_v2_meteosat_prefetch_worker(
     fresh_window = int(SATELLITE_V2_METEOSAT_PREFETCH_FRESH_WINDOW_SECONDS)
     if not force and is_cache_fresh(worker_name, fresh_window):
         logging.getLogger(__name__).info(f"[{worker_name}] skipped: fresh sentinel within {fresh_window}s")
-        return {"jobs": 0, "downloaded": 0, "errors": 0, "pruned": 0}
+        return {
+            "jobs": 0,
+            "downloaded": 0,
+            "errors": 0,
+            "pruned": 0,
+            "download_elapsed_ms": 0,
+        }
 
     selected_jobs = tuple(jobs or SATELLITE_V2_METEOSAT_PREFETCH_JOBS)
     newest_count = int(frames or SATELLITE_V2_METEOSAT_PREFETCH_FRAMES)
@@ -237,7 +254,13 @@ def run_satellite_v2_meteosat_prefetch_worker(
     hours_value = int(hours or SATELLITE_V2_METEOSAT_PREFETCH_HOURS)
     keep_value = int(keep_hours or SATELLITE_V2_METEOSAT_PREFETCH_KEEP_HOURS)
 
-    totals = {"jobs": 0, "downloaded": 0, "errors": 0, "pruned": 0}
+    totals = {
+        "jobs": 0,
+        "downloaded": 0,
+        "errors": 0,
+        "pruned": 0,
+        "download_elapsed_ms": 0,
+    }
     with _worker_lock(worker_name) as acquired:
         if not acquired:
             return totals
@@ -269,12 +292,16 @@ def run_satellite_v2_meteosat_prefetch_worker(
             totals["downloaded"] += int(stats.get("downloaded") or 0)
             totals["errors"] += int(stats.get("errors") or 0)
             totals["pruned"] += int(stats.get("pruned") or 0)
+            totals["download_elapsed_ms"] += int(
+                stats.get("download_elapsed_ms") or 0
+            )
         # Mark complete even when nothing was missing; the run did its check.
         mark_run_complete(worker_name)
         logging.getLogger(__name__).warning(
             f"[{worker_name}] complete jobs={totals['jobs']} "
             f"downloaded={totals['downloaded']} errors={totals['errors']} "
             f"pruned={totals['pruned']} "
+            f"download_ms={totals['download_elapsed_ms']} "
             f"elapsed={_format_elapsed(time.perf_counter() - run_start)}"
         )
     return totals

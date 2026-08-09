@@ -307,7 +307,17 @@ def test_resolve_tile_can_skip_neighbor_fanout_for_explicit_prefetch(
     def fake_submit(target, **_kwargs):
         submitted.append(target)
         future = Future()
-        future.set_result((target, {"cache_status": "miss"}))
+        future.set_result(
+            (
+                target,
+                {
+                    "cache_status": "miss",
+                    "download_elapsed_ms": 120,
+                    "decode_elapsed_ms": 45,
+                    "render_elapsed_ms": 8,
+                },
+            )
+        )
         return future, True
 
     monkeypatch.setattr(service, "_submit_tile_render", fake_submit)
@@ -337,6 +347,9 @@ def test_resolve_tile_can_skip_neighbor_fanout_for_explicit_prefetch(
     assert len(submitted) == 1
     assert stats["supertile_radius"] == 0
     assert stats["supertile_submitted"] == 0
+    assert stats["download_elapsed_ms"] == 120
+    assert stats["decode_elapsed_ms"] == 45
+    assert stats["render_elapsed_ms"] == 8
 
 
 def test_renderer_batches_fci_channels_from_shared_chunk_directory(tmp_path, monkeypatch):

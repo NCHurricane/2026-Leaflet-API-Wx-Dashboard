@@ -33,6 +33,19 @@ Current boundary:
 - The final cleanup gate passes 604 Python tests plus 42 subtests, all 36 Node
   behavior tests, repo-wide Ruff/compile/diff checks, affected API/runtime
   probes, and controlled Chrome checks for the UI/CSS slices.
+- The confirmed post-cleanup Satellite cross-page blocking defect is corrected
+  in the current working tree: tile waits use a Satellite-owned executor, page
+  selection ownership cancels queued work on teardown, and an already-running
+  render may finish and retain its complete cache artifact. The current gate is
+  607 Python tests plus 42 subtests, 37 Node tests, repo-wide Ruff/compile/diff,
+  responsive concurrent runtime probes, and controlled Chrome
+  Satellite-to-Tropical navigation during an uncached Meteosat z7 render. Final
+  owner smoke passed Meteosat-12 Channel 13 current/past-frame loading and
+  immediate navigation to another page while past-frame work was active.
+- Separate cached-source Meteosat-12 timing measured a three-frame median of
+  `7 ms` source resolution, `2.948 s` decode, `52 ms` render/publication, and
+  `3.021 s` HTTP time. The earlier `2m39s` source-prefetch observation did no
+  tile decode/render; future prefetch runs expose explicit download timing.
 - Audit findings remain historical evidence, not authorization for additional
   deletion or refactoring beyond the completed cleanup program.
 - Preserve unrelated dirty work. Do not commit unless explicitly asked.
@@ -42,6 +55,9 @@ Default next discussion:
 
 - Select one bounded item from the approved current-dashboard enhancement
   ledger in section 4 of the canonical superfile.
+- The Satellite prerequisite is closed and does not choose that enhancement.
+  Radar WebGL is first only by document order; Surface Archive remains an
+  independent section 4.7 option.
 - State exact scope, dependencies, verification, rollback/fallback behavior,
   and exclusions before editing. Cleanup completion alone does not authorize an
   enhancement family.
@@ -75,8 +91,9 @@ Validation language must stay exact:
 
 - Unit/static/API/native-decode tests are not controlled-browser proof.
 - A static `browser_smoke` suite is not an executed browser test.
-- Runtime checks should restart/probe the actual listener and use cache-busted
-  assets before browser claims.
+- Runtime checks should restart/probe the actual listener, confirm no detached
+  `127.0.0.1:8000` probe is shadowing the intended `0.0.0.0:8000` server, and
+  use cache-busted assets before browser claims.
 - Inspect frame/source metadata when diagnosing RTMA/MRMS fallback.
 
 Begin by reporting the Git state and the bounded slice you intend to work on.

@@ -1,8 +1,8 @@
-import { createSatelliteAnimator } from '../satellite/satellite-anim.js?v=20260731c';
+import { createSatelliteAnimator } from '../satellite/satellite-anim.js?v=20260809a';
 import {
     SAT_DISPLAY_NAMES,
     createSatelliteEngine,
-} from '../satellite/satellite-engine.js?v=20260731a';
+} from '../satellite/satellite-engine.js?v=20260809a';
 import { workspaceFrameIndexAtOrBefore } from './workspace-timeline.js?v=20260803b';
 
 const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -59,10 +59,11 @@ export function createWorkspaceSatellite({
         frameCount,
     } = elements;
     const lifecycle = new AbortController();
+    const clientId = globalThis.crypto?.randomUUID?.()
+        || `workspace-satellite-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const engine = createSatelliteEngine({
         api,
-        clientId: globalThis.crypto?.randomUUID?.()
-            || `workspace-satellite-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        clientId,
     });
 
     let catalog = null;
@@ -85,6 +86,7 @@ export function createWorkspaceSatellite({
     const animator = createSatelliteAnimator({
         mapCore,
         apiUrl: api.apiUrl,
+        clientId,
         getSelection: selection,
         getCatalog: () => catalog,
         onFrameVisible(frameKey) {
@@ -140,8 +142,9 @@ export function createWorkspaceSatellite({
         }
     }
 
-    function clearImagery({ message = '' } = {}) {
+    function clearImagery({ message = '', releaseSelection = true } = {}) {
         abortLoad();
+        if (releaseSelection) engine.releaseSelection();
         frames = [];
         catalog = null;
         animator.setFrames([]);
@@ -348,8 +351,9 @@ export function createWorkspaceSatellite({
     }, { signal: lifecycle.signal });
 
     productSelect.addEventListener('change', () => {
-        clearImagery();
-        if (hasCompleteSelection()) void refresh();
+        const complete = hasCompleteSelection();
+        clearImagery({ releaseSelection: !complete });
+        if (complete) void refresh();
         else status.setMessage('Select a satellite product.');
     }, { signal: lifecycle.signal });
 
@@ -383,6 +387,7 @@ export function createWorkspaceSatellite({
         destroy() {
             lifecycle.abort();
             abortLoad();
+            engine.releaseSelection({ beacon: true });
             mapCore.map.off('zoomstart', onZoomStart);
             mapCore.map.off('zoomend', onZoomEnd);
             animator.destroy();

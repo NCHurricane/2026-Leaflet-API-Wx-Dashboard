@@ -102,7 +102,7 @@ def get_satellite_v2_legend(channel: str = SATELLITE_V2_DEFAULT_CHANNEL):
 
 
 @router.get("/api/satellite-v2/tile/{z}/{x}/{y}")
-def get_satellite_v2_tile(
+async def get_satellite_v2_tile(
     z: int,
     x: int,
     y: int,
@@ -112,9 +112,10 @@ def get_satellite_v2_tile(
     frame_key: str,
     render_live: bool = True,
     render_neighbors: bool = True,
+    client_id: str | None = None,
 ):
     try:
-        tile_file, tile_stats = satellite_v2_service.resolve_tile(
+        tile_file, tile_stats = await satellite_v2_service.resolve_tile_async(
             cache_root=CACHE_ROOT,
             sat_id=sat_id,
             sector=sector,
@@ -125,6 +126,7 @@ def get_satellite_v2_tile(
             y=y,
             allow_render=render_live,
             render_neighbors=render_neighbors,
+            client_id=client_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -137,7 +139,7 @@ def get_satellite_v2_tile(
     _LOGGER.info(
         "Satellite tile source=%s cache_status=%s miss_reason=%s "
         "validate_ms=%s elapsed_ms=%s sat_id=%s sector=%s channel=%s "
-        "frame_key=%s z=%s x=%s y=%s",
+        "download_ms=%s decode_ms=%s render_ms=%s frame_key=%s z=%s x=%s y=%s",
         source_label,
         cache_status.upper(),
         str(tile_stats.get("miss_reason") or "none"),
@@ -146,6 +148,9 @@ def get_satellite_v2_tile(
         tile_stats.get("sat_id") or sat_id,
         tile_stats.get("sector") or sector,
         tile_stats.get("channel") or channel,
+        int(tile_stats.get("download_elapsed_ms") or 0),
+        int(tile_stats.get("decode_elapsed_ms") or 0),
+        int(tile_stats.get("render_elapsed_ms") or 0),
         frame_key,
         z,
         x,
@@ -153,7 +158,7 @@ def get_satellite_v2_tile(
     )
 
     if not tile_file.exists():
-        if cache_status.lower() in {"empty", "invalid", "missing"}:
+        if cache_status.lower() in {"cancelled", "empty", "invalid", "missing"}:
             response = Response(content=_TRANSPARENT_PNG_1X1, media_type="image/png")
             response.headers["X-Satellite-V2-Cache"] = cache_status.upper()
             response.headers["X-Satellite-V2-Provider"] = str(
@@ -179,9 +184,9 @@ def get_satellite_v2_tile(
         raise HTTPException(
             status_code=404, detail="Satellite tile could not be read."
         ) from exc
-    # FileResponse performs another threadpool read after this synchronous
-    # route returns. A cold tile burst can occupy every request worker with
-    # render waits, starving an already-rendered PNG before it reaches Leaflet.
+    # FileResponse performs a deferred threadpool read after the handler
+    # returns. Reading the small PNG here keeps delivery independent of the
+    # shared request-worker pool even during a cold tile burst.
     response = Response(content=tile_content, media_type="image/png")
     response.headers["X-Satellite-V2-Cache"] = cache_status.upper()
     response.headers["X-Satellite-V2-Provider"] = str(
@@ -191,12 +196,27 @@ def get_satellite_v2_tile(
         int(tile_stats.get("elapsed_ms") or 0)
     )
     response.headers["X-Satellite-V2-Frame-Key"] = str(frame_key or "")
+    response.headers["X-Satellite-V2-Download-Ms"] = str(
+        int(tile_stats.get("download_elapsed_ms") or 0)
+    )
+    response.headers["X-Satellite-V2-Decode-Ms"] = str(
+        int(tile_stats.get("decode_elapsed_ms") or 0)
+    )
+    response.headers["X-Satellite-V2-Render-Ms"] = str(
+        int(tile_stats.get("render_elapsed_ms") or 0)
+    )
     response.headers["Cache-Control"] = "public, max-age=86400, immutable"
     response.headers["ETag"] = (
         f"satv2-{sat_id}-{sector}-{channel}-{frame_key}-{z}-{x}-{y}"
     )
     response.headers["Vary"] = "Accept-Encoding"
     return response
+
+
+@router.post("/api/satellite-v2/selection/release", status_code=204)
+async def release_satellite_v2_selection(client_id: str):
+    satellite_v2_service.release_satellite_selection(client_id)
+    return Response(status_code=204)
 
 
 def _satellite_v2_tile_source_label(cache_status: object) -> str:

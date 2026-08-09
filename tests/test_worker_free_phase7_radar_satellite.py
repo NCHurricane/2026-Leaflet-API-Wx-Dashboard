@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
+import inspect
 from pathlib import Path
 import threading
 import time
 from unittest.mock import Mock
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 import requests
 from starlette.responses import Response
 
-from config.satellite_v2_config import SATELLITE_V2_RAPID_WORKER_ZOOMS
+from config.satellite_v2_config import (
+    SATELLITE_V2_LIVE_TILE_RENDER_WORKERS,
+    SATELLITE_V2_RAPID_WORKER_ZOOMS,
+)
 from radar import radar_chunks_utils
 from satellite_v2 import providers, service
 from satellite_v2.models import SourceFrame
@@ -289,6 +296,19 @@ def test_stale_catalog_completion_does_not_reclaim_client_selection(monkeypatch)
     assert continued == [False]
 
 
+def test_releasing_one_page_preserves_another_pages_matching_selection():
+    selection = ("meteosat12", "FULLDISK", "Channel13")
+    service._SATELLITE_SELECTIONS.clear()
+    service._record_satellite_selection("page-a", selection)
+    service._record_satellite_selection("page-b", selection)
+
+    service.release_satellite_selection("page-a")
+    assert service._satellite_selection_is_active(selection)
+
+    service.release_satellite_selection("page-b")
+    assert not service._satellite_selection_is_active(selection)
+
+
 def test_eumetsat_download_concurrency_is_bounded():
     from satellite_v2 import provider_eumetsat
 
@@ -324,7 +344,10 @@ def test_satellite_page_surfaces_cached_provider_capability_state():
     assert "client_id" in (
         root / "frontend/pages/satellite/satellite-engine.js"
     ).read_text("utf-8")
-    assert "satellite-page.js?v=20260731f" in page
+    assert "selection/release" in (
+        root / "frontend/pages/satellite/satellite-engine.js"
+    ).read_text("utf-8")
+    assert "satellite-page.js?v=20260809a" in page
 
 
 def test_satellite_png_response_does_not_require_deferred_file_thread(
@@ -343,19 +366,120 @@ def test_satellite_png_response_does_not_require_deferred_file_thread(
                 "sat_id": "goes19",
                 "sector": "CONUS",
                 "channel": "Channel13",
+                "download_elapsed_ms": 120,
+                "decode_elapsed_ms": 45,
+                "render_elapsed_ms": 8,
             },
         ),
     )
 
-    response = satellite_routes.get_satellite_v2_tile(
-        z=7,
-        x=1,
-        y=2,
-        sat_id="goes19",
-        sector="CONUS",
-        channel="Channel13",
-        frame_key="frame-a",
+    response = asyncio.run(
+        satellite_routes.get_satellite_v2_tile(
+            z=7,
+            x=1,
+            y=2,
+            sat_id="goes19",
+            sector="CONUS",
+            channel="Channel13",
+            frame_key="frame-a",
+        )
     )
 
     assert isinstance(response, Response)
     assert response.body == content
+    assert response.headers["X-Satellite-V2-Download-Ms"] == "120"
+    assert response.headers["X-Satellite-V2-Decode-Ms"] == "45"
+    assert response.headers["X-Satellite-V2-Render-Ms"] == "8"
+
+
+def test_satellite_tile_route_waits_outside_shared_request_threads(
+    tmp_path, monkeypatch
+):
+    assert inspect.iscoroutinefunction(satellite_routes.get_satellite_v2_tile)
+    tile = tmp_path / "tile.png"
+    tile.write_bytes(service._PNG_SIGNATURE + b"concurrency-test")
+    release = threading.Event()
+    entered_lock = threading.Lock()
+    entered = 0
+
+    def slow_resolve(**_kwargs):
+        nonlocal entered
+        with entered_lock:
+            entered += 1
+        assert release.wait(timeout=5)
+        return tile, {"cache_status": "hit"}
+
+    monkeypatch.setattr(service, "resolve_tile", slow_resolve)
+
+    app = FastAPI()
+    app.include_router(satellite_routes.router)
+
+    @app.get("/unrelated")
+    def unrelated():
+        return Response(content=b"ok")
+
+    url = (
+        "/api/satellite-v2/tile/5/1/1?"
+        "sat_id=goes19&sector=CONUS&channel=Channel13&frame_key=frame-a"
+    )
+    with TestClient(app) as client, ThreadPoolExecutor(max_workers=49) as callers:
+        tile_requests = [callers.submit(client.get, url) for _ in range(48)]
+        try:
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                with entered_lock:
+                    if entered >= SATELLITE_V2_LIVE_TILE_RENDER_WORKERS:
+                        break
+                time.sleep(0.01)
+            with entered_lock:
+                assert entered >= SATELLITE_V2_LIVE_TILE_RENDER_WORKERS
+            time.sleep(0.1)
+            response = callers.submit(client.get, "/unrelated").result(timeout=1)
+            assert response.status_code == 200
+            assert response.content == b"ok"
+        finally:
+            release.set()
+            [request.result(timeout=5) for request in tile_requests]
+
+
+def test_released_satellite_selection_stops_waiting_but_keeps_started_artifact(
+    tmp_path, monkeypatch
+):
+    render_future = service.Future()
+    submitted = threading.Event()
+
+    def fake_submit(*_args, **_kwargs):
+        submitted.set()
+        return render_future, True
+
+    monkeypatch.setattr(service, "_submit_tile_render", fake_submit)
+    service._SATELLITE_SELECTIONS.clear()
+    service._record_satellite_selection(
+        "page-a", ("goes19", "CONUS", "Channel13")
+    )
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending = pool.submit(
+            service.resolve_tile,
+            str(tmp_path),
+            "goes19",
+            "CONUS",
+            "Channel13",
+            "frame-a",
+            5,
+            1,
+            1,
+            frame_override={"frame_key": "frame-a"},
+            client_id="page-a",
+        )
+        assert submitted.wait(timeout=1)
+        service.release_satellite_selection("page-a")
+        path, stats = pending.result(timeout=1)
+
+    assert stats["cache_status"] == "cancelled"
+    assert stats["miss_reason"] == "selection-released"
+    assert not render_future.cancelled()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(service._PNG_SIGNATURE + b"completed-after-release")
+    render_future.set_result((path, {"cache_status": "miss"}))
+    assert path.read_bytes().endswith(b"completed-after-release")

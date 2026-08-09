@@ -515,6 +515,9 @@ def render_frame_tile(
         "rendered": 0,
         "skipped": 0,
         "errors": 0,
+        "download_elapsed_ms": source_elapsed,
+        "decode_elapsed_ms": renderer_elapsed,
+        "render_elapsed_ms": 0,
         "supertile_rendered": 0,
         "supertile_skipped": 0,
         "supertile_invalid": 0,
@@ -559,6 +562,7 @@ def render_frame_tile(
                 stats["supertile_errors"] += 1
                 continue
             render_elapsed = int((time.perf_counter() - render_start) * 1000)
+            stats["render_elapsed_ms"] += render_elapsed
             total_elapsed = int((time.perf_counter() - started) * 1000)
             current_tile_id = (
                 f"{sat_key}/{sector_key}/{channel}/{frame_key}/z{z}/{tile_x}/{tile_y}"
