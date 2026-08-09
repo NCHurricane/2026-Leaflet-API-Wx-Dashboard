@@ -67,9 +67,9 @@ Status vocabulary:
 - The supported runtime is one application process. Multi-worker Uvicorn is not
   supported. Persistent cross-process leases are **closed as unnecessary for
   the current deployment** and may be reconsidered only if deployment changes.
-- `workers/scheduler.py` is a compatibility lifecycle hook, not a broad job
-  scheduler. Optional OS warmers call the running local API and are never a
-  correctness dependency.
+- The former `workers/scheduler.py` compatibility lifecycle hook is removed.
+  Optional OS warmers call the running local API and are never a correctness
+  dependency.
 - There is no Windows background service requirement. Closing all dashboard
   pages ends browser-owned activity; server-owned cache maintenance remains
   bounded by the running application.
@@ -433,11 +433,38 @@ retention is **rejected**.
 - User preference persistence with explicit reset/migration behavior.
 - RTMA wind-marker polish and Projected Arrival Tool FAQ/wiki material.
 
+### 4.7 Surface Archive completion
+
+Complete the currently partial Surface Archive UI/API scaffold as a separately
+selected enhancement:
+
+- Support owner-selected ending date/time for both CONUS and individual states,
+  with explicit timezone, maximum-span, and maximum-historical-age contracts.
+- Define a bounded provider strategy for near-current and older observations.
+  AWC's practical 24-hour window cannot satisfy older targets; historical IEM
+  access must avoid unbounded per-state/per-frame request multiplication.
+- Distinguish loading, legitimate no-observation, unsupported-range, and provider
+  failure states instead of returning false-empty success.
+- Preserve the authoritative Surface palette and station/frame contracts, and
+  define scrubber, cancellation, cache, retry/backoff, and source-provenance
+  behavior.
+- Version or invalidate false-empty archive cache entries and add focused
+  provider, route, frontend, runtime, and controlled-browser coverage.
+
+Until this enhancement is selected and completed, the exposed archive controls
+and endpoint are partial scaffolding rather than a supported historical product.
+
 ## 5. Post-refactor observation register
 
 These observations were collected on 2026-08-05. They are preserved as
-**unverified/open observations**, not confirmed current defects. Reproduce and
-reconcile each against current code before implementation.
+**unverified/open observations**, not confirmed current defects unless a later
+owner-smoke note says otherwise. Reproduce and reconcile each against current
+code before implementation.
+
+The 2026-08-08 post-cleanup owner smoke passed the global shell, Surface display
+and product behavior, Satellite, Tropical, Water, Workspace, and the quick
+cross-page regression sweep. It confirmed the exceptions and timing evidence
+recorded below.
 
 General observations:
 
@@ -463,7 +490,12 @@ Testing batch:
 13. Separate Mesoscale Discussion and Storm Report pills.
 14. RTMA Wind Speed should select Wind Direction; Direction remains independently
     removable and follows Wind Speed in the control order.
-15. Diagnose cancellation/ownership when rendering continues after page switch.
+15. **Confirmed 2026-08-08:** a cold Meteosat-12 Channel 13 render continued
+    after switching away from Satellite, and Tropical did not load until that
+    request finished. The synchronous tile route waits on its render future;
+    diagnose request-thread starvation, page-switch cancellation/ownership, and
+    isolation of unrelated page/static requests without weakening bounded
+    render ownership or cache publication.
 16. Determine whether MRMS blocks current display on full animation warming.
 17. Research zooming MESH to the location behind `Largest Hail`.
 18. Consider dual useful units in `mrms-legend-units`.
@@ -479,6 +511,19 @@ Testing batch:
     `[19.05, -167.69]`, zoom `4.5`.
 25. Replace WPC QPF subproduct dropdown repetition with time-range pills.
 26. Measure current-frame-first loading with user-triggered lookback warming.
+27. **Confirmed limitation and future feature, 2026-08-08:** selecting July 1,
+    2026 for both CONUS and NC completed with zero stations and no browser or
+    server error. The owner clarified that Surface Archive is a future feature;
+    this is a limitation of its partial scaffold, not a Cleanup Wave regression.
+    The control emits `date_from`/`date_to`, but AWC archive requests cap `hours`
+    at 24 even for older targets, state fallback to IEM is decided before
+    nearest-time filtering, CONUS has no historical IEM fallback, and the service
+    caches empty provider frames as `status: success`. Complete the bounded
+    product contract in section 4.7 when that enhancement is selected.
+28. Measure Meteosat selection-to-first-useful-tile latency by separating source
+    download, decode, and render time. One Meteosat-12 Full Disk prefetch recorded
+    `jobs=1 downloaded=3 errors=0 pruned=27 elapsed=0h 2m 39s`; treat that as an
+    observation, not an optimization baseline, and preserve output parity.
 
 ## 6. Version 2 lane
 
@@ -566,12 +611,11 @@ developer, repository, user, and selected-skill instructions.
 
 ## 10. Choosing the next slice
 
-The default next decision is **Cleanup Wave A**, selecting one test family that
-protects an immediately following cleanup slice. A good first pair is:
-
-1. route JSON-serialization coverage plus the `/api/mrms/products` fix, or
-2. Surface normalization/archive fixtures plus the bounded Surface correctness
-   fixes.
+Cleanup Waves A through E are complete. The default next decision is to select
+one bounded item from the approved current-dashboard enhancement ledger in
+section 4. The ledger order does not establish priority or authorization; name
+the selected family and define its exact implementation boundary before editing.
 
 Before starting, confirm current Git status, inspect only the named paths and
-their callers, define validation categories, and keep unrelated work untouched.
+their callers, define validation and rollback/fallback behavior, state explicit
+exclusions, and keep unrelated work untouched.

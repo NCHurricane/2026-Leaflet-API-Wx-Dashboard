@@ -8,7 +8,7 @@
 
 .drought-controls { grid-area: controls; }
 .drought-map-wrap { grid-area: map; position: relative; min-height: 0; }
-#drought-map { width: 100%; height: 100%; background: #dbe7ef; }
+#drought-map { width: 100%; height: 100%; background: var(--core-bg); }
 
 .drought-controls h2 {
     margin: 0 0 8px;

@@ -8,7 +8,7 @@
 
 .spc-controls { grid-area: controls; }
 .spc-map-wrap { grid-area: map; position: relative; min-height: 0; }
-#spc-map { width: 100%; height: 100%; background: #dbe7ef; }
+#spc-map { width: 100%; height: 100%; background: var(--core-bg); }
 
 .spc-controls h2 {
     margin: 0 0 8px;

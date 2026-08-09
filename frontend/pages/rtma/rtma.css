@@ -10,7 +10,7 @@
 
 .rtma-controls { grid-area: controls; }
 .rtma-map-wrap { grid-area: map; position: relative; min-height: 0; }
-#rtma-map { width: 100%; height: 100%; background: #dbe7ef; }
+#rtma-map { width: 100%; height: 100%; background: var(--core-bg); }
 
 .rtma-controls h2 {
     margin: 0 0 8px;

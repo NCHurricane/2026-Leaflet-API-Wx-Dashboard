@@ -8,7 +8,7 @@
 
 .surface-controls { grid-area: controls; }
 .surface-map-wrap { grid-area: map; position: relative; min-height: 0; }
-#surface-map { width: 100%; height: 100%; background: #dbe7ef; }
+#surface-map { width: 100%; height: 100%; background: var(--core-bg); }
 
 .surface-controls h2 {
     margin: 0 0 8px;

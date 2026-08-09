@@ -286,6 +286,11 @@ button:hover { border-color: var(--core-accent); }
    fractional device pixels. Map Core supplies one physical pixel of overlap;
    the 1px fallback also covers cached older modules. Geographic tile positions
    and hit testing remain unchanged. */
+
+.leaflet-container {
+    background: var(--core-bg);
+}
+
 .leaflet-container img.leaflet-tile {
     width: calc(256px + var(--core-tile-overlap, 1px)) !important;
     height: calc(256px + var(--core-tile-overlap, 1px)) !important;

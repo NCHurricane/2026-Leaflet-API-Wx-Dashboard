@@ -10,7 +10,7 @@
 
 .mrms-controls { grid-area: controls; }
 .mrms-map-wrap { grid-area: map; position: relative; min-height: 0; }
-#mrms-map { width: 100%; height: 100%; background: #dbe7ef; }
+#mrms-map { width: 100%; height: 100%; background: var(--core-bg); }
 
 .mrms-controls h2 {
     margin: 0 0 8px;
