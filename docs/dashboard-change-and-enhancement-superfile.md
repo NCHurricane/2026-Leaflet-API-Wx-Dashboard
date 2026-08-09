@@ -98,8 +98,15 @@ Status vocabulary:
   bounded. The current UI history is approximately 12 hours. Native MRMS tiles
   coexist with PNG fallback; `latest_source.json` is canonical frame identity.
 - **SPC/WPC/Tropical/Water/Surface/Drought:** preserve their current standalone
-  routes, provider parsing, legitimate-empty states, archive behavior where
-  exposed, and page-owned controls/legends.
+  routes, provider parsing, legitimate-empty states, and page-owned
+  controls/legends. Surface owns a bounded 15-minute-to-24-hour recent-lookback
+  slider in Live; the latest current frame remains fallback, while older frames
+  retain their ASOS-only/no-gradient boundary.
+- **Archive UI:** Surface and Alerts expose placeholder Archive tabs with the
+  message `Archive tools are planned for a future update.` Alerts has no general
+  lookback slider; its 1/6/12/24-hour Local Storm Report pills remain a distinct
+  live-data filter. The retained Surface/Alerts archive endpoints are backend
+  groundwork, not completed standalone Archive workflows.
 - **Shapefiles:** retain the primary state bundle, county bundle, and
   `tl_2025_us_state.*` as the explicit TIGER state fallback.
 - **Data:** all reviewed files under `data/` are retained as city/label inputs.
@@ -439,26 +446,33 @@ retention is **rejected**.
 - User preference persistence with explicit reset/migration behavior.
 - RTMA wind-marker polish and Projected Arrival Tool FAQ/wiki material.
 
-### 4.7 Surface Archive completion
+### 4.7 Unified cross-page Archive workflow
 
-Complete the currently partial Surface Archive UI/API scaffold as a separately
-selected enhancement:
+Archive tooling is one future cross-page family for every eligible product with
+retained archived source files or provider access. Do not complete Surface or
+Alerts as isolated Archive products before that shared workflow is selected.
 
-- Support owner-selected ending date/time for both CONUS and individual states,
-  with explicit timezone, maximum-span, and maximum-historical-age contracts.
-- Define a bounded provider strategy for near-current and older observations.
-  AWC's practical 24-hour window cannot satisfy older targets; historical IEM
-  access must avoid unbounded per-state/per-frame request multiplication.
-- Distinguish loading, legitimate no-observation, unsupported-range, and provider
-  failure states instead of returning false-empty success.
-- Preserve the authoritative Surface palette and station/frame contracts, and
-  define scrubber, cancellation, cache, retry/backoff, and source-provenance
-  behavior.
-- Version or invalidate false-empty archive cache entries and add focused
-  provider, route, frontend, runtime, and controlled-browser coverage.
+Current UI boundary:
 
-Until this enhancement is selected and completed, the exposed archive controls
-and endpoint are partial scaffolding rather than a supported historical product.
+- Surface and Alerts Archive tabs are placeholders with the exact message
+  `Archive tools are planned for a future update.`
+- Surface's bounded recent lookback belongs to Live and ends at the current
+  time; it is not an arbitrary-date Archive workflow.
+- Alerts has no general lookback slider. Local Storm Report time-window pills
+  remain live filtering, not Archive controls.
+- Retain the existing Surface/Alerts archive endpoints, provider helpers,
+  deterministic caches, and tests as groundwork; do not present them as a
+  supported page workflow.
+
+When selected, the unified family must inventory eligible pages and define
+shared ending-date/time and timezone behavior, maximum span and historical age,
+provider/source limits, cache/versioning, cancellation, retry/backoff, source
+provenance, and page-specific rendering/playback contracts. It must distinguish
+loading, legitimate no-data, unsupported range, and provider failure rather
+than returning false-empty success. Surface specifically still requires a
+bounded older-observation strategy because AWC's practical 24-hour window
+cannot satisfy older targets and IEM access must avoid unbounded
+per-state/per-frame request multiplication.
 
 ## 5. Post-refactor observation register
 
@@ -528,15 +542,15 @@ Testing batch:
     `[19.05, -167.69]`, zoom `4.5`.
 25. Replace WPC QPF subproduct dropdown repetition with time-range pills.
 26. Measure current-frame-first loading with user-triggered lookback warming.
-27. **Confirmed limitation and future feature, 2026-08-08:** selecting July 1,
-    2026 for both CONUS and NC completed with zero stations and no browser or
-    server error. The owner clarified that Surface Archive is a future feature;
-    this is a limitation of its partial scaffold, not a Cleanup Wave regression.
-    The control emits `date_from`/`date_to`, but AWC archive requests cap `hours`
-    at 24 even for older targets, state fallback to IEM is decided before
-    nearest-time filtering, CONUS has no historical IEM fallback, and the service
-    caches empty provider frames as `status: success`. Complete the bounded
-    product contract in section 4.7 when that enhancement is selected.
+27. **Corrected product boundary, 2026-08-08:** the July 1 Surface probe exposed
+    an unsupported partial UI, not a Cleanup Wave regression. Surface now keeps
+    its bounded recent lookback in Live; Surface and Alerts Archive tabs are
+    placeholders, and Alerts has no general lookback slider. The backend
+    limitation remains useful evidence for the unified section 4.7 family: AWC
+    archive requests cap `hours` at 24 even for older targets, state fallback to
+    IEM is decided before nearest-time filtering, CONUS has no historical IEM
+    fallback, and the service can cache empty provider frames as
+    `status: success`.
 28. **Measured 2026-08-09:** tile responses and logs now expose source/download,
     decode/renderer construction, and final tile render/publication separately.
     Three uncached z6 Meteosat-12 Channel 13 tiles from distinct cached-source
@@ -642,8 +656,9 @@ the selected family and define its exact implementation boundary before editing.
 
 The post-cleanup Satellite cross-page blocking prerequisite and separate
 Meteosat stage measurement are complete. They do not select a Section 4 family;
-Radar WebGL remains listed first without priority, and Surface Archive remains
-available independently in section 4.7.
+Radar WebGL remains listed first without priority. Section 4.7 retains one
+future unified cross-page Archive family, not an independently selectable
+Surface-only completion.
 
 Before starting, confirm current Git status, inspect only the named paths and
 their callers, define validation and rollback/fallback behavior, state explicit

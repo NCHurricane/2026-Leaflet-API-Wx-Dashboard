@@ -86,9 +86,9 @@ Product-page architecture (migration completed in Phase 27):
   and Local Storm Report filtering/rendering, the active-warning rail, immersive
   alert detail, in-memory off/on restoration, page-owned combined status,
   severe-warning pulse styling, and default-on 60-second refresh without
-  loading `js/weather.js`. Retained Alerts archive behavior is part of the
-  current page/API contract. The radar-dependent Projected Arrival Tool remains
-  reserved for the severe-weather workspace.
+  loading `js/weather.js`. Its Archive tab is an explicit future-tools
+  placeholder; Alerts has no general lookback slider. The radar-dependent
+  Projected Arrival Tool remains reserved for the severe-weather workspace.
 - `/radar` serves `frontend/pages/radar/radar.html`, which owns live site/product
   selection, current and cached-frame playback, NST overlays, legends, and the
   value inspector. The extensionless `/radar` URL is canonical; the broken
@@ -140,6 +140,13 @@ engine displays the prior masked PNG or observations alone; its unmasked
 client-canvas interpolation is reserved for a completed server path that
 produced no usable image. Presence-only states report `idle`. Six-hour
 cache cleanup is coordinator-owned and does not require an open page.
+
+Surface Live also owns a bounded 15-minute-to-24-hour recent-lookback slider.
+It loads the latest current response first, then uses the retained synchronous
+Surface frame endpoint to populate a recent scrubber ending at the current
+quarter-hour. Current data remains visible if history is unavailable. Older
+frames are ASOS-only and do not generate historical gradients. The Surface
+Archive tab remains a future-tools placeholder.
 
 The current coordinator supports one application process. `WEB_CONCURRENCY` and
 `UVICORN_WORKERS` above 1 are rejected, and CLI multi-worker launches are
@@ -458,7 +465,9 @@ The older root `radar.html`/`satellite.html` split (synchronous Lambert render
 pipeline and layered PNG scrubber) was not carried forward for the live paths.
 Cleanup Phase 2 also removed the disconnected MRMS/SPC archive render-session
 and progress workflow. The retained Alerts and Surface archive endpoints use
-synchronous vector/data responses with deterministic JSON caching.
+synchronous vector/data responses with deterministic JSON caching. They remain
+backend groundwork, while the standalone Surface and Alerts Archive tabs are
+placeholders pending one future unified cross-page workflow.
 
 Direction:
 

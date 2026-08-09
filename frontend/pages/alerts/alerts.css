@@ -81,14 +81,10 @@
 .alerts-notification span { margin-top: 2px; color: #cbd5e1; font-size: .68rem; }
 .alerts-notification-close { position: absolute; top: 6px; right: 7px; width: auto; padding: 1px 6px; background: transparent; border: 0; font-size: 1rem; }
 
-#alerts-scrubber-bar { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 620; min-width: 0; padding: 6px 10px; background: rgba(15,23,42,0.96); border: 1px solid #334155; border-radius: 8px; }
-#alerts-scrubber-bar[hidden] { display: none; }
 .alerts-legend { left: 12px !important; right: auto !important; width: min(48%, 620px); max-height: min(60%, 420px); }
 .alerts-lsr-legend { left: auto !important; right: 12px !important; }
 .alerts-legend .core-legend-body { padding: 8px 10px 10px; }
 .alerts-legend .core-legend-categories { grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); justify-content: start; gap: 4px; }
-.alerts-archive-lookback { padding: 9px 10px; border: 1px solid rgba(148,163,184,.24); border-radius: 6px; background: rgba(15,23,42,.55); }
-.alerts-lookback-labels { display: flex; justify-content: space-between; color: var(--core-muted); font-size: .66rem; }
 .alerts-legend .core-legend-category { padding: 5px 5px 5px 0; }
 .alerts-legend .alerts-legend-lsr-category { grid-template-columns: 24px minmax(0, 1fr); align-items: center; }
 .alerts-legend-icon { display: grid; width: 24px; min-height: 24px; place-items: center; font-size: 1rem; -webkit-text-stroke: .5px #08111d; text-shadow: 0 0 3px #000; }

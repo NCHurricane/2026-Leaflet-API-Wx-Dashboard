@@ -6,7 +6,7 @@ import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260808a';
-import { createSurfaceEngine } from './surface-engine.js?v=20260808a';
+import { createSurfaceEngine } from './surface-engine.js?v=20260808c';
 import { baseDistKm, createSurfaceRenderer } from './surface-render.js?v=20260808a';
 
 const byId = (id) => document.getElementById(id);
@@ -58,23 +58,24 @@ async function initialize() {
         provider: byId('surface-provider'),
     });
     const renderer = createSurfaceRenderer(mapCore);
+    const historyGate = api.createRequestGate();
+    let currentLiveFrame = null;
     const engine = createSurfaceEngine({
         api,
         renderer,
         legend,
         status,
         onStationCount: (count) => { byId('surface-station-count').textContent = String(count); },
+        onLiveFrame: (frame) => {
+            currentLiveFrame = frame;
+            void loadRecentHistory();
+        },
     });
-    let archiveFrames = [];
     const scrubberBar = byId('surface-scrubber-bar');
     const scrubber = createScrubber(byId('surface-bottom-scrubber'), {
         holdAtEnd: true,
         onFrame(frame) {
-            engine.renderArchiveFrame(frame, {
-                ...viewOptions(),
-                networks: new Set(['ASOS']),
-                gradientEnabled: false,
-            });
+            engine.renderRecentFrame(frame, viewOptions());
         },
     });
 
@@ -108,9 +109,20 @@ async function initialize() {
         return remainder ? `${wholeHours}h ${remainder}m` : `${wholeHours} hour${wholeHours === 1 ? '' : 's'}`;
     }
 
-    function localDatetimeValue(date) {
-        const offset = date.getTimezoneOffset() * 60000;
-        return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    function frameLabel(frame) {
+        const date = new Date(frame?.timestamp || '');
+        return Number.isFinite(date.getTime())
+            ? date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+            : '—';
+    }
+
+    function recentWindow(hours) {
+        const end = new Date();
+        end.setUTCMinutes(Math.floor(end.getUTCMinutes() / 15) * 15, 0, 0);
+        return {
+            start: new Date(end.getTime() - hours * 60 * 60 * 1000),
+            end,
+        };
     }
 
     function updateGradientControlState() {
@@ -128,13 +140,75 @@ async function initialize() {
         byId('surface-networks-wrap').hidden = region === 'CONUS' || region === 'WORLD';
     }
 
+    function clearRecentHistory() {
+        historyGate.cancel();
+        scrubber.pause();
+        scrubber.setFrames([], { silent: true });
+        scrubberBar.hidden = true;
+    }
+
+    async function loadRecentHistory() {
+        const view = viewOptions();
+        if (!view.product || !currentLiveFrame) {
+            clearRecentHistory();
+            return;
+        }
+
+        clearRecentHistory();
+        if (Array.isArray(currentLiveFrame.stations) && currentLiveFrame.stations.length) {
+            engine.renderRecentFrame({ ...currentLiveFrame, is_live: true }, view);
+        }
+        const request = historyGate.begin();
+        const hours = Number(byId('surface-lookback').value);
+        const { start, end } = recentWindow(hours);
+        const maxFrames = Math.min(120, Math.floor(hours * 4) + 1);
+        try {
+            const data = await api.fetchJson(`/api/archive/surface?region=${encodeURIComponent(view.region)}`
+                + `&product=${encodeURIComponent(view.product)}&date_from=${encodeURIComponent(start.toISOString())}`
+                + `&date_to=${encodeURIComponent(end.toISOString())}&max_frames=${maxFrames}`, {
+                cache: 'no-store',
+                signal: request.signal,
+            });
+            if (!historyGate.isCurrent(request.sequence)) return;
+
+            const liveTimestamp = Date.parse(currentLiveFrame.timestamp || '');
+            const recentFrames = (Array.isArray(data?.frames) ? data.frames : [])
+                .filter((frame) => Array.isArray(frame?.stations) && frame.stations.length)
+                .filter((frame) => {
+                    const timestamp = Date.parse(frame?.timestamp || '');
+                    return !Number.isFinite(liveTimestamp) || !Number.isFinite(timestamp) || timestamp < liveTimestamp;
+                })
+                .map((frame) => ({ ...frame, label: frameLabel(frame) }));
+            const liveTimestampValue = currentLiveFrame.timestamp || new Date().toISOString();
+            const liveFrame = {
+                ...currentLiveFrame,
+                timestamp: liveTimestampValue,
+                label: frameLabel({ timestamp: liveTimestampValue }),
+                is_live: true,
+            };
+            const hasLiveStations = Array.isArray(liveFrame.stations) && liveFrame.stations.length > 0;
+            const frames = hasLiveStations ? [...recentFrames, liveFrame] : recentFrames;
+            scrubber.setFrames(frames, { index: Math.max(0, frames.length - 1) });
+            scrubberBar.hidden = frames.length < 2;
+        } catch (error) {
+            if (error.name === 'AbortError' || !historyGate.isCurrent(request.sequence)) return;
+            console.warn('[surface] recent history unavailable', error);
+            scrubberBar.hidden = true;
+            status.setMessage(`Current Surface data shown; recent history unavailable: ${error.message}`, 'error');
+        }
+    }
+
     async function loadActive(options = {}) {
         const view = viewOptions();
         if (!view.product) {
+            currentLiveFrame = null;
+            clearRecentHistory();
             engine.clear();
             status.setMessage(SELECT_PRODUCT_MESSAGE);
             return;
         }
+        currentLiveFrame = null;
+        clearRecentHistory();
         try {
             await engine.load(view, options);
         } catch (error) {
@@ -200,51 +274,12 @@ async function initialize() {
     });
     byId('surface-refresh').addEventListener('click', () => void loadActive({ forceRefresh: true }));
 
-    const archiveTime = byId('surface-archive-time');
-    const archiveLookback = byId('surface-archive-lookback');
-    archiveTime.value = localDatetimeValue(new Date());
-    archiveLookback.addEventListener('input', () => {
-        byId('surface-archive-lookback-value').textContent = formatLookback(archiveLookback.value);
+    const lookback = byId('surface-lookback');
+    lookback.addEventListener('input', () => {
+        byId('surface-lookback-value').textContent = formatLookback(lookback.value);
     });
-    byId('surface-archive-load').addEventListener('click', async () => {
-        const product = activeProduct();
-        if (!product) {
-            status.setMessage('Select a Surface product before loading archive observations.', 'error');
-            return;
-        }
-        const end = new Date(archiveTime.value);
-        if (!Number.isFinite(end.getTime())) {
-            status.setMessage('Choose a valid ending date and time.', 'error');
-            return;
-        }
-        const hours = Number(archiveLookback.value);
-        const start = new Date(end.getTime() - hours * 60 * 60 * 1000);
-        const maxFrames = Math.floor(hours * 4) + 1;
-        status.setMessage(`Loading ${formatLookback(hours)} of Surface observations…`);
-        try {
-            const data = await api.fetchJson(`/api/archive/surface?region=${encodeURIComponent(regionSelect.value)}`
-                + `&product=${encodeURIComponent(product)}&date_from=${encodeURIComponent(start.toISOString())}`
-                + `&date_to=${encodeURIComponent(end.toISOString())}&max_frames=${maxFrames}`);
-            archiveFrames = Array.isArray(data?.frames) ? data.frames.map((frame) => ({
-                ...frame,
-                label: new Date(frame.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
-            })) : [];
-            scrubber.setFrames(archiveFrames, { index: Math.max(0, archiveFrames.length - 1) });
-            scrubberBar.hidden = !archiveFrames.length;
-            status.setMessage(`Loaded ${archiveFrames.length} Surface frames.`, archiveFrames.length ? 'success' : 'error');
-        } catch (error) {
-            status.setMessage(`Surface archive error: ${error.message}`, 'error');
-        }
-    });
-
-    byId('surface-sidebar-tabs').addEventListener('core:sidebar-tab-change', (event) => {
-        const archive = event.detail?.tab === 'archive';
-        byId('surface-refresh').hidden = archive;
-        if (!archive) {
-            scrubber.pause();
-            scrubberBar.hidden = true;
-            if (activeProduct()) void loadActive();
-        }
+    lookback.addEventListener('change', () => {
+        if (activeProduct() && currentLiveFrame) void loadRecentHistory();
     });
 
     // ── Cities ───────────────────────────────────────────────────────────────
@@ -328,6 +363,7 @@ async function initialize() {
         sidebarTabs.destroy();
         legend.destroy();
         mapCore.map.off('zoomend', onZoomEnd);
+        historyGate.cancel();
         engine.destroy();
         scrubber.destroy();
         mapCore.destroy();

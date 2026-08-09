@@ -2,38 +2,22 @@ import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
 import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
-import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260808a';
 import { ALERT_CATEGORIES, ALERT_COLORS, ALERT_DEFAULT_COLOR, ALERT_TEXT_COLORS, LSR_CATEGORIES, SEVERE_EVENTS } from './alerts-config.js?v=20260719a';
 import { createAlertDetail } from './alerts-detail.js?v=20260804a';
-import { classifyLsrEvent, createAlertsEngine } from './alerts-engine.js?v=20260803a';
+import { classifyLsrEvent, createAlertsEngine } from './alerts-engine.js?v=20260808b';
 
 const byId = (id) => document.getElementById(id);
 const AUTO_UPDATE_MS = 60_000;
 
-function selectedMode() {
-    return document.querySelector('#alerts-sidebar-tabs .core-sidebar-tab.is-active')?.dataset.sidebarTab === 'archive'
-        ? 'archive'
-        : 'live';
-}
 function selectedCategories() { return [...document.querySelectorAll('#alerts-category-list .alerts-category-input:checked')].map((input) => input.value); }
 function selectedWarningTypes() { return [...document.querySelectorAll('#alerts-warning-subtypes input:checked')].map((input) => input.value); }
 function selectedLsrCategories() { return [...document.querySelectorAll('#alerts-lsr-list input:checked')].map((input) => input.value); }
 function selectedLsrHours() { return Number(byId('alerts-lsr-hours').querySelector('.is-active')?.dataset.hours || 24); }
 function notificationMode() { return document.querySelector('input[name="alerts-notification-mode"]:checked')?.value || 'severe'; }
 function selection() { return { categories: selectedCategories(), warningTypes: selectedWarningTypes() }; }
-
-function localDatetimeValue(date) {
-    const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-    return shifted.toISOString().slice(0, 16);
-}
-
-function frameLabel(frame) {
-    const date = new Date(frame?.timestamp || '');
-    return Number.isFinite(date.getTime()) ? date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
-}
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'Alerts');
@@ -225,12 +209,6 @@ async function initialize() {
         onLsrDetailClose: detail.closeLsr,
         onNewAlert: showNewAlert,
     });
-    const scrubberBar = byId('alerts-scrubber-bar');
-    const scrubber = createScrubber(byId('alerts-bottom-scrubber'), {
-        holdAtEnd: true,
-        onFrame(frame) { engine.renderArchiveFrame(frame); },
-    });
-
     function populateFilters() {
         const master = byId('alerts-all').closest('label');
         byId('alerts-category-list').replaceChildren(master, ...Object.keys(ALERT_CATEGORIES).map((category) => {
@@ -268,7 +246,6 @@ async function initialize() {
     syncCategoryMaster(); syncLsrMaster(); syncRightRailVisibility();
 
     async function loadLive(options = {}) {
-        if (selectedMode() !== 'live') return;
         await Promise.all([
             engine.loadLive(selection(), regionSelect.value, options),
             engine.loadLsr(selectedLsrCategories(), selectedLsrHours(), options),
@@ -277,7 +254,6 @@ async function initialize() {
 
     let moveTimer = null;
     function scheduleViewportRefresh() {
-        if (selectedMode() !== 'live') return;
         clearTimeout(moveTimer);
         moveTimer = setTimeout(() => void loadLive({ silent: true }), 350);
     }
@@ -321,42 +297,6 @@ async function initialize() {
         renderLsrReports();
     });
 
-    byId('alerts-sidebar-tabs').addEventListener('core:sidebar-tab-change', (event) => {
-        if (!['live', 'archive'].includes(event.detail?.tab)) return;
-        const archive = event.detail.tab === 'archive';
-        scrubber.pause(); scrubber.setFrames([]); scrubberBar.hidden = true;
-        engine.clear(); detail.close(); status.clear();
-        if (!archive) void loadLive(); else status.setMessage('Choose an ending time and lookback, then load.');
-    });
-
-    const now = new Date();
-    const archiveTime = byId('alerts-archive-time');
-    const archiveLookback = byId('alerts-archive-lookback');
-    const archiveLookbackValue = byId('alerts-archive-lookback-value');
-    archiveTime.value = localDatetimeValue(now);
-    function formatArchiveLookback(value) {
-        const minutes = Math.max(5, Math.round(Number(value)));
-        const wholeHours = Math.floor(minutes / 60);
-        const remainder = minutes % 60;
-        if (!wholeHours) return `${remainder} min`;
-        return remainder ? `${wholeHours}h ${remainder}m` : `${wholeHours} hour${wholeHours === 1 ? '' : 's'}`;
-    }
-    archiveLookback.addEventListener('input', () => {
-        archiveLookbackValue.textContent = formatArchiveLookback(archiveLookback.value);
-    });
-    byId('alerts-load-archive').addEventListener('click', async () => {
-        const to = archiveTime.value;
-        const endMs = Date.parse(to);
-        if (!to || !Number.isFinite(endMs)) { status.setMessage('Choose a valid archive ending time.', 'error'); return; }
-        const from = new Date(endMs - Number(archiveLookback.value) * 60_000).toISOString();
-        try {
-            const frames = await engine.loadArchive(from, to, regionSelect.value);
-            const labeled = frames.map((frame) => ({ ...frame, label: frameLabel(frame) }));
-            scrubber.setFrames(labeled, { index: Math.max(0, labeled.length - 1) });
-            scrubberBar.hidden = labeled.length === 0;
-        } catch (error) { status.setMessage(`Archive unavailable: ${error.message}`, 'error'); }
-    });
-
     let autoTimer = null;
     const autoUpdate = byId('alerts-auto-update');
     function syncAutoUpdate() {
@@ -366,8 +306,8 @@ async function initialize() {
     autoUpdate.addEventListener('change', syncAutoUpdate);
     syncAutoUpdate();
     regionSelect.addEventListener('change', () => { detail.close(); engine.clear(); mapCore.fitRegion(regionSelect.value); scheduleViewportRefresh(); });
-    byId('alerts-refresh').addEventListener('click', () => selectedMode() === 'live' ? void loadLive({ refresh: true }) : byId('alerts-load-archive').click());
-    byId('alerts-clear').addEventListener('click', () => { scrubber.pause(); scrubber.setFrames([]); scrubberBar.hidden = true; detail.close(); engine.clear(); status.clear(); status.setMessage('Alerts cleared.'); });
+    byId('alerts-refresh').addEventListener('click', () => void loadLive({ refresh: true }));
+    byId('alerts-clear').addEventListener('click', () => { detail.close(); engine.clear(); status.clear(); status.setMessage('Alerts cleared.'); });
     byId('alerts-basemap').addEventListener('change', (event) => mapCore.setBasemap(event.target.value));
     const opacity = byId('alerts-opacity');
     opacity.addEventListener('input', () => { const value = engine.setOpacity(opacity.value); byId('alerts-opacity-label').textContent = `Polygon Opacity (${value.toFixed(2).replace(/\.?0+$/, '')})`; });

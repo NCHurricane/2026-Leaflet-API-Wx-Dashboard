@@ -74,7 +74,7 @@ function gradientSourceRegion(region) {
     return String(region || 'CONUS').toUpperCase() === 'WORLD' ? 'WORLD' : 'CONUS';
 }
 
-export function createSurfaceEngine({ api, renderer, legend, status, onStationCount }) {
+export function createSurfaceEngine({ api, renderer, legend, status, onStationCount, onLiveFrame }) {
     const gate = createRequestGate();
     const gradientMetaCache = new Map();
     const gradientMetaInflight = new Map();
@@ -85,6 +85,17 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
     let gradientRegion = null;
     let colorAnchors = null;
     let lastView = null;
+    let recentHistoryActive = false;
+
+    function liveFrameSnapshot(data) {
+        return {
+            timestamp: data?.timestamp || null,
+            stations: [...stations],
+            color_anchors: colorAnchors?.map((anchor) => [...anchor]) || [],
+            source: 'live',
+            is_live: true,
+        };
+    }
 
     function filteredStations(view) {
         if (!(view.networks instanceof Set)) return stations;
@@ -209,6 +220,9 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
             colorAnchors = normalizeColorAnchors(data?.color_anchors, view.product);
             stations = Array.isArray(data?.stations) ? data.stations : [];
             lastView = { ...view };
+            recentHistoryActive = false;
+            let liveFrame = liveFrameSnapshot(data);
+            onLiveFrame?.(liveFrame);
             const gradientKey = gradientMetaKey(view.product, view.region);
             if (view.gradientEnabled && !freshGradientMeta(view.product, view.region)) {
                 gradientPendingKeys.add(gradientKey);
@@ -238,6 +252,8 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
                     if (refreshStates.has(data?.cache_state)) continue;
                     colorAnchors = normalizeColorAnchors(data?.color_anchors, view.product);
                     stations = Array.isArray(data?.stations) ? data.stations : [];
+                    liveFrame = liveFrameSnapshot(data);
+                    onLiveFrame?.(liveFrame);
                     renderView(lastView);
                     legend.setHtml(legendHtml(view.product, stations.length, colorAnchors));
                     onStationCount?.(stations.length);
@@ -247,7 +263,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
                     status.setMessage(
                         `Surface ${label} is still warming; retrying on the next refresh.`,
                     );
-                    return;
+                    return liveFrame;
                 }
             }
 
@@ -285,6 +301,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
                 // finished without a usable current or last-complete PNG.
                 if (meta || !hadMeta) renderView(lastView);
             }
+            return liveFrame;
         } catch (error) {
             if (error.name === 'AbortError' || !gate.isCurrent(request.sequence)) return;
             console.error('[surface] load failed', error);
@@ -297,6 +314,10 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
     function rerender(view) {
         if (!lastView || !stations.length) return false;
         lastView = { ...lastView, ...view };
+        if (recentHistoryActive) {
+            lastView.gradientEnabled = false;
+            lastView.networks = new Set(['ASOS']);
+        }
         renderView(lastView);
         return true;
     }
@@ -304,6 +325,10 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
     // Gradient toggled on after load: make sure source stations and the worker
     // PNG metadata exist, then re-render.
     async function applyGradient(view) {
+        if (recentHistoryActive) {
+            rerender(view);
+            return;
+        }
         const gradientKey = gradientMetaKey(view.product, view.region);
         if (view.gradientEnabled && !freshGradientMeta(view.product, view.region)) {
             gradientPendingKeys.add(gradientKey);
@@ -343,22 +368,32 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
         stations = [];
         colorAnchors = null;
         lastView = null;
+        recentHistoryActive = false;
         renderer.clear();
         legend.clear();
         status.clear();
         onStationCount?.(0);
     }
 
-    function renderArchiveFrame(frame, view) {
-        gate.cancel();
+    function renderRecentFrame(frame, view) {
+        recentHistoryActive = frame?.is_live !== true;
+        if (recentHistoryActive) gate.cancel();
         stations = Array.isArray(frame?.stations) ? frame.stations : [];
         colorAnchors = normalizeColorAnchors(frame?.color_anchors, view.product);
-        lastView = { ...view, gradientEnabled: false };
+        lastView = recentHistoryActive
+            ? { ...view, gradientEnabled: false, networks: new Set(['ASOS']) }
+            : { ...view };
         renderView(lastView);
         legend.setHtml(legendHtml(view.product, stations.length, colorAnchors));
         onStationCount?.(stations.length);
-        status.setDataInfo({ timestamp: frame?.timestamp, provider: 'IEM' });
-        status.setMessage(`Surface archive: ${stations.length} stations.`, 'success');
+        const provider = recentHistoryActive
+            ? String(frame?.source || 'IEM').toUpperCase()
+            : 'IEM';
+        status.setDataInfo({ timestamp: frame?.timestamp, provider });
+        status.setMessage(
+            `Surface ${recentHistoryActive ? 'recent history' : 'live'}: ${stations.length} stations.`,
+            'success',
+        );
     }
 
     return Object.freeze({
@@ -366,7 +401,7 @@ export function createSurfaceEngine({ api, renderer, legend, status, onStationCo
         destroy: clear,
         applyGradient,
         load,
-        renderArchiveFrame,
+        renderRecentFrame,
         rerender,
         get hasStations() { return stations.length > 0; },
     });

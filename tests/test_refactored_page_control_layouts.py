@@ -123,11 +123,26 @@ def test_global_view_pages_border_defaults_enable_country_only():
         assert "checked" in country
 
 
-def test_archive_sliders_use_exact_requested_steps():
+def test_surface_live_lookback_and_surface_alerts_archive_placeholders():
     surface = page_text("surface")
     alerts = page_text("alerts")
-    assert 'id="surface-archive-lookback" type="range" min="0.25" max="24" step="0.25"' in surface
-    assert 'id="alerts-archive-lookback" type="range" min="5" max="360" step="5"' in alerts
+    surface_script = script_text("surface")
+    alerts_script = script_text("alerts")
+
+    assert 'id="surface-lookback" type="range" min="0.25" max="24" step="0.25"' in surface
+    assert surface.index('id="surface-lookback"') < surface.index('id="surface-panel-settings"')
+    assert surface.count("Archive tools are planned for a future update.") == 1
+    assert alerts.count("Archive tools are planned for a future update.") == 1
+    assert "surface-archive-time" not in surface
+    assert "surface-archive-load" not in surface
+    assert "alerts-archive-time" not in alerts
+    assert "alerts-archive-lookback" not in alerts
+    assert "alerts-load-archive" not in alerts
+    assert "alerts-scrubber-bar" not in alerts
+    assert "/api/archive/surface?" in surface_script
+    assert "/api/archive/alerts" not in alerts_script
+    assert "createScrubber" not in alerts_script
+    assert "core:sidebar-tab-change" not in alerts_script
 
 
 def test_tropical_keeps_tab_order_and_uses_shared_settings_spacing():

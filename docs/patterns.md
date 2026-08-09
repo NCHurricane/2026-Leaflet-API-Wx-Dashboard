@@ -140,6 +140,13 @@ their results synchronously and use deterministic JSON caching in
 `services/archive_service.py`. The disconnected MRMS/SPC render-session and
 progress-polling workflow was removed during cleanup Phase 2.
 
+These endpoints are retained groundwork rather than completed standalone page
+workflows. Surface and Alerts show the shared Archive placeholder message.
+Surface alone reuses its bounded recent-frame response for a current-ending
+Live lookback; current data remains fallback, and older frames are ASOS-only
+without historical gradients. Alerts has no general lookback slider; Local
+Storm Report time pills are a separate live filter.
+
 Cache-first endpoints (`/api/data/*`, `/api/overlay/*`, `/api/radar/live/*`,
 `/api/satellite-v2/*`) remain lightweight reads or bounded on-demand renders.
 

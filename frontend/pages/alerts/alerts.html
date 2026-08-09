@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4-cleanup-20260808">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="/frontend/core/core.css?v=20260730b">
-    <link rel="stylesheet" href="/frontend/pages/alerts/alerts.css?v=20260729a">
+    <link rel="stylesheet" href="/frontend/pages/alerts/alerts.css?v=20260808b">
 </head>
 <body>
     <header class="core-header">
@@ -117,17 +117,9 @@
                     </div>
                 </section>
 
-                <section id="alerts-panel-archive" class="core-sidebar-panel alerts-panel-stack" role="tabpanel"
+                <section id="alerts-panel-archive" class="core-sidebar-panel core-placeholder-panel" role="tabpanel"
                     aria-labelledby="alerts-tab-archive" data-sidebar-panel="archive" hidden>
-                    <div id="alerts-archive-controls" class="alerts-panel-stack">
-                        <div class="core-field"><label for="alerts-archive-time">Ending Date and Time</label><input id="alerts-archive-time" type="datetime-local"></div>
-                        <div class="core-adjustment alerts-archive-lookback">
-                            <label for="alerts-archive-lookback">Lookback <span id="alerts-archive-lookback-value">1 hour</span></label>
-                            <input id="alerts-archive-lookback" type="range" min="5" max="360" step="5" value="60">
-                            <div class="alerts-lookback-labels"><span>5 min</span><span>6 hours</span></div>
-                        </div>
-                        <button id="alerts-load-archive" class="alerts-primary" type="button">Load Archive</button>
-                    </div>
+                    <p>Archive tools are planned for a future update.</p>
                 </section>
             </div>
             <div class="core-sidebar-footer">
@@ -143,7 +135,6 @@
             <div id="alerts-lsr-legend" class="alerts-legend alerts-lsr-legend" data-legend-align="right" hidden></div>
             <div id="alerts-detail" class="alerts-detail" hidden></div>
             <div id="alerts-notifications" class="alerts-notifications" aria-live="assertive"></div>
-            <div id="alerts-scrubber-bar" hidden><div id="alerts-bottom-scrubber"></div></div>
         </section>
 
         <aside id="alerts-right-rail" class="alerts-warning-rail" aria-label="Active warnings and latest storm reports">
@@ -174,6 +165,6 @@
         </aside>
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/alerts/alerts-page.js?v=20260804a"></script>
+    <script type="module" src="/frontend/pages/alerts/alerts-page.js?v=20260808b"></script>
 </body>
 </html>

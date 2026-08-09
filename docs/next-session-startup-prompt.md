@@ -56,8 +56,8 @@ Default next discussion:
 - Select one bounded item from the approved current-dashboard enhancement
   ledger in section 4 of the canonical superfile.
 - The Satellite prerequisite is closed and does not choose that enhancement.
-  Radar WebGL is first only by document order; Surface Archive remains an
-  independent section 4.7 option.
+  Radar WebGL is first only by document order. Section 4.7 is a future unified
+  cross-page Archive workflow, not an independent Surface-only completion.
 - State exact scope, dependencies, verification, rollback/fallback behavior,
   and exclusions before editing. Cleanup completion alone does not authorize an
   enhancement family.
@@ -84,6 +84,11 @@ Decisions that must not drift:
 - Surface's 32 °F isotherm and disconnected `*-source` UI are removed. Surface
   colors come from the full authoritative server palette; do not restore a
   simplified browser palette.
+- Surface's 15-minute-to-24-hour lookback remains in Live. Surface and Alerts
+  Archive tabs show `Archive tools are planned for a future update.` Alerts has
+  no general lookback slider; its Local Storm Report time pills remain separate
+  live filters. Retained archive endpoints are groundwork for a later unified
+  cross-page workflow, not supported standalone Archive products.
 - Unused Leaflet stock-image references were removed rather than restoring the
   missing vendored images.
 

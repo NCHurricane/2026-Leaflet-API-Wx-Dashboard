@@ -172,7 +172,6 @@ export function createAlertsEngine(options) {
     let liveSequence = 0;
     let liveRefreshTimer = null;
     let lsrSequence = 0;
-    let archiveSequence = 0;
     let knownAlertIds = null;
     const notificationStartedAtMs = Date.now();
     let selectedAlert = null;
@@ -654,39 +653,9 @@ export function createAlertsEngine(options) {
         }
     }
 
-    function sliceArchive(features, fromValue, toValue) {
-        const start = timestampMs(fromValue); const end = timestampMs(toValue);
-        const step = 5 * 60_000;
-        const parsed = (features || []).map((feature) => ({ feature, start: timestampMs(feature?.properties?.onset || feature?.properties?.sent, start), end: timestampMs(feature?.properties?.expires, end) }));
-        const frames = [];
-        for (let time = start; time <= end; time += step) frames.push({ timestamp: new Date(time).toISOString(), features: parsed.filter((item) => item.start <= time && item.end > time).map((item) => item.feature) });
-        return frames;
-    }
-
-    async function loadArchive(fromValue, toValue, region) {
-        const seq = ++archiveSequence;
-        liveSequence += 1; lsrSequence += 1;
-        status.setMessage('Loading archived alerts…');
-        const params = new URLSearchParams({ date_from: new Date(fromValue).toISOString(), date_to: new Date(toValue).toISOString() });
-        if (region && !['CONUS', 'WORLD'].includes(region)) params.set('state', region);
-        const data = await api.fetchJson(`/api/archive/alerts?${params}`, { cache: 'no-store' });
-        if (seq !== archiveSequence) return [];
-        const frames = sliceArchive(data?.features || [], data?.date_from || fromValue, data?.date_to || toValue);
-        status.setDataInfo({ timestamp: data?.date_to || toValue, provider: 'IEM' });
-        status.setMessage(`${frames.length} archive frame${frames.length === 1 ? '' : 's'} loaded.`);
-        return frames;
-    }
-
-    function renderArchiveFrame(frame) {
-        fullBaseFeatures = activeFeatures(frame?.features || []);
-        displayBaseFeatures = fullBaseFeatures;
-        renderAlerts();
-        status.setDataInfo({ timestamp: frame?.timestamp, provider: 'IEM' });
-    }
-
     function clear() {
         cancelLiveRefreshRetry();
-        liveSequence += 1; lsrSequence += 1; archiveSequence += 1;
+        liveSequence += 1; lsrSequence += 1;
         fullBaseFeatures = []; displayBaseFeatures = []; railAlertBaseFeatures = []; renderedAlerts = []; renderedLsr = [];
         alertCacheReady = false; lsrBaseFeatures = []; railLsrBaseFeatures = []; lsrCacheKey = ''; lsrCacheReady = false;
         knownAlertIds = null;
@@ -705,7 +674,7 @@ export function createAlertsEngine(options) {
             clear();
         },
         getAlerts() { return [...renderedAlerts]; },
-        loadArchive, loadLive, loadLsr, renderArchiveFrame, renderLegend, setSelection, showSelectedAlert,
+        loadLive, loadLsr, renderLegend, setSelection, showSelectedAlert,
         setOpacity(value) { opacity = Math.max(0.1, Math.min(1, Number(value) || 0.75)); alertLayer?.setStyle(alertStyle); watchLayer?.setStyle(alertStyle); selectedAlertLayer?.setStyle(selectedAlertStyle); syncAlertPulseLayers(); return opacity; },
         setLsrOpacity(value) {
             lsrOpacity = Math.max(0.1, Math.min(1, Number(value) || 1));

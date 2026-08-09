@@ -31,7 +31,7 @@ function station(id, network = 'ASOS') {
     return { id, network, lat: 35, lon: -80, temperature: 70 };
 }
 
-function createHarness(fetchJson) {
+function createHarness(fetchJson, overrides = {}) {
     const renderCalls = [];
     const renderer = {
         clearCount: 0,
@@ -61,6 +61,7 @@ function createHarness(fetchJson) {
         legend,
         status,
         onStationCount: (count) => stationCounts.push(count),
+        ...overrides,
     });
     return { engine, legend, renderer, renderCalls, stationCounts, status };
 }
@@ -79,7 +80,7 @@ test('Surface live load filters selected networks and updates product legend and
         };
     });
 
-    await harness.engine.load(view());
+    const liveFrame = await harness.engine.load(view());
 
     assert.equal(requests.length, 1);
     assert.equal(requests[0].path, '/api/data/surface?region=NC&product=temperature');
@@ -98,6 +99,9 @@ test('Surface live load filters selected networks and updates product legend and
     });
     assert.match(harness.status.messages.at(-1).message, /2 stations/);
     assert.equal(harness.engine.hasStations, true);
+    assert.equal(liveFrame.is_live, true);
+    assert.deepEqual(liveFrame.stations.map((item) => item.id), ['airport', 'coop']);
+    assert.deepEqual(liveFrame.color_anchors, TEST_COLOR_ANCHORS);
 });
 
 test('Surface rejects a response without its authoritative palette', async () => {
@@ -145,7 +149,7 @@ test('Surface gradient uses the retained source region and ASOS-only interpolati
     assert.deepEqual(rendered.options.gradientStations.map((item) => item.id), ['airport']);
 });
 
-test('Surface archive frame cancels an unresolved live load and remains authoritative', async () => {
+test('Surface recent-history frame cancels an unresolved live load and remains authoritative', async () => {
     const live = deferred();
     let liveSignal = null;
     const harness = createHarness(async (_path, options) => {
@@ -154,21 +158,26 @@ test('Surface archive frame cancels an unresolved live load and remains authorit
     });
     const pending = harness.engine.load(view());
 
-    const archiveStation = station('archive');
-    harness.engine.renderArchiveFrame(
+    const historyStation = station('history');
+    harness.engine.renderRecentFrame(
         {
             timestamp: '2026-08-05T12:00:00Z',
             color_anchors: TEST_COLOR_ANCHORS,
-            stations: [archiveStation],
+            source: 'awc',
+            stations: [historyStation],
         },
         view({ gradientEnabled: true }),
     );
 
     assert.equal(liveSignal.aborted, true);
     assert.equal(harness.renderCalls.length, 1);
-    assert.deepEqual(harness.renderCalls[0].stations, [archiveStation]);
+    assert.deepEqual(harness.renderCalls[0].stations, [historyStation]);
     assert.equal(harness.renderCalls[0].options.gradientEnabled, false);
-    assert.match(harness.status.messages.at(-1).message, /Surface archive: 1 stations/);
+    assert.deepEqual(harness.status.dataInfo, {
+        timestamp: '2026-08-05T12:00:00Z',
+        provider: 'AWC',
+    });
+    assert.match(harness.status.messages.at(-1).message, /Surface recent history: 1 stations/);
 
     live.resolve({
         cache_state: 'fresh',
@@ -178,7 +187,40 @@ test('Surface archive frame cancels an unresolved live load and remains authorit
     });
     await pending;
 
-    assert.equal(harness.renderCalls.length, 1, 'the stale live response cannot replace the archive frame');
-    assert.equal(harness.engine.rerender({ density: 0.8 }), true);
-    assert.deepEqual(harness.renderCalls.at(-1).stations, [archiveStation]);
+    assert.equal(harness.renderCalls.length, 1, 'the stale live response cannot replace the recent-history frame');
+    assert.equal(harness.engine.rerender({ density: 0.8, gradientEnabled: true, networks: new Set(['COOP']) }), true);
+    assert.deepEqual(harness.renderCalls.at(-1).stations, [historyStation]);
+    assert.equal(harness.renderCalls.at(-1).options.gradientEnabled, false);
+});
+
+test('Surface current-frame scrubber selection preserves an in-flight live refresh', async () => {
+    const live = deferred();
+    let liveSignal = null;
+    const harness = createHarness(async (_path, options) => {
+        liveSignal = options.signal;
+        return live.promise;
+    });
+    const pending = harness.engine.load(view());
+
+    harness.engine.renderRecentFrame(
+        {
+            timestamp: '2026-08-08T22:00:00Z',
+            color_anchors: TEST_COLOR_ANCHORS,
+            stations: [station('cached-live')],
+            is_live: true,
+        },
+        view(),
+    );
+    assert.equal(liveSignal.aborted, false);
+
+    live.resolve({
+        cache_state: 'fresh',
+        timestamp: '2026-08-08T22:05:00Z',
+        color_anchors: TEST_COLOR_ANCHORS,
+        stations: [station('refreshed-live')],
+    });
+    await pending;
+
+    assert.deepEqual(harness.renderCalls.at(-1).stations, [station('refreshed-live')]);
+    assert.match(harness.status.messages.at(-1).message, /1 station/);
 });
