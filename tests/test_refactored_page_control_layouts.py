@@ -42,7 +42,7 @@ def test_two_tab_pages_remain_live_and_settings_only():
 def test_settings_controls_follow_reference_order():
     expected = {
         "surface": ("surface-basemap", "surface-value-opacity", "surface-gradient-opacity", "surface-city-density", 'data-map-overlay="graticule"'),
-        "alerts": ("alerts-basemap", "alerts-opacity", "alerts-city-density", 'data-map-overlay="graticule"', "New Alert Notifications", "Severe Polygon Pulse"),
+        "alerts": ("alerts-basemap", "alerts-opacity", "alerts-city-density", 'data-map-overlay="graticule"', "Shared Alert Notifications", "Severe Polygon Pulse"),
         "radar": ("radar-basemap", "radar-opacity", "radar-city-density", 'data-map-overlay="graticule"'),
         "satellite": ("satellite-basemap", "satellite-opacity", "satellite-city-density", 'data-map-overlay="graticule"'),
         "spc": ("spc-basemap", "spc-fill-opacity", "spc-stroke-opacity", "spc-city-density", 'data-map-overlay="graticule"'),

@@ -2,6 +2,7 @@ import { apiUrl } from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
 import { createMapCore } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
+import { startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260814a';
 import { loadDefaultSettings } from '../../core/settings.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { createStatusReporter } from '../../core/status.js?v=20260808a';
@@ -1582,6 +1583,7 @@ function configureProductModules() {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'Tropical');
+    startNonWorkspaceAlertMonitor();
     configureProductModules();
     _wireLiveAccordions();
     _wireLiveBasinPills();

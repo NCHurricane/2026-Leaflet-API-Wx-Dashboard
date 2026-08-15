@@ -2,6 +2,7 @@ import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
 import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
+import { startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260814a';
 import { createScrubber } from '../../core/scrubber.js?v=20260730b';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
@@ -285,6 +286,7 @@ function setSelectValue(selectId, value) {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'Satellite');
+    startNonWorkspaceAlertMonitor();
     const sidebarTabs = createSidebarTabs(byId('satellite-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('satellite', {
         mapView: 'WORLD', platform: '', sector: '', product: 'Channel13', hours: 1,

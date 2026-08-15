@@ -46,6 +46,26 @@ Current boundary:
   `7 ms` source resolution, `2.948 s` decode, `52 ms` render/publication, and
   `3.021 s` HTTP time. The earlier `2m39s` source-prefetch observation did no
   tile decode/render; future prefetch runs expose explicit download timing.
+- Section 4.2 shared non-Workspace alert monitoring is implemented and
+  committed. Every standalone page joins one same-origin
+  focused/visible-owner cohort; the fixed six-event national monitor baselines
+  existing alerts and deduplicates banners, one sound burst, and one
+  alert-colored border flash. Simultaneous batches flash the highest-priority
+  event color. Alerts owns the shared On/Off setting and in-place selection;
+  other pages open a deep-linked Workspace tab that resolves/selects/zooms
+  without depending on monitor ownership. Workspace monitoring remains separate.
+- The isolated Section 4.2 commit snapshot passes 613 Python tests plus 42
+  subtests, all 44 Node tests, focused Ruff, JavaScript syntax, and diff checks.
+  The combined working tree separately passes 620 Python tests plus 42 subtests
+  and all 45 Node tests. Runtime verification confirmed a healthy national
+  Alerts API. Controlled in-app browser checks retain the earlier
+  Surface/Radar ownership and cross-tab Alerts On/Off evidence. The corrected
+  deep link additionally opened a real Severe Thunderstorm Warning in Workspace,
+  consumed the query parameter, drew the selected polygon at z9, opened detail,
+  exposed the Projected Arrival radar-site prompt, logged no warnings/errors,
+  and did not create a shared monitor host in Workspace. Alert priority and
+  highest-priority color selection are deterministic Node proof; a live new
+  issuance was not fabricated, so there is no visual browser-flash claim.
 - Audit findings remain historical evidence, not authorization for additional
   deletion or refactoring beyond the completed cleanup program.
 - Preserve unrelated dirty work. Do not commit unless explicitly asked.
@@ -68,12 +88,16 @@ Decisions that must not drift:
   `L3_DAA`, and `L3_DTA`; PNG remains authority/fallback. Broader WebGL is
   parked, and Radar PNG retirement/tile-server migration are rejected.
 - Filtered Reflectivity and AWS notifications are removed from the plan.
-- The shared Alerts proposal is browser-page-only, national, deduplicated across
+- The shared Alerts monitor is browser-page-only, national, deduplicated across
   non-Workspace tabs, and active only while a non-Workspace dashboard page and
   the local server are open. It uses the existing six-event Workspace allowlist.
-  Alerts-page clicks select/zoom in place; other-page clicks open `/alerts` in a
-  new tab and select/zoom. Workspace keeps its own notifications. There is no
-  Windows background service or OS notification path.
+  Alerts-page clicks select/zoom in place; other-page clicks open `/workspace`
+  in a new tab and select/zoom so its operational tools are available around the
+  polygon. Workspace keeps its own notifications and does not join the shared
+  monitor cohort. There is no Windows background service or OS notification path.
+- Shared notification flashes use the highest-priority newly observed alert
+  color in this order: Tornado Warning, Severe Thunderstorm Warning, Flash Flood
+  Warning, Tornado Watch, Severe Thunderstorm Watch, Flash Flood Watch.
 - Keep current bounded RTMA/MRMS history; only a measured bounded 24/48-hour
   option remains eligible. Unbounded retention is rejected.
 - Remove unreachable Satellite registry recipes/branches as cleanup candidates;
@@ -101,7 +125,8 @@ Validation language must stay exact:
   use cache-busted assets before browser claims.
 - Inspect frame/source metadata when diagnosing RTMA/MRMS fallback.
 
-Begin by reporting the Git state and the bounded slice you intend to work on.
+Begin by reporting the Git state and whether Section 4.2 is still uncommitted.
+If it is complete and committed, report the next bounded slice you intend to work on.
 Ask only if a missing choice would materially change scope; otherwise inspect
 and proceed within the selected authorization.
 

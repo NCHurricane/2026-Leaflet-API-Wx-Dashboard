@@ -2,6 +2,7 @@ import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
 import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
+import { startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260814a';
 import { createScrubber } from '../../core/scrubber.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
@@ -49,6 +50,7 @@ function lookbackHours(stream) {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'RTMA');
+    startNonWorkspaceAlertMonitor();
     const sidebarTabs = createSidebarTabs(byId('rtma-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('rtma', { mapView: 'CONUS' });
     const defaults = await loadDefaultSettings().catch(() => ({}));

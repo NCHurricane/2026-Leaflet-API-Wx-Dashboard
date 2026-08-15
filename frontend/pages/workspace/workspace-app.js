@@ -13,7 +13,7 @@ import { buildSpcOutlookDetailHtml, buildSpcTextDetailHtml, wireSpcDetailContent
 import { CIG_OVERLAY_BY_HAZARD, createSpcEngine } from '../spc/spc-engine.js?v=20260801a';
 import { createSpcRenderer } from '../spc/spc-render.js?v=20260803a';
 import { createWorkspaceDetailCarousel } from './workspace-detail-carousel.js?v=20260801a';
-import { createWorkspaceSatellite } from './workspace-satellite.js?v=20260809a';
+import { createWorkspaceSatellite } from './workspace-satellite.js?v=20260814b';
 import { createWorkspaceRtma } from './workspace-rtma.js?v=20260803b';
 import { createWorkspaceMrms } from './workspace-mrms.js?v=20260804b';
 import { createWorkspaceWater } from './workspace-water.js?v=20260804c';
@@ -570,6 +570,28 @@ async function initialize() {
             : supportsProjectedArrival(feature)
             ? `${props.event || 'Alert'} selected; select a radar site to use Projected Arrival.`
             : `${props.event || 'Alert'} selected.`);
+    }
+
+    let pendingSharedAlertId = new URLSearchParams(window.location.search).get('alert') || '';
+    function resolvePendingSharedAlert(features) {
+        if (!pendingSharedAlertId) return;
+        const feature = features.find((item) => alertFeatureId(item) === pendingSharedAlertId);
+        if (!feature) return;
+        selectAlert(feature, { maxZoom: 9 });
+        pendingSharedAlertId = '';
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.delete('alert');
+        window.history.replaceState(window.history.state, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    }
+    async function resolvePendingSharedAlertFromApi() {
+        if (!pendingSharedAlertId) return;
+        try {
+            const payload = await api.fetchJson(
+                '/api/data/alerts?geometry_mode=full&zoom_bucket=high',
+                { cache: 'no-store' },
+            );
+            resolvePendingSharedAlert(Array.isArray(payload?.features) ? payload.features : []);
+        } catch (_) { /* The normal Workspace alert feed remains available if deep-link resolution fails. */ }
     }
 
     function showNewAlert(feature) {
@@ -1310,6 +1332,7 @@ async function initialize() {
     await Promise.all([radarEngine.loadCatalog(), refreshAlerts()]);
     legendTray.markReady();
     status.setMessage('Workspace ready. Select a radar site to add live radar.');
+    await resolvePendingSharedAlertFromApi();
     window.addEventListener('beforeunload', () => {
         clearInterval(autoUpdateTimer);
         mapCore.map.off('zoomend', updateCityControlLabels);

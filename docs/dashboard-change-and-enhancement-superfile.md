@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-**Canonical status:** current source of truth as of 2026-08-07
+**Canonical status:** current source of truth as of 2026-08-14
 
 **Repository:** `F:\Python\dashboard_2026`
 
@@ -47,7 +47,8 @@ Status vocabulary:
   `/alerts`, `/radar`, `/satellite`, `/spc`, `/surface`, `/mrms`, `/rtma`,
   `/drought`, `/tropical`, `/wpc`, `/water`, and `/workspace`.
 - `frontend/` is the current UI implementation. All 76 files found in its audit
-  are retained. Product pages import narrow shared capabilities from
+  are retained, and the shared alert monitor adds one current core module.
+  Product pages import narrow shared capabilities from
   `frontend/core/`; Workspace composes engine APIs and must not import sibling
   page controllers.
 - Standalone product behavior must remain independent of Workspace behavior.
@@ -88,6 +89,12 @@ Status vocabulary:
 - **Alerts:** immutable cache generations, zoom-aware geometry, stale-complete
   service while a deduplicated refresh runs, explicit warming/backoff on a cold
   miss, live Local Storm Reports, active-warning rail, and detail selection.
+- **Shared standalone alert monitor:** every non-Workspace product page joins a
+  same-origin browser cohort with one focused/visible polling owner. The fixed
+  national six-event allowlist baselines existing alerts and deduplicates
+  banners, sound, and an alert-colored border flash across tabs/windows. Alerts
+  owns the shared On/Off setting and in-place selection; other pages deep-link
+  to a selected/zoomed Workspace view. Workspace monitoring remains independent.
 - **Radar:** live cache-first site/product PNG streams, newest-frame-first cold
   behavior, asynchronous bounded history, legends/value inspection, and PNG as
   the authoritative fallback even where WebGL is used.
@@ -383,10 +390,10 @@ are **rejected**.
 Filtered Reflectivity is **rejected and removed**; custom `.pal` files provide
 the desired display alternative.
 
-### 4.2 Shared non-Workspace alert notifications
+### 4.2 Shared non-Workspace alert notifications — implemented
 
-Add a browser-page monitor shared by every non-Workspace dashboard page,
-including Alerts, with this exact contract:
+The browser-page monitor is implemented and committed on every non-Workspace
+dashboard page, including Alerts, with this exact contract:
 
 - It runs only while at least one non-Workspace dashboard tab is open and the
   local server is running. It is not a Windows service and does not use OS
@@ -394,13 +401,43 @@ including Alerts, with this exact contract:
 - Scope is national. Use the existing Workspace event allowlist:
   `Tornado Warning`, `Tornado Watch`, `Severe Thunderstorm Warning`,
   `Severe Thunderstorm Watch`, `Flash Flood Warning`, and `Flash Flood Watch`.
-- Deduplicate banner and sound across non-Workspace tabs so one alert is not
-  announced by every open page.
-- On a non-Alerts page, clicking the notice opens standalone `/alerts` in a new
-  tab, selects the active alert, and zooms to it.
+- Deduplicate banner, one sound burst, and one border flash across
+  non-Workspace tabs so one alert is not announced by every open page. The
+  flash matches the alert color; simultaneous alerts use this priority:
+  Tornado Warning, Severe Thunderstorm Warning, Flash Flood Warning, Tornado
+  Watch, Severe Thunderstorm Watch, then Flash Flood Watch.
+- On a non-Alerts page, clicking the notice opens `/workspace` in a new tab,
+  selects the active alert, and zooms to it so Workspace tools are available
+  around the warned polygon.
 - On `/alerts`, clicking selects and zooms in the current tab.
+- Alerts exposes one shared persisted On/Off control. The prior page-local
+  `Severe / All Selected / Off` selector is retired because its expanded event
+  semantics conflict with the fixed cross-page allowlist.
 - Workspace keeps its separate Workspace-specific notification system because
   it may split from the main dashboard in Version 2.
+
+Implementation boundary: one same-origin focused/visible owner polls and
+presents; owner handoff preserves bounded seen IDs. `BroadcastChannel` and
+expiring `localStorage` presence provide coordination/fallback. If neither is
+available, notifications fail closed. A destination `/workspace?alert=` performs
+its own one-time national lookup so click-through selection does not depend on
+polling ownership or add Workspace to the shared monitor cohort. Different
+browsers/profiles/private contexts/origins remain separate cohorts by browser
+security.
+
+The isolated Section 4.2 commit snapshot passes 613 Python tests plus 42
+subtests, all 44 Node tests, focused Ruff, JavaScript syntax, and diff checks.
+The combined working tree separately passes 620 Python tests plus 42 subtests
+and all 45 Node tests. Runtime verification confirmed a healthy national alert
+API. Controlled in-app browser
+checks confirmed the earlier Surface/Radar ownership and cross-tab Alerts
+On/Off behavior; the corrected active-alert deep link additionally opened a
+real Severe Thunderstorm Warning in Workspace, removed the query parameter,
+drew the selected polygon at z9, opened detail, exposed the Projected Arrival
+radar-site prompt, logged no warnings/errors, and added no shared monitor host
+to Workspace. Priority ordering and the highest-priority alert-color flash are
+deterministic Node proof; no live new issuance was fabricated for a visual
+browser-flash claim.
 
 AWS notifications, OS-level/background notifications, and Windows always-on
 monitoring are **rejected**.

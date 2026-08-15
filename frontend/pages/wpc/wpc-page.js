@@ -2,6 +2,7 @@ import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
 import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
+import { startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260814a';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260808a';
@@ -109,6 +110,7 @@ function buildProductList(ulEl, products, name, currentId) {
 
 async function initialize() {
     renderProductNav(byId('product-nav'), 'WPC');
+    startNonWorkspaceAlertMonitor();
     const sidebarTabs = createSidebarTabs(byId('wpc-sidebar-tabs'), { defaultTab: 'live' });
     const settings = await loadPageSettings('wpc', { mapView: 'CONUS', autoLoad: false });
     const defaults = await loadDefaultSettings().catch(() => ({}));

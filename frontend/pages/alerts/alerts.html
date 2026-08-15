@@ -7,8 +7,8 @@
     <link rel="icon" href="/img/favicon.ico">
     <link rel="stylesheet" href="/frontend/lib/leaflet/leaflet.css?v=1.9.4-cleanup-20260808">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/core/core.css?v=20260730b">
-    <link rel="stylesheet" href="/frontend/pages/alerts/alerts.css?v=20260808b">
+    <link rel="stylesheet" href="/frontend/core/core.css?v=20260809a">
+    <link rel="stylesheet" href="/frontend/pages/alerts/alerts.css?v=20260809a">
 </head>
 <body>
     <header class="core-header">
@@ -101,11 +101,10 @@
                         <label class="alerts-check core-check-row"><span>County Borders</span><input data-map-overlay="counties" type="checkbox"></label>
                     </div></div>
                     <div class="core-settings-section">
-                        <h2>New Alert Notifications</h2>
-                        <div class="core-segmented alerts-notification-mode" role="radiogroup" aria-label="New alert notifications">
-                            <label><input name="alerts-notification-mode" type="radio" value="severe" checked><span>Severe</span></label>
-                            <label><input name="alerts-notification-mode" type="radio" value="all"><span>All Selected</span></label>
-                            <label><input name="alerts-notification-mode" type="radio" value="off"><span>Off</span></label>
+                        <h2>Shared Alert Notifications</h2>
+                        <div class="core-segmented" role="radiogroup" aria-label="Shared alert notifications">
+                            <label><input name="alerts-shared-notifications" type="radio" value="on" checked><span>On</span></label>
+                            <label><input name="alerts-shared-notifications" type="radio" value="off"><span>Off</span></label>
                         </div>
                     </div>
                     <div class="core-settings-section">
@@ -134,7 +133,6 @@
             <div id="alerts-legend" class="alerts-legend" data-legend-align="left" hidden></div>
             <div id="alerts-lsr-legend" class="alerts-legend alerts-lsr-legend" data-legend-align="right" hidden></div>
             <div id="alerts-detail" class="alerts-detail" hidden></div>
-            <div id="alerts-notifications" class="alerts-notifications" aria-live="assertive"></div>
         </section>
 
         <aside id="alerts-right-rail" class="alerts-warning-rail" aria-label="Active warnings and latest storm reports">
@@ -165,6 +163,6 @@
         </aside>
     </main>
     <script src="/frontend/lib/leaflet/leaflet.js?v=1.9.4"></script>
-    <script type="module" src="/frontend/pages/alerts/alerts-page.js?v=20260808b"></script>
+    <script type="module" src="/frontend/pages/alerts/alerts-page.js?v=20260814a"></script>
 </body>
 </html>

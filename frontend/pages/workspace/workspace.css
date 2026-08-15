@@ -1222,36 +1222,6 @@
     }
 }
 
-#wx-new-alert-border-flash.is-active {
-    animation: wx-new-alert-border-flash 1.15s ease-out 1;
-}
-
-@keyframes wx-new-alert-border-flash {
-    0% {
-        opacity: 0;
-        border-width: 0;
-        box-shadow: none;
-    }
-
-    20% {
-        opacity: 1;
-        border-width: 10px;
-        box-shadow: inset 0 0 24px rgba(255, 255, 255, 0.18);
-    }
-
-    60% {
-        opacity: 0.9;
-        border-width: 8px;
-        box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.12);
-    }
-
-    100% {
-        opacity: 0;
-        border-width: 2px;
-        box-shadow: none;
-    }
-}
-
 .wx-radar-toast.is-active {
     opacity: 1;
     transform: translateY(0);

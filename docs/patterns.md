@@ -506,6 +506,40 @@ For Tropical backend changes, follow the post-refactor ownership boundaries:
   due advisory/GTWO checks and a conservative ten-minute special-product probe.
 - Do not add Tropical route logic back to `main.py`.
 
+## Shared Non-Workspace Alert Monitor Pattern
+
+`frontend/core/non-workspace-alert-monitor.js` is a narrow browser runtime, not
+a replacement global page controller. Every standalone entry module starts it;
+Workspace does not. Same-origin tabs and windows share these rules:
+
+1. Exchange short-lived presence through `BroadcastChannel` and
+   `localStorage`, then deterministically prefer the focused visible tab as the
+   single polling/presentation owner. Ownership fails over after page close or
+   heartbeat expiry.
+2. Baseline alerts already active when the first page in a browser cohort
+   opens. Keep bounded seen IDs across owner handoff so focus changes, reloads,
+   and tab changes do not replay notices.
+3. Poll only the national `Tornado Warning`, `Severe Thunderstorm Warning`,
+   `Flash Flood Warning`, `Tornado Watch`, `Severe Thunderstorm Watch`, and
+   `Flash Flood Watch` set. Initial/current snapshots, test/cancel/expired
+   records, and unsupported events never notify.
+4. Present one sound burst and one border flash per newly observed batch. Sort
+   priority in the listed order; the highest-priority alert supplies the flash
+   color while individual banners retain their own event colors. Respect
+   `prefers-reduced-motion`.
+5. Alerts owns the shared persisted On/Off control. Clicking in Alerts selects,
+   zooms, and opens detail in place. Other pages use `/workspace?alert=...` in a
+   new tab; Workspace performs a one-time national resolution, selects and
+   zooms to the polygon, and exposes its surrounding operational tools without
+   joining or depending on the polling cohort.
+6. API errors retain the baseline and use bounded backoff. If both coordination
+   transports are unavailable, fail closed rather than emit duplicate notices.
+
+Different browsers, profiles, private contexts, hostnames, or ports are separate
+coordination cohorts by browser security. Do not extend this pattern into
+Workspace monitoring, service workers, OS notifications, Windows services,
+AWS, Local Storm Reports, or additional alert events without a new decision.
+
 ## Clean-Cut Migration Pattern
 
 The clean-cut migration completed in Phase 27. The retained rules are:

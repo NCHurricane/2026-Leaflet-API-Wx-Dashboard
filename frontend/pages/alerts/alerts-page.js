@@ -2,6 +2,7 @@ import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
 import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
+import { sharedAlertFeatureId, startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260814a';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260808a';
@@ -16,7 +17,6 @@ function selectedCategories() { return [...document.querySelectorAll('#alerts-ca
 function selectedWarningTypes() { return [...document.querySelectorAll('#alerts-warning-subtypes input:checked')].map((input) => input.value); }
 function selectedLsrCategories() { return [...document.querySelectorAll('#alerts-lsr-list input:checked')].map((input) => input.value); }
 function selectedLsrHours() { return Number(byId('alerts-lsr-hours').querySelector('.is-active')?.dataset.hours || 24); }
-function notificationMode() { return document.querySelector('input[name="alerts-notification-mode"]:checked')?.value || 'severe'; }
 function selection() { return { categories: selectedCategories(), warningTypes: selectedWarningTypes() }; }
 
 async function initialize() {
@@ -52,7 +52,6 @@ async function initialize() {
     });
     mapCore.leaflet.DomEvent.disableClickPropagation(byId('alerts-detail'));
     mapCore.leaflet.DomEvent.disableScrollPropagation(byId('alerts-detail'));
-    mapCore.leaflet.DomEvent.disableClickPropagation(byId('alerts-notifications'));
     closeDetail = detail.close;
     let currentWarnings = [];
     let warningRailFilter = 'all';
@@ -148,34 +147,6 @@ async function initialize() {
         requestAnimationFrame(() => mapCore.map.invalidateSize({ pan: false }));
     }
 
-    function showNewAlert(feature) {
-        const props = feature?.properties || {};
-        const mode = notificationMode();
-        if (mode === 'off') return;
-        if (mode === 'severe' && !Object.values(SEVERE_EVENTS).includes(props.event)) return;
-        const root = byId('alerts-notifications');
-        const notice = document.createElement('div');
-        notice.className = 'alerts-notification';
-        notice.tabIndex = 0;
-        notice.setAttribute('role', 'button');
-        notice.style.setProperty('--alert-color', ALERT_COLORS[props.event] || ALERT_DEFAULT_COLOR);
-        notice.style.setProperty('--alert-text-color', ALERT_TEXT_COLORS[props.event] || ALERT_COLORS[props.event] || ALERT_DEFAULT_COLOR);
-        const title = document.createElement('strong');
-        title.textContent = `NEW ${props.event || 'WEATHER ALERT'}`;
-        const area = document.createElement('span');
-        area.textContent = props.areaDesc || 'Area unavailable';
-        const close = document.createElement('button');
-        close.type = 'button'; close.className = 'alerts-notification-close'; close.setAttribute('aria-label', 'Dismiss alert'); close.textContent = '×';
-        close.addEventListener('click', (event) => { event.stopPropagation(); notice.remove(); });
-        notice.append(title, area, close);
-        const openNotice = () => { engine.zoomTo(feature, { maxZoom: 9 }); detail.open(feature); notice.remove(); };
-        notice.addEventListener('click', openNotice);
-        notice.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openNotice(); } });
-        root.prepend(notice);
-        while (root.children.length > 3) root.lastElementChild.remove();
-        setTimeout(() => notice.remove(), 20_000);
-    }
-
     let displayedAlertCount = 0;
     let displayedLsrCount = 0;
 
@@ -207,8 +178,54 @@ async function initialize() {
         onDetail: (feature) => detail.open(feature),
         onLsrDetail: (feature) => detail.openLsr(feature),
         onLsrDetailClose: detail.closeLsr,
-        onNewAlert: showNewAlert,
     });
+    let pendingSharedAlertId = new URLSearchParams(window.location.search).get('alert') || '';
+    function openSharedAlert(feature) {
+        engine.showSelectedAlert(feature);
+        let opened = false;
+        const openDetail = () => {
+            if (opened) return;
+            opened = true;
+            mapCore.map.off('moveend', openDetail);
+            detail.open(feature);
+        };
+        mapCore.map.once('moveend', openDetail);
+        engine.zoomTo(feature, { maxZoom: 9 });
+        window.setTimeout(openDetail, 100);
+    }
+    function resolvePendingSharedAlert(features) {
+        if (!pendingSharedAlertId) return;
+        const feature = features.find((item) => sharedAlertFeatureId(item) === pendingSharedAlertId);
+        if (!feature) return;
+        openSharedAlert(feature);
+        pendingSharedAlertId = '';
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.delete('alert');
+        window.history.replaceState(window.history.state, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    }
+    async function resolvePendingSharedAlertFromApi() {
+        if (!pendingSharedAlertId) return;
+        try {
+            const payload = await api.fetchJson(
+                '/api/data/alerts?geometry_mode=full&zoom_bucket=high',
+                { cache: 'no-store' },
+            );
+            resolvePendingSharedAlert(Array.isArray(payload?.features) ? payload.features : []);
+        } catch (_) { /* The page feed and monitor snapshot remain secondary resolution paths. */ }
+    }
+    const sharedNotificationInputs = [...document.querySelectorAll('input[name="alerts-shared-notifications"]')];
+    function syncSharedNotificationInputs(enabled) {
+        sharedNotificationInputs.forEach((input) => { input.checked = input.value === (enabled ? 'on' : 'off'); });
+    }
+    const sharedAlertMonitor = startNonWorkspaceAlertMonitor({
+        onActivate: openSharedAlert,
+        onEnabledChange: syncSharedNotificationInputs,
+    });
+    sharedNotificationInputs.forEach((input) => input.addEventListener('change', () => {
+        if (input.checked) sharedAlertMonitor.setEnabled(input.value === 'on');
+    }));
+    syncSharedNotificationInputs(sharedAlertMonitor.isEnabled());
+
     function populateFilters() {
         const master = byId('alerts-all').closest('label');
         byId('alerts-category-list').replaceChildren(master, ...Object.keys(ALERT_CATEGORIES).map((category) => {
@@ -337,6 +354,7 @@ async function initialize() {
     mapCore.map.on('moveend', () => { engine.renderLegend(); scheduleViewportRefresh(); });
     status.setMessage('Loading active severe-weather warnings…');
     await loadLive();
+    await resolvePendingSharedAlertFromApi();
 }
 
 initialize().catch((error) => {

@@ -511,11 +511,11 @@ def test_shared_radar_refresh_uses_latest_only_followup_and_cache_busted_assets(
     assert "latestPollAttempt < LATEST_REFRESH_POLL_LIMIT" in engine
     assert "radar-engine.js?v=20260729b" in radar_app
     assert "radar-engine.js?v=20260802a" in workspace_app
-    assert "radar-page.js?v=20260729b" in radar_page
-    assert "workspace-satellite.js?v=20260809a" in workspace_app
+    assert "radar-page.js?v=20260814a" in radar_page
+    assert "workspace-satellite.js?v=20260814b" in workspace_app
     assert "workspace-wpc.js?v=20260804b" in workspace_app
-    assert "workspace.css?v=20260808a" in workspace_page
-    assert "workspace-app.js?v=20260809a" in workspace_page
+    assert "workspace.css?v=20260809a" in workspace_page
+    assert "workspace-app.js?v=20260814b" in workspace_page
 
 
 def test_workspace_layer_groups_only_expand_while_enabled():

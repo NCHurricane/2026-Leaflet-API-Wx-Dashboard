@@ -65,6 +65,15 @@ Active root pages and their JS in this checkout:
   the existing normal and italic Montserrat variable fonts from the root
   `/fonts` static mount and applies the family through `:root`, allowing product
   pages and controls to inherit the original dashboard type treatment.
+- `frontend/core/non-workspace-alert-monitor.js` is explicitly initialized by
+  every standalone product page and excluded from Workspace. Same-origin tabs
+  and windows elect one focused/visible owner through `BroadcastChannel` plus
+  expiring `localStorage` presence. That owner polls the national alert feed,
+  baselines existing alerts, and deduplicates banner, sound, and one-shot
+  alert-colored border flashes. The Alerts page exposes the shared On/Off
+  preference and handles its own notice clicks in place; other standalone pages
+  open a Workspace `?alert=` link in a new tab. Workspace resolves that link to
+  a selected polygon/detail without joining the shared monitor cohort.
 
 Product-page architecture (migration completed in Phase 27):
 
@@ -86,9 +95,13 @@ Product-page architecture (migration completed in Phase 27):
   and Local Storm Report filtering/rendering, the active-warning rail, immersive
   alert detail, in-memory off/on restoration, page-owned combined status,
   severe-warning pulse styling, and default-on 60-second refresh without
-  loading `js/weather.js`. Its Archive tab is an explicit future-tools
-  placeholder; Alerts has no general lookback slider. The radar-dependent
-  Projected Arrival Tool remains reserved for the severe-weather workspace.
+  loading `js/weather.js`. Its Settings tab owns the persisted On/Off control
+  for the separate shared standalone-page alert monitor. Deep-linked monitored
+  alerts receive one direct national lookup, selected-polygon rendering, detail
+  display, and zoom independent of which tab owns ongoing monitoring. Its
+  Archive tab is an explicit future-tools placeholder; Alerts has no general
+  lookback slider. The radar-dependent Projected Arrival Tool remains reserved
+  for the severe-weather workspace.
 - `/radar` serves `frontend/pages/radar/radar.html`, which owns live site/product
   selection, current and cached-frame playback, NST overlays, legends, and the
   value inspector. The extensionless `/radar` URL is canonical; the broken
