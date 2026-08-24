@@ -88,7 +88,8 @@ Status vocabulary:
 
 - **Alerts:** immutable cache generations, zoom-aware geometry, stale-complete
   service while a deduplicated refresh runs, explicit warming/backoff on a cold
-  miss, live Local Storm Reports, active-warning rail, and detail selection.
+  miss, live Local Storm Reports, a national active-warning rail independent of
+  viewport-filtered map/legend content, and detail selection.
 - **Shared standalone alert monitor:** every non-Workspace product page joins a
   same-origin browser cohort with one focused/visible polling owner. The fixed
   national six-event allowlist baselines existing alerts and deduplicates
@@ -423,21 +424,39 @@ available, notifications fail closed. A destination `/workspace?alert=` performs
 its own one-time national lookup so click-through selection does not depend on
 polling ownership or add Workspace to the shared monitor cohort. Different
 browsers/profiles/private contexts/origins remain separate cohorts by browser
-security.
+security. The Alerts API supplies the current server-session start time. An
+alert is eligible to notify only when its valid issuance timestamp is later
+than both that server boundary and the current browser-cohort boundary;
+missing timestamps fail closed.
 
-The isolated Section 4.2 commit snapshot passes 613 Python tests plus 42
-subtests, all 44 Node tests, focused Ruff, JavaScript syntax, and diff checks.
-The combined working tree separately passes 620 Python tests plus 42 subtests
-and all 45 Node tests. Runtime verification confirmed a healthy national alert
-API. Controlled in-app browser
+The Section 4.2 base monitor is committed. Its later server-session cutoff,
+cadence/audio, and national-rail follow-up is committed as `8ffcd14`. Its
+isolated staged snapshot passes 615 Python tests plus 42 subtests, all 45 Node
+tests, Ruff, and JavaScript syntax. An isolated in-process API probe returned a
+valid current server-start timestamp with the national alert payload.
+Controlled in-app browser
 checks confirmed the earlier Surface/Radar ownership and cross-tab Alerts
 On/Off behavior; the corrected active-alert deep link additionally opened a
 real Severe Thunderstorm Warning in Workspace, removed the query parameter,
 drew the selected polygon at z9, opened detail, exposed the Projected Arrival
 radar-site prompt, logged no warnings/errors, and added no shared monitor host
-to Workspace. Priority ordering and the highest-priority alert-color flash are
-deterministic Node proof; no live new issuance was fabricated for a visual
-browser-flash claim.
+to Workspace. Owner smoke then observed a genuinely new Flash Flood Warning on
+Tropical and confirmed that its notice opened the matching alert in Workspace.
+Priority ordering and the highest-priority alert-color flash remain
+deterministic Node proof; the live smoke did not separately record the visual
+border-flash color.
+
+Owner smoke on 2026-08-24 observed a new Severe Thunderstorm Warning but found
+roughly two minutes of issuance-to-notice latency and a clipped sound opening.
+The retained generations showed the 30-second monitor cadence combining with
+the 35-second cache TTL into roughly 60-second refresh steps. The committed
+alert-only correction exposes cache TTL in the API, caps ordinary owner
+polling at 20 seconds, schedules the next stale check at the actual TTL
+boundary, and preloads/unlocks the sound on first interaction. Seven focused
+Node cases and 81 focused Python cases pass. The full combined gate passes 623
+Python tests plus 42 subtests, all 48 Node tests, Ruff, and diff checks. The
+restarted owner smoke passed on 2026-08-24: a naturally issued alert notified
+within 60 seconds of issuance.
 
 AWS notifications, OS-level/background notifications, and Windows always-on
 monitoring are **rejected**.
@@ -449,6 +468,32 @@ and licensing for ECCC Canada, DWD Germany, and BOM Australia. Preserve provider
 cadence, projection, legends, geographic metadata, and graceful source failure.
 
 ### 4.4 Satellite
+
+A bounded Meteosat latency overhaul is in progress in the current working tree.
+Phase 0 captured a fresh benchmark matrix and tolerance-capable golden harness;
+Phase 1 removed redundant tile cache-busting, corrected native-zoom floors,
+detached inactive frame layers, reduced redundant selection releases, deferred
+success copy until imagery is visible, memoized catalog lookups, and made
+permanent negative tiles cacheable. It does not change pixels or render
+versions.
+
+Owner smoke on 2026-08-14 passed Meteosat-12 Channel 13 loading, sidebar state,
+scrubbing, selection changes, Satellite-to-Radar navigation during a Meteosat
+load, and clean consoles. It found Himawari-9 Target using the wrong preset and
+an all-platform frame-transition opacity flash in Satellite and Workspace.
+First re-smoke passed the Target fix but found no visual change from a complete
+replacement-readiness gate. Restoring the last known working contract then
+passed owner re-smoke: completed Leaflet frame layers stay mounted at opacity 0,
+incomplete/abandoned layers detach, and replacements remain readiness-gated.
+That re-smoke exposed a separate GOES-19 Meso 2 starvation case when manual
+scrubbing jumped ahead of not-yet-rendered animation frames. The current
+cache-busted tree coalesces drag input to its resting frame and gives each
+foreground frame a monotonic page generation, so superseded queued renders lose
+ownership before entering the heavy render slot. Playback still pauses on
+manual input and the retained no-flash layer pool is unchanged. The automated
+gate passes 623 Python tests plus 42 subtests and all 48 Node tests; the
+scrub-ahead reproduction passed owner re-smoke on 2026-08-24 in Satellite and
+Workspace.
 
 - Satellite Archive UI on the active satellite-v2 contract.
 - Controls redesign without changing page/engine ownership.
@@ -626,11 +671,13 @@ decision.
 ## 7. Separate Greenfield project
 
 The NCH Weather Studio Greenfield plan is a **separate project**, not Version 2
-of this repository and not part of the current dashboard backlog. Its complete
-preserved plan is
+of this repository and not part of the current dashboard backlog. Its active,
+current-dashboard-aware plan is
+[`nch-weather-studio-greenfield-plan.md`](nch-weather-studio-greenfield-plan.md).
+The superseded 2026-06-30 plan remains unchanged at
 [`archive/2026-08-07-consolidation-sources/nch-weather-studio-greenfield-plan.md`](archive/2026-08-07-consolidation-sources/nch-weather-studio-greenfield-plan.md).
-Ideas may be compared explicitly, but work must not cross project boundaries by
-default.
+Ideas may be compared explicitly, but implementation work must not cross
+project boundaries without an explicit owner decision.
 
 ## 8. Closed and rejected proposals
 
@@ -657,6 +704,9 @@ default.
 - This file — decisions, active candidates, and ordered work.
 - [`next-session-startup-prompt.md`](next-session-startup-prompt.md) — concise
   startup procedure.
+- [`nch-weather-studio-greenfield-plan.md`](nch-weather-studio-greenfield-plan.md)
+  — active plan for the separate Greenfield project; it does not authorize
+  current-dashboard or Greenfield implementation by itself.
 - [`architecture.md`](architecture.md) — implemented architecture only.
 - [`patterns.md`](patterns.md) — reusable implemented patterns only.
 
@@ -691,8 +741,17 @@ one bounded item from the approved current-dashboard enhancement ledger in
 section 4. The ledger order does not establish priority or authorization; name
 the selected family and define its exact implementation boundary before editing.
 
-The post-cleanup Satellite cross-page blocking prerequisite and separate
-Meteosat stage measurement are complete. They do not select a Section 4 family;
+The post-cleanup Satellite cross-page blocking prerequisite is complete. A
+separate bounded Meteosat latency family was selected; its Phase 0/1 baseline,
+no-flash, and scrub-ahead work is committed as Satellite-only checkpoint
+`6759832`. Its required scrub-ahead re-smoke passed. The Section 4.2 base
+monitor and its
+server-session cutoff plus notification-cadence/audio correction and national
+Alerts rail are committed as separate alert-only checkpoint `8ffcd14`. Shared
+page-entry and test files received hunk-level separation: Alert used intermediate
+entry cache version `20260824a`, and Satellite advanced the final version to
+`20260824b`. Alert owner smoke passed with notification within 60 seconds of
+issuance.
 Radar WebGL remains listed first without priority. Section 4.7 retains one
 future unified cross-page Archive family, not an independently selectable
 Surface-only completion.
