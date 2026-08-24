@@ -229,7 +229,9 @@ def load_ahi_raster(
     paths = [Path(path) for path in segment_files]
     first_buf = read_hsd_bytes(paths[0])
     first_header = parse_ahi_header(first_buf)
-    stride = max(1, first_header.n_cols // max_grid)
+    stride = 1
+    while math.ceil(first_header.n_cols / stride) > max(1, int(max_grid)):
+        stride *= 2
 
     def _validate_header(header: AhiHeader) -> None:
         if (
@@ -240,30 +242,25 @@ def load_ahi_raster(
             raise ValueError(
                 "AHI HSD segments are from mismatched bands or grids."
             )
-        if (
-            header.n_cols % stride
-            or header.n_lines % stride
-            or (header.first_line - 1) % stride
-        ):
-            raise ValueError(
-                f"AHI HSD grid ({header.n_cols} cols) is not divisible by "
-                f"stride {stride}."
-            )
-
     offset = stride // 2
 
     def _calibrated_segment(
         header: AhiHeader, buf: bytes
-    ) -> tuple[AhiHeader, np.ndarray]:
+    ) -> tuple[AhiHeader, int, np.ndarray]:
         _validate_header(header)
         counts = segment_counts(buf, header)
-        values = calibrate(counts[offset::stride, offset::stride], header)
-        return header, values
+        start_row = header.first_line - 1
+        first_sampled = start_row + ((offset - start_row) % stride)
+        local_first = first_sampled - start_row
+        values = calibrate(
+            counts[local_first::stride, offset::stride], header
+        )
+        return header, first_sampled, values
 
     segments = [_calibrated_segment(first_header, first_buf)]
     del first_buf
 
-    def _load_segment(path: Path) -> tuple[AhiHeader, np.ndarray]:
+    def _load_segment(path: Path) -> tuple[AhiHeader, int, np.ndarray]:
         buf = read_hsd_bytes(path)
         header = parse_ahi_header(buf)
         return _calibrated_segment(header, buf)
@@ -277,13 +274,13 @@ def load_ahi_raster(
 
     segments.sort(key=lambda item: item[0].first_line)
     ref = segments[0][0]
-    total_lines = max(h.first_line + h.n_lines - 1 for h, _ in segments)
+    total_lines = max(h.first_line + h.n_lines - 1 for h, _, _ in segments)
 
-    out_cols = ref.n_cols // stride
-    out_rows = total_lines // stride
+    out_cols = len(range(offset, ref.n_cols, stride))
+    out_rows = len(range(offset, total_lines, stride))
     values = np.full((out_rows, out_cols), np.nan, dtype=np.float32)
-    for header, calibrated in segments:
-        row0 = (header.first_line - 1) // stride
+    for _, first_sampled, calibrated in segments:
+        row0 = (first_sampled - offset) // stride
         values[row0 : row0 + calibrated.shape[0], :] = calibrated
 
     # --- geostationary georeferencing from block 3 fixed-grid scaling ---

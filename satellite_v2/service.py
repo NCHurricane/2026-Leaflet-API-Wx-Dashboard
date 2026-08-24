@@ -22,7 +22,6 @@ from config.satellite_v2_config import (
     SATELLITE_V2_INTERPRETIVE_LEGENDS,
     SATELLITE_V2_LEGEND_ANCHOR_COUNT,
     SATELLITE_V2_LEGEND_TICK_COUNT,
-    SATELLITE_V2_LIVE_SUPERTILE_RADIUS,
     SATELLITE_V2_LIVE_TILE_RENDER_WORKERS,
     SATELLITE_V2_METEOSAT_PREFETCH_FRESH_WINDOW_SECONDS,
     SATELLITE_V2_METEOSAT_PREFETCH_JOBS,
@@ -50,7 +49,7 @@ from satellite_v2.cache import (
 from satellite_v2 import providers
 from satellite_v2.providers import download_product_source_frames, list_recent_frames
 from satellite_v2.renderer import _load_source_raster
-from satellite_v2.tiler import _live_supertile_coords, render_frame_tile
+from satellite_v2.tiler import render_frame_tile
 
 
 logger = logging.getLogger(__name__)
@@ -342,7 +341,6 @@ def _submit_tile_render(
         future = _ON_DEMAND_TILE_RENDER_POOL.submit(
             _render_tile_with_budget,
             render_should_continue=render_should_continue,
-            render_supertile=False,
             **render_kwargs,
         )
         _IN_FLIGHT_TILE_RENDERS[key] = future
@@ -1008,6 +1006,7 @@ def resolve_tile(
                 if bench_enabled()
                 else None
             ),
+            "render_supertile": bool(render_neighbors),
         }
         future, _ = _submit_tile_render(
             path,
@@ -1051,46 +1050,7 @@ def resolve_tile(
                     channel=channel_key,
                     frame_key=frame_key,
                 )
-        supertile_submitted = 0
-        supertile_skipped_in_flight = 0
-        neighbor_coords = (
-            _live_supertile_coords(int(z), int(x), int(y))[1:]
-            if render_neighbors
-            else []
-        )
-        for neighbor_x, neighbor_y in neighbor_coords:
-            neighbor_target = tile_path(
-                cache_root, sat_key, sector_key, channel_key, frame_key,
-                int(z), neighbor_x, neighbor_y,
-            )
-            _, submitted = _submit_tile_render(
-                neighbor_target,
-                client_id=client_id,
-                selection=selection,
-                tile_frame_key=frame_key,
-                foreground_frame_key=foreground_frame_key,
-                frame_generation=frame_generation,
-                cache_root=cache_root,
-                sat_id=sat_key,
-                sector=sector_key,
-                channel_key=channel_key,
-                frame=frame,
-                z=z,
-                x=neighbor_x,
-                y=neighbor_y,
-                record_timing=False,
-            )
-            if submitted:
-                supertile_submitted += 1
-            else:
-                supertile_skipped_in_flight += 1
-        render_stats["supertile_radius"] = (
-            int(SATELLITE_V2_LIVE_SUPERTILE_RADIUS or 0)
-            if render_neighbors
-            else 0
-        )
-        render_stats["supertile_submitted"] = supertile_submitted
-        render_stats["supertile_skipped"] = supertile_skipped_in_flight
+        render_stats["supertile_submitted"] = 0
         render_elapsed = int((time.perf_counter() - render_start) * 1000)
         logger.info(
             "Satellite tile render_complete frame_key=%s tile=%s cache_status=%s "

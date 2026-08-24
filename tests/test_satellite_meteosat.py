@@ -7,7 +7,10 @@ import netCDF4
 import numpy as np
 import pytest
 
-from config.satellite_v2_config import source_channels_for_product
+from config.satellite_v2_config import (
+    satellite_v2_render_version_for_satellite,
+    source_channels_for_product,
+)
 from satellite_v2.fci_nc import load_fci_rasters
 import satellite_v2.provider_eumetsat as provider_eumetsat
 from satellite_v2.seviri_nat import (
@@ -221,6 +224,16 @@ def test_fci_loader_stitches_body_chunks_and_calibrates_shared_channels(tmp_path
     assert infrared.src_transform.a > 0.0
     assert infrared.src_transform.e < 0.0
     assert infrared.src_crs.to_dict()["lon_0"] == 0
+
+    decimated = load_fci_rasters(
+        [second, first],
+        ["Channel13"],
+        max_grid=2,
+    )["Channel13"]
+    assert decimated.values.shape == (2, 2)
+    assert np.isfinite(decimated.values).all()
+    assert decimated.src_transform.a > infrared.src_transform.a
+    assert satellite_v2_render_version_for_satellite("meteosat12") == "products-fci5"
 
 
 def test_eumetsat_seviri_catalog_uses_shared_bundle_for_composite(monkeypatch):

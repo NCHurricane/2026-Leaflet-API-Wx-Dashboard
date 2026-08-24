@@ -6,8 +6,13 @@ import struct
 import numpy as np
 import pytest
 
+from config.satellite_v2_config import satellite_v2_render_version_for_satellite
 from satellite_v2.ahi_hsd import load_ahi_raster
 import satellite_v2.provider_himawari as provider_himawari
+
+
+def test_himawari_uses_phase2_render_namespace():
+    assert satellite_v2_render_version_for_satellite("himawari9") == "products-ahi5"
 
 
 def _header_block(block_number: int, length: int) -> bytearray:
@@ -160,4 +165,3 @@ def test_himawari_provider_lists_only_complete_full_disk_frames(monkeypatch):
     assert frames[0].file_size == 300
     assert frames[0].file_sizes == {"Channel02": 300}
     assert frames[0].source_key.endswith("_S0102.DAT.bz2")
-

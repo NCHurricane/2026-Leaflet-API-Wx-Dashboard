@@ -105,6 +105,23 @@ Current boundary:
   render slot. The no-flash pool is unchanged. The full gate passes 623 Python
   tests plus 42 subtests and all 48 Node tests. Owner browser re-smoke passed on
   2026-08-24 in standalone Satellite and Workspace.
+- Meteosat Phase 2a/2b/2d is implemented in the current uncommitted tree. Live
+  neighbor rendering uses one canvas warp for the 3x3 supertile and the shared
+  atomic crop/publication helper. Source-grid caps are keyed by destination
+  zoom (2048 at z1–4, 4096 at z5–6, existing platform cap at z7+), and the
+  default/GK2A/GMGSI/Himawari/Meteosat-12 namespaces advance to
+  `products-v9`/`products-ami3`/`products-gmgsi2`/`products-ahi5`/`products-fci5`.
+  Direct FCI hyperslab slicing (2c) was measured and rejected: it did not help
+  Channel13 parse and slowed the pinned three-channel parse. On the same
+  2026-08-24 frames, final z5 cold/warm p50s improve from 3401/546 ms to
+  2915/179 ms for Meteosat-12 Channel13, from 5750/1423 ms to 3856/375 ms for
+  NighttimeMicrophysics, and from 606/327 ms to 469/179 ms for Meteosat-9
+  Channel13. The no-decimation Meteosat-12 z7 golden row stays within max delta
+  2. The automated gate passes 631 Python tests plus 42 subtests, all 48 Node
+  tests, repo-wide Ruff/compile, and diff checks. Owner smoke passed on
+  2026-08-24 for Channel13 and NighttimeMicrophysics at z3/z4/z5/z7, including
+  current/past frames, seams, detail, transitions, and clean consoles. Phase 2
+  is accepted and ready for its independent commit.
 - Audit findings remain historical evidence, not authorization for additional
   deletion or refactoring beyond the completed cleanup program.
 - Preserve unrelated dirty work. Do not commit unless explicitly asked.
@@ -130,8 +147,10 @@ Default next discussion:
 - The Alert follow-up owner smoke passed: a naturally issued alert notified
   within 60 seconds of issuance. Preserve that evidence with the Alert
   checkpoint without mixing the Satellite boundary.
-- Meteosat Phase 2 is the next technical slice only if the owner explicitly
-  continues the already-selected Meteosat latency family.
+- Meteosat Phase 2 automated validation and owner smoke are complete. Reconcile
+  and commit it as one independent checkpoint when explicitly authorized.
+- Do not begin Phase 3 merely because Phase 2 automated validation is green;
+  it changes the memory/concurrency guard and requires separate authorization.
 - The Satellite prerequisite is closed and does not choose that enhancement.
   Radar WebGL is first only by document order. Section 4.7 is a future unified
   cross-page Archive workflow, not an independent Surface-only completion.

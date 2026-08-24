@@ -235,6 +235,37 @@ versions, since 2a/2b touch the shared render path for every platform. **This is
 today** — the entire tile cache is 21 MB and the `goes19`/`himawari9` directories are empty,
 so a global bump discards almost nothing. Re-measure before assuming this still holds.
 
+### Phase 2 implementation status — 2026-08-24
+
+Phase 2a, 2b, and 2d are implemented in the current uncommitted working tree. Live
+neighbor rendering now performs one bounded canvas warp and uses the same crop,
+content-check, negative-marker, validation, and atomic-publication helper as canvas
+warming. Source raster cache keys include the destination-zoom cap: z1–4 use 2048,
+z5–6 use 4096, and z7+ retain the existing platform cap. SEVIRI and GMGSI retain their
+native loader behavior. The global platform namespaces advance to `products-v9`,
+`products-ami3`, `products-gmgsi2`, `products-ahi5`, and `products-fci5`. Immediately
+before the bump, the retained tile namespaces measured 2488 files / 111.62 MB; source
+downloads are outside those render-version namespaces and remain reusable.
+
+Phase 2c was measured and deliberately not retained. Direct strided FCI hyperslab reads
+did not improve parse time and were slower on the pinned three-channel frame than reading
+each chunk contiguously and decimating in memory. The final pinned z5 cold p50s without
+the hyperslab change are 2915 ms for Meteosat-12 Channel13 and 3856 ms for
+NighttimeMicrophysics, versus 3401 ms and 5750 ms in the archived `d1451f9` tree.
+Warm p50s fall from 546 ms to 179 ms and from 1423 ms to 375 ms. Meteosat-9 Channel13
+cold/warm p50s fall from 606/327 ms to 469/179 ms.
+
+The no-decimation Meteosat-12 z7 golden comparison stays within max channel delta 2 for
+all nine tiles. Low-zoom decimation intentionally changes more pixels and remains an
+owner visual gate. Shared-canvas rendering can also move thin colored reference-overlay
+pixels by a pixel even where the imagery delta is small; this is why the known
+byte-identical gate cannot apply to Phase 2. The automated gate passes 631 Python tests
+plus 42 subtests, all 48 Node tests, repo-wide Ruff/compile, and diff checks. Owner smoke
+passed on 2026-08-24 for Meteosat-12 Channel13 and NighttimeMicrophysics at
+z3/z4/z5/z7, including the requested current/past-frame, seam, detail, transition, and
+console checks. Phase 2 is accepted and ready for its independent commit; Phase 3 remains
+separately gated.
+
 ## Phase 3 — Memory-guarded render concurrency
 
 Replace the satellite side of the single global slot with **byte-budgeted admission**, in

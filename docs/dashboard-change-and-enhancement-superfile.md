@@ -469,13 +469,13 @@ cadence, projection, legends, geographic metadata, and graceful source failure.
 
 ### 4.4 Satellite
 
-A bounded Meteosat latency overhaul is in progress in the current working tree.
-Phase 0 captured a fresh benchmark matrix and tolerance-capable golden harness;
-Phase 1 removed redundant tile cache-busting, corrected native-zoom floors,
-detached inactive frame layers, reduced redundant selection releases, deferred
-success copy until imagery is visible, memoized catalog lookups, and made
-permanent negative tiles cacheable. It does not change pixels or render
-versions.
+A bounded Meteosat latency overhaul is in progress. Phase 0 captured a fresh
+benchmark matrix and tolerance-capable golden harness; Phase 1 removed
+redundant tile cache-busting, corrected native-zoom floors, detached inactive
+frame layers, reduced redundant selection releases, deferred success copy until
+imagery is visible, memoized catalog lookups, and made permanent negative tiles
+cacheable. Phase 0/1 is committed as `6759832` without a pixel or render-version
+change.
 
 Owner smoke on 2026-08-14 passed Meteosat-12 Channel 13 loading, sidebar state,
 scrubbing, selection changes, Satellite-to-Radar navigation during a Meteosat
@@ -494,6 +494,25 @@ manual input and the retained no-flash layer pool is unchanged. The automated
 gate passes 623 Python tests plus 42 subtests and all 48 Node tests; the
 scrub-ahead reproduction passed owner re-smoke on 2026-08-24 in Satellite and
 Workspace.
+
+Phase 2a/2b/2d is implemented in the current uncommitted tree: one live canvas
+warp now feeds a 3x3 supertile through the shared atomic crop/publication path;
+zoom-aware source caps use 2048 at z1–4, 4096 at z5–6, and the platform cap at
+z7+; and all platform render namespaces are bumped. The candidate direct FCI
+hyperslab slice (2c) was measured and rejected because it did not improve the
+single-channel parse stage and slowed the pinned three-channel parse. Against
+the same 2026-08-24 frames and archived `d1451f9` code, final z5 cold/warm p50s
+change from 3401/546 ms to 2915/179 ms for Meteosat-12 Channel13, from
+5750/1423 ms to 3856/375 ms for NighttimeMicrophysics, and from 606/327 ms to
+469/179 ms for Meteosat-9 Channel13. The no-decimation Meteosat-12 z7 golden
+row stays within max channel delta 2. Low-zoom decimation and one-pixel shifts
+of thin colored reference overlays were retained as the owner visual gate. Automated
+validation passes 631 Python tests plus 42 subtests, all 48 Node tests,
+repo-wide Ruff/compile, and diff checks. Owner smoke passed on 2026-08-24 for
+Meteosat-12 Channel13 and NighttimeMicrophysics at z3/z4/z5/z7, including the
+requested current/past-frame, seam, detail, transition, and console checks.
+Phase 2 is accepted and ready for its independent commit; Phase 3 is not
+authorized by this implementation.
 
 - Satellite Archive UI on the active satellite-v2 contract.
 - Controls redesign without changing page/engine ownership.
@@ -744,7 +763,12 @@ the selected family and define its exact implementation boundary before editing.
 The post-cleanup Satellite cross-page blocking prerequisite is complete. A
 separate bounded Meteosat latency family was selected; its Phase 0/1 baseline,
 no-flash, and scrub-ahead work is committed as Satellite-only checkpoint
-`6759832`. Its required scrub-ahead re-smoke passed. The Section 4.2 base
+`6759832`. Its required scrub-ahead re-smoke passed. Phase 2a/2b/2d is
+implemented and automated validation is green in the current uncommitted tree;
+Phase 2c was rejected by its measurement gate, and the z3/z4/z5/z7 Meteosat
+owner visual review passed on 2026-08-24. Phase 2 is ready for its independent
+commit. Do not begin Phase 3 from that state without separate authorization.
+The Section 4.2 base
 monitor and its
 server-session cutoff plus notification-cadence/audio correction and national
 Alerts rail are committed as separate alert-only checkpoint `8ffcd14`. Shared

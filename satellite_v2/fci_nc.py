@@ -9,6 +9,7 @@ SourceRaster-compatible geostationary grid used by the shared tile renderer
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -151,7 +152,12 @@ def load_fci_rasters(
                     raise ValueError(f"FCI partial-width chunks are not supported: {path}")
                 if state.full_cols == 0:
                     state.full_cols = end_col
-                    state.stride = max(1, end_col // max(1, int(max_grid)))
+                    state.stride = 1
+                    while (
+                        math.ceil(end_col / state.stride)
+                        > max(1, int(max_grid))
+                    ):
+                        state.stride *= 2
                     state.offset = state.stride // 2
                     state.out_cols = len(range(state.offset, state.full_cols, state.stride))
                 elif end_col != state.full_cols:

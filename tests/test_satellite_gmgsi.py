@@ -57,7 +57,7 @@ def test_gmgsi_platform_and_frontend_are_separately_bounded() -> None:
     assert descriptor["sectors"] == ["GLOBAL"]
     assert "gmgsi" in SATELLITE_V2_SUPPORTED_SATELLITES
     assert "GLOBAL" in SATELLITE_V2_SUPPORTED_SECTORS
-    assert satellite_v2_render_version_for_satellite("gmgsi") == "products-gmgsi1"
+    assert satellite_v2_render_version_for_satellite("gmgsi") == "products-gmgsi2"
     assert 'data-satellite-sat="gmgsi"' in page
     assert 'data-satellite-sector="Global"' in page
     assert "gmgsi: new Set(['Channel02', 'Channel07', 'Channel09RAMSDIS', 'Channel13'])" in script

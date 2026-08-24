@@ -68,7 +68,11 @@ def _calibrate_reflectance(
     return reflectance
 
 
-def load_ami_raster(dataset: xr.Dataset, source_channel: str) -> AmiRaster:
+def load_ami_raster(
+    dataset: xr.Dataset,
+    source_channel: str,
+    max_grid: int | None = None,
+) -> AmiRaster:
     expected_channel = ami_channel_for_source_channel(source_channel).upper()
     if str(dataset.attrs.get("instrument_name") or "").upper() != "AMI":
         raise ValueError("GK2A source is missing AMI instrument metadata.")
@@ -84,10 +88,10 @@ def load_ami_raster(dataset: xr.Dataset, source_channel: str) -> AmiRaster:
         )
 
     full_rows, full_cols = image.shape
-    stride = max(
-        1,
-        math.ceil(max(full_rows, full_cols) / SATELLITE_V2_AMI_MAX_GRID),
-    )
+    grid_cap = int(max_grid or SATELLITE_V2_AMI_MAX_GRID)
+    stride = 1
+    while math.ceil(max(full_rows, full_cols) / stride) > grid_cap:
+        stride *= 2
     offset = stride // 2
     if stride > 1:
         image = image[offset::stride, offset::stride]

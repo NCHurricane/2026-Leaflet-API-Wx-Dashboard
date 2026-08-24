@@ -7,10 +7,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from PIL import Image
 
 from satellite_v2 import bench
 from satellite_v2.cache import source_path, tile_path
-from satellite_v2 import renderer, service
+from satellite_v2 import renderer, service, tiler
 from satellite_v2.composites import COMPOSITES_REQUIRING_LONLAT
 
 
@@ -410,6 +411,7 @@ def test_submit_tile_render_deduplicates_in_flight_target(tmp_path, monkeypatch)
         "z": 7,
         "x": 1,
         "y": 2,
+        "render_supertile": True,
     }
 
     first, first_submitted = service._submit_tile_render(target, **render_kwargs)
@@ -419,7 +421,7 @@ def test_submit_tile_render_deduplicates_in_flight_target(tmp_path, monkeypatch)
     assert first_submitted is True
     assert second_submitted is False
     assert len(submitted) == 1
-    assert submitted[0][1]["render_supertile"] is False
+    assert submitted[0][1]["render_supertile"] is True
 
     first.set_result((target, {"cache_status": "miss"}))
     assert service._IN_FLIGHT_TILE_RENDERS == {}
@@ -430,8 +432,8 @@ def test_resolve_tile_can_skip_neighbor_fanout_for_explicit_prefetch(
 ):
     submitted = []
 
-    def fake_submit(target, **_kwargs):
-        submitted.append(target)
+    def fake_submit(target, **kwargs):
+        submitted.append((target, kwargs))
         future = Future()
         future.set_result(
             (
@@ -452,12 +454,6 @@ def test_resolve_tile_can_skip_neighbor_fanout_for_explicit_prefetch(
         "_catalog_frame_for_tile",
         lambda *_args: {"frame_key": "frame-a"},
     )
-    monkeypatch.setattr(
-        service,
-        "_live_supertile_coords",
-        lambda *_args: pytest.fail("neighbor planning should be skipped"),
-    )
-
     _, stats = service.resolve_tile(
         tmp_path,
         "goes19",
@@ -471,11 +467,98 @@ def test_resolve_tile_can_skip_neighbor_fanout_for_explicit_prefetch(
     )
 
     assert len(submitted) == 1
+    assert submitted[0][1]["render_supertile"] is False
     assert stats["supertile_radius"] == 0
     assert stats["supertile_submitted"] == 0
     assert stats["download_elapsed_ms"] == 120
     assert stats["decode_elapsed_ms"] == 45
     assert stats["render_elapsed_ms"] == 8
+
+
+def test_live_render_uses_one_canvas_for_the_whole_supertile(tmp_path, monkeypatch):
+    calls = []
+
+    class _FakeRenderer:
+        def render_zoom_canvas(
+            self, z, x_min, y_min, x_max, y_max, tile_size=256
+        ):
+            calls.append((z, x_min, y_min, x_max, y_max, tile_size))
+            return Image.new(
+                "RGBA",
+                ((x_max - x_min + 1) * tile_size, (y_max - y_min + 1) * tile_size),
+                (10, 20, 30, 255),
+            )
+
+    class _FakeRendererFactory:
+        @staticmethod
+        def from_sources(_channel, _sources, *, sat_id, destination_zoom):
+            assert sat_id == "goes19"
+            assert destination_zoom == 3
+            return _FakeRenderer()
+
+    monkeypatch.setattr(tiler, "SatelliteTileRenderer", _FakeRendererFactory)
+    monkeypatch.setattr(tiler, "SATELLITE_V2_LIVE_SUPERTILE_RADIUS", 1)
+    monkeypatch.setattr(
+        tiler,
+        "download_product_source_frames",
+        lambda *_args: {"Channel13": tmp_path / "source.nc"},
+    )
+
+    target, stats = tiler.render_frame_tile(
+        tmp_path,
+        "goes19",
+        "CONUS",
+        "Channel13",
+        {"frame_key": "frame-a"},
+        3,
+        4,
+        4,
+    )
+
+    assert calls == [(3, 3, 3, 5, 5, 256)]
+    assert target.is_file()
+    assert stats["rendered"] == 1
+    assert stats["supertile_rendered"] == 8
+    assert sum(1 for path in tmp_path.rglob("*.png") if path.is_file()) == 9
+
+
+@pytest.mark.parametrize(
+    ("zoom", "expected"),
+    [(3, 2048), (4, 2048), (5, 4096), (6, 4096), (7, 10848)],
+)
+def test_source_grid_cap_has_three_zoom_bands(tmp_path, zoom, expected):
+    source = tmp_path / "OR_ABI-L2-CMIPF-M6C13_G19_s20262360000000.nc"
+
+    assert renderer._source_raster_grid_cap(source, "Channel13", zoom) == expected
+
+
+def test_source_cache_keeps_zoom_decimation_levels_separate(tmp_path, monkeypatch):
+    source = tmp_path / "OR_ABI-L2-CMIPF-M6C13_G19_s20262360000000.nc"
+    source.write_bytes(b"source")
+    _reset_source_raster_cache(monkeypatch, 1024)
+    calls = []
+
+    def fake_load(path, channel, max_grid=None):
+        calls.append((path, channel, max_grid))
+        return renderer.SourceRaster(
+            cmi=np.zeros((2, 2), dtype=np.float32),
+            src_transform=object(),
+            src_crs=object(),
+        )
+
+    monkeypatch.setattr(renderer, "_load_source_raster", fake_load)
+
+    low, _ = renderer._load_source_raster_cached(source, "Channel13", 4)
+    middle, _ = renderer._load_source_raster_cached(source, "Channel13", 6)
+    low_again, parsed = renderer._load_source_raster_cached(source, "Channel13", 3)
+
+    assert low is low_again
+    assert low is not middle
+    assert parsed is False
+    assert calls == [
+        (source, "Channel13", 2048),
+        (source, "Channel13", 4096),
+    ]
 
 
 def test_renderer_batches_fci_channels_from_shared_chunk_directory(tmp_path, monkeypatch):

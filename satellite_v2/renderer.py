@@ -28,6 +28,7 @@ from config.satellite_v2_config import (
     ABI_CHANNELS,
     RGB_COMPOSITE_KEYS,
     SATELLITE_V2_AHI_MAX_GRID,
+    SATELLITE_V2_AMI_MAX_GRID,
     SATELLITE_V2_FCI_MAX_GRID,
     SATELLITE_V2_GOES_FULLDISK_MAX_GRID,
     SATELLITE_V2_NETCDF_CACHE_SIZE,
@@ -129,6 +130,7 @@ class SatelliteTileRenderer:
         product_key: str,
         source_files: dict[str, str | Path],
         sat_id: str | None = None,
+        destination_zoom: int | None = None,
     ) -> "SatelliteTileRenderer":
         product = normalize_channel(product_key)
         required = source_channels_for_product(product)
@@ -138,7 +140,14 @@ class SatelliteTileRenderer:
         instrument = SATELLITE_PLATFORMS.get(str(sat_id or "").strip().lower(), {}).get(
             "instrument"
         )
-        return _get_cached_renderer(cls, product, source_files, required, instrument)
+        return _get_cached_renderer(
+            cls,
+            product,
+            source_files,
+            required,
+            instrument,
+            destination_zoom=destination_zoom,
+        )
 
     def render_tile(
         self,
@@ -294,24 +303,49 @@ def _source_file_signature(source_file: str | Path) -> tuple[str, int, int]:
     return str(path), int(stat.st_mtime_ns), int(stat.st_size)
 
 
-def _source_raster_grid_cap(path: Path, source_channel: str) -> int:
+def _zoom_derived_grid_cap(destination_zoom: int | None) -> int:
+    if destination_zoom is None or int(destination_zoom) >= 7:
+        return 0
+    if int(destination_zoom) <= 4:
+        return 2048
+    return 4096
+
+
+def _source_raster_grid_cap(
+    path: Path,
+    source_channel: str,
+    destination_zoom: int | None = None,
+) -> int:
     if _is_ahi_hsd_file(path):
-        return SATELLITE_V2_AHI_MAX_GRID
-    if _is_fci_chunk_file(path):
-        return SATELLITE_V2_FCI_MAX_GRID
-    if path.suffix.lower() == ".nc" and source_channel not in {"ADP", "AOD", "FRP"}:
-        return SATELLITE_V2_GOES_FULLDISK_MAX_GRID
-    return 0
+        platform_cap = SATELLITE_V2_AHI_MAX_GRID
+    elif _is_fci_chunk_file(path):
+        platform_cap = SATELLITE_V2_FCI_MAX_GRID
+    elif _is_ami_l1b_file(path):
+        platform_cap = SATELLITE_V2_AMI_MAX_GRID
+    elif (
+        path.suffix.lower() == ".nc"
+        and not _is_gmgsi_file(path)
+        and source_channel not in {"ADP", "AOD", "FRP"}
+    ):
+        platform_cap = SATELLITE_V2_GOES_FULLDISK_MAX_GRID
+    else:
+        platform_cap = 0
+    zoom_cap = _zoom_derived_grid_cap(destination_zoom)
+    if platform_cap and zoom_cap:
+        return min(platform_cap, zoom_cap)
+    return platform_cap
 
 
 def _source_raster_cache_key(
-    source_file: str | Path, source_channel: str
+    source_file: str | Path,
+    source_channel: str,
+    destination_zoom: int | None = None,
 ) -> tuple[object, ...]:
     path = Path(source_file)
     return (
         *_source_file_signature(path),
         source_channel,
-        _source_raster_grid_cap(path, source_channel),
+        _source_raster_grid_cap(path, source_channel, destination_zoom),
     )
 
 
@@ -376,11 +410,18 @@ def _source_raster_key_lock(key: tuple[object, ...]) -> threading.Lock:
 
 
 def _load_source_raster_cached(
-    source_file: str | Path, source_channel: str
+    source_file: str | Path,
+    source_channel: str,
+    destination_zoom: int | None = None,
 ) -> tuple[SourceRaster, bool]:
+    grid_cap = _source_raster_grid_cap(
+        Path(source_file), source_channel, destination_zoom
+    )
     if _SOURCE_RASTER_CACHE_MAX_BYTES <= 0:
-        return _load_source_raster(source_file, source_channel), True
-    key = _source_raster_cache_key(source_file, source_channel)
+        if destination_zoom is None:
+            return _load_source_raster(source_file, source_channel), True
+        return _load_source_raster(source_file, source_channel, max_grid=grid_cap), True
+    key = _source_raster_cache_key(source_file, source_channel, destination_zoom)
     cached = _cached_source_raster(key)
     if cached is not None:
         return cached, False
@@ -389,7 +430,13 @@ def _load_source_raster_cached(
         cached = _cached_source_raster(key)
         if cached is not None:
             return cached, False
-        raster = _load_source_raster(source_file, source_channel)
+        raster = (
+            _load_source_raster(source_file, source_channel)
+            if destination_zoom is None
+            else _load_source_raster(
+                source_file, source_channel, max_grid=grid_cap
+            )
+        )
         _cache_source_raster(key, raster)
     with _SOURCE_RASTER_CACHE_LOCK:
         if (
@@ -401,12 +448,26 @@ def _load_source_raster_cached(
 
 
 def _load_fci_source_rasters_cached(
-    primary_chunk: Path, source_channels: Sequence[str]
+    primary_chunk: Path,
+    source_channels: Sequence[str],
+    destination_zoom: int | None = None,
 ) -> tuple[dict[str, SourceRaster], set[str]]:
+    grid_cap = _source_raster_grid_cap(
+        primary_chunk, source_channels[0], destination_zoom
+    )
     if _SOURCE_RASTER_CACHE_MAX_BYTES <= 0:
-        return _load_fci_source_rasters(primary_chunk, source_channels), set(source_channels)
+        loaded = (
+            _load_fci_source_rasters(primary_chunk, source_channels)
+            if destination_zoom is None
+            else _load_fci_source_rasters(
+                primary_chunk, source_channels, max_grid=grid_cap
+            )
+        )
+        return loaded, set(source_channels)
     keys = {
-        channel: _source_raster_cache_key(primary_chunk, channel)
+        channel: _source_raster_cache_key(
+            primary_chunk, channel, destination_zoom
+        )
         for channel in source_channels
     }
     results = {
@@ -435,7 +496,13 @@ def _load_fci_source_rasters_cached(
             else:
                 missing.append(channel)
         if missing:
-            loaded = _load_fci_source_rasters(primary_chunk, missing)
+            loaded = (
+                _load_fci_source_rasters(primary_chunk, missing)
+                if destination_zoom is None
+                else _load_fci_source_rasters(
+                    primary_chunk, missing, max_grid=grid_cap
+                )
+            )
             parsed_channels.update(loaded)
             for channel, raster in loaded.items():
                 _cache_source_raster(keys[channel], raster)
@@ -470,12 +537,24 @@ def _renderer_cache_key(
     source_files: dict[str, str | Path],
     required: tuple[str, ...],
     instrument: str | None,
+    destination_zoom: int | None = None,
 ) -> tuple[object, ...]:
     return (
         product_key,
         instrument,
         tuple(
             (source_channel, *_source_file_signature(source_files[source_channel]))
+            for source_channel in required
+        ),
+        tuple(
+            (
+                source_channel,
+                _source_raster_grid_cap(
+                    Path(source_files[source_channel]),
+                    source_channel,
+                    destination_zoom,
+                ),
+            )
             for source_channel in required
         ),
     )
@@ -487,6 +566,7 @@ def _load_renderer_uncached(
     source_files: dict[str, str | Path],
     required: tuple[str, ...],
     instrument: str | None,
+    destination_zoom: int | None = None,
 ) -> "SatelliteTileRenderer":
     rasters = {}
     remaining = list(required)
@@ -501,7 +581,9 @@ def _load_renderer_uncached(
             continue
         parse_started = time.perf_counter() if bench_enabled() else 0.0
         loaded_rasters, parsed_channels = _load_fci_source_rasters_cached(
-            Path(source_files[channels[0]]), channels
+            Path(source_files[channels[0]]),
+            channels,
+            destination_zoom=destination_zoom,
         )
         rasters.update(loaded_rasters)
         if bench_enabled() and parsed_channels:
@@ -514,7 +596,9 @@ def _load_renderer_uncached(
     for source_channel in remaining:
         parse_started = time.perf_counter() if bench_enabled() else 0.0
         raster, parsed = _load_source_raster_cached(
-            source_files[source_channel], source_channel
+            source_files[source_channel],
+            source_channel,
+            destination_zoom=destination_zoom,
         )
         rasters[source_channel] = raster
         if bench_enabled() and parsed:
@@ -539,13 +623,25 @@ def _get_cached_renderer(
     source_files: dict[str, str | Path],
     required: tuple[str, ...],
     instrument: str | None = None,
+    destination_zoom: int | None = None,
 ) -> "SatelliteTileRenderer":
     if _RENDERER_CACHE_MAX <= 0:
         return _load_renderer_uncached(
-            renderer_cls, product_key, source_files, required, instrument
+            renderer_cls,
+            product_key,
+            source_files,
+            required,
+            instrument,
+            destination_zoom,
         )
 
-    key = _renderer_cache_key(product_key, source_files, required, instrument)
+    key = _renderer_cache_key(
+        product_key,
+        source_files,
+        required,
+        instrument,
+        destination_zoom,
+    )
     with _RENDERER_CACHE_LOCK:
         cached = _RENDERER_CACHE.get(key)
         if cached is not None:
@@ -569,7 +665,12 @@ def _get_cached_renderer(
             return cached
 
         renderer = _load_renderer_uncached(
-            renderer_cls, product_key, source_files, required, instrument
+            renderer_cls,
+            product_key,
+            source_files,
+            required,
+            instrument,
+            destination_zoom,
         )
 
         # Keep source membership stable through renderer insertion. Otherwise a
@@ -689,10 +790,14 @@ def _load_gmgsi_source_raster(path: Path, source_channel: str) -> SourceRaster:
     )
 
 
-def _load_ami_source_raster(path: Path, source_channel: str) -> SourceRaster:
+def _load_ami_source_raster(
+    path: Path, source_channel: str, max_grid: int | None = None
+) -> SourceRaster:
     from satellite_v2.ami_nc import load_ami_raster
 
-    raster = load_ami_raster(_load_netcdf_dataset(path), source_channel)
+    raster = load_ami_raster(
+        _load_netcdf_dataset(path), source_channel, max_grid=max_grid
+    )
     return SourceRaster(
         cmi=raster.values,
         src_transform=raster.src_transform,
@@ -703,7 +808,9 @@ def _load_ami_source_raster(path: Path, source_channel: str) -> SourceRaster:
     )
 
 
-def _load_ahi_source_raster(primary_segment: Path) -> SourceRaster:
+def _load_ahi_source_raster(
+    primary_segment: Path, max_grid: int | None = None
+) -> SourceRaster:
     """Load Himawari AHI HSD segments into a SourceRaster.
 
     The provider hands over one segment path; the sibling segments live in
@@ -714,7 +821,9 @@ def _load_ahi_source_raster(primary_segment: Path) -> SourceRaster:
         for path in primary_segment.parent.iterdir()
         if _is_ahi_hsd_file(path)
     )
-    raster = load_ahi_raster(segment_paths)
+    raster = load_ahi_raster(
+        segment_paths, max_grid=max_grid or SATELLITE_V2_AHI_MAX_GRID
+    )
     return SourceRaster(
         cmi=raster.values,
         src_transform=raster.src_transform,
@@ -883,12 +992,18 @@ def _is_fci_chunk_file(path: Path) -> bool:
     return "FCI-1C-RRAD-FDHSI" in name and "CHK-BODY" in name and name.endswith(".nc")
 
 
-def _load_fci_source_raster(primary_chunk: Path, source_channel: str) -> SourceRaster:
+def _load_fci_source_raster(
+    primary_chunk: Path, source_channel: str, max_grid: int | None = None
+) -> SourceRaster:
     """Load Meteosat-12 FCI body chunks into a SourceRaster."""
     from satellite_v2.fci_nc import load_fci_raster
 
     chunk_paths = sorted(path for path in primary_chunk.parent.iterdir() if _is_fci_chunk_file(path))
-    raster = load_fci_raster(chunk_paths, source_channel)
+    raster = load_fci_raster(
+        chunk_paths,
+        source_channel,
+        max_grid=max_grid or SATELLITE_V2_FCI_MAX_GRID,
+    )
     return SourceRaster(
         cmi=raster.values,
         src_transform=raster.src_transform,
@@ -896,9 +1011,23 @@ def _load_fci_source_raster(primary_chunk: Path, source_channel: str) -> SourceR
     )
 
 
-def _goes_fulldisk_stride(dataset: xr.Dataset, path: Path, shape: tuple[int, ...]) -> int:
+def _power_of_two_stride(longest: int, max_grid: int) -> int:
+    stride = 1
+    limit = max(1, int(max_grid))
+    while math.ceil(int(longest) / stride) > limit:
+        stride *= 2
+    return stride
+
+
+def _goes_fulldisk_stride(
+    dataset: xr.Dataset,
+    path: Path,
+    shape: tuple[int, ...],
+    max_grid: int | None = None,
+) -> int:
     longest = max(shape)
-    if longest <= SATELLITE_V2_GOES_FULLDISK_MAX_GRID:
+    grid_cap = int(max_grid or SATELLITE_V2_GOES_FULLDISK_MAX_GRID)
+    if longest <= grid_cap:
         return 1
     scene = str(dataset.attrs.get("scene_id", "")).strip().lower()
     is_fulldisk = (
@@ -908,12 +1037,13 @@ def _goes_fulldisk_stride(dataset: xr.Dataset, path: Path, shape: tuple[int, ...
     )
     if not is_fulldisk:
         return 1
-    return -(-longest // SATELLITE_V2_GOES_FULLDISK_MAX_GRID)
+    return _power_of_two_stride(longest, grid_cap)
 
 
 def _load_source_raster(
     source_file: str | Path,
     source_channel: str | None = None,
+    max_grid: int | None = None,
 ) -> SourceRaster:
     """Load a GOES/GK2A/GMGSI NetCDF, AHI HSD, or SEVIRI .nat source.
 
@@ -935,15 +1065,15 @@ def _load_source_raster(
     if _is_ami_l1b_file(path):
         if not source_channel:
             raise ValueError("GK2A AMI sources require a source_channel.")
-        return _load_ami_source_raster(path, source_channel)
+        return _load_ami_source_raster(path, source_channel, max_grid=max_grid)
     if _is_ahi_hsd_file(path):
-        return _load_ahi_source_raster(path)
+        return _load_ahi_source_raster(path, max_grid=max_grid)
     if _is_fci_chunk_file(path):
         if not source_channel:
             raise ValueError(
                 "FCI NetCDF chunks require a source_channel to extract."
             )
-        return _load_fci_source_raster(path, source_channel)
+        return _load_fci_source_raster(path, source_channel, max_grid=max_grid)
     if path.name.lower().endswith(".nat"):
         if not source_channel:
             raise ValueError(
@@ -979,7 +1109,9 @@ def _load_source_raster(
     if cmi_lazy.ndim != 2:
         raise ValueError(f"CMI variable must be 2D: {source_file}")
 
-    stride = _goes_fulldisk_stride(dataset, path, cmi_lazy.shape)
+    stride = _goes_fulldisk_stride(
+        dataset, path, cmi_lazy.shape, max_grid=max_grid
+    )
     if stride > 1:
         # Slice the lazy variable so the full-resolution array is never
         # materialised; netCDF4 reads only the strided hyperslab.
@@ -1025,7 +1157,9 @@ def _load_source_raster(
 
 
 def _load_fci_source_rasters(
-    primary_chunk: Path, source_channels: Sequence[str]
+    primary_chunk: Path,
+    source_channels: Sequence[str],
+    max_grid: int | None = None,
 ) -> dict[str, SourceRaster]:
     """Load multiple FCI channels in one pass over their shared chunks."""
     from satellite_v2.fci_nc import load_fci_rasters
@@ -1033,7 +1167,11 @@ def _load_fci_source_rasters(
     chunk_paths = sorted(
         path for path in primary_chunk.parent.iterdir() if _is_fci_chunk_file(path)
     )
-    rasters = load_fci_rasters(chunk_paths, source_channels)
+    rasters = load_fci_rasters(
+        chunk_paths,
+        source_channels,
+        max_grid=max_grid or SATELLITE_V2_FCI_MAX_GRID,
+    )
     return {
         source_channel: SourceRaster(
             cmi=raster.values,

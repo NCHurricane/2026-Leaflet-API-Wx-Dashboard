@@ -11,9 +11,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Iterable, Any, Mapping, Sequence
 
-import numpy as np
-
-
 from config.satellite_v2_config import (
     SATELLITE_V2_LIVE_SUPERTILE_RADIUS,
     SATELLITE_V2_SECTOR_BOUNDS,
@@ -119,12 +116,9 @@ def planning_tile_coords(
     return tile_coords_for_bounds(bounds, z, buffer_tiles=buffer_tiles)
 
 
-def _render_tile_to_target(
-    renderer: SatelliteTileRenderer,
+def _publish_tile_image_to_target(
+    image,
     target: Path,
-    z: int,
-    x: int,
-    y: int,
     target_was_invalid: bool,
 ) -> str:
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -133,7 +127,6 @@ def _render_tile_to_target(
     )
     os.close(fd)
     try:
-        image = renderer.render_tile(int(z), int(x), int(y), SATELLITE_V2_TILE_SIZE)
         if not tile_image_has_content(image):
             if target_was_invalid:
                 target.unlink(missing_ok=True)
@@ -209,6 +202,71 @@ def _merge_tile_stats(total: dict[str, int], part: dict[str, int]) -> None:
         total[key] += int(part.get(key) or 0)
 
 
+def _publish_zoom_canvas_tiles(
+    canvas,
+    *,
+    cache_root: str | Path,
+    sat_id: str,
+    sector: str,
+    channel: str,
+    frame_key: str,
+    zoom: int,
+    coords: Sequence[tuple[int, int]],
+    x_min: int,
+    y_min: int,
+    tile_size: int,
+    overwrite: bool,
+    raise_coord: tuple[int, int] | None = None,
+) -> tuple[dict[str, int], dict[tuple[int, int], str]]:
+    """Crop and atomically publish tiles from one already-rendered zoom canvas."""
+    stats = {"rendered": 0, "skipped": 0, "errors": 0, "repaired": 0, "invalid": 0}
+    results: dict[tuple[int, int], str] = {}
+    for x, y in coords:
+        coord = (int(x), int(y))
+        target = tile_path(
+            cache_root,
+            sat_id,
+            sector,
+            channel,
+            frame_key,
+            int(zoom),
+            coord[0],
+            coord[1],
+        )
+        needs_render, target_was_invalid = _target_needs_live_render(
+            target, overwrite
+        )
+        if not needs_render:
+            stats["skipped"] += 1
+            results[coord] = "skipped"
+            continue
+
+        left = (coord[0] - int(x_min)) * int(tile_size)
+        top = (coord[1] - int(y_min)) * int(tile_size)
+        tile_img = canvas.crop(
+            (left, top, left + int(tile_size), top + int(tile_size))
+        )
+        try:
+            result = _publish_tile_image_to_target(
+                tile_img, target, target_was_invalid
+            )
+        except Exception:
+            stats["errors"] += 1
+            results[coord] = "error"
+            if raise_coord is not None and coord == raise_coord:
+                raise
+            continue
+
+        results[coord] = result
+        if result == "invalid":
+            stats["invalid"] += 1
+        else:
+            stats["rendered"] += 1
+            if target_was_invalid:
+                stats["repaired"] += 1
+    return stats, results
+
+
 def _render_warm_zoom_canvas_task(task: dict[str, Any]) -> dict[str, int]:
     stats = {"rendered": 0, "skipped": 0, "errors": 0, "repaired": 0, "invalid": 0}
     cache_root = task["cache_root"]
@@ -236,7 +294,7 @@ def _render_warm_zoom_canvas_task(task: dict[str, Any]) -> dict[str, int]:
             for source_channel, path in (task.get("source_files") or {}).items()
         }
         renderer = SatelliteTileRenderer.from_sources(
-            channel, source_files, sat_id=sat_id
+            channel, source_files, sat_id=sat_id, destination_zoom=zoom
         )
         canvas = renderer.render_zoom_canvas(
             zoom,
@@ -259,75 +317,21 @@ def _render_warm_zoom_canvas_task(task: dict[str, Any]) -> dict[str, int]:
         stats["errors"] += len(coords)
         return stats
 
-    # Fast path: if the entire canvas is transparent the MESO/source footprint
-    # does not intersect this tile range.  Skip all coords immediately.
-    canvas_arr = np.array(canvas)
-    if (
-        canvas_arr.ndim == 3
-        and canvas_arr.shape[2] == 4
-        and not np.any(canvas_arr[:, :, 3])
-    ):
-        for x, y in coords:
-            write_negative_tile_marker(
-                tile_path(cache_root, sat_id, sector, channel, frame_key, zoom, x, y)
-            )
-        stats["invalid"] += len(coords)
-        return stats
-
-    for x, y in coords:
-        target = tile_path(
-            cache_root,
-            sat_id,
-            sector,
-            channel,
-            frame_key,
-            zoom,
-            x,
-            y,
-        )
-        if target.exists() and is_valid_tile_file(target) and not overwrite:
-            stats["skipped"] += 1
-            continue
-
-        target_was_invalid = target.exists() and not is_valid_tile_file(target)
-        left = (x - x_min) * tile_size
-        top = (y - y_min) * tile_size
-        right = (x - x_min + 1) * tile_size
-        bottom = (y - y_min + 1) * tile_size
-        tile_img = canvas.crop((left, top, right, bottom))
-
-        if not tile_image_has_content(tile_img):
-            if target_was_invalid:
-                target.unlink(missing_ok=True)
-            write_negative_tile_marker(target)
-            stats["invalid"] += 1
-            continue
-
-        target.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(
-            prefix=f".{target.name}.", suffix=".tmp", dir=str(target.parent)
-        )
-        os.close(fd)
-        try:
-            tile_img.save(tmp_name, format="PNG", optimize=False, compress_level=1)
-            if not is_valid_tile_file(Path(tmp_name)):
-                if target_was_invalid:
-                    target.unlink(missing_ok=True)
-                os.unlink(tmp_name)
-                stats["invalid"] += 1
-                continue
-            os.replace(tmp_name, target)
-            clear_negative_tile_marker(target)
-            stats["rendered"] += 1
-            if target_was_invalid:
-                stats["repaired"] += 1
-        except Exception:
-            stats["errors"] += 1
-            try:
-                os.unlink(tmp_name)
-            except OSError:
-                pass
-
+    publish_stats, _ = _publish_zoom_canvas_tiles(
+        canvas,
+        cache_root=cache_root,
+        sat_id=sat_id,
+        sector=sector,
+        channel=channel,
+        frame_key=frame_key,
+        zoom=zoom,
+        coords=coords,
+        x_min=x_min,
+        y_min=y_min,
+        tile_size=tile_size,
+        overwrite=overwrite,
+    )
+    _merge_tile_stats(stats, publish_stats)
     return stats
 
 
@@ -449,9 +453,9 @@ def render_frame_tile(
 ) -> tuple[Path, dict[str, int | str]]:
     """Render one tile and optionally warm its configured neighbors inline.
 
-    The HTTP service passes ``render_supertile=False`` so the requested tile
-    can return before it submits neighbors to its shared background pool.
-    Direct callers retain the original synchronous supertile behavior.
+    The HTTP service enables the bounded supertile for ordinary live misses so
+    one canvas warp can publish the requested tile and its neighbors. Explicit
+    prefetch callers disable it and retain single-tile behavior.
     """
     started = time.perf_counter()
     sat_key = normalize_sat_id(sat_id)
@@ -478,7 +482,7 @@ def render_frame_tile(
         )
 
     target = tile_path(cache_root, sat_key, sector_key, channel, frame_key, z, x, y)
-    target_needs_render, target_was_invalid = _target_needs_live_render(target, overwrite)
+    target_needs_render, _ = _target_needs_live_render(target, overwrite)
     if not target_needs_render:
         finish_timing(timing_token, cache_status="hit")
         return target, {"cache_status": "hit", "rendered": 0, "skipped": 1, "errors": 0}
@@ -502,7 +506,7 @@ def render_frame_tile(
     renderer_start = time.perf_counter()
     _LOGGER.info("Satellite tile stage=renderer_start tile=%s", tile_id)
     renderer = SatelliteTileRenderer.from_sources(
-        channel, source_files_for_renderer, sat_id=sat_key
+        channel, source_files_for_renderer, sat_id=sat_key, destination_zoom=int(z)
     )
     renderer_elapsed = int((time.perf_counter() - renderer_start) * 1000)
     _LOGGER.info(
@@ -532,62 +536,70 @@ def render_frame_tile(
             if render_supertile
             else [(int(x), int(y))]
         )
-        for tile_x, tile_y in coords:
-            current_target = tile_path(
-                cache_root,
-                sat_key,
-                sector_key,
-                channel,
-                frame_key,
-                int(z),
-                tile_x,
-                tile_y,
-            )
-            current_needs_render, current_was_invalid = _target_needs_live_render(
-                current_target, overwrite
-            )
-            is_requested_tile = tile_x == int(x) and tile_y == int(y)
-            if not current_needs_render:
-                if not is_requested_tile:
-                    stats["supertile_skipped"] += 1
+        xs = [tile_x for tile_x, _ in coords]
+        ys = [tile_y for _, tile_y in coords]
+        x_min, x_max = min(xs), max(xs)
+        y_min, y_max = min(ys), max(ys)
+        render_start = time.perf_counter()
+        canvas = renderer.render_zoom_canvas(
+            int(z),
+            x_min,
+            y_min,
+            x_max,
+            y_max,
+            tile_size=SATELLITE_V2_TILE_SIZE,
+        )
+        publish_stats, results = _publish_zoom_canvas_tiles(
+            canvas,
+            cache_root=cache_root,
+            sat_id=sat_key,
+            sector=sector_key,
+            channel=channel,
+            frame_key=frame_key,
+            zoom=int(z),
+            coords=coords,
+            x_min=x_min,
+            y_min=y_min,
+            tile_size=SATELLITE_V2_TILE_SIZE,
+            overwrite=overwrite,
+            raise_coord=(int(x), int(y)),
+        )
+        render_elapsed = int((time.perf_counter() - render_start) * 1000)
+        stats["render_elapsed_ms"] = render_elapsed
+        requested_coord = (int(x), int(y))
+        requested_result = results.get(requested_coord, "error")
+        if requested_result == "invalid":
+            stats["cache_status"] = "invalid"
+            stats["errors"] = 1
+        elif requested_result == "rendered":
+            stats["rendered"] = 1
+        elif requested_result == "skipped":
+            stats["cache_status"] = "hit"
+            stats["skipped"] = 1
+        else:
+            stats["errors"] = 1
+
+        for coord, result in results.items():
+            if coord == requested_coord:
                 continue
-            render_start = time.perf_counter()
-            try:
-                result = _render_tile_to_target(
-                    renderer, current_target, int(z), tile_x, tile_y, current_was_invalid
-                )
-            except Exception:
-                if is_requested_tile:
-                    raise
-                stats["supertile_errors"] += 1
-                continue
-            render_elapsed = int((time.perf_counter() - render_start) * 1000)
-            stats["render_elapsed_ms"] += render_elapsed
-            total_elapsed = int((time.perf_counter() - started) * 1000)
-            current_tile_id = (
-                f"{sat_key}/{sector_key}/{channel}/{frame_key}/z{z}/{tile_x}/{tile_y}"
-            )
-            if is_requested_tile:
-                _LOGGER.info(
-                    "Satellite tile stage=tile_render_complete tile=%s result=%s "
-                    "render_ms=%s total_ms=%s",
-                    current_tile_id,
-                    result,
-                    render_elapsed,
-                    total_elapsed,
-                )
-            if result == "invalid":
-                if is_requested_tile:
-                    stats["cache_status"] = "invalid"
-                    stats["errors"] = 1
-                    break
-                else:
-                    stats["supertile_invalid"] += 1
-                continue
-            if is_requested_tile:
-                stats["rendered"] = 1
-            else:
+            if result == "rendered":
                 stats["supertile_rendered"] += 1
+            elif result == "skipped":
+                stats["supertile_skipped"] += 1
+            elif result == "invalid":
+                stats["supertile_invalid"] += 1
+            else:
+                stats["supertile_errors"] += 1
+        total_elapsed = int((time.perf_counter() - started) * 1000)
+        _LOGGER.info(
+            "Satellite tile stage=tile_render_complete tile=%s result=%s "
+            "render_ms=%s total_ms=%s canvas_tiles=%s",
+            tile_id,
+            requested_result,
+            render_elapsed,
+            total_elapsed,
+            len(coords),
+        )
     except Exception:
         stats["supertile_errors"] += 1
         raise

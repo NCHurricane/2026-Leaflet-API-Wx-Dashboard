@@ -284,13 +284,21 @@ Satellite v2 tile endpoints:
    channels, and render missing Web Mercator tiles on demand.
 2. Tile paths include a platform render-version namespace so display-recipe
    changes can invalidate old pixels without deleting source downloads.
-3. Filled satellite images own the basemap inside valid coverage (PNG alpha
+3. A live tile miss with neighbor rendering enabled performs one bounded canvas
+   warp for the requested 3x3 supertile, then crops, validates, and atomically
+   publishes each tile through the same helper used by canvas warming. Explicit
+   single-tile prefetch remains single-tile.
+4. Loaders with an existing source-grid cap key their decoded-raster cache by
+   destination zoom: z1–4 cap at 2048, z5–6 at 4096, and z7+ retain the platform
+   cap. SEVIRI and GMGSI retain native loader behavior; frame-bound discovery
+   omits destination zoom and therefore retains its prior source behavior.
+5. Filled satellite images own the basemap inside valid coverage (PNG alpha
    255); invalid/off-disk pixels remain transparent. ADP, AOD, and FRP retain
    product-specific sparse-overlay alpha.
-4. Selected rapid sectors and Meteosat source prefetch are delayed optional
+6. Selected rapid sectors and Meteosat source prefetch are delayed optional
    accelerators owned by the application while request presence remains active;
    they do not replace the live on-demand tile path.
-5. Source downloads deduplicate by platform/sector/frame. EUMETSAT FCI uses
+7. Source downloads deduplicate by platform/sector/frame. EUMETSAT FCI uses
    one or two download connections and reports `credentials_required` or
    `license_required` instead of hanging or presenting a generic provider
    failure.
@@ -464,10 +472,11 @@ Alpha ownership is deliberately split by product semantics:
 - AOD: value-driven alpha ramp.
 - FRP: sparse overlay alpha.
 
-Current render namespaces carrying this contract are `products-v5` for the
-default/GOES path, `products-ahi3` for Himawari-9, and `products-fci3` for
-Meteosat-12. Any pixel-output optimization must establish golden tiles from
-these namespaces before changing the render pipeline.
+Phase 2 canvas/zoom-cap render namespaces carrying this contract are
+`products-v9` for the default/GOES/SEVIRI path, `products-ahi5` for Himawari-9,
+`products-fci5` for Meteosat-12, `products-ami3` for GK2A, and
+`products-gmgsi2` for GMGSI. Golden tiles from the preceding namespaces remain
+the comparison baseline for the Phase 2 owner visual gate.
 
 ## Radar / Satellite Product Pages (Current State)
 
