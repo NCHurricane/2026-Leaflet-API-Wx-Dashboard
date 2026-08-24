@@ -141,6 +141,7 @@ export function formatFrameLabel(frame) {
 
 export function createSatelliteEngine({ api, clientId = '' }) {
     const legendCache = new Map();
+    let selectionHeld = false;
 
     async function fetchFrameSet(selection, { hours, maxFrames, signal, refresh = false, minFrames = 1 }) {
         const { satId, sector, channel } = selection;
@@ -159,6 +160,9 @@ export function createSatelliteEngine({ api, clientId = '' }) {
         if (!resp.ok || (data.status !== 'success' && data.status !== 'stale')) {
             throw new Error(data.detail || data.message || resp.statusText || 'Satellite catalog request failed');
         }
+        // The catalog request is what takes the presence lease, so from here on
+        // there is a selection worth releasing.
+        selectionHeld = Boolean(clientId);
         const frames = Array.isArray(data.frames)
             ? data.frames.filter((frame) => frame && frame.frame_key)
             : [];
@@ -196,6 +200,11 @@ export function createSatelliteEngine({ api, clientId = '' }) {
 
     function releaseSelection({ beacon = false } = {}) {
         if (!clientId) return false;
+        // Stepping through platform → sector → product clears the frames once
+        // per click, but only the first clear has a lease to give back. The
+        // rest would release a selection that is about to be re-acquired.
+        if (!selectionHeld) return false;
+        selectionHeld = false;
         const params = new URLSearchParams({ client_id: clientId });
         const url = api.apiUrl(`/api/satellite-v2/selection/release?${params.toString()}`);
         if (beacon && typeof globalThis.navigator?.sendBeacon === 'function') {

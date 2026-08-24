@@ -101,6 +101,92 @@ def test_golden_capture_and_compare_are_byte_exact(tmp_path):
         bench._write_golden("compare", golden_dir, tmp_path, context, coords)
 
 
+def _write_tile_png(path, color):
+    from PIL import Image
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGBA", (4, 4), color).save(path)
+
+
+def test_golden_tolerance_mode_measures_delta_instead_of_hash(tmp_path):
+    context = {
+        "sat_id": "meteosat12",
+        "sector": "FULLDISK",
+        "product": "Channel13",
+        "frame_key": "frame-a",
+        "z": 5,
+    }
+    coords = [(1, 2)]
+    target = tile_path(tmp_path, "meteosat12", "FULLDISK", "Channel13", "frame-a", 5, 1, 2)
+    _write_tile_png(target, (10, 20, 30, 255))
+
+    golden_dir = tmp_path / "goldens"
+    bench._write_golden("capture", golden_dir, tmp_path, context, coords)
+
+    _write_tile_png(target, (12, 20, 30, 255))
+    rows = bench._write_golden(
+        "compare", golden_dir, tmp_path, context, coords, tolerance=2
+    )
+
+    assert rows[0]["sha_equal"] is False
+    assert rows[0]["max_delta"] == 2
+    assert rows[0]["diff_fraction"] == 1.0
+
+    # The same shifted tile still fails the strict gate the other platforms keep.
+    with pytest.raises(RuntimeError, match="Golden comparison failed"):
+        bench._write_golden("compare", golden_dir, tmp_path, context, coords)
+
+    _write_tile_png(target, (40, 20, 30, 255))
+    with pytest.raises(RuntimeError, match="Golden tolerance comparison failed"):
+        bench._write_golden("compare", golden_dir, tmp_path, context, coords, tolerance=2)
+
+
+def test_golden_version_override_targets_prebump_capture(tmp_path):
+    context = {
+        "sat_id": "meteosat12",
+        "sector": "FULLDISK",
+        "product": "Channel13",
+        "frame_key": "frame-v",
+        "z": 5,
+    }
+    coords = [(1, 2)]
+    target = tile_path(tmp_path, "meteosat12", "FULLDISK", "Channel13", "frame-v", 5, 1, 2)
+    _write_tile_png(target, (10, 20, 30, 255))
+    golden_dir = tmp_path / "goldens"
+    bench._write_golden(
+        "capture", golden_dir, tmp_path, context, coords, version_override="products-fci-prebump"
+    )
+
+    assert (golden_dir / "products-fci-prebump").is_dir()
+    # Without the override the compare looks under the live version and finds nothing.
+    with pytest.raises(FileNotFoundError):
+        bench._write_golden("compare", golden_dir, tmp_path, context, coords)
+    bench._write_golden(
+        "compare", golden_dir, tmp_path, context, coords, version_override="products-fci-prebump"
+    )
+
+
+def test_golden_tolerance_mode_rejects_geometry_change(tmp_path):
+    from PIL import Image
+
+    context = {
+        "sat_id": "meteosat12",
+        "sector": "FULLDISK",
+        "product": "Channel13",
+        "frame_key": "frame-b",
+        "z": 5,
+    }
+    coords = [(1, 2)]
+    target = tile_path(tmp_path, "meteosat12", "FULLDISK", "Channel13", "frame-b", 5, 1, 2)
+    _write_tile_png(target, (10, 20, 30, 255))
+    golden_dir = tmp_path / "goldens"
+    bench._write_golden("capture", golden_dir, tmp_path, context, coords)
+
+    Image.new("RGBA", (8, 8), (10, 20, 30, 255)).save(target)
+    with pytest.raises(RuntimeError, match="geometry changed"):
+        bench._write_golden("compare", golden_dir, tmp_path, context, coords, tolerance=2)
+
+
 def test_summary_reports_stage_percentiles():
     summary = bench._summary_markdown(
         "run",
@@ -201,6 +287,46 @@ def test_netcdf_cache_closes_same_path_dataset_on_mtime_replace(tmp_path, monkey
     assert replacement is not original
     assert original.close_count == 1
     assert replacement.close_count == 0
+
+
+def test_catalog_frame_lookup_is_memoized_until_the_catalog_changes(tmp_path, monkeypatch):
+    from satellite_v2.cache import catalog_path
+
+    path = catalog_path(tmp_path, "meteosat12", "FULLDISK", "Channel13")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"frames": [{"frame_key": "frame-a", "source_key": "one"}]}),
+        encoding="utf-8",
+    )
+    reads = []
+    real_read_json = service.read_json
+
+    def counting_read_json(target):
+        reads.append(target)
+        return real_read_json(target)
+
+    monkeypatch.setattr(service, "read_json", counting_read_json)
+    monkeypatch.setattr(service, "_CATALOG_FRAME_INDEX", OrderedDict())
+
+    first = service._catalog_frame_for_tile(tmp_path, "meteosat12", "FULLDISK", "Channel13", "frame-a")
+    second = service._catalog_frame_for_tile(tmp_path, "meteosat12", "FULLDISK", "Channel13", "frame-a")
+
+    assert first == {"frame_key": "frame-a", "source_key": "one"}
+    assert second == first
+    assert first is not second  # copied, so a caller cannot corrupt the index
+    assert len(reads) == 1
+
+    path.write_text(
+        json.dumps({"frames": [{"frame_key": "frame-a", "source_key": "two"}]}),
+        encoding="utf-8",
+    )
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+
+    assert service._catalog_frame_for_tile(
+        tmp_path, "meteosat12", "FULLDISK", "Channel13", "frame-a"
+    )["source_key"] == "two"
+    assert len(reads) == 2
 
 
 def test_resolve_tile_png_signature_skips_deep_validation(tmp_path, monkeypatch):

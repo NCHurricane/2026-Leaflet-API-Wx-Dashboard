@@ -19,6 +19,17 @@ const PREFETCH_DEBOUNCE_MS = 220;
 const PREFETCH_RETRY_AFTER_MS = 20000;
 const PREFETCH_SEEN_LIMIT = 1200;
 const TILE_SIZE = 256;
+// Lowest zoom each sector is asked to render. A floor above the sector's
+// opening view preset makes Leaflet clamp _tileZoom upward and request ~4x the
+// tiles the view actually needs, so every sector with a preset below the
+// default is listed explicitly.
+const SECTOR_MIN_NATIVE_ZOOM = {
+    FULLDISK: 1,
+    GLOBAL: 2,
+    RSS: 4,
+    TARGET: 4,
+};
+const DEFAULT_MIN_NATIVE_ZOOM = 5;
 
 export function createSatelliteAnimator({
     mapCore,
@@ -43,8 +54,9 @@ export function createSatelliteAnimator({
     let opacity = 1.0;
     let enabled = true;
     let renderSeq = 0;
+    let foregroundGeneration = 0;
+    let foregroundFrameKey = '';
     let pendingSwapToken = 0;
-    let tileRefreshToken = 0;
     let layerZCounter = 0;
     let progressiveRedrawSeq = 0;
     let progressiveRedrawTimers = [];
@@ -78,9 +90,21 @@ export function createSatelliteAnimator({
             render_live: renderLive ? '1' : '0',
             render_neighbors: renderNeighbors ? '1' : '0',
             rv: String(getCatalog()?.render_version || 'products'),
-            t: String(tileRefreshToken || 0),
         });
-        if (clientId) params.set('client_id', clientId);
+        if (clientId) {
+            params.set('client_id', clientId);
+            const requestedGeneration = Number(
+                options?.frameGeneration ?? foregroundGeneration,
+            );
+            const requestedForegroundFrameKey = String(
+                options?.foregroundFrameKey ?? foregroundFrameKey,
+            );
+            if (Number.isFinite(requestedGeneration) && requestedGeneration > 0
+                && requestedForegroundFrameKey) {
+                params.set('frame_generation', String(Math.floor(requestedGeneration)));
+                params.set('foreground_frame_key', requestedForegroundFrameKey);
+            }
+        }
         return apiUrl(`/api/satellite-v2/tile/{z}/{x}/{y}?${params.toString()}`);
     }
 
@@ -114,9 +138,7 @@ export function createSatelliteAnimator({
 
     function minNativeZoomForSector() {
         const sector = String(getSelection().sector || '').toUpperCase();
-        if (sector === 'FULLDISK') return 1;
-        if (sector === 'MESO1' || sector === 'MESO2') return 5;
-        return 5; // CONUS
+        return SECTOR_MIN_NATIVE_ZOOM[sector] ?? DEFAULT_MIN_NATIVE_ZOOM;
     }
 
     function effectiveTileZoom(frame = null) {
@@ -188,12 +210,22 @@ export function createSatelliteAnimator({
     }
 
     // ── Layer pool / hot-frame window ───────────────────────────────────────
-    function getOrCreateLayer(frameKey) {
+    function layerTileTemplate(layer, frameKey) {
+        return tileTemplate(frameKey, {
+            frameGeneration: layer?._satFrameGeneration,
+            foregroundFrameKey: layer?._satForegroundFrameKey,
+        });
+    }
+
+    function getOrCreateLayer(frameKey, frameGeneration) {
         const key = poolKey(frameKey);
         if (!layerPool.has(key)) {
             const frame = frameByKey(frameKey);
             const maxNativeZoom = frameMaxNativeZoom(frame);
-            const layer = leaflet.tileLayer(tileTemplate(frameKey), {
+            const layer = leaflet.tileLayer(tileTemplate(frameKey, {
+                frameGeneration,
+                foregroundFrameKey: frameKey,
+            }), {
                 pane: LAYER_PANE,
                 maxZoom: 19,
                 ...(Number.isFinite(maxNativeZoom) ? { maxNativeZoom } : {}),
@@ -204,6 +236,8 @@ export function createSatelliteAnimator({
                 keepBuffer: 1,
                 crossOrigin: true,
             });
+            layer._satFrameGeneration = frameGeneration;
+            layer._satForegroundFrameKey = frameKey;
             layer.on('tileerror', () => {
                 layer._satLoadCompleteKey = '';
                 const retryCount = Number(layer._satTileErrorCount || 0) + 1;
@@ -214,15 +248,24 @@ export function createSatelliteAnimator({
                 layer._satTileErrorRetryTimer = setTimeout(() => {
                     layer._satTileErrorRetryTimer = null;
                     if (!enabled || !map.hasLayer(layer)) return;
-                    tileRefreshToken = Date.now();
-                    layer.setUrl(tileTemplate(frameKey), false);
+                    // Same URL on purpose: a cache-busting parameter would make
+                    // the retry miss every already-delivered immutable tile and
+                    // re-render the whole viewport to recover a few failures.
+                    layer.setUrl(layerTileTemplate(layer, frameKey), false);
                     scheduleProgressiveRedraws(layer, frameKey, { force: true });
                 }, retryDelayMs);
             });
             layer.on('tileload', () => reportFrameVisible(layer, frameKey));
             layerPool.set(key, layer);
         }
-        return layerPool.get(key);
+        const layer = layerPool.get(key);
+        if (Number(layer?._satFrameGeneration) !== Number(frameGeneration)
+            && !layerReadyForSwap(layer, map.getZoom())) {
+            layer._satFrameGeneration = frameGeneration;
+            layer._satForegroundFrameKey = frameKey;
+            layer.setUrl(layerTileTemplate(layer, frameKey), false);
+        }
+        return layer;
     }
 
     function shouldRetainLayers() {
@@ -233,11 +276,12 @@ export function createSatelliteAnimator({
         const visibleLayers = new Set([currentLayer, previousLayer].filter(Boolean));
         layerPool.forEach((layer) => {
             if (!layer || visibleLayers.has(layer)) return;
-            // Preserve the original blink-free animation contract for a
-            // completed frame: retain it underneath at opacity 0 so a later
-            // crossfade never has to rebuild its tile DOM. Incomplete layers
-            // are detached so abandoned renders cannot keep filling the queue.
-            // Zoom startup still detaches every inactive layer.
+            // Completed frames must keep their Leaflet tile DOM mounted. A
+            // detached layer visibly fades again when Leaflet rebuilds that DOM,
+            // even if every tile is already cached and readiness-gated. This is
+            // the established no-flash animation contract; do not replace it
+            // with detach/re-add timing. Incomplete or abandoned layers still
+            // detach so they cannot continue filling the render queue.
             if (shouldRetainLayers()
                 && map.hasLayer(layer)
                 && layerReadyForSwap(layer, map.getZoom())) {
@@ -286,8 +330,9 @@ export function createSatelliteAnimator({
             if (!enabled || !map.hasLayer(layer)) return;
             if (!retainLayers && activeLayer !== layer) return;
             if (layer._satLoadCompleteKey === retryKey) return;
-            tileRefreshToken = Date.now();
-            layer.setUrl(tileTemplate(frameKey), false);
+            // Reusing the URL keeps delivered tiles served from the browser
+            // cache; only the tiles that came back empty go back to the server.
+            layer.setUrl(layerTileTemplate(layer, frameKey), false);
         }, delayMs));
         progressiveRedrawTimers.push(...timers);
     }
@@ -395,7 +440,12 @@ export function createSatelliteAnimator({
         const frameKey = frame?.frame_key || '';
         if (!frameKey) return false;
 
-        const nextLayer = getOrCreateLayer(frameKey);
+        foregroundGeneration += 1;
+        foregroundFrameKey = frameKey;
+        cancelPrefetch();
+        const frameGeneration = foregroundGeneration;
+        const nextLayer = getOrCreateLayer(frameKey, frameGeneration);
+        nextLayer._satPrefetchVisibleKey = '';
         const targetZoom = map.getZoom();
         const prevLayer = activeLayer;
         const seq = ++renderSeq;
@@ -409,7 +459,9 @@ export function createSatelliteAnimator({
 
         if (prevLayer === nextLayer) {
             if (forceReloadSameLayer) {
-                nextLayer.setUrl(tileTemplate(frameKey), false);
+                nextLayer._satFrameGeneration = frameGeneration;
+                nextLayer._satForegroundFrameKey = frameKey;
+                nextLayer.setUrl(layerTileTemplate(nextLayer, frameKey), false);
                 if (typeof nextLayer.redraw === 'function') nextLayer.redraw();
             }
             if (!canApplyFrame(seq)) return false;
@@ -425,7 +477,14 @@ export function createSatelliteAnimator({
         hideInactiveLayers(nextLayer, prevLayer);
 
         let ready = true;
-        if (waitForTiles) {
+        if (prevLayer) {
+            // Detached pooled layers rebuild their Leaflet tile DOM when added
+            // again. Keep the currently visible frame in place until every
+            // current-viewport tile in the replacement is ready; swapping on
+            // only the first tile (or immediately) exposes the basemap as an
+            // opacity flash between frames.
+            ready = await waitForLayerReady(nextLayer, targetZoom, seq, tileTimeoutMs);
+        } else if (waitForTiles) {
             ready = await waitForLayerReady(nextLayer, targetZoom, seq, tileTimeoutMs);
         } else if (waitForVisibleTile) {
             ready = await waitForLayerVisible(nextLayer, targetZoom, seq, tileTimeoutMs);
@@ -661,9 +720,6 @@ export function createSatelliteAnimator({
         prepareForZoom,
         invalidate,
         clearPool,
-        bumpTileRefreshToken() {
-            tileRefreshToken = Date.now();
-        },
         setOpacity(value) {
             opacity = Math.max(0.1, Math.min(1, Number(value) || 1));
             if (activeLayer) activeLayer.setOpacity(opacity);

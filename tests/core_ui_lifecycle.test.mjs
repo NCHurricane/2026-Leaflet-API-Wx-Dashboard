@@ -241,3 +241,39 @@ test('Shared scrubber teardown cancels playback while an async frame is pending'
         clock.restore();
     }
 });
+
+test('Shared scrubber coalesces drag input to the resting frame', async () => {
+    const clock = useFakeTimers();
+    try {
+        const container = new FakeScrubberContainer();
+        const seen = [];
+        const scrubber = createScrubber(container, {
+            scrubDebounceMs: 160,
+            onFrame: (frame, index) => seen.push([frame.label, index]),
+        });
+        scrubber.setFrames(
+            [{ label: 'A' }, { label: 'B' }, { label: 'C' }],
+            { silent: true },
+        );
+        const slider = container.querySelector('.nch-scrubber-slider');
+
+        slider.value = 1;
+        slider.dispatch('input');
+        slider.value = 2;
+        slider.dispatch('input');
+
+        assert.equal(clock.timers.size, 1);
+        assert.deepEqual(seen, []);
+        assert.equal(await clock.fireNext(), 160);
+        assert.deepEqual(seen, [['C', 2]]);
+
+        slider.value = 1;
+        slider.dispatch('input');
+        slider.dispatch('change');
+        assert.equal(clock.timers.size, 0);
+        assert.deepEqual(seen, [['C', 2], ['B', 1]]);
+        scrubber.destroy();
+    } finally {
+        clock.restore();
+    }
+});

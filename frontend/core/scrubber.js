@@ -11,6 +11,7 @@ export function createScrubber(containerEl, options = {}) {
     const onPlayingChange = options.onPlayingChange || (() => {});
     const holdAtEnd = options.holdAtEnd === true;
     const awaitFrameOnPlay = options.awaitFrameOnPlay === true;
+    const scrubDebounceMs = Math.max(0, Number(options.scrubDebounceMs) || 0);
 
     let frames = [];
     let currentIndex = 0;
@@ -18,6 +19,7 @@ export function createScrubber(containerEl, options = {}) {
     let playTimer = null;
     let playGeneration = 0;
     let speedIndex = 1;
+    let scrubTimer = null;
 
     containerEl.innerHTML = [
         '<div class="nch-scrubber">',
@@ -66,9 +68,35 @@ export function createScrubber(containerEl, options = {}) {
 
     function goTo(index) {
         if (!frames.length) return;
+        cancelPendingScrub();
         currentIndex = Math.max(0, Math.min(frames.length - 1, index));
         updateUI();
         return onFrame(frames[currentIndex], currentIndex);
+    }
+
+    function cancelPendingScrub() {
+        if (!scrubTimer) return;
+        clearTimeout(scrubTimer);
+        scrubTimer = null;
+    }
+
+    function renderScrubbedFrame() {
+        if (!scrubTimer) return;
+        clearTimeout(scrubTimer);
+        scrubTimer = null;
+        if (frames.length) return onFrame(frames[currentIndex], currentIndex);
+    }
+
+    function scrubTo(index) {
+        if (!frames.length) return;
+        currentIndex = Math.max(0, Math.min(frames.length - 1, index));
+        updateUI();
+        cancelPendingScrub();
+        if (!scrubDebounceMs) return onFrame(frames[currentIndex], currentIndex);
+        scrubTimer = setTimeout(() => {
+            scrubTimer = null;
+            if (frames.length) onFrame(frames[currentIndex], currentIndex);
+        }, scrubDebounceMs);
     }
 
     function stopPlay() {
@@ -102,6 +130,7 @@ export function createScrubber(containerEl, options = {}) {
 
     function startPlay() {
         if (playing || frames.length < 2) return;
+        renderScrubbedFrame();
         playGeneration += 1;
         playing = true;
         if (els.play) els.play.textContent = '⏸';
@@ -122,13 +151,15 @@ export function createScrubber(containerEl, options = {}) {
     });
     els.slider.addEventListener('input', () => {
         stopPlay();
-        goTo(Number(els.slider.value));
+        scrubTo(Number(els.slider.value));
     });
+    els.slider.addEventListener('change', renderScrubbedFrame);
 
     return Object.freeze({
         setFrames(newFrames, options = {}) {
             const { index = 0, silent = false, keepPlaying = false } = options;
             if (!keepPlaying) stopPlay();
+            cancelPendingScrub();
             frames = Array.isArray(newFrames) ? newFrames : [];
             currentIndex = Math.max(0, Math.min(frames.length - 1, index));
             updateUI();
@@ -143,6 +174,6 @@ export function createScrubber(containerEl, options = {}) {
         goTo,
         play: startPlay,
         pause: stopPlay,
-        destroy() { stopPlay(); containerEl.innerHTML = ''; },
+        destroy() { stopPlay(); cancelPendingScrub(); containerEl.innerHTML = ''; },
     });
 }

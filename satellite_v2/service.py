@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor, TimeoutError
 from functools import partial
 import logging
@@ -34,6 +35,7 @@ from config.satellite_v2_config import (
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
+    satellite_v2_render_version_for_satellite,
     source_channels_for_product,
 )
 from satellite_v2 import catalog
@@ -68,6 +70,9 @@ _TILE_REQUEST_WAIT_POOL = ThreadPoolExecutor(
 _IN_FLIGHT_TILE_RENDERS: dict[Path, Future] = {}
 _IN_FLIGHT_TILE_RENDERS_LOCK = threading.RLock()
 _SATELLITE_SELECTIONS: dict[str, tuple[tuple[str, str, str], float]] = {}
+_SATELLITE_FRAME_REQUESTS: dict[
+    str, tuple[tuple[str, str, str], str, int, float]
+] = {}
 _SATELLITE_SELECTIONS_LOCK = threading.RLock()
 _SATELLITE_SELECTION_TTL_SECONDS = 10 * 60.0
 
@@ -87,6 +92,10 @@ def _record_satellite_selection(
         ]
         for key in expired:
             _SATELLITE_SELECTIONS.pop(key, None)
+            _SATELLITE_FRAME_REQUESTS.pop(key, None)
+        active_frame_request = _SATELLITE_FRAME_REQUESTS.get(normalized_client_id)
+        if active_frame_request is not None and active_frame_request[0] != selection:
+            _SATELLITE_FRAME_REQUESTS.pop(normalized_client_id, None)
         _SATELLITE_SELECTIONS[normalized_client_id] = (
             selection,
             now + _SATELLITE_SELECTION_TTL_SECONDS,
@@ -99,6 +108,7 @@ def release_satellite_selection(client_id: str | None) -> None:
         return
     with _SATELLITE_SELECTIONS_LOCK:
         _SATELLITE_SELECTIONS.pop(normalized_client_id, None)
+        _SATELLITE_FRAME_REQUESTS.pop(normalized_client_id, None)
 
 
 def _satellite_client_owns_selection(
@@ -119,6 +129,135 @@ def _satellite_client_owns_selection(
         return active_selection == selection
 
 
+def _record_satellite_frame_request(
+    client_id: str | None,
+    selection: tuple[str, str, str],
+    foreground_frame_key: str | None,
+    frame_generation: int | None,
+) -> None:
+    normalized_client_id = str(client_id or "").strip()[:128]
+    normalized_frame_key = str(foreground_frame_key or "").strip()[:256]
+    try:
+        normalized_generation = int(frame_generation or 0)
+    except (TypeError, ValueError):
+        normalized_generation = 0
+    if (
+        not normalized_client_id
+        or not normalized_frame_key
+        or normalized_generation <= 0
+    ):
+        return
+    now = time.monotonic()
+    with _SATELLITE_SELECTIONS_LOCK:
+        active_selection = _SATELLITE_SELECTIONS.get(normalized_client_id)
+        if active_selection is None:
+            return
+        owned_selection, selection_expires_at = active_selection
+        if selection_expires_at <= now or owned_selection != selection:
+            if selection_expires_at <= now:
+                _SATELLITE_SELECTIONS.pop(normalized_client_id, None)
+                _SATELLITE_FRAME_REQUESTS.pop(normalized_client_id, None)
+            return
+        active_request = _SATELLITE_FRAME_REQUESTS.get(normalized_client_id)
+        if active_request is not None:
+            active_request_selection, _, active_generation, expires_at = active_request
+            if expires_at > now and active_request_selection == selection:
+                if active_generation > normalized_generation:
+                    return
+                if (
+                    active_generation == normalized_generation
+                    and active_request[1] != normalized_frame_key
+                ):
+                    return
+        _SATELLITE_FRAME_REQUESTS[normalized_client_id] = (
+            selection,
+            normalized_frame_key,
+            normalized_generation,
+            now + _SATELLITE_SELECTION_TTL_SECONDS,
+        )
+
+
+def _satellite_client_owns_frame_request(
+    client_id: str | None,
+    selection: tuple[str, str, str],
+    tile_frame_key: str,
+    foreground_frame_key: str | None,
+    frame_generation: int | None,
+) -> bool:
+    normalized_client_id = str(client_id or "").strip()[:128]
+    if not normalized_client_id:
+        return True
+    normalized_foreground_key = str(foreground_frame_key or "").strip()[:256]
+    try:
+        normalized_generation = int(frame_generation or 0)
+    except (TypeError, ValueError):
+        normalized_generation = 0
+    if not normalized_foreground_key or normalized_generation <= 0:
+        return _satellite_client_owns_selection(normalized_client_id, selection)
+    now = time.monotonic()
+    with _SATELLITE_SELECTIONS_LOCK:
+        active_selection = _SATELLITE_SELECTIONS.get(normalized_client_id)
+        if active_selection is None:
+            return False
+        owned_selection, selection_expires_at = active_selection
+        if selection_expires_at <= now:
+            _SATELLITE_SELECTIONS.pop(normalized_client_id, None)
+            _SATELLITE_FRAME_REQUESTS.pop(normalized_client_id, None)
+            return False
+        if owned_selection != selection:
+            return False
+        active_request = _SATELLITE_FRAME_REQUESTS.get(normalized_client_id)
+        if active_request is None:
+            return False
+        request_selection, active_foreground_key, active_generation, expires_at = (
+            active_request
+        )
+        if expires_at <= now:
+            _SATELLITE_FRAME_REQUESTS.pop(normalized_client_id, None)
+            return False
+        if request_selection != selection:
+            return False
+        return (
+            active_foreground_key == str(tile_frame_key or "")
+            or (
+                active_foreground_key == normalized_foreground_key
+                and active_generation == normalized_generation
+            )
+        )
+
+
+def _satellite_frame_request_is_active(
+    client_id: str | None,
+    selection: tuple[str, str, str],
+    tile_frame_key: str,
+    foreground_frame_key: str | None,
+    frame_generation: int | None,
+) -> bool:
+    if _satellite_client_owns_frame_request(
+        client_id,
+        selection,
+        tile_frame_key,
+        foreground_frame_key,
+        frame_generation,
+    ):
+        return True
+    normalized_client_id = str(client_id or "").strip()[:128]
+    now = time.monotonic()
+    with _SATELLITE_SELECTIONS_LOCK:
+        expired = [
+            key
+            for key, (_, expires_at) in _SATELLITE_SELECTIONS.items()
+            if expires_at <= now
+        ]
+        for key in expired:
+            _SATELLITE_SELECTIONS.pop(key, None)
+            _SATELLITE_FRAME_REQUESTS.pop(key, None)
+        return any(
+            key != normalized_client_id and active_selection == selection
+            for key, (active_selection, _) in _SATELLITE_SELECTIONS.items()
+        )
+
+
 def _satellite_selection_is_active(selection: tuple[str, str, str]) -> bool:
     now = time.monotonic()
     with _SATELLITE_SELECTIONS_LOCK:
@@ -129,6 +268,7 @@ def _satellite_selection_is_active(selection: tuple[str, str, str]) -> bool:
         ]
         for key in expired:
             _SATELLITE_SELECTIONS.pop(key, None)
+            _SATELLITE_FRAME_REQUESTS.pop(key, None)
         return any(
             active_selection == selection
             for active_selection, _ in _SATELLITE_SELECTIONS.values()
@@ -176,6 +316,9 @@ def _submit_tile_render(
     *,
     client_id: str | None = None,
     selection: tuple[str, str, str] | None = None,
+    tile_frame_key: str = "",
+    foreground_frame_key: str | None = None,
+    frame_generation: int | None = None,
     **render_kwargs: Any,
 ) -> tuple[Future, bool]:
     key = target.resolve()
@@ -184,7 +327,15 @@ def _submit_tile_render(
         if existing is not None:
             return existing, False
         render_should_continue = (
-            (lambda: _satellite_selection_is_active(selection))
+            (
+                lambda: _satellite_frame_request_is_active(
+                    client_id,
+                    selection,
+                    tile_frame_key,
+                    foreground_frame_key,
+                    frame_generation,
+                )
+            )
             if str(client_id or "").strip() and selection is not None
             else None
         )
@@ -478,6 +629,42 @@ def get_legend_payload(channel: str) -> dict[str, Any]:
     }
 
 
+# Every tile miss used to re-read and re-scan the catalog JSON from disk. The
+# file only changes when a refresh rewrites it, so the parsed frame index is
+# memoized per (catalog file, mtime, render version) and misses in between cost
+# a dict lookup instead of a JSON parse.
+_CATALOG_FRAME_INDEX_MAX = 32
+_CATALOG_FRAME_INDEX: OrderedDict[
+    tuple[str, int, str], dict[str, dict[str, Any]]
+] = OrderedDict()
+_CATALOG_FRAME_INDEX_LOCK = threading.Lock()
+
+
+def _catalog_frame_index(path: Path, render_version: str) -> dict[str, dict[str, Any]]:
+    try:
+        mtime_ns = path.stat().st_mtime_ns
+    except OSError:
+        return {}
+    key = (str(path), mtime_ns, render_version)
+    with _CATALOG_FRAME_INDEX_LOCK:
+        cached = _CATALOG_FRAME_INDEX.get(key)
+        if cached is not None:
+            _CATALOG_FRAME_INDEX.move_to_end(key)
+            return cached
+    payload = read_json(path)
+    index = {
+        str(frame.get("frame_key") or ""): frame
+        for frame in (payload or {}).get("frames") or []
+        if frame.get("frame_key")
+    }
+    with _CATALOG_FRAME_INDEX_LOCK:
+        _CATALOG_FRAME_INDEX[key] = index
+        _CATALOG_FRAME_INDEX.move_to_end(key)
+        while len(_CATALOG_FRAME_INDEX) > _CATALOG_FRAME_INDEX_MAX:
+            _CATALOG_FRAME_INDEX.popitem(last=False)
+    return index
+
+
 def _catalog_frame_for_tile(
     cache_root: str,
     sat_id: str,
@@ -485,10 +672,14 @@ def _catalog_frame_for_tile(
     channel: str,
     frame_key: str,
 ) -> dict[str, Any]:
-    cached = read_json(catalog_path(cache_root, sat_id, sector, channel))
-    for frame in (cached or {}).get("frames") or []:
-        if str(frame.get("frame_key") or "") == str(frame_key or ""):
-            return frame
+    index = _catalog_frame_index(
+        catalog_path(cache_root, sat_id, sector, channel),
+        satellite_v2_render_version_for_satellite(sat_id),
+    )
+    # Copied so a caller mutating the frame cannot corrupt the shared index.
+    frame = index.get(str(frame_key or ""))
+    if frame is not None:
+        return dict(frame)
 
     frames = list_recent_frames(
         sat_id=sat_id,
@@ -660,6 +851,8 @@ def resolve_tile(
     render_neighbors: bool = True,
     frame_override: dict[str, Any] | None = None,
     client_id: str | None = None,
+    foreground_frame_key: str | None = None,
+    frame_generation: int | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Resolve a cached tile or render the requested tile before returning.
 
@@ -672,6 +865,12 @@ def resolve_tile(
     sector_key = normalize_sector(sector)
     channel_key = normalize_channel(channel)
     selection = (sat_key, sector_key, channel_key)
+    _record_satellite_frame_request(
+        client_id,
+        selection,
+        foreground_frame_key,
+        frame_generation,
+    )
     path = tile_path(cache_root, sat_key, sector_key, channel_key, frame_key, z, x, y)
     validate_start = time.perf_counter()
     try:
@@ -734,7 +933,13 @@ def resolve_tile(
                 )
                 finish_timing(timing_token, cache_status=cache_status)
             return path, stats
-        if not _satellite_client_owns_selection(client_id, selection):
+        if not _satellite_client_owns_frame_request(
+            client_id,
+            selection,
+            frame_key,
+            foreground_frame_key,
+            frame_generation,
+        ):
             return path, _cancelled_tile_stats(
                 started=started,
                 path_exists_before=path_exists_before,
@@ -808,11 +1013,20 @@ def resolve_tile(
             path,
             client_id=client_id,
             selection=selection,
+            tile_frame_key=frame_key,
+            foreground_frame_key=foreground_frame_key,
+            frame_generation=frame_generation,
             **render_kwargs,
         )
         render_start = time.perf_counter()
         while True:
-            if not _satellite_client_owns_selection(client_id, selection):
+            if not _satellite_client_owns_frame_request(
+                client_id,
+                selection,
+                frame_key,
+                foreground_frame_key,
+                frame_generation,
+            ):
                 return path, _cancelled_tile_stats(
                     started=started,
                     path_exists_before=path_exists_before,
@@ -853,6 +1067,9 @@ def resolve_tile(
                 neighbor_target,
                 client_id=client_id,
                 selection=selection,
+                tile_frame_key=frame_key,
+                foreground_frame_key=foreground_frame_key,
+                frame_generation=frame_generation,
                 cache_root=cache_root,
                 sat_id=sat_key,
                 sector=sector_key,

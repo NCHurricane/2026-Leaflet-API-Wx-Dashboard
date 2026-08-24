@@ -3,7 +3,7 @@ import { createLegendHost } from '../../core/legend.js';
 import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
 import { startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260824a';
-import { createScrubber } from '../../core/scrubber.js?v=20260730b';
+import { createScrubber } from '../../core/scrubber.js?v=20260814c';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260808a';
@@ -12,8 +12,8 @@ import {
     createSatelliteEngine,
     formatFrameLabel,
     frameIndexForReload,
-} from './satellite-engine.js?v=20260809a';
-import { createSatelliteAnimator } from './satellite-anim.js?v=20260809a';
+} from './satellite-engine.js?v=20260811a';
+import { createSatelliteAnimator } from './satellite-anim.js?v=20260814c';
 
 const byId = (id) => document.getElementById(id);
 const SELECT_CHAIN_MESSAGE = 'Pick a satellite, sector, and product to load imagery.';
@@ -80,7 +80,7 @@ const AUTO_VIEW_PRESETS = {
     'gmgsi:Global': 'global',
     'himawari9:FullDisk': 'west-pacific',
     'himawari9:Japan': 'himawari-japan',
-    'himawari9:Target': 'west-pacific',
+    'himawari9:Target': 'himawari-target-current',
     'meteosat12:FullDisk': 'europe-africa',
     'meteosat9:FullDisk': 'indian-ocean',
     'meteosat11:RSS': 'europe-rss',
@@ -324,6 +324,9 @@ async function initialize() {
 
     let catalog = null;
     let visibleFrameKey = '';
+    // Success copy is written only once a frame is actually painted, so the
+    // sidebar cannot claim frames are loaded while the map is still blank.
+    let pendingReadyMessage = '';
     const animator = createSatelliteAnimator({
         mapCore,
         apiUrl: api.apiUrl,
@@ -333,6 +336,10 @@ async function initialize() {
         onFrameVisible(frameKey) {
             visibleFrameKey = String(frameKey || '');
             status.setDataState('Ready', 'fresh');
+            if (pendingReadyMessage) {
+                status.setMessage(pendingReadyMessage, 'success');
+                pendingReadyMessage = '';
+            }
         },
     });
 
@@ -346,6 +353,7 @@ async function initialize() {
     const scrubber = createScrubber(byId('satellite-bottom-scrubber'), {
         holdAtEnd: true,
         awaitFrameOnPlay: true,
+        scrubDebounceMs: 160,
         async onFrame(frame, index) {
             const shown = await showFrame(index, {
                 waitForVisibleTile: scrubber.isPlaying(),
@@ -417,6 +425,7 @@ async function initialize() {
         frames = [];
         catalog = null;
         visibleFrameKey = '';
+        pendingReadyMessage = '';
         animator.clearPool();
         animator.setFrames([]);
         scrubber.setFrames([], { silent: true });
@@ -450,6 +459,7 @@ async function initialize() {
         loadController = new AbortController();
         const { signal } = loadController;
         visibleFrameKey = '';
+        pendingReadyMessage = '';
         animator.invalidate();
         void updateLegend();
         const requestWindow = currentFrameRequestWindow();
@@ -505,11 +515,14 @@ async function initialize() {
                 );
                 status.setDataState('Cached only', 'stale');
             } else {
-                status.setMessage(
-                    `${frames.length} frames available (${requestWindow.hours}h window). `
-                    + 'Newest frame requested first; visible tiles load from cache or render on demand.',
-                    'success',
-                );
+                const readyMessage = `${frames.length} frames available (${requestWindow.hours}h window). `
+                    + 'Newest frame requested first; visible tiles load from cache or render on demand.';
+                if (visibleFrameKey) {
+                    status.setMessage(readyMessage, 'success');
+                    pendingReadyMessage = '';
+                } else {
+                    pendingReadyMessage = readyMessage;
+                }
                 if (!displayed) status.setDataState('Unable to display frame', 'error');
             }
         } catch (err) {

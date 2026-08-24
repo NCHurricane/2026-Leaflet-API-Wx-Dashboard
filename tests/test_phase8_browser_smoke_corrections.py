@@ -89,7 +89,7 @@ def test_satellite_zoom_keeps_integer_tiles_and_newest_frame_priority() -> None:
     )
 
 
-def test_satellite_playback_retains_mounted_layers_with_bounded_live_prefetch() -> None:
+def test_satellite_playback_retains_ready_layers_with_bounded_live_prefetch() -> None:
     page = (ROOT / "frontend/pages/satellite/satellite-page.js").read_text(
         encoding="utf-8"
     )
@@ -110,13 +110,25 @@ def test_satellite_playback_retains_mounted_layers_with_bounded_live_prefetch() 
     assert "Current-frame delivery always wins" in animator
     assert "visibleFrameKey = String(frameKey || '')" in page
     assert "visibleFrameKey !== selectedFrameKey" in page
+    assert "if (prevLayer)" in animator
+    assert "ready = await waitForLayerReady(nextLayer" in animator
+    assert "Keep the currently visible frame in place" in animator
     assert "if (shouldRetainLayers()" in animator
-    assert "&& map.hasLayer(layer)" in animator
     assert "&& layerReadyForSwap(layer, map.getZoom()))" in animator
     assert "layer.setOpacity(0);" in animator
-    assert "setLayerZIndex(layer, false);" in animator
+    assert "the established no-flash animation contract" in animator
     assert "if (map.hasLayer(layer)) map.removeLayer(layer);" in animator
     assert "hotFrameIndexes" not in animator
+
+
+def test_himawari_target_selection_uses_the_current_target_bounds() -> None:
+    page = (ROOT / "frontend/pages/satellite/satellite-page.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "'himawari9:Target': 'himawari-target-current'" in page
+    assert "presetKey !== 'himawari-target-current'" in page
+    assert "/api/satellite-v2/frame-bounds?" in page
 
 
 def test_fresh_satellite_catalog_is_chronological_with_newest_last(

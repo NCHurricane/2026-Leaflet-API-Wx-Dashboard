@@ -805,6 +805,7 @@ async function initialize() {
     const radarScrubber = createScrubber(byId('workspace-radar-bottom-scrubber'), {
         holdAtEnd: true,
         awaitFrameOnPlay: true,
+        scrubDebounceMs: 160,
         onFrame(frame, index) {
             return renderWorkspaceTimelineFrame(index, {
                 waitForVisible: radarScrubber.isPlaying(),

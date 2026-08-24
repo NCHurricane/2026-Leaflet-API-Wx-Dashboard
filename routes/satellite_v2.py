@@ -24,6 +24,9 @@ _TRANSPARENT_PNG_1X1 = (
     b"\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01"
     b"\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
 )
+# Tiles are keyed by frame_key and never rewritten in place, so a delivered
+# tile is immutable for the lifetime of its frame.
+_SATELLITE_TILE_CACHE_CONTROL = "public, max-age=86400, immutable"
 
 
 @router.get("/api/satellite/products")
@@ -113,6 +116,8 @@ async def get_satellite_v2_tile(
     render_live: bool = True,
     render_neighbors: bool = True,
     client_id: str | None = None,
+    foreground_frame_key: str | None = None,
+    frame_generation: int | None = None,
 ):
     try:
         tile_file, tile_stats = await satellite_v2_service.resolve_tile_async(
@@ -127,6 +132,8 @@ async def get_satellite_v2_tile(
             allow_render=render_live,
             render_neighbors=render_neighbors,
             client_id=client_id,
+            foreground_frame_key=foreground_frame_key,
+            frame_generation=frame_generation,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -168,7 +175,14 @@ async def get_satellite_v2_tile(
                 int(tile_stats.get("elapsed_ms") or 0)
             )
             response.headers["X-Satellite-V2-Frame-Key"] = str(frame_key or "")
-            response.headers["Cache-Control"] = "no-store, max-age=0"
+            # A negative marker means this tile is permanently off the disk for
+            # this frame, so it is as immutable as a rendered tile and must not
+            # be refetched on every pan. Every other empty status (a cancelled
+            # render, a not-yet-rendered tile) is transient and stays uncached.
+            if str(tile_stats.get("miss_reason") or "") == "negative-cache":
+                response.headers["Cache-Control"] = _SATELLITE_TILE_CACHE_CONTROL
+            else:
+                response.headers["Cache-Control"] = "no-store, max-age=0"
             response.headers["ETag"] = (
                 f"satv2-empty-{sat_id}-{sector}-{channel}-{frame_key}-{z}-{x}-{y}"
             )
@@ -205,7 +219,7 @@ async def get_satellite_v2_tile(
     response.headers["X-Satellite-V2-Render-Ms"] = str(
         int(tile_stats.get("render_elapsed_ms") or 0)
     )
-    response.headers["Cache-Control"] = "public, max-age=86400, immutable"
+    response.headers["Cache-Control"] = _SATELLITE_TILE_CACHE_CONTROL
     response.headers["ETag"] = (
         f"satv2-{sat_id}-{sector}-{channel}-{frame_key}-{z}-{x}-{y}"
     )

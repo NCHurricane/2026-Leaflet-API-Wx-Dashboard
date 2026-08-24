@@ -36,8 +36,14 @@ _BASELINE_ROW_ORDER = {
     ("meteosat12", "FULLDISK", "Channel13", 5): 7,
     ("meteosat12", "FULLDISK", "NighttimeMicrophysics", 5): 8,
     ("meteosat9", "FULLDISK", "Channel13", 5): 9,
+    ("meteosat11", "RSS", "Channel13", 6): 10,
 }
 _SCENARIO_ORDER = {"cold-parse": 0, "warm-parse": 1, "hit": 2}
+# Tolerance-mode golden compare reports every differing pixel by default and
+# only fails on the per-channel delta, so a resampling shift is measured rather
+# than gated on how many pixels moved.
+_GOLDEN_DEFAULT_DIFF_FRACTION = 1.0
+_GOLDEN_MAX_CHANNEL_VALUE = 255
 
 
 def _utc_run_id() -> str:
@@ -287,20 +293,67 @@ def _update_baseline_index(output_dir: Path) -> None:
     (output_dir / "baseline-summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _tile_rgba(path: Path) -> Any:
+    """Decode a tile PNG as signed RGBA so deltas cannot wrap around."""
+    import numpy as np
+    from PIL import Image
+
+    with Image.open(path) as image:
+        return np.asarray(image.convert("RGBA"), dtype=np.int16)
+
+
+def _tile_delta(golden_tile: Path, current_tile: Path) -> dict[str, Any]:
+    import numpy as np
+
+    golden_pixels = _tile_rgba(golden_tile)
+    current_pixels = _tile_rgba(current_tile)
+    if golden_pixels.shape != current_pixels.shape:
+        raise RuntimeError(
+            f"Golden tile geometry changed: {golden_tile} is {golden_pixels.shape}, "
+            f"rendered tile is {current_pixels.shape}"
+        )
+    delta = np.abs(current_pixels - golden_pixels)
+    pixel_count = int(delta.shape[0] * delta.shape[1])
+    differing = int(np.count_nonzero(delta.any(axis=-1)))
+    return {
+        "max_delta": int(delta.max()) if delta.size else 0,
+        "mean_delta": round(float(delta.mean()), 4) if delta.size else 0.0,
+        "differing_pixels": differing,
+        "pixel_count": pixel_count,
+        "diff_fraction": round(differing / pixel_count, 6) if pixel_count else 0.0,
+    }
+
+
 def _write_golden(
     mode: str,
     golden_dir: Path,
     cache_root: Path,
     context: dict[str, Any],
     coords: list[tuple[int, int]],
-) -> None:
+    *,
+    tolerance: int | None = None,
+    max_diff_fraction: float = _GOLDEN_DEFAULT_DIFF_FRACTION,
+    version_override: str | None = None,
+) -> list[dict[str, Any]]:
+    """Capture or compare golden tiles.
+
+    ``tolerance`` selects the comparison mode. ``None`` keeps the strict
+    SHA-256 gate used by platforms whose pixels must not move; an integer
+    switches to a per-channel absolute-delta gate for platforms where a
+    resampling shift is expected and only its magnitude matters.
+
+    ``version_override`` names the render version segment of the golden tree.
+    Goldens are stored per render version, so a compare that spans a version
+    bump has to be pointed back at the version they were captured under.
+    """
     from config.satellite_v2_config import satellite_v2_render_version_for_satellite
     from satellite_v2.cache import tile_path
 
-    version = satellite_v2_render_version_for_satellite(context["sat_id"])
+    version = version_override or satellite_v2_render_version_for_satellite(context["sat_id"])
     root = golden_dir / version / context["sat_id"] / context["sector"] / context["product"] / context["frame_key"]
     index_path = root / "sha256.json"
     current: dict[str, str] = {}
+    rendered: dict[str, Path] = {}
     for x, y in coords:
         source = tile_path(
             cache_root, context["sat_id"], context["sector"], context["product"],
@@ -310,6 +363,7 @@ def _write_golden(
             raise FileNotFoundError(f"Golden tile was not rendered: {source}")
         relative = f"{context['z']}/{x}/{y}.png"
         current[relative] = _sha256(source)
+        rendered[relative] = source
         if mode == "capture":
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -317,12 +371,55 @@ def _write_golden(
     if mode == "capture":
         index_path.parent.mkdir(parents=True, exist_ok=True)
         index_path.write_text(json.dumps(current, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        return
+        return []
     expected = json.loads(index_path.read_text(encoding="utf-8"))
-    mismatches = [key for key, digest in current.items() if expected.get(key) != digest]
     missing = sorted(set(expected) - set(current))
-    if mismatches or missing:
-        raise RuntimeError(f"Golden comparison failed: mismatched={mismatches}, missing={missing}")
+    if tolerance is None:
+        mismatches = [key for key, digest in current.items() if expected.get(key) != digest]
+        if mismatches or missing:
+            raise RuntimeError(f"Golden comparison failed: mismatched={mismatches}, missing={missing}")
+        return []
+    if missing:
+        raise RuntimeError(f"Golden comparison failed: missing={missing}")
+    rows: list[dict[str, Any]] = []
+    failures: list[str] = []
+    for relative in sorted(current):
+        golden_tile = root / relative
+        if not golden_tile.exists():
+            raise RuntimeError(
+                f"Tolerance compare needs the captured tile image, which is absent: {golden_tile}"
+            )
+        row = {"tile": relative, "sha_equal": expected.get(relative) == current[relative]}
+        row.update(_tile_delta(golden_tile, rendered[relative]))
+        rows.append(row)
+        if row["max_delta"] > tolerance or row["diff_fraction"] > max_diff_fraction:
+            failures.append(
+                f"{relative} (max_delta={row['max_delta']}, diff_fraction={row['diff_fraction']})"
+            )
+    if failures:
+        raise RuntimeError(
+            f"Golden tolerance comparison failed (tolerance={tolerance}, "
+            f"max_diff_fraction={max_diff_fraction}): {failures}"
+        )
+    return rows
+
+
+def _golden_report_markdown(run_id: str, context: dict[str, Any], rows: list[dict[str, Any]]) -> str:
+    lines = [
+        f"# Golden tolerance compare {run_id}",
+        "",
+        f"- Target: `{context['sat_id']}/{context['sector']}/{context['product']}`",
+        f"- Frame: `{context['frame_key']}`",
+        "",
+        "| tile | sha equal | max delta | mean delta | differing px | diff fraction |",
+        "|---|---|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        lines.append(
+            f"| `{row['tile']}` | {'yes' if row['sha_equal'] else 'no'} | {row['max_delta']} | "
+            f"{row['mean_delta']:.4f} | {row['differing_pixels']} | {row['diff_fraction']:.6f} |"
+        )
+    return "\n".join(lines) + "\n"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -339,6 +436,27 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--repeat", type=int, default=5)
     parser.add_argument("--golden", choices=("capture", "compare"))
     parser.add_argument("--golden-dir", type=Path)
+    parser.add_argument(
+        "--golden-tolerance",
+        type=int,
+        help=(
+            "Compare golden tiles by max per-channel absolute delta instead of SHA-256. "
+            "Omit to keep the strict byte-identical gate."
+        ),
+    )
+    parser.add_argument(
+        "--golden-version",
+        help=(
+            "Render version segment the golden tiles live under. Use it to compare "
+            "against goldens captured before a render-version bump."
+        ),
+    )
+    parser.add_argument(
+        "--golden-max-diff-fraction",
+        type=float,
+        default=_GOLDEN_DEFAULT_DIFF_FRACTION,
+        help="Fraction of differing pixels tolerated in --golden-tolerance mode.",
+    )
     parser.add_argument("--summary", action="store_true")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--cache-root", type=Path)
@@ -503,6 +621,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("--golden-dir is required with --golden")
     if args.golden == "compare" and args.scenario == "hit":
         raise SystemExit("--golden compare requires cold-parse or warm-parse so tiles are re-rendered")
+    if args.golden_version and not args.golden:
+        raise SystemExit("--golden-version only applies with --golden")
+    if args.golden_tolerance is not None:
+        if args.golden != "compare":
+            raise SystemExit("--golden-tolerance only applies to --golden compare")
+        if not 0 <= args.golden_tolerance <= _GOLDEN_MAX_CHANNEL_VALUE:
+            raise SystemExit(f"--golden-tolerance must be between 0 and {_GOLDEN_MAX_CHANNEL_VALUE}")
+    if not 0.0 <= args.golden_max_diff_fraction <= 1.0:
+        raise SystemExit("--golden-max-diff-fraction must be between 0.0 and 1.0")
 
     run_id = args.run_id or _utc_run_id()
     os.environ["WX_SATELLITE_V2_BENCH"] = "1"
@@ -574,8 +701,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 respond_first=args.respond_first, settle_ms=args.settle_ms,
             )
 
+    golden_rows: list[dict[str, Any]] = []
     if args.golden:
-        _write_golden(args.golden, args.golden_dir.resolve(), cache_root, context, coords)
+        golden_rows = _write_golden(
+            args.golden, args.golden_dir.resolve(), cache_root, context, coords,
+            tolerance=args.golden_tolerance,
+            max_diff_fraction=args.golden_max_diff_fraction,
+            version_override=args.golden_version,
+        )
 
     records = _read_jsonl(sink)
     output_dir = (args.output_dir or (Path(BASE_PATH) / "docs" / "perf" / f"{datetime.now().date().isoformat()}-baseline")).resolve()
@@ -589,6 +722,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if sink.exists():
         shutil.copyfile(sink, output_dir / sink.name)
     _update_baseline_index(output_dir)
+    if golden_rows:
+        golden_report = _golden_report_markdown(run_id, context, golden_rows)
+        (output_dir / f"{run_id}-golden.md").write_text(golden_report, encoding="utf-8")
+        print(golden_report, end="")
     if args.summary:
         print(summary, end="")
     return 0

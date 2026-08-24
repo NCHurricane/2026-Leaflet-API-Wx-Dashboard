@@ -11,6 +11,7 @@ from unittest.mock import Mock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 import requests
 from starlette.responses import Response
 
@@ -309,6 +310,41 @@ def test_releasing_one_page_preserves_another_pages_matching_selection():
     assert not service._satellite_selection_is_active(selection)
 
 
+def test_new_foreground_frame_cancels_queued_work_for_superseded_frame(
+    tmp_path, monkeypatch
+):
+    selection = ("goes19", "MESO2", "Channel13")
+    client_id = "page-a"
+    render_future = service.Future()
+    render_pool = Mock()
+    render_pool.submit.return_value = render_future
+    monkeypatch.setattr(service, "_ON_DEMAND_TILE_RENDER_POOL", render_pool)
+    service._IN_FLIGHT_TILE_RENDERS.clear()
+    service._SATELLITE_SELECTIONS.clear()
+    service._SATELLITE_FRAME_REQUESTS.clear()
+    service._record_satellite_selection(client_id, selection)
+    service._record_satellite_frame_request(client_id, selection, "frame-a", 1)
+
+    _, submitted = service._submit_tile_render(
+        tmp_path / "frame-a.png",
+        client_id=client_id,
+        selection=selection,
+        tile_frame_key="frame-a",
+        foreground_frame_key="frame-a",
+        frame_generation=1,
+    )
+    should_continue = render_pool.submit.call_args.kwargs["render_should_continue"]
+
+    assert submitted
+    assert should_continue()
+    service._record_satellite_frame_request(client_id, selection, "frame-b", 2)
+    assert not should_continue()
+    assert service._satellite_client_owns_frame_request(
+        client_id, selection, "frame-b", "frame-b", 2
+    )
+    render_future.cancel()
+
+
 def test_eumetsat_download_concurrency_is_bounded():
     from satellite_v2 import provider_eumetsat
 
@@ -340,6 +376,10 @@ def test_satellite_page_surfaces_cached_provider_capability_state():
     assert "const visibleLayers = new Set([currentLayer, previousLayer]" in animator
     assert "if (shouldRetainLayers()" in animator
     assert "&& layerReadyForSwap(layer, map.getZoom()))" in animator
+    assert "layer.setOpacity(0);" in animator
+    assert "if (map.hasLayer(layer)) map.removeLayer(layer);" in animator
+    assert "if (prevLayer)" in animator
+    assert "ready = await waitForLayerReady(nextLayer" in animator
     assert "hotFrameIndexes" not in animator
     assert "client_id" in (
         root / "frontend/pages/satellite/satellite-engine.js"
@@ -347,7 +387,7 @@ def test_satellite_page_surfaces_cached_provider_capability_state():
     assert "selection/release" in (
         root / "frontend/pages/satellite/satellite-engine.js"
     ).read_text("utf-8")
-    assert "satellite-page.js?v=20260824a" in page
+    assert "satellite-page.js?v=20260824b" in page
 
 
 def test_satellite_png_response_does_not_require_deferred_file_thread(
@@ -390,6 +430,49 @@ def test_satellite_png_response_does_not_require_deferred_file_thread(
     assert response.headers["X-Satellite-V2-Download-Ms"] == "120"
     assert response.headers["X-Satellite-V2-Decode-Ms"] == "45"
     assert response.headers["X-Satellite-V2-Render-Ms"] == "8"
+
+
+@pytest.mark.parametrize(
+    ("miss_reason", "expected_cache_control"),
+    [
+        # A negative marker is permanent for this frame, so the placeholder is
+        # as immutable as a rendered tile and must survive a pan.
+        ("negative-cache", "public, max-age=86400, immutable"),
+        # Not-yet-rendered and cancelled tiles are transient and must not stick.
+        ("missing", "no-store, max-age=0"),
+    ],
+)
+def test_off_disk_tile_is_cacheable_only_when_permanently_empty(
+    tmp_path, monkeypatch, miss_reason, expected_cache_control
+):
+    monkeypatch.setattr(
+        satellite_routes.satellite_v2_service,
+        "resolve_tile",
+        lambda **_kwargs: (
+            tmp_path / "absent.png",
+            {
+                "cache_status": "invalid" if miss_reason == "negative-cache" else "empty",
+                "miss_reason": miss_reason,
+                "sat_id": "meteosat11",
+                "sector": "RSS",
+                "channel": "Channel13",
+            },
+        ),
+    )
+
+    response = asyncio.run(
+        satellite_routes.get_satellite_v2_tile(
+            z=6,
+            x=32,
+            y=23,
+            sat_id="meteosat11",
+            sector="RSS",
+            channel="Channel13",
+            frame_key="frame-a",
+        )
+    )
+
+    assert response.headers["Cache-Control"] == expected_cache_control
 
 
 def test_satellite_tile_route_waits_outside_shared_request_threads(

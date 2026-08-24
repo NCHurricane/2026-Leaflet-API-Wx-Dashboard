@@ -119,7 +119,70 @@ test('Satellite tile requests carry their page ownership id', async () => {
 
     assert.equal(await harness.animator.showFrame(0), true);
     assert.match(harness.createdLayers[0].url, /client_id=page-owner/);
+    assert.match(harness.createdLayers[0].url, /frame_generation=1/);
+    assert.match(harness.createdLayers[0].url, /foreground_frame_key=frame-a/);
 
+    harness.animator.destroy();
+});
+
+test('Satellite advances foreground ownership when a newer cold frame is selected', async () => {
+    const harness = createHarness({ clientId: 'page-owner' });
+    harness.animator.setFrames([
+        { frame_key: 'frame-a', max_native_zoom: 5 },
+        { frame_key: 'frame-b', max_native_zoom: 5 },
+    ]);
+
+    assert.equal(await harness.animator.showFrame(0), true);
+    markVisible(harness.createdLayers[0], 'ready-first');
+    const pending = harness.animator.showFrame(1, { tileTimeoutMs: 1000 });
+    const secondLayer = harness.createdLayers[1];
+
+    assert.match(secondLayer.url, /frame_generation=2/);
+    assert.match(secondLayer.url, /foreground_frame_key=frame-b/);
+    markVisible(secondLayer, 'ready-second');
+    secondLayer.fire('load');
+    assert.equal(await pending, true);
+    harness.animator.destroy();
+});
+
+test('Satellite keeps the prior frame visible until the replacement is fully ready', async () => {
+    const harness = createHarness();
+    harness.animator.setFrames([
+        { frame_key: 'frame-a', max_native_zoom: 5 },
+        { frame_key: 'frame-b', max_native_zoom: 5 },
+    ]);
+
+    assert.equal(await harness.animator.showFrame(0), true);
+    const firstLayer = harness.createdLayers[0];
+    markVisible(firstLayer, 'ready-first');
+    const pendingSwap = harness.animator.showFrame(1, { tileTimeoutMs: 1000 });
+    const secondLayer = harness.createdLayers[1];
+
+    let settled = false;
+    void pendingSwap.then(() => { settled = true; });
+    secondLayer._loading = true;
+    markVisible(secondLayer, 'partial-second');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(settled, false);
+    assert.equal(harness.layers.has(firstLayer), true);
+    assert.equal(firstLayer.opacity, 1);
+    assert.equal(secondLayer.opacity, 0);
+
+    secondLayer._loading = false;
+    secondLayer.fire('load');
+
+    assert.equal(await pendingSwap, true);
+    assert.equal(harness.layers.has(firstLayer), true);
+    assert.equal(harness.layers.has(secondLayer), true);
+    assert.equal(firstLayer.opacity, 0);
+    assert.equal(secondLayer.opacity, 1);
+
+    assert.equal(await harness.animator.showFrame(0), true);
+    assert.equal(harness.layers.has(firstLayer), true);
+    assert.equal(harness.layers.has(secondLayer), true);
+    assert.equal(firstLayer.opacity, 1);
+    assert.equal(secondLayer.opacity, 0);
     harness.animator.destroy();
 });
 
@@ -138,7 +201,7 @@ test('Satellite teardown aborts active neighbor prefetch and removes its pooled 
     });
 
     try {
-        const harness = createHarness();
+        const harness = createHarness({ clientId: 'page-owner' });
         harness.animator.setFrames([
             { frame_key: 'frame-a', max_native_zoom: 5 },
             { frame_key: 'frame-b', max_native_zoom: 5 },
@@ -152,6 +215,8 @@ test('Satellite teardown aborts active neighbor prefetch and removes its pooled 
         assert.equal(requests.length, 2);
         assert.equal(requests.every(({ url }) => url.includes('render_neighbors=0')), true);
         assert.equal(requests.every(({ url }) => url.includes('frame_key=frame-b')), true);
+        assert.equal(requests.every(({ url }) => url.includes('frame_generation=1')), true);
+        assert.equal(requests.every(({ url }) => url.includes('foreground_frame_key=frame-a')), true);
         assert.equal(new Set(requests.map(({ url }) => url)).size, 2);
         assert.equal(requests.every(({ signal }) => signal.aborted === false), true);
 
