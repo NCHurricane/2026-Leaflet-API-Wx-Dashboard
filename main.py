@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 from app_core.paths import BASE_DIR, CACHE_ROOT as _CACHE_ROOT, ensure_runtime_dirs
 from app_core.runtime import initialize_runtime, shutdown_runtime
+from app_core.server_session import mark_server_started
 from app_core.static_assets import CacheStaticFiles
 from routes.alerts import router as alerts_router
 from routes.archive import router as archive_router
@@ -34,6 +35,7 @@ from services.rtma_service import get_rtma_data
 async def _application_lifespan(_app: FastAPI):
     """Own startup and graceful shutdown of application background work."""
     initialize_runtime()
+    mark_server_started()
     try:
         yield
     finally:

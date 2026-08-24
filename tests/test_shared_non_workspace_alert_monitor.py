@@ -1,4 +1,8 @@
 from pathlib import Path
+from datetime import datetime, timezone
+
+import app_core.server_session as server_session
+import routes.alerts as alerts_routes
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -26,7 +30,7 @@ def _read(path: Path) -> str:
 def test_every_non_workspace_page_starts_shared_monitor_and_workspace_does_not():
     for relative_path in NON_WORKSPACE_ENTRIES:
         source = _read(FRONTEND / "pages" / relative_path)
-        assert "non-workspace-alert-monitor.js?v=20260814a" in source
+        assert "non-workspace-alert-monitor.js?v=20260824a" in source
         assert "startNonWorkspaceAlertMonitor" in source
 
     workspace = _read(FRONTEND / "pages/workspace/workspace-app.js")
@@ -41,7 +45,12 @@ def test_shared_monitor_uses_national_feed_deduplication_and_fixed_event_scope()
     assert "localStorage" in monitor
     assert "cohortStartedAt" in monitor
     assert "baselineNextPoll" in monitor
+    assert "serverStartedAt: payload?._server_started_at" in monitor
     assert "new windowRef.Audio('/sounds/weather_alert.mp3')" in monitor
+    assert "cache_ttl_seconds" in monitor
+    assert "audio.preload = 'auto'" in monitor
+    assert "audio.load()" in monitor
+    assert "unlockAudio" in monitor
     for event in (
         "Tornado Warning",
         "Severe Thunderstorm Warning",
@@ -52,6 +61,33 @@ def test_shared_monitor_uses_national_feed_deduplication_and_fixed_event_scope()
     ):
         assert event in monitor
     assert "Special Marine Warning" not in monitor
+
+
+def test_alerts_api_exposes_current_server_session_boundary(monkeypatch):
+    monkeypatch.setattr(
+        alerts_routes,
+        "get_alerts_data",
+        lambda **_kwargs: {"type": "FeatureCollection", "features": []},
+    )
+    monkeypatch.setattr(
+        alerts_routes,
+        "server_started_at",
+        lambda: "2026-08-14T16:00:00+00:00",
+    )
+
+    payload = alerts_routes.get_data_alerts()
+
+    assert payload["_server_started_at"] == "2026-08-14T16:00:00+00:00"
+
+
+def test_server_session_boundary_is_recorded_as_utc(monkeypatch):
+    monkeypatch.setattr(server_session, "_server_started_at", None)
+    started = server_session.mark_server_started(
+        datetime(2026, 8, 14, 12, 0, tzinfo=timezone.utc)
+    )
+
+    assert started == "2026-08-14T12:00:00.000+00:00"
+    assert server_session.server_started_at() == started
 
 
 def test_alerts_page_uses_shared_toggle_and_deep_link_selection():
@@ -65,6 +101,7 @@ def test_alerts_page_uses_shared_toggle_and_deep_link_selection():
     assert "engine.showSelectedAlert(feature)" in controller
     assert "engine.zoomTo(feature, { maxZoom: 9 })" in controller
     assert "/api/data/alerts?geometry_mode=full&zoom_bucket=high" in controller
+    assert "railScope: 'national'" in controller
     assert "window.history.replaceState" in controller
     assert "onNewAlert" not in controller
 

@@ -18,6 +18,7 @@ const {
 } = await import('../frontend/core/non-workspace-alert-monitor.js');
 
 const NOW = Date.parse('2026-08-09T12:00:00Z');
+const SERVER_STARTED_AT = '2026-08-09T11:50:00Z';
 
 function alert(event, id, options = {}) {
     return {
@@ -81,13 +82,45 @@ test('initial snapshot establishes a baseline and later snapshots notify once', 
     const newAlert = alert('Severe Thunderstorm Warning', 'new', { sent: '2026-08-09T12:01:00Z' });
     const next = reconcileMonitoredAlertSnapshot(baseline.state, [initial, newAlert], {
         now: Date.parse('2026-08-09T12:02:00Z'),
+        serverStartedAt: SERVER_STARTED_AT,
     });
     assert.deepEqual(next.fresh.map((feature) => feature.id), ['new']);
 
     const repeated = reconcileMonitoredAlertSnapshot(next.state, [newAlert], {
         now: Date.parse('2026-08-09T12:03:00Z'),
+        serverStartedAt: SERVER_STARTED_AT,
     });
     assert.deepEqual(repeated.fresh, []);
+});
+
+test('notifications require issuance after both browser and server startup', () => {
+    const baseline = reconcileMonitoredAlertSnapshot(null, [], { now: NOW, baseline: true });
+    const serverRestartedAt = '2026-08-09T12:05:00Z';
+    const beforeServerRestart = alert('Flash Flood Warning', 'before-server', {
+        sent: '2026-08-09T12:04:00Z',
+    });
+    const afterBothStarts = alert('Tornado Warning', 'after-both', {
+        sent: '2026-08-09T12:06:00Z',
+    });
+    const missingIssuedAt = alert('Severe Thunderstorm Warning', 'missing-issued');
+    delete missingIssuedAt.properties.sent;
+
+    const result = reconcileMonitoredAlertSnapshot(
+        baseline.state,
+        [beforeServerRestart, afterBothStarts, missingIssuedAt],
+        {
+            now: Date.parse('2026-08-09T12:07:00Z'),
+            serverStartedAt: serverRestartedAt,
+        },
+    );
+    assert.deepEqual(result.fresh.map((feature) => feature.id), ['after-both']);
+
+    const withoutServerIdentity = reconcileMonitoredAlertSnapshot(
+        baseline.state,
+        [afterBothStarts],
+        { now: Date.parse('2026-08-09T12:07:00Z') },
+    );
+    assert.deepEqual(withoutServerIdentity.fresh, []);
 });
 
 test('owner election favors the focused visible tab and fails over deterministically', () => {
@@ -101,10 +134,13 @@ test('owner election favors the focused visible tab and fails over deterministic
 });
 
 test('poll cadence honors stale-refresh hints and bounded failure backoff', () => {
-    assert.equal(monitoredAlertPollDelayMs({}), 30_000);
+    assert.equal(monitoredAlertPollDelayMs({}), 20_000);
+    assert.equal(monitoredAlertPollDelayMs({ cache_age_seconds: 10, cache_ttl_seconds: 35 }), 20_000);
+    assert.equal(monitoredAlertPollDelayMs({ cache_age_seconds: 30, cache_ttl_seconds: 35 }), 5_000);
+    assert.equal(monitoredAlertPollDelayMs({ cache_age_seconds: 34.8, cache_ttl_seconds: 35 }), 500);
     assert.equal(monitoredAlertPollDelayMs({ refreshing: true }), 1_000);
     assert.equal(monitoredAlertPollDelayMs({ refreshing: true, retry_after_seconds: 2.5 }), 2_500);
-    assert.equal(monitoredAlertPollDelayMs({ refreshing: true }, 0, 30), 30_000);
+    assert.equal(monitoredAlertPollDelayMs({ refreshing: true }, 0, 30), 20_000);
     assert.equal(monitoredAlertPollDelayMs(null, 1), 5_000);
     assert.equal(monitoredAlertPollDelayMs(null, 5), 60_000);
 });

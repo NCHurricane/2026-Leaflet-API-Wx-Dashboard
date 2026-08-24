@@ -121,6 +121,9 @@ with the panel does not also manipulate or close the map view.
   viewport plus time window; scope changes or explicit refresh fetch new data.
 - Active Alerts uses one map payload per refresh. Below zoom 8 it requests the
   national `low` payload; zoom 8+ requests `high` with the visible bbox.
+- Standalone Alerts and Workspace load a separate national full-geometry feed
+  for the active-warning rail. Viewport changes affect map layers, map counts,
+  and the legend, but never filter the warning cards or their rail counts.
 - Native NWS polygons are never simplified. Only zone/SAME-derived geometry may
   use the topology-preserving low-detail path.
 - Full, low-detail, and compatibility artifacts share one generation ID and
@@ -517,16 +520,24 @@ Workspace does not. Same-origin tabs and windows share these rules:
    single polling/presentation owner. Ownership fails over after page close or
    heartbeat expiry.
 2. Baseline alerts already active when the first page in a browser cohort
-   opens. Keep bounded seen IDs across owner handoff so focus changes, reloads,
-   and tab changes do not replay notices.
+   opens. A notice is eligible only when its valid issuance timestamp is later
+   than both that cohort boundary and the current server-session boundary
+   supplied by the Alerts API. Missing boundaries or issuance timestamps fail
+   closed. Keep bounded seen IDs across owner handoff so focus changes, reloads,
+   tab changes, and server restarts do not replay notices.
 3. Poll only the national `Tornado Warning`, `Severe Thunderstorm Warning`,
    `Flash Flood Warning`, `Tornado Watch`, `Severe Thunderstorm Watch`, and
    `Flash Flood Watch` set. Initial/current snapshots, test/cancel/expired
-   records, and unsupported events never notify.
+   records, and unsupported events never notify. Use API cache age/TTL metadata
+   to schedule the stale check at the real refresh boundary while retaining a
+   bounded ordinary-poll cap; do not quantize a 35-second provider floor into a
+   60-second refresh cycle.
 4. Present one sound burst and one border flash per newly observed batch. Sort
    priority in the listed order; the highest-priority alert supplies the flash
    color while individual banners retain their own event colors. Respect
-   `prefers-reduced-motion`.
+   `prefers-reduced-motion`. Preload the short alert sound and silently unlock
+   it on the first pointer or keyboard interaction so first-use decode/output
+   startup does not clip the audible opening.
 5. Alerts owns the shared persisted On/Off control. Clicking in Alerts selects,
    zooms, and opens detail in place. Other pages use `/workspace?alert=...` in a
    new tab; Workspace performs a one-time national resolution, selects and

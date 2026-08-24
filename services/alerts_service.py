@@ -546,6 +546,7 @@ def get_alerts_data(
         "_simplified_feature_count": simplified_count,
         "_simplification_metrics": data.get("_simplification_metrics", {}),
         "cache_state": cache_state,
+        "cache_ttl_seconds": _ALERTS_CACHE_TTL_SECONDS,
         "refreshing": refreshing,
         "source_timestamp": data.get("_updated"),
         "cache_age_seconds": round(cache_age_seconds, 3),

@@ -2,7 +2,7 @@ import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
 import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
 import { renderProductNav } from '../../core/nav.js';
-import { sharedAlertFeatureId, startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260814a';
+import { sharedAlertFeatureId, startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260824a';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';
 import { createStatusReporter } from '../../core/status.js?v=20260808a';
@@ -163,6 +163,7 @@ async function initialize() {
 
     const engine = createAlertsEngine({
         api, mapCore, legend, lsrLegend, status,
+        railScope: 'national',
         onAlertCount: (count) => {
             displayedAlertCount = count;
             byId('alerts-count').textContent = String(count);

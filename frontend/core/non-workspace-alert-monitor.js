@@ -27,7 +27,8 @@ const STATE_KEY = `${STORAGE_PREFIX}:state`;
 const PRESENCE_PREFIX = `${STORAGE_PREFIX}:presence:`;
 const HEARTBEAT_MS = 2_000;
 const PEER_TTL_MS = 7_000;
-const POLL_MS = 30_000;
+const POLL_MS = 20_000;
+const MIN_POLL_MS = 500;
 const REFRESH_RETRY_MAX = 30;
 const SEEN_TTL_MS = 48 * 60 * 60 * 1_000;
 const NOTICE_MS = 20_000;
@@ -115,6 +116,7 @@ function normalizeSharedState(value) {
 export function reconcileMonitoredAlertSnapshot(previousState, features, options = {}) {
     const now = Number(options.now) || Date.now();
     const baseline = options.baseline === true;
+    const serverStartedAt = parseTimestamp(options.serverStartedAt);
     const current = filterMonitoredAlerts(features, now);
     const state = normalizeSharedState(previousState);
     if (baseline || !state.cohortStartedAt) {
@@ -125,6 +127,7 @@ export function reconcileMonitoredAlertSnapshot(previousState, features, options
         if (!Number.isFinite(Number(observedAt)) || Number(observedAt) < now - SEEN_TTL_MS) delete state.seen[id];
     });
     const fresh = [];
+    const notificationStartedAt = Math.max(state.cohortStartedAt, serverStartedAt);
     current.forEach((feature) => {
         const id = sharedAlertFeatureId(feature);
         const issuedAt = parseTimestamp(
@@ -133,7 +136,12 @@ export function reconcileMonitoredAlertSnapshot(previousState, features, options
             || feature?.properties?.onset
             || feature?.properties?.issued,
         );
-        if (!baseline && !(id in state.seen) && (!issuedAt || issuedAt > state.cohortStartedAt)) {
+        if (
+            !baseline
+            && serverStartedAt
+            && issuedAt > notificationStartedAt
+            && !(id in state.seen)
+        ) {
             fresh.push(feature);
         }
         state.seen[id] = now;
@@ -165,6 +173,17 @@ export function monitoredAlertPollDelayMs(payload, failureCount = 0, refreshAtte
         if (refreshAttempt >= REFRESH_RETRY_MAX) return POLL_MS;
         const retrySeconds = Number(payload?.retry_after_seconds);
         return Math.max(500, Math.min(5_000, Math.round((retrySeconds > 0 ? retrySeconds : 1) * 1_000)));
+    }
+    const cacheAgeSeconds = Number(payload?.cache_age_seconds);
+    const cacheTtlSeconds = Number(payload?.cache_ttl_seconds);
+    if (
+        Number.isFinite(cacheAgeSeconds)
+        && cacheAgeSeconds >= 0
+        && Number.isFinite(cacheTtlSeconds)
+        && cacheTtlSeconds > 0
+    ) {
+        const untilStaleMs = Math.round((cacheTtlSeconds - cacheAgeSeconds) * 1_000);
+        return Math.max(MIN_POLL_MS, Math.min(POLL_MS, untilStaleMs));
     }
     return POLL_MS;
 }
@@ -222,7 +241,26 @@ function createPresentation(documentRef, windowRef, options) {
     documentRef.body.append(border, notices);
     const audio = typeof windowRef.Audio === 'function'
         ? new windowRef.Audio('/sounds/weather_alert.mp3') : null;
+    let audioUnlocked = false;
     let flashTimer = null;
+
+    function unlockAudio() {
+        if (!audio || audioUnlocked) return;
+        audio.muted = true;
+        void audio.play().then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.muted = false;
+            audioUnlocked = true;
+        }).catch(() => { audio.muted = false; });
+    }
+
+    if (audio) {
+        audio.preload = 'auto';
+        audio.load();
+        windowRef.addEventListener('pointerdown', unlockAudio, { once: true, capture: true });
+        windowRef.addEventListener('keydown', unlockAudio, { once: true, capture: true });
+    }
 
     function clear() {
         notices.replaceChildren();
@@ -289,7 +327,18 @@ function createPresentation(documentRef, windowRef, options) {
         }
     }
 
-    return Object.freeze({ clear, present });
+    function destroy() {
+        clear();
+        windowRef.removeEventListener('pointerdown', unlockAudio, { capture: true });
+        windowRef.removeEventListener('keydown', unlockAudio, { capture: true });
+        if (audio) {
+            audio.pause();
+            try { audio.currentTime = 0; }
+            catch (_) { /* Metadata may not have loaded before teardown. */ }
+        }
+    }
+
+    return Object.freeze({ clear, destroy, present });
 }
 
 export function startNonWorkspaceAlertMonitor(options = {}) {
@@ -412,6 +461,7 @@ export function startNonWorkspaceAlertMonitor(options = {}) {
             if (destroyed || !enabled || ownerId !== tabId) return;
             const result = reconcileMonitoredAlertSnapshot(sharedState, payload?.features, {
                 baseline: baselineNextPoll,
+                serverStartedAt: payload?._server_started_at,
             });
             baselineNextPoll = false;
             failureCount = 0;
@@ -504,7 +554,7 @@ export function startNonWorkspaceAlertMonitor(options = {}) {
         clearPoll();
         if (heartbeatTimer) windowRef.clearInterval(heartbeatTimer);
         heartbeatTimer = null;
-        presentation.clear();
+        presentation.destroy();
         try { storage?.removeItem(`${PRESENCE_PREFIX}${tabId}`); }
         catch (_) { /* stale presence expires after the short peer TTL. */ }
         post({ type: 'bye' });

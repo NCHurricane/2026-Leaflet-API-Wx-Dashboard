@@ -21,7 +21,7 @@ def test_wpc_raster_url_is_versioned_and_status_is_separate() -> None:
     assert "versionedImageUrl(geojson.image_url, geojson._updated)" in engine
     assert "status.setDataState('Fresh data', 'fresh')" in engine
     assert "Refreshing stale data…" in engine
-    assert "wpc-page.js?v=20260814a" in page
+    assert "wpc-page.js?v=20260824a" in page
 
 
 def test_mrms_initial_load_and_live_append_hold_at_newest() -> None:
@@ -31,7 +31,7 @@ def test_mrms_initial_load_and_live_append_hold_at_newest() -> None:
     assert "scrubber.setFrames(frames, { index: frames.length - 1 })" in page
     assert "const wasAtNewest = currentIndex === frames.length - 1;" in page
     assert "Loading newest frame…" in page
-    assert "mrms-page.js?v=20260814a" in markup
+    assert "mrms-page.js?v=20260824a" in markup
 
 
 def test_satellite_requests_selected_newest_frame_before_neighbor_priming() -> None:

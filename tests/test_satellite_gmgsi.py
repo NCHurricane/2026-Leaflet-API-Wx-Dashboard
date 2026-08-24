@@ -64,7 +64,7 @@ def test_gmgsi_platform_and_frontend_are_separately_bounded() -> None:
     assert "'gmgsi:Global': 'global'" in script
     assert "return Math.min(FRAME_REQUEST_MAX, safeHours + 1);" in script
     assert "gmgsi: 'GMGSI Global Mosaic'" in engine
-    assert "satellite-page.js?v=20260814b" in page
+    assert "satellite-page.js?v=20260824a" in page
 
 
 def test_gmgsi_provider_lists_the_hourly_product(monkeypatch) -> None:

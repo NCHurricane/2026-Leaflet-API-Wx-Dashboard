@@ -232,6 +232,7 @@ def test_low_zoom_is_national_and_high_zoom_is_bbox_filtered(
         for feature in low["features"] + high["features"]
     )
     assert low["_generation"] == high["_generation"] == "generation-one"
+    assert low["cache_ttl_seconds"] == alerts_service._ALERTS_CACHE_TTL_SECONDS
     assert coordinator.submissions == []
 
 

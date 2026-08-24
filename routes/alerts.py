@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter
 
+from app_core.server_session import server_started_at
 from services.alerts_service import (
     get_alerts_data,
     get_local_storm_reports,
@@ -22,7 +23,7 @@ def get_data_alerts(
     south: Optional[float] = None,
     north: Optional[float] = None,
 ):
-    return get_alerts_data(
+    response = get_alerts_data(
         state=state,
         geometry_mode=geometry_mode,
         zoom_bucket=zoom_bucket,
@@ -31,6 +32,8 @@ def get_data_alerts(
         south=south,
         north=north,
     )
+    response["_server_started_at"] = server_started_at()
+    return response
 
 
 @router.get("/api/data/alerts/lsr")

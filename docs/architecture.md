@@ -69,11 +69,13 @@ Active root pages and their JS in this checkout:
   every standalone product page and excluded from Workspace. Same-origin tabs
   and windows elect one focused/visible owner through `BroadcastChannel` plus
   expiring `localStorage` presence. That owner polls the national alert feed,
-  baselines existing alerts, and deduplicates banner, sound, and one-shot
-  alert-colored border flashes. The Alerts page exposes the shared On/Off
-  preference and handles its own notice clicks in place; other standalone pages
-  open a Workspace `?alert=` link in a new tab. Workspace resolves that link to
-  a selected polygon/detail without joining the shared monitor cohort.
+  baselines existing alerts, and only announces alerts issued after both the
+  browser cohort and current server session began. It deduplicates banner,
+  sound, and one-shot alert-colored border flashes. The Alerts page exposes the
+  shared On/Off preference and handles its own notice clicks in place; other
+  standalone pages open a Workspace `?alert=` link in a new tab. Workspace
+  resolves that link to a selected polygon/detail without joining the shared
+  monitor cohort.
 
 Product-page architecture (migration completed in Phase 27):
 
@@ -92,13 +94,16 @@ Product-page architecture (migration completed in Phase 27):
 - Clean extensionless product URLs are canonical. Only explicitly retained
   compatibility redirects, such as `/weather.html` to `/workspace`, remain.
 - `/alerts` serves `frontend/pages/alerts/alerts.html`, which owns active alert
-  and Local Storm Report filtering/rendering, the active-warning rail, immersive
-  alert detail, in-memory off/on restoration, page-owned combined status,
+  and Local Storm Report filtering/rendering, a national active-warning rail
+  independent of the map viewport, immersive alert detail, in-memory off/on
+  restoration, page-owned combined status,
   severe-warning pulse styling, and default-on 60-second refresh without
   loading `js/weather.js`. Its Settings tab owns the persisted On/Off control
   for the separate shared standalone-page alert monitor. Deep-linked monitored
   alerts receive one direct national lookup, selected-polygon rendering, detail
   display, and zoom independent of which tab owns ongoing monitoring. Its
+  cache-age-aware monitor schedules refresh at the Alerts API TTL boundary and
+  preloads/unlocks its notification sound on the first user interaction. Its
   Archive tab is an explicit future-tools placeholder; Alerts has no general
   lookback slider. The radar-dependent Projected Arrival Tool remains reserved
   for the severe-weather workspace.
