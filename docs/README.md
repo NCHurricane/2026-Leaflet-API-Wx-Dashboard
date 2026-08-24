@@ -8,12 +8,16 @@ This directory separates current operating truth from historical evidence.
   handoff for a new work session.
 - [`dashboard-change-and-enhancement-superfile.md`](dashboard-change-and-enhancement-superfile.md)
   — canonical decision, cleanup, enhancement, Version 2, and evidence ledger.
+- [`nch-weather-studio-greenfield-plan.md`](nch-weather-studio-greenfield-plan.md)
+  — active plan for the explicitly separate NCH Weather Studio project.
 - [`architecture.md`](architecture.md) — implemented system architecture.
 - [`patterns.md`](patterns.md) — reusable patterns already used by the project.
 
-The superfile is the only active roadmap. A proposal appearing in an archived
-file is not authorization and is not active unless the current superfile says
-so.
+The superfile is the only active roadmap for the current dashboard and Version
+2 lane. The Greenfield plan is a separate active project plan because the
+superfile explicitly routes to it; it is not part of the current-dashboard
+backlog. Neither document authorizes implementation by itself. A proposal
+appearing only in an archived file is historical.
 
 ## Historical records
 
@@ -41,6 +45,8 @@ without it.
 - Put established reusable practices in `patterns.md`, not superseded runtime
   designs.
 - Put active decisions, candidates, dependencies, and status in the superfile.
+- Put NCH Weather Studio design and phases in its separate Greenfield plan; do
+  not merge them into the current-dashboard or Version 2 backlog.
 - Put exact completed/superseded records in `archive/`.
 - Put measured artifacts and their reproduction notes in `perf/`.
 - Do not maintain parallel active roadmaps.
