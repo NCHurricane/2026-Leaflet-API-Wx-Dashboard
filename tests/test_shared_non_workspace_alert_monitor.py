@@ -131,4 +131,4 @@ def test_shared_core_css_is_cache_busted_on_every_product_page():
     pages = list((FRONTEND / "pages").glob("*/*.html"))
     assert len(pages) == 12
     for page in pages:
-        assert "/frontend/core/core.css?v=20260826a" in _read(page)
+        assert "/frontend/core/core.css?v=20260826b" in _read(page)

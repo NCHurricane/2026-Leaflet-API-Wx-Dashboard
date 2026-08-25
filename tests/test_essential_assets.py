@@ -156,6 +156,8 @@ def test_canonical_pages_use_shared_chuck_copeland_branding():
     assert "image.alt = ''" in map_core
     assert "aria-hidden" in map_core
     assert "pointer-events: none" in core_css
+    assert "background: transparent" in core_css
+    assert "box-shadow: none" in core_css
     assert "/img/chuck-copeland-weather-logo.svg?v=20260826a" in landing
     assert 'aria-label="Chuck Copeland Weather home"' in landing
 
@@ -163,7 +165,7 @@ def test_canonical_pages_use_shared_chuck_copeland_branding():
         page = page_path.read_text(encoding="utf-8")
         assert '<div class="core-brand"></div>' in page
         assert ">NCHURRICANE<" not in page
-        assert "/frontend/core/core.css?v=20260826a" in page
+        assert "/frontend/core/core.css?v=20260826b" in page
 
     for script_path in (ROOT / "frontend/pages").glob("*/*.js"):
         script = script_path.read_text(encoding="utf-8")
