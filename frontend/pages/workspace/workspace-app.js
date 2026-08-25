@@ -1,6 +1,6 @@
 import * as api from '../../core/api.js';
-import { createMapCore } from '../../core/map-core.js';
-import { renderProductNav } from '../../core/nav.js';
+import { createMapCore } from '../../core/map-core.js?v=20260826a';
+import { renderProductNav } from '../../core/nav.js?v=20260826a';
 import { createScrubber } from '../../core/scrubber.js';
 import { loadDefaultSettings } from '../../core/settings.js';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';

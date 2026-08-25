@@ -46,3 +46,20 @@ header h1 {
 header h1:hover {
     color: var(--text);
 }
+
+.landing-brand a {
+    display: inline-block;
+    max-width: 100%;
+    border-radius: 6px;
+}
+
+.landing-brand a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+}
+
+.landing-brand img {
+    display: block;
+    width: min(560px, calc(100vw - 32px));
+    height: auto;
+}

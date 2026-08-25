@@ -38,15 +38,18 @@ Active root pages and their JS in this checkout:
 - `/drought` — first true Stage 2 standalone page, served from
   `frontend/pages/drought/drought.html`; it loads ES modules from
   `frontend/core/` and its own directory and does not load `js/weather.js`.
-  Shared `map-core.js` owns the Leaflet map, basemaps, logo, region fitting,
+  Shared `map-core.js` owns the Leaflet map, basemaps, decorative map logo,
+  region fitting,
   Lat/Lon/state/country/county overlays, and cached US/World city-label layers
   with bounded density filtering. It also supplies the shared reset-view and
   numeric-zoom controls. Pages may provide an `onResetView` hook to clear
   product state before the shared Home control refits the active region. The
   Drought page owns its controls and supplies the
   product-specific content for a bottom-left expandable legend;
-  `frontend/core/nav.js` owns the icon-bearing
-  product navigation. Large static map payloads use `fetchCachedJson()` and
+  `frontend/core/branding.js` owns the canonical Chuck Copeland Weather asset
+  metadata and product-header logo rendering; `frontend/core/nav.js` owns the
+  icon-bearing product navigation and invokes that shared header renderer.
+  Large static map payloads use `fetchCachedJson()` and
   versioned browser Cache Storage. Boundary builders retain decoded runtime
   cache data in memory, while the routes expose state/county filtering and
   long-lived immutable response caching.
@@ -293,8 +296,9 @@ Satellite v2 tile endpoints:
    destination zoom: z1–4 cap at 2048, z5–6 at 4096, and z7+ retain the platform
    cap. SEVIRI and GMGSI retain native loader behavior; frame-bound discovery
    omits destination zoom and therefore retains its prior source behavior.
-5. Live tile misses and the app-owned rapid accelerator reserve a conservative
-   float32 source-grid estimate from a fair process-local byte budget. The
+5. Live tile misses, the app-owned rapid accelerator, and presence-driven
+   Meteosat Full Disk warming reserve a conservative float32 source-grid
+   estimate from a fair process-local byte budget. The
    `WX_SATELLITE_RENDER_BUDGET_MB` default is 16384 MB; work may overlap while
    cumulative estimates fit, and an oversized render runs alone. Queued work
    retains selection-cancellation behavior. Radar remains on its existing
@@ -302,9 +306,12 @@ Satellite v2 tile endpoints:
 6. Filled satellite images own the basemap inside valid coverage (PNG alpha
    255); invalid/off-disk pixels remain transparent. ADP, AOD, and FRP retain
    product-specific sparse-overlay alpha.
-7. Selected rapid sectors and Meteosat source prefetch are delayed optional
-   accelerators owned by the application while request presence remains active;
-   they do not replace the live on-demand tile path.
+7. Selected rapid sectors and Meteosat source/tile warming are delayed optional
+   accelerators owned by the application while request presence remains active.
+   Meteosat-9/12 warm only the selected product's newest two frames at z1–z6,
+   use platform-longitude disk bounds, stop scheduling on selection release or
+   new live work, and prune tile-frame caches with the seven-hour source window.
+   They do not replace the live on-demand tile path.
 8. Source downloads deduplicate by platform/sector/frame. EUMETSAT FCI uses
    one or two download connections and reports `credentials_required` or
    `license_required` instead of hanging or presenting a generic provider
@@ -323,7 +330,10 @@ is empty. Pages import only `core/`, vendored `frontend/lib/`, and their own dir
 Shared `frontend/core/` modules:
 
 - `api.js` — `apiUrl()`, `fetchCachedJson()`, and versioned browser Cache Storage.
-- `map-core.js` — Leaflet map factory: basemaps, logo, `REGION_BOUNDS` + `fitRegion`,
+- `branding.js` — canonical Chuck Copeland Weather asset metadata and accessible
+  product-header logo rendering.
+- `map-core.js` — Leaflet map factory: basemaps, decorative shared logo,
+  `REGION_BOUNDS` + `fitRegion`,
   the reset-view (⌂, returns to the page's home region) and numeric-zoom controls,
   lat/lon/state/county/country overlays, cached US/World city-label layers with bounded
   density filtering, and the `mapViewportLog()` dev tool.

@@ -23,8 +23,10 @@ from config.satellite_v2_config import (
     SATELLITE_V2_LEGEND_ANCHOR_COUNT,
     SATELLITE_V2_LEGEND_TICK_COUNT,
     SATELLITE_V2_LIVE_TILE_RENDER_WORKERS,
-    SATELLITE_V2_METEOSAT_PREFETCH_FRESH_WINDOW_SECONDS,
     SATELLITE_V2_METEOSAT_PREFETCH_JOBS,
+    SATELLITE_V2_METEOSAT_TILE_WARM_FRESH_WINDOW_SECONDS,
+    SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS,
+    SATELLITE_V2_METEOSAT_TILE_WARM_ZOOMS,
     SATELLITE_V2_ON_DEMAND_CATALOG_HOURS,
     SATELLITE_V2_ON_DEMAND_CATALOG_MAX_FRAMES,
     SATELLITE_V2_PRODUCTS,
@@ -410,17 +412,64 @@ def _run_selected_satellite_accelerator(
 ) -> dict[str, int]:
     if not _wait_for_live_tile_idle(should_continue=should_continue):
         return {"cancelled": 1}
-    if accelerator == "meteosat-source":
+    if accelerator == "meteosat-tiles":
         from satellite_v2.meteosat_prefetch_worker import (
             run_satellite_v2_meteosat_prefetch_worker,
         )
+        from satellite_v2.meteosat_tile_worker import (
+            run_selected_meteosat_tile_warmer,
+        )
 
-        return run_satellite_v2_meteosat_prefetch_worker(
+        source_stats = run_satellite_v2_meteosat_prefetch_worker(
             force=True,
             jobs=((sat_id, sector),),
             worker_name=f"app-meteosat-{sat_id}-{sector}".lower(),
             should_continue=should_continue,
         )
+        combined = {
+            f"source_{key}": int(value or 0) for key, value in source_stats.items()
+        }
+        if should_continue is not None and not should_continue():
+            combined["cancelled"] = 1
+            return combined
+        if not _wait_for_live_tile_idle(should_continue=should_continue):
+            combined["cancelled"] = 1
+            return combined
+
+        from app_core.render_budget import satellite_render_slot
+
+        destination_zoom = max(
+            (int(value) for value in SATELLITE_V2_METEOSAT_TILE_WARM_ZOOMS),
+            default=6,
+        )
+        estimated_bytes = estimate_source_grid_bytes(
+            sat_id,
+            channel,
+            destination_zoom=destination_zoom,
+        ) * max(1, int(SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS))
+        with satellite_render_slot(
+            estimated_bytes,
+            should_continue=should_continue,
+        ) as acquired:
+            if not acquired:
+                combined["cancelled"] = 1
+                return combined
+            tile_stats = run_selected_meteosat_tile_warmer(
+                sat_id=sat_id,
+                sector=sector,
+                channel=channel,
+                should_continue=should_continue,
+                wait_until_ready=lambda: _wait_for_live_tile_idle(
+                    timeout_seconds=0.0,
+                    should_continue=should_continue
+                ),
+            )
+        combined.update(
+            {f"tile_{key}": int(value or 0) for key, value in tile_stats.items()}
+        )
+        combined["estimated_memory_bytes"] = estimated_bytes
+        combined["cancelled"] = int(tile_stats.get("cancelled") or 0)
+        return combined
 
     from app_core.render_budget import satellite_render_slot
     from satellite_v2.rapid_worker import run_satellite_v2_rapid_worker
@@ -468,11 +517,11 @@ def _activate_satellite_accelerator(
         else "satellite-aws"
     )
     if (sat_key, sector_key) in SATELLITE_V2_METEOSAT_PREFETCH_JOBS:
-        accelerator = "meteosat-source"
+        accelerator = "meteosat-tiles"
         interval_seconds = float(
-            SATELLITE_V2_METEOSAT_PREFETCH_FRESH_WINDOW_SECONDS
+            SATELLITE_V2_METEOSAT_TILE_WARM_FRESH_WINDOW_SECONDS
         )
-        key = ("satellite", "source-prefetch", sat_key, sector_key)
+        key = ("satellite", "meteosat-tiles", sat_key, sector_key, channel_key)
     elif (
         (sat_key, sector_key) in SATELLITE_V2_RAPID_WORKER_JOBS
         and channel_key in SATELLITE_V2_RAPID_WORKER_PRODUCTS
@@ -511,6 +560,9 @@ def _activate_satellite_accelerator(
 
 
 def shutdown_live_tile_pool() -> None:
+    from satellite_v2.meteosat_tile_worker import shutdown_meteosat_tile_pool
+
+    shutdown_meteosat_tile_pool()
     _TILE_REQUEST_WAIT_POOL.shutdown(wait=False, cancel_futures=True)
     _ON_DEMAND_TILE_RENDER_POOL.shutdown(wait=False, cancel_futures=True)
 

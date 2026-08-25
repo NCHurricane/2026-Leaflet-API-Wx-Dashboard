@@ -34,6 +34,7 @@ from config.satellite_v2_config import (
     SATELLITE_V2_METEOSAT_PREFETCH_MAX_FRAMES,
     normalize_sat_id,
     normalize_sector,
+    satellite_v2_render_version_for_satellite,
 )
 from satellite_v2.cache import namespace_root, source_path
 from satellite_v2.models import SourceFrame
@@ -129,6 +130,46 @@ def _prune_stale_sources(sat_id: str, sector: str, keep_hours: int) -> int:
     return pruned
 
 
+def _prune_stale_tiles(sat_id: str, sector: str, keep_hours: int) -> int:
+    """Remove current-version product/frame tile dirs older than the keep window."""
+    sat_key = normalize_sat_id(sat_id)
+    sector_key = normalize_sector(sector)
+    tiles_root = (
+        namespace_root(_CACHE_ROOT)
+        / "tiles"
+        / satellite_v2_render_version_for_satellite(sat_key)
+        / sat_key
+        / sector_key
+    )
+    if not tiles_root.exists():
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=float(keep_hours))
+    pruned = 0
+    for product_dir in tiles_root.iterdir():
+        if not product_dir.is_dir() or product_dir.is_symlink():
+            continue
+        for frame_dir in product_dir.iterdir():
+            if not frame_dir.is_dir() or frame_dir.is_symlink():
+                continue
+            try:
+                frame_dt = datetime.strptime(frame_dir.name, _FRAME_KEY_FORMAT).replace(
+                    tzinfo=timezone.utc
+                )
+            except ValueError:
+                continue
+            if frame_dt >= cutoff:
+                continue
+            try:
+                shutil.rmtree(str(frame_dir))
+                pruned += 1
+            except OSError as exc:
+                logging.getLogger(__name__).warning(
+                    f"[{_WORKER_NAME}] tile prune failed "
+                    f"{product_dir.name}/{frame_dir.name}: {type(exc).__name__}"
+                )
+    return pruned
+
+
 def _prefetch_one_job(
     worker_name: str,
     sat_id: str,
@@ -149,6 +190,7 @@ def _prefetch_one_job(
         "cached": 0,
         "errors": 0,
         "pruned": 0,
+        "tile_frames_pruned": 0,
         "download_elapsed_ms": 0,
     }
 
@@ -221,6 +263,9 @@ def _prefetch_one_job(
             )
 
     totals["pruned"] = _prune_stale_sources(sat_key, sector_key, keep_hours)
+    totals["tile_frames_pruned"] = _prune_stale_tiles(
+        sat_key, sector_key, keep_hours
+    )
     return totals
 
 
@@ -243,6 +288,7 @@ def run_satellite_v2_meteosat_prefetch_worker(
             "downloaded": 0,
             "errors": 0,
             "pruned": 0,
+            "tile_frames_pruned": 0,
             "download_elapsed_ms": 0,
         }
 
@@ -259,6 +305,7 @@ def run_satellite_v2_meteosat_prefetch_worker(
         "downloaded": 0,
         "errors": 0,
         "pruned": 0,
+        "tile_frames_pruned": 0,
         "download_elapsed_ms": 0,
     }
     with _worker_lock(worker_name) as acquired:
@@ -292,6 +339,9 @@ def run_satellite_v2_meteosat_prefetch_worker(
             totals["downloaded"] += int(stats.get("downloaded") or 0)
             totals["errors"] += int(stats.get("errors") or 0)
             totals["pruned"] += int(stats.get("pruned") or 0)
+            totals["tile_frames_pruned"] += int(
+                stats.get("tile_frames_pruned") or 0
+            )
             totals["download_elapsed_ms"] += int(
                 stats.get("download_elapsed_ms") or 0
             )
@@ -301,6 +351,7 @@ def run_satellite_v2_meteosat_prefetch_worker(
             f"[{worker_name}] complete jobs={totals['jobs']} "
             f"downloaded={totals['downloaded']} errors={totals['errors']} "
             f"pruned={totals['pruned']} "
+            f"tile_frames_pruned={totals['tile_frames_pruned']} "
             f"download_ms={totals['download_elapsed_ms']} "
             f"elapsed={_format_elapsed(time.perf_counter() - run_start)}"
         )

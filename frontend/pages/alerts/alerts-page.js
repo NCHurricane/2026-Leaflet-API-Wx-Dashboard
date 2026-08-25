@@ -1,7 +1,7 @@
 import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
-import { createMapCore, REGION_LABELS } from '../../core/map-core.js';
-import { renderProductNav } from '../../core/nav.js';
+import { createMapCore, REGION_LABELS } from '../../core/map-core.js?v=20260826a';
+import { renderProductNav } from '../../core/nav.js?v=20260826a';
 import { sharedAlertFeatureId, startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260824a';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
 import { loadDefaultSettings, loadPageSettings } from '../../core/settings.js';

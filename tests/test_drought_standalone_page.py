@@ -50,7 +50,7 @@ def test_drought_page_includes_shared_map_parity_controls():
     assert page.index('class="core-map-panel drought-map-wrap"') < page.index(
         'id="drought-legend"'
     )
-    assert "/img/nchurricane_logo.png" in map_core
+    assert "BRAND_ASSET_URL" in map_core
     assert "/api/overlay/us-boundaries" in map_core
     assert "/api/overlay/world-borders" in map_core
     assert "fetchCachedJson" in map_core
@@ -60,7 +60,7 @@ def test_drought_page_includes_shared_map_parity_controls():
     assert "USGSImageryOnly" in map_core
     assert "core-reset-view" in map_core
     assert "core-zoom-indicator" in map_core
-    assert "ChuckCopeland.com/NCHurricane.com" in map_core
+    assert "©2026 Chuck Copeland Weather" in map_core
     assert "options.basemap || 'Dark'" in map_core
     assert "/data/us-cities-all.json" in map_core
     assert "/data/world-cities.json" in map_core
@@ -100,7 +100,7 @@ def test_shared_map_tiles_overlap_and_cache_bust():
     for page_path in (Path(BASE_DIR) / "frontend" / "pages").glob("*/*.html"):
         page = page_path.read_text(encoding="utf-8")
         if "/frontend/core/core.css" in page:
-            assert "/frontend/core/core.css?v=20260809a" in page
+            assert "/frontend/core/core.css?v=20260826a" in page
 
 
 def test_drought_sidebar_uses_accessible_mounted_tab_panels():

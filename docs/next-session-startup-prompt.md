@@ -122,7 +122,7 @@ Current boundary:
   2026-08-24 for Channel13 and NighttimeMicrophysics at z3/z4/z5/z7, including
   current/past frames, seams, detail, transitions, and clean consoles. Phase 2
   is accepted and committed as its independent checkpoint.
-- Meteosat Phase 3 is implemented in the current uncommitted tree. Satellite
+- Meteosat Phase 3 is committed as `7bda975`. Satellite
   live misses and the app-owned rapid accelerator use a fair process-local byte
   budget (`WX_SATELLITE_RENDER_BUDGET_MB`, default 16384 MB) with conservative
   float32 source-grid/channel estimates, oversized-render exclusivity, and
@@ -137,7 +137,30 @@ Current boundary:
   loaded and remained responsive, Satellite scrub-ahead did not freeze or
   flash, and the browser console stayed clean. A direct response probe
   confirmed `X-Satellite-V2-Estimated-Memory-MB: 0` on a cache hit. Phase 3 is
-  accepted and awaits its independent commit.
+  accepted.
+- Meteosat Phase 4 is implemented in the current uncommitted tree. Channel-
+  specific Meteosat-9/12 presence jobs chain source prefetch into warming the
+  selected product's newest two frames at z1–z6, using platform-longitude disk
+  bounds and a reusable two-process pool. Selection release or new live work
+  stops additional zoom scheduling; already-running canvases may finish and
+  publish atomically. Warmed tile frames prune with the seven-hour source
+  window. A real-source two-worker NighttimeMicrophysics temporary-cache probe
+  completed in 88.4 seconds, peaked 6.28 GiB above baseline, and settled at
+  964.2 MiB parent-plus-worker RSS. Warmed/live center-tile deltas remained
+  inside the accepted shared-canvas/low-zoom envelope. The automated gate
+  passes 647 Python tests plus 42 subtests, all 48 Node tests, repo-wide
+  Ruff/compile, and diff checks. Restarted owner smoke remains required before
+  Phase 4 is accepted or committed; Phase 5 has not started.
+- The bounded shared-branding update is implemented in the current uncommitted
+  tree. `frontend/core/branding.js` owns the accessible product-header logo,
+  `map-core.js` owns its decorative non-interactive map duplicate, and the
+  landing shell uses the same canonical SVG. The SVG animates only
+  `#lightning-bolt` and disables that pulse while keeping the bolt visible for
+  reduced motion. Fifteen changed JavaScript files pass syntax checks, 38
+  focused Python tests and all 48 Node tests pass, the SVG returns HTTP 200 as
+  `image/svg+xml`, and controlled in-app browser checks pass all 13 canonical
+  headers plus desktop/mobile map branding in Workspace and Radar. No owner or
+  production validation has been performed.
 - Audit findings remain historical evidence, not authorization for additional
   deletion or refactoring beyond the completed cleanup program.
 - Preserve unrelated dirty work. Do not commit unless explicitly asked.
@@ -164,10 +187,13 @@ Default next discussion:
   within 60 seconds of issuance. Preserve that evidence with the Alert
   checkpoint without mixing the Satellite boundary.
 - Meteosat Phase 2 is committed as `7b2d9a5`.
-- Meteosat Phase 3 owner smoke passed and the phase is ready for its independent
-  commit when explicitly authorized.
-- Do not begin Phase 4 merely because Phase 3 is accepted; presence-driven
-  Meteosat tile warming remains separately gated.
+- Meteosat Phase 3 is committed as `7bda975`.
+- Restart the app and complete the Phase 4 owner smoke. Confirm selected-product
+  warming/cache hits for Meteosat-9 and Meteosat-12, eastward Meteosat-9 disk
+  coverage, responsive Radar work during warming, product/navigation
+  cancellation, retained no-flash behavior, and clean consoles.
+- Do not begin Phase 5 merely because Phase 4 automated/runtime validation is
+  green; the EUMETSAT fetch-path changes remain separately gated.
 - The Satellite prerequisite is closed and does not choose that enhancement.
   Radar WebGL is first only by document order. Section 4.7 is a future unified
   cross-page Archive workflow, not an independent Surface-only completion.

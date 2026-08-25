@@ -119,6 +119,60 @@ def test_landing_and_leaflet_css_have_no_disconnected_legacy_assets():
     assert "images/marker-icon.png" not in leaflet_css
 
 
+def test_canonical_pages_use_shared_chuck_copeland_branding():
+    logo_path = ROOT / "img/chuck-copeland-weather-logo.svg"
+    logo_source = logo_path.read_text(encoding="utf-8")
+    logo_root = ET.fromstring(logo_source)
+    bolt = next(
+        (
+            element
+            for element in logo_root.iter()
+            if element.attrib.get("id") == "lightning-bolt"
+        ),
+        None,
+    )
+
+    assert logo_root.attrib["viewBox"] == "0 0 1377.81 115.73"
+    assert bolt is not None
+    assert "#lightning-bolt" in logo_source
+    assert (
+        "animation: lightning-bolt-flash 4.5s ease-in-out infinite" in logo_source
+    )
+    assert "@media (prefers-reduced-motion: reduce)" in logo_source
+    assert "animation: none" in logo_source
+    assert "opacity: 1" in logo_source
+
+    branding = (ROOT / "frontend/core/branding.js").read_text(encoding="utf-8")
+    nav = (ROOT / "frontend/core/nav.js").read_text(encoding="utf-8")
+    map_core = (ROOT / "frontend/core/map-core.js").read_text(encoding="utf-8")
+    core_css = (ROOT / "frontend/core/core.css").read_text(encoding="utf-8")
+    landing = (ROOT / "index.html").read_text(encoding="utf-8")
+
+    assert "/img/chuck-copeland-weather-logo.svg?v=20260826a" in branding
+    assert "BRAND_NAME = 'Chuck Copeland Weather'" in branding
+    assert "`${BRAND_NAME} home`" in branding
+    assert "renderHeaderBrand(root)" in nav
+    assert "BRAND_ASSET_URL" in map_core
+    assert "image.alt = ''" in map_core
+    assert "aria-hidden" in map_core
+    assert "pointer-events: none" in core_css
+    assert "/img/chuck-copeland-weather-logo.svg?v=20260826a" in landing
+    assert 'aria-label="Chuck Copeland Weather home"' in landing
+
+    for page_path in CANONICAL_PAGES[1:]:
+        page = page_path.read_text(encoding="utf-8")
+        assert '<div class="core-brand"></div>' in page
+        assert ">NCHURRICANE<" not in page
+        assert "/frontend/core/core.css?v=20260826a" in page
+
+    for script_path in (ROOT / "frontend/pages").glob("*/*.js"):
+        script = script_path.read_text(encoding="utf-8")
+        if "../../core/map-core.js" in script:
+            assert "../../core/map-core.js?v=20260826a" in script
+        if "../../core/nav.js" in script:
+            assert "../../core/nav.js?v=20260826a" in script
+
+
 def test_split_page_css_excludes_unreachable_monolith_blocks():
     tropical_css = (ROOT / "frontend/pages/tropical/tropical.css").read_text(
         encoding="utf-8"

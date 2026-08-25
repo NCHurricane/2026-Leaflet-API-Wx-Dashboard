@@ -1,4 +1,5 @@
 import { fetchCachedJson } from './api.js';
+import { BRAND_ASSET_URL } from './branding.js?v=20260826a';
 
 export const REGION_LABELS = Object.freeze({
     CONUS: 'CONUS', WORLD: 'World', NC: 'North Carolina', SC: 'South Carolina',
@@ -202,9 +203,12 @@ export function createMapCore(element, options = {}) {
         onAdd() {
             const root = leaflet.DomUtil.create('div', 'core-map-logo leaflet-control');
             const image = leaflet.DomUtil.create('img', '', root);
-            image.src = '/img/nchurricane_logo.png';
-            image.alt = 'NCHurricane.com';
+            image.src = BRAND_ASSET_URL;
+            image.alt = '';
+            image.setAttribute('aria-hidden', 'true');
             image.loading = 'lazy';
+            image.decoding = 'async';
+            root.setAttribute('aria-hidden', 'true');
             return root;
         },
     });
@@ -437,7 +441,7 @@ export function createMapCore(element, options = {}) {
 
     setBasemap(options.basemap || 'Dark');
     fitRegion(options.region || 'CONUS');
-    map.attributionControl.addAttribution('©2026 ChuckCopeland.com/NCHurricane.com');
+    map.attributionControl.addAttribution('©2026 Chuck Copeland Weather');
     updateZoomIndicator();
     map.on('moveend', rebuildCityLayer);
 

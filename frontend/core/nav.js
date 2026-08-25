@@ -1,3 +1,5 @@
+import { renderHeaderBrand } from './branding.js?v=20260826a';
+
 const PRODUCTS = Object.freeze([
     ['Home', '/workspace', 'fa-home', 'Severe Weather Workspace'],
     ['Current', '/surface', 'fa-thermometer', 'Current Conditions'],
@@ -15,6 +17,7 @@ const PRODUCTS = Object.freeze([
 
 export function renderProductNav(root, activeLabel) {
     if (!root) return;
+    renderHeaderBrand(root);
     root.replaceChildren(...PRODUCTS.map(([label, href, iconName, title]) => {
         const link = document.createElement('a');
         link.href = href;

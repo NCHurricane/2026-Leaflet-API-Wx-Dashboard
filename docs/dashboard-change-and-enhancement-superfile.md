@@ -59,6 +59,11 @@ Status vocabulary:
   WPC retains its own issuance/product cadence.
 - Browser dependencies are vendored under `frontend/lib/`. The seven retained
   fonts are active assets. `css/shared.css` remains active for the landing page.
+- `frontend/core/branding.js` renders the shared Chuck Copeland Weather header
+  logo, while `map-core.js` renders the decorative map duplicate. The landing
+  shell uses the same canonical `/img/chuck-copeland-weather-logo.svg` asset.
+  Only its identified lightning-bolt group pulses; reduced motion keeps the
+  complete logo and bolt visible and static.
 
 ### 2.2 Runtime and refresh ownership
 
@@ -513,7 +518,7 @@ Meteosat-12 Channel13 and NighttimeMicrophysics at z3/z4/z5/z7, including the
 requested current/past-frame, seam, detail, transition, and console checks.
 Phase 2 is accepted and committed as its independent checkpoint.
 
-Phase 3 is implemented in the current uncommitted tree. Satellite live misses
+Phase 3 is committed as `7bda975`. Satellite live misses
 and the app-owned rapid accelerator now use a fair process-local byte budget
 (`WX_SATELLITE_RENDER_BUDGET_MB`, default 16384 MB) based on conservative
 float32 source-grid dimensions times unique product channel count. Concurrent
@@ -529,8 +534,21 @@ plus 42 subtests, all 48 Node tests, repo-wide Ruff/compile, and diff checks. Th
 restarted simultaneous Satellite/Radar owner smoke passed on 2026-08-24: both
 products loaded and remained responsive, Satellite scrub-ahead did not freeze
 or flash, and the browser console stayed clean. A direct response probe
-confirmed the estimated-memory header on a cache hit. Phase 3 is accepted and
-awaits its independent commit; Phase 4/5 have not started.
+confirmed the estimated-memory header on a cache hit. Phase 3 is accepted.
+
+Phase 4 is implemented in the current uncommitted tree. Meteosat-9/12 presence
+jobs chain source prefetch into selected-product warming for the newest two
+frames at z1–z6 using platform-longitude disk bounds and a reusable two-process
+pool. Zooms are scheduled incrementally; selection release or new live tile
+work stops further scheduling, while already-running canvases may finish and
+publish atomically. Current-version warmed tile frames prune with the seven-hour
+source window. A two-worker Meteosat-12 NighttimeMicrophysics temporary-cache
+probe completed in 88.4 seconds, peaked 6.28 GiB above baseline, and settled at
+964.2 MiB parent-plus-worker RSS. Warmed/live center-tile deltas stayed within
+the accepted shared-canvas/low-zoom envelope. The automated gate passes 647
+Python tests plus 42 subtests, all 48 Node tests, repo-wide Ruff/compile, and
+diff checks. Restarted owner smoke remains required before Phase 4 is accepted
+or committed; Phase 5 has not started.
 
 - Satellite Archive UI on the active satellite-v2 contract.
 - Controls redesign without changing page/engine ownership.
@@ -783,10 +801,11 @@ separate bounded Meteosat latency family was selected; its Phase 0/1 baseline,
 no-flash, and scrub-ahead work is committed as Satellite-only checkpoint
 `6759832`. Its required scrub-ahead re-smoke passed. Phase 2a/2b/2d and its
 owner visual review are committed as `7b2d9a5`; Phase 2c was rejected by its
-measurement gate. Phase 3 is implemented with automated/runtime evidence in
-the current uncommitted tree, and its restarted simultaneous Satellite/Radar
-owner smoke passed on 2026-08-24. It is accepted and awaits its independent
-commit. Do not begin Phase 4 without separate authorization.
+measurement gate. Phase 3 and its passed simultaneous Satellite/Radar owner
+smoke are committed as `7bda975`. Phase 4 is implemented with green automated
+and temporary-cache runtime evidence in the current uncommitted tree; restarted
+owner smoke remains required. Do not begin Phase 5 without separate
+authorization.
 The Section 4.2 base
 monitor and its
 server-session cutoff plus notification-cadence/audio correction and national

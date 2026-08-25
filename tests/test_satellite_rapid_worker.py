@@ -55,6 +55,39 @@ def test_canvas_warm_uses_supplied_pool(tmp_path, monkeypatch):
     assert [task[1]["z"] for task in pool.tasks] == [7, 8]
 
 
+def test_canvas_warm_stops_scheduling_zooms_when_live_work_arrives(
+    tmp_path, monkeypatch
+):
+    pool = _RecordingPool()
+    ready = iter((True, True, False))
+    monkeypatch.setattr(
+        tiler,
+        "planning_tile_coords",
+        lambda _sector, zoom, **_kwargs: [(zoom, zoom)],
+    )
+    monkeypatch.setattr(
+        tiler,
+        "download_product_source_frames",
+        lambda *_args: {"Channel13": tmp_path / "source.nc"},
+    )
+
+    stats = tiler.warm_frame_tiles_from_canvas(
+        cache_root=tmp_path,
+        sat_id="meteosat12",
+        sector="FULLDISK",
+        channel_key="Channel13",
+        frame={"frame_key": "frame-a"},
+        zooms=(4, 5, 6),
+        render_workers=1,
+        pool=pool,
+        wait_until_ready=lambda: next(ready),
+    )
+
+    assert [task[1]["z"] for task in pool.tasks] == [4]
+    assert stats["rendered"] == 1
+    assert stats["cancelled"] == 1
+
+
 def test_rapid_worker_reuses_one_pool_for_all_jobs(monkeypatch):
     pools = []
     seen_pools = []

@@ -314,8 +314,8 @@ tests, repo-wide Ruff/compile, and diff checks. The restarted simultaneous
 Satellite/Radar owner smoke passed on 2026-08-24: both products loaded and remained
 responsive, Satellite scrub-ahead did not freeze or flash, and the browser console stayed
 clean. A direct response probe also confirmed
-`X-Satellite-V2-Estimated-Memory-MB: 0` on a cache hit. Phase 3 is accepted and awaits
-its independent commit; Phase 4 has not started.
+`X-Satellite-V2-Estimated-Memory-MB: 0` on a cache hit. Phase 3 is accepted and committed
+as `7bda975`.
 
 ## Phase 4 — Presence-driven Meteosat tile warming
 
@@ -342,6 +342,34 @@ Turn the cold path into a cache hit for the frames a user is actually looking at
   (`service.py:138`).
 - Prune warmed tiles alongside sources; `SATELLITE_V2_METEOSAT_PREFETCH_KEEP_HOURS` (7 h)
   currently prunes sources only.
+
+### Phase 4 implementation status — 2026-08-24
+
+Phase 4 is implemented in the current uncommitted tree. Channel-specific presence jobs
+for Meteosat-9/12 chain the existing source prefetch into selected-product warming for the
+newest two frames at z1–z6. Bounds use each platform's `lon_0`; the default two-process
+pool is reused across runs and is shut down with the application. The parent schedules
+zoom canvases incrementally: selection release stops new work, and a nonblocking live-tile
+check stops background scheduling without holding the byte reservation in a wait cycle.
+Already-running canvases may finish and publish atomically. Meteosat-11 RSS retains its
+existing rapid warmer. Current-version Meteosat tile-frame directories now prune with the
+seven-hour source window.
+
+Each full-disk frame plans 2,072–2,076 z1–z6 coordinates; the largest z6 canvas is
+7680×12800 (375 MiB final RGBA). A temporary-cache Meteosat-12 Channel13 warm completed
+in 49.7 s with a 3.37 GiB RSS increase. NighttimeMicrophysics completed in 108.3 s with
+one worker and 88.4 s with the actual two-worker pool; the two-worker process tree peaked
+6.28 GiB above baseline and settled at 964.2 MiB while the pool remained alive. The
+two-worker composite published 1,613 valid PNGs / 173,493,019 bytes and 459 negative
+markers with no errors. Warmed-versus-live center tiles stayed inside the accepted shared-
+canvas/low-zoom envelope: Channel13 max channel delta 2 and NighttimeMicrophysics max 6.
+All temporary probe output was removed.
+
+The focused Phase 4 gate passes 40 tests. The full gate passes 647 Python tests plus 42
+subtests, all 48 Node tests, repo-wide Ruff/compile, and diff checks. A restarted owner
+smoke remains required before Phase 4 is accepted or committed: confirm M9/M12 warming
+and cache hits, M9 eastward disk coverage, live Radar responsiveness, product/navigation
+cancellation, retained no-flash transitions, and clean consoles. Phase 5 has not started.
 
 ## Phase 5 — EUMETSAT fetch path
 

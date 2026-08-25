@@ -209,6 +209,76 @@ def test_selected_rapid_product_activates_lease_job(monkeypatch):
     assert kwargs["run_immediately"] is False
 
 
+def test_selected_meteosat_product_activates_channel_specific_tile_job(monkeypatch):
+    coordinator = Mock()
+    coordinator.activate_presence_job.return_value = Mock(
+        status="scheduled", retry_after_seconds=5.0
+    )
+    monkeypatch.setattr(
+        "app_core.refresh_coordinator.get_refresh_coordinator", lambda: coordinator
+    )
+
+    payload = service._activate_satellite_accelerator(
+        "meteosat12", "FULLDISK", "NighttimeMicrophysics"
+    )
+
+    assert payload["accelerator"] == "meteosat-tiles"
+    kwargs = coordinator.activate_presence_job.call_args.kwargs
+    assert kwargs["key"] == (
+        "satellite",
+        "meteosat-tiles",
+        "meteosat12",
+        "FULLDISK",
+        "NighttimeMicrophysics",
+    )
+    assert kwargs["run_immediately"] is False
+
+
+def test_selected_meteosat_accelerator_chains_source_and_memory_guarded_tiles(
+    monkeypatch,
+):
+    calls = []
+    slot = Mock(side_effect=lambda *_args, **_kwargs: nullcontext(True))
+    wait_kwargs = []
+
+    def fake_wait(**kwargs):
+        calls.append("live-idle")
+        wait_kwargs.append(kwargs)
+        return True
+
+    monkeypatch.setattr(service, "_wait_for_live_tile_idle", fake_wait)
+    monkeypatch.setattr(
+        "satellite_v2.meteosat_prefetch_worker.run_satellite_v2_meteosat_prefetch_worker",
+        lambda **_kwargs: calls.append("source") or {"downloaded": 1},
+    )
+
+    def fake_tiles(**kwargs):
+        calls.append("tiles")
+        assert kwargs["wait_until_ready"]()
+        return {"frames": 1, "rendered": 4, "cancelled": 0}
+
+    monkeypatch.setattr(
+        "satellite_v2.meteosat_tile_worker.run_selected_meteosat_tile_warmer",
+        fake_tiles,
+    )
+    monkeypatch.setattr(
+        "app_core.render_budget.satellite_render_slot",
+        slot,
+    )
+    monkeypatch.setattr(service, "estimate_source_grid_bytes", lambda *_args, **_kwargs: 100)
+
+    result = service._run_selected_satellite_accelerator(
+        "meteosat12", "FULLDISK", "Channel13", "meteosat-tiles"
+    )
+
+    assert calls == ["live-idle", "source", "live-idle", "tiles", "live-idle"]
+    assert result["source_downloaded"] == 1
+    assert result["tile_rendered"] == 4
+    assert result["estimated_memory_bytes"] == 200
+    assert slot.call_args.args == (200,)
+    assert wait_kwargs[-1]["timeout_seconds"] == 0.0
+
+
 def test_meso_accelerator_uses_initial_view_zooms():
     assert SATELLITE_V2_RAPID_WORKER_ZOOMS["MESO1"] == (5, 6)
     assert SATELLITE_V2_RAPID_WORKER_ZOOMS["MESO2"] == (5, 6)

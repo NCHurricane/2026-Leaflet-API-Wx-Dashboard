@@ -7,9 +7,9 @@ import logging
 import os
 import tempfile
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from pathlib import Path
-from typing import Iterable, Any, Mapping, Sequence
+from typing import Callable, Iterable, Any, Mapping, Sequence
 
 from config.satellite_v2_config import (
     SATELLITE_V2_LIVE_SUPERTILE_RADIUS,
@@ -347,6 +347,8 @@ def warm_frame_tiles_from_canvas(
     tile_bounds: Mapping[str, float] | Sequence[float] | None = None,
     tile_buffer: int = 0,
     pool: ProcessPoolExecutor | None = None,
+    should_continue: Callable[[], bool] | None = None,
+    wait_until_ready: Callable[[], bool] | None = None,
 ) -> dict[str, int]:
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
@@ -355,7 +357,14 @@ def warm_frame_tiles_from_canvas(
     if not frame_key:
         raise ValueError("Satellite v2 frame is missing frame_key.")
 
-    stats = {"rendered": 0, "skipped": 0, "errors": 0, "repaired": 0, "invalid": 0}
+    stats = {
+        "rendered": 0,
+        "skipped": 0,
+        "errors": 0,
+        "repaired": 0,
+        "invalid": 0,
+        "cancelled": 0,
+    }
 
     zoom_list = [int(value) for value in zooms]
     if not zoom_list:
@@ -366,6 +375,9 @@ def warm_frame_tiles_from_canvas(
     # canvas render entirely.
     pending_coords: dict[int, list[tuple[int, int]]] = {}
     for zoom in zoom_list:
+        if should_continue is not None and not should_continue():
+            stats["cancelled"] = 1
+            break
         coords = planning_tile_coords(
             sector_key, zoom, bounds=tile_bounds, buffer_tiles=tile_buffer
         )
@@ -395,6 +407,15 @@ def warm_frame_tiles_from_canvas(
     if not pending_coords:
         return stats
 
+    def ready_for_more_work() -> bool:
+        if should_continue is not None and not should_continue():
+            return False
+        return wait_until_ready is None or bool(wait_until_ready())
+
+    if not ready_for_more_work():
+        stats["cancelled"] = 1
+        return stats
+
     source_files = download_product_source_frames(
         cache_root, sat_key, sector_key, channel, frame
     )
@@ -418,16 +439,41 @@ def warm_frame_tiles_from_canvas(
     worker_count = max(1, min(int(render_workers or 1), len(tasks)))
     if pool is None and worker_count <= 1:
         for task in tasks:
+            if not ready_for_more_work():
+                stats["cancelled"] = 1
+                break
             _merge_tile_stats(stats, _render_warm_zoom_canvas_task(task))
         return stats
 
     def collect(executor: ProcessPoolExecutor) -> None:
-        futures = [executor.submit(_render_warm_zoom_canvas_task, task) for task in tasks]
-        for future in as_completed(futures):
-            try:
-                _merge_tile_stats(stats, future.result())
-            except Exception:
-                stats["errors"] += 1
+        task_iter = iter(tasks)
+        active = set()
+        scheduling_stopped = False
+
+        def fill_capacity() -> None:
+            nonlocal scheduling_stopped
+            while not scheduling_stopped and len(active) < worker_count:
+                if not ready_for_more_work():
+                    stats["cancelled"] = 1
+                    scheduling_stopped = True
+                    return
+                try:
+                    task = next(task_iter)
+                except StopIteration:
+                    scheduling_stopped = True
+                    return
+                active.add(executor.submit(_render_warm_zoom_canvas_task, task))
+
+        fill_capacity()
+        while active:
+            completed, _ = wait(active, return_when=FIRST_COMPLETED)
+            for future in completed:
+                active.remove(future)
+                try:
+                    _merge_tile_stats(stats, future.result())
+                except Exception:
+                    stats["errors"] += 1
+            fill_capacity()
 
     if pool is not None:
         collect(pool)
