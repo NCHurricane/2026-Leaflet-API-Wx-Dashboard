@@ -311,6 +311,47 @@ def _zoom_derived_grid_cap(destination_zoom: int | None) -> int:
     return 4096
 
 
+def estimate_source_grid_bytes(
+    sat_id: str,
+    product_key: str,
+    destination_zoom: int | None = None,
+) -> int:
+    """Conservatively estimate float32 source grids held by one renderer.
+
+    Admission happens before source arrays are decoded, so the estimate uses
+    the platform's maximum retained grid plus the product's unique source
+    channel count. FCI and SEVIRI have stable native grid sizes; ABI, AHI,
+    AMI, and the global mosaic use their configured safety cap. Zoom-derived
+    caps apply only to loaders that enforce them for every scene.
+    """
+    sat_key = str(sat_id or "").strip().lower()
+    descriptor = SATELLITE_PLATFORMS.get(sat_key) or {}
+    instrument = str(descriptor.get("instrument") or "").strip()
+    sources = tuple(dict.fromkeys(source_channels_for_product(product_key)))
+    channel_count = max(1, len(sources))
+
+    if instrument == "FCI":
+        platform_side = min(5568, SATELLITE_V2_FCI_MAX_GRID)
+    elif instrument == "SEVIRI":
+        platform_side = 3712
+    elif instrument == "AHI":
+        platform_side = SATELLITE_V2_AHI_MAX_GRID
+    elif instrument == "AMI":
+        platform_side = SATELLITE_V2_AMI_MAX_GRID
+    else:
+        platform_side = SATELLITE_V2_GOES_FULLDISK_MAX_GRID
+
+    # AHI, AMI, and FCI enforce the requested cap for every source. ABI only
+    # applies it to Full Disk scenes, so retaining the platform cap here avoids
+    # underestimating higher-resolution CONUS source grids.
+    if instrument in {"AHI", "AMI", "FCI"}:
+        zoom_cap = _zoom_derived_grid_cap(destination_zoom)
+        if zoom_cap:
+            platform_side = min(platform_side, zoom_cap)
+
+    return int(platform_side) * int(platform_side) * 4 * channel_count
+
+
 def _source_raster_grid_cap(
     path: Path,
     source_channel: str,

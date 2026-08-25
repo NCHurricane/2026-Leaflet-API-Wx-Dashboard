@@ -495,7 +495,7 @@ gate passes 623 Python tests plus 42 subtests and all 48 Node tests; the
 scrub-ahead reproduction passed owner re-smoke on 2026-08-24 in Satellite and
 Workspace.
 
-Phase 2a/2b/2d is implemented in the current uncommitted tree: one live canvas
+Phase 2a/2b/2d is committed as `7b2d9a5`: one live canvas
 warp now feeds a 3x3 supertile through the shared atomic crop/publication path;
 zoom-aware source caps use 2048 at z1–4, 4096 at z5–6, and the platform cap at
 z7+; and all platform render namespaces are bumped. The candidate direct FCI
@@ -511,8 +511,26 @@ validation passes 631 Python tests plus 42 subtests, all 48 Node tests,
 repo-wide Ruff/compile, and diff checks. Owner smoke passed on 2026-08-24 for
 Meteosat-12 Channel13 and NighttimeMicrophysics at z3/z4/z5/z7, including the
 requested current/past-frame, seam, detail, transition, and console checks.
-Phase 2 is accepted and ready for its independent commit; Phase 3 is not
-authorized by this implementation.
+Phase 2 is accepted and committed as its independent checkpoint.
+
+Phase 3 is implemented in the current uncommitted tree. Satellite live misses
+and the app-owned rapid accelerator now use a fair process-local byte budget
+(`WX_SATELLITE_RENDER_BUDGET_MB`, default 16384 MB) based on conservative
+float32 source-grid dimensions times unique product channel count. Concurrent
+work is admitted while cumulative estimates fit; an oversized request runs
+alone, and queued ownership cancellation releases its queue position. Radar
+retains the existing `heavy_render_slot`, so the two families no longer wait on
+the same semaphore. A four-render real-source probe reached four concurrent
+Satellite admissions and 757 MB estimated in flight; process RSS moved from
+205.9 MB to a 503.6 MB peak and settled at 451.1 MB with zero final active,
+queued, or reserved work. Committed Phase 2 and Phase 3 matched all 18
+same-source GOES/Meteosat PNG hashes. The automated gate passes 639 Python tests
+plus 42 subtests, all 48 Node tests, repo-wide Ruff/compile, and diff checks. The
+restarted simultaneous Satellite/Radar owner smoke passed on 2026-08-24: both
+products loaded and remained responsive, Satellite scrub-ahead did not freeze
+or flash, and the browser console stayed clean. A direct response probe
+confirmed the estimated-memory header on a cache hit. Phase 3 is accepted and
+awaits its independent commit; Phase 4/5 have not started.
 
 - Satellite Archive UI on the active satellite-v2 contract.
 - Controls redesign without changing page/engine ownership.
@@ -763,11 +781,12 @@ the selected family and define its exact implementation boundary before editing.
 The post-cleanup Satellite cross-page blocking prerequisite is complete. A
 separate bounded Meteosat latency family was selected; its Phase 0/1 baseline,
 no-flash, and scrub-ahead work is committed as Satellite-only checkpoint
-`6759832`. Its required scrub-ahead re-smoke passed. Phase 2a/2b/2d is
-implemented and automated validation is green in the current uncommitted tree;
-Phase 2c was rejected by its measurement gate, and the z3/z4/z5/z7 Meteosat
-owner visual review passed on 2026-08-24. Phase 2 is ready for its independent
-commit. Do not begin Phase 3 from that state without separate authorization.
+`6759832`. Its required scrub-ahead re-smoke passed. Phase 2a/2b/2d and its
+owner visual review are committed as `7b2d9a5`; Phase 2c was rejected by its
+measurement gate. Phase 3 is implemented with automated/runtime evidence in
+the current uncommitted tree, and its restarted simultaneous Satellite/Radar
+owner smoke passed on 2026-08-24. It is accepted and awaits its independent
+commit. Do not begin Phase 4 without separate authorization.
 The Section 4.2 base
 monitor and its
 server-session cutoff plus notification-cadence/audio correction and national

@@ -150,9 +150,10 @@ response reports `refreshing` and the standalone Surface engine polls local
 state until the cache is ready. Surface gradients use a separate
 `(WORLD|CONUS, product)` coordinator key, keep the prior complete artifact
 visible while rendering, and share the regional observation snapshot for one
-minute. Their process-local render semaphore is independent of the shared
-Radar/Satellite heavy-render slot. Daily AviationWeather station metadata
-avoids per-request discovery; the rare IEM fallback acquires the coordinator's
+minute. Their process-local render semaphore is independent of Radar's
+heavy-render slot and Satellite's byte-budgeted admission queue. Daily
+AviationWeather station metadata avoids per-request discovery; the rare IEM
+fallback acquires the coordinator's
 shared provider budget directly. While a server PNG is pending, the Surface
 engine displays the prior masked PNG or observations alone; its unmasked
 client-canvas interpolation is reserved for a completed server path that
@@ -292,13 +293,19 @@ Satellite v2 tile endpoints:
    destination zoom: z1–4 cap at 2048, z5–6 at 4096, and z7+ retain the platform
    cap. SEVIRI and GMGSI retain native loader behavior; frame-bound discovery
    omits destination zoom and therefore retains its prior source behavior.
-5. Filled satellite images own the basemap inside valid coverage (PNG alpha
+5. Live tile misses and the app-owned rapid accelerator reserve a conservative
+   float32 source-grid estimate from a fair process-local byte budget. The
+   `WX_SATELLITE_RENDER_BUDGET_MB` default is 16384 MB; work may overlap while
+   cumulative estimates fit, and an oversized render runs alone. Queued work
+   retains selection-cancellation behavior. Radar remains on its existing
+   `heavy_render_slot` and no longer contends with Satellite admission.
+6. Filled satellite images own the basemap inside valid coverage (PNG alpha
    255); invalid/off-disk pixels remain transparent. ADP, AOD, and FRP retain
    product-specific sparse-overlay alpha.
-6. Selected rapid sectors and Meteosat source prefetch are delayed optional
+7. Selected rapid sectors and Meteosat source prefetch are delayed optional
    accelerators owned by the application while request presence remains active;
    they do not replace the live on-demand tile path.
-7. Source downloads deduplicate by platform/sector/frame. EUMETSAT FCI uses
+8. Source downloads deduplicate by platform/sector/frame. EUMETSAT FCI uses
    one or two download connections and reports `credentials_required` or
    `license_required` instead of hanging or presenting a generic provider
    failure.

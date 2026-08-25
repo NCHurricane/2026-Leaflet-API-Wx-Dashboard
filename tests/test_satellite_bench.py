@@ -79,6 +79,32 @@ def test_default_full_disk_center_is_platform_specific():
     assert bench._default_center("goes19", "MESO1") == (-95.0, 38.0)
 
 
+def test_source_grid_memory_estimate_uses_zoom_and_product_channel_count():
+    z4_single = renderer.estimate_source_grid_bytes(
+        "meteosat12", "Channel13", destination_zoom=4
+    )
+    z5_single = renderer.estimate_source_grid_bytes(
+        "meteosat12", "Channel13", destination_zoom=5
+    )
+    z7_single = renderer.estimate_source_grid_bytes(
+        "meteosat12", "Channel13", destination_zoom=7
+    )
+    z5_three_channel = renderer.estimate_source_grid_bytes(
+        "meteosat12", "NighttimeMicrophysics", destination_zoom=5
+    )
+
+    assert z4_single == 2048 * 2048 * 4
+    assert z5_single == 4096 * 4096 * 4
+    assert z7_single == 5568 * 5568 * 4
+    assert z5_three_channel == z5_single * 3
+
+
+def test_goes_memory_estimate_keeps_conservative_platform_cap():
+    assert renderer.estimate_source_grid_bytes(
+        "goes19", "Channel13", destination_zoom=4
+    ) == 10848 * 10848 * 4
+
+
 def test_golden_capture_and_compare_are_byte_exact(tmp_path):
     context = {
         "sat_id": "goes19",

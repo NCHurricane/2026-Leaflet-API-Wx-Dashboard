@@ -226,8 +226,8 @@ def test_selected_accelerator_waits_for_live_tiles(monkeypatch):
         lambda **_kwargs: calls.append("accelerator") or {"rendered": 1},
     )
     monkeypatch.setattr(
-        "app_core.render_budget.heavy_render_slot",
-        nullcontext,
+        "app_core.render_budget.satellite_render_slot",
+        lambda *_args, **_kwargs: nullcontext(True),
     )
 
     result = service._run_selected_satellite_accelerator(
@@ -237,6 +237,31 @@ def test_selected_accelerator_waits_for_live_tiles(monkeypatch):
     assert result == {"rendered": 1}
     assert calls[0] == "live-idle"
     assert calls[-1] == "accelerator"
+
+
+def test_live_tile_uses_estimated_satellite_memory_budget(tmp_path, monkeypatch):
+    tile = tmp_path / "tile.png"
+    slot = Mock(side_effect=lambda *_args, **_kwargs: nullcontext(True))
+    monkeypatch.setattr(
+        "app_core.render_budget.satellite_render_slot",
+        slot,
+    )
+    monkeypatch.setattr(service, "estimate_source_grid_bytes", lambda *_args, **_kwargs: 123)
+    monkeypatch.setattr(
+        service,
+        "render_frame_tile",
+        lambda **_kwargs: (tile, {"cache_status": "miss"}),
+    )
+
+    path, stats = service._render_tile_with_budget(
+        sat_id="meteosat12",
+        channel_key="Channel13",
+        z=5,
+    )
+
+    assert path == tile
+    assert stats["estimated_memory_bytes"] == 123
+    assert slot.call_args.args == (123,)
 
 
 def test_selected_accelerator_stops_after_client_changes_selection(monkeypatch):
@@ -409,6 +434,7 @@ def test_satellite_png_response_does_not_require_deferred_file_thread(
                 "download_elapsed_ms": 120,
                 "decode_elapsed_ms": 45,
                 "render_elapsed_ms": 8,
+                "estimated_memory_bytes": 128 * 1024 * 1024,
             },
         ),
     )
@@ -430,6 +456,7 @@ def test_satellite_png_response_does_not_require_deferred_file_thread(
     assert response.headers["X-Satellite-V2-Download-Ms"] == "120"
     assert response.headers["X-Satellite-V2-Decode-Ms"] == "45"
     assert response.headers["X-Satellite-V2-Render-Ms"] == "8"
+    assert response.headers["X-Satellite-V2-Estimated-Memory-MB"] == "128"
 
 
 @pytest.mark.parametrize(

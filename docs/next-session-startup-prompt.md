@@ -105,7 +105,7 @@ Current boundary:
   render slot. The no-flash pool is unchanged. The full gate passes 623 Python
   tests plus 42 subtests and all 48 Node tests. Owner browser re-smoke passed on
   2026-08-24 in standalone Satellite and Workspace.
-- Meteosat Phase 2a/2b/2d is implemented in the current uncommitted tree. Live
+- Meteosat Phase 2a/2b/2d is committed as `7b2d9a5`. Live
   neighbor rendering uses one canvas warp for the 3x3 supertile and the shared
   atomic crop/publication helper. Source-grid caps are keyed by destination
   zoom (2048 at z1–4, 4096 at z5–6, existing platform cap at z7+), and the
@@ -121,7 +121,23 @@ Current boundary:
   tests, repo-wide Ruff/compile, and diff checks. Owner smoke passed on
   2026-08-24 for Channel13 and NighttimeMicrophysics at z3/z4/z5/z7, including
   current/past frames, seams, detail, transitions, and clean consoles. Phase 2
-  is accepted and ready for its independent commit.
+  is accepted and committed as its independent checkpoint.
+- Meteosat Phase 3 is implemented in the current uncommitted tree. Satellite
+  live misses and the app-owned rapid accelerator use a fair process-local byte
+  budget (`WX_SATELLITE_RENDER_BUDGET_MB`, default 16384 MB) with conservative
+  float32 source-grid/channel estimates, oversized-render exclusivity, and
+  queued ownership cancellation. Radar retains `heavy_render_slot` and no
+  longer contends with Satellite admission. A four-render real-source probe
+  reached four active reservations and 757 MB estimated in flight; RSS moved
+  from 205.9 MB to a 503.6 MB peak and settled at 451.1 MB with a zeroed final
+  budget state. Phase 2 versus Phase 3 matched all 18 same-source GOES/Meteosat
+  PNG hashes. The automated gate passes 639 Python tests plus 42 subtests, all
+  48 Node tests, repo-wide Ruff/compile, and diff checks. The restarted
+  simultaneous Satellite/Radar owner smoke passed on 2026-08-24: both products
+  loaded and remained responsive, Satellite scrub-ahead did not freeze or
+  flash, and the browser console stayed clean. A direct response probe
+  confirmed `X-Satellite-V2-Estimated-Memory-MB: 0` on a cache hit. Phase 3 is
+  accepted and awaits its independent commit.
 - Audit findings remain historical evidence, not authorization for additional
   deletion or refactoring beyond the completed cleanup program.
 - Preserve unrelated dirty work. Do not commit unless explicitly asked.
@@ -147,10 +163,11 @@ Default next discussion:
 - The Alert follow-up owner smoke passed: a naturally issued alert notified
   within 60 seconds of issuance. Preserve that evidence with the Alert
   checkpoint without mixing the Satellite boundary.
-- Meteosat Phase 2 automated validation and owner smoke are complete. Reconcile
-  and commit it as one independent checkpoint when explicitly authorized.
-- Do not begin Phase 3 merely because Phase 2 automated validation is green;
-  it changes the memory/concurrency guard and requires separate authorization.
+- Meteosat Phase 2 is committed as `7b2d9a5`.
+- Meteosat Phase 3 owner smoke passed and the phase is ready for its independent
+  commit when explicitly authorized.
+- Do not begin Phase 4 merely because Phase 3 is accepted; presence-driven
+  Meteosat tile warming remains separately gated.
 - The Satellite prerequisite is closed and does not choose that enhancement.
   Radar WebGL is first only by document order. Section 4.7 is a future unified
   cross-page Archive workflow, not an independent Surface-only completion.

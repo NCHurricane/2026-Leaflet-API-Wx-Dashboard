@@ -31,6 +31,7 @@ from config.satellite_v2_config import (
     SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS,
     SATELLITE_V2_RAPID_WORKER_JOBS,
     SATELLITE_V2_RAPID_WORKER_PRODUCTS,
+    SATELLITE_V2_RAPID_WORKER_ZOOMS,
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
@@ -48,7 +49,7 @@ from satellite_v2.cache import (
 )
 from satellite_v2 import providers
 from satellite_v2.providers import download_product_source_frames, list_recent_frames
-from satellite_v2.renderer import _load_source_raster
+from satellite_v2.renderer import _load_source_raster, estimate_source_grid_bytes
 from satellite_v2.tiler import render_frame_tile
 
 
@@ -302,12 +303,22 @@ def _render_tile_with_budget(
     render_should_continue: Callable[[], bool] | None = None,
     **render_kwargs: Any,
 ):
-    from app_core.render_budget import heavy_render_slot
+    from app_core.render_budget import satellite_render_slot
 
-    with heavy_render_slot(should_continue=render_should_continue) as acquired:
+    estimated_bytes = estimate_source_grid_bytes(
+        str(render_kwargs.get("sat_id") or ""),
+        str(render_kwargs.get("channel_key") or ""),
+        destination_zoom=int(render_kwargs.get("z") or 0),
+    )
+    with satellite_render_slot(
+        estimated_bytes,
+        should_continue=render_should_continue,
+    ) as acquired:
         if not acquired:
             raise _TileRenderCancelled("Satellite tile render ownership ended.")
-        return render_frame_tile(**render_kwargs)
+        path, stats = render_frame_tile(**render_kwargs)
+        stats["estimated_memory_bytes"] = estimated_bytes
+        return path, stats
 
 
 def _submit_tile_render(
@@ -411,10 +422,22 @@ def _run_selected_satellite_accelerator(
             should_continue=should_continue,
         )
 
-    from app_core.render_budget import heavy_render_slot
+    from app_core.render_budget import satellite_render_slot
     from satellite_v2.rapid_worker import run_satellite_v2_rapid_worker
 
-    with heavy_render_slot():
+    zooms = SATELLITE_V2_RAPID_WORKER_ZOOMS.get(normalize_sector(sector), ())
+    destination_zoom = max((int(value) for value in zooms), default=7)
+    estimated_bytes = estimate_source_grid_bytes(
+        sat_id,
+        channel,
+        destination_zoom=destination_zoom,
+    )
+    with satellite_render_slot(
+        estimated_bytes,
+        should_continue=should_continue,
+    ) as acquired:
+        if not acquired:
+            return {"cancelled": 1}
         return run_satellite_v2_rapid_worker(
             force=True,
             jobs=((sat_id, sector),),
@@ -1097,6 +1120,9 @@ def resolve_tile(
                 ),
                 "render_elapsed_ms": int(
                     render_stats.get("render_elapsed_ms") or 0
+                ),
+                "estimated_memory_bytes": int(
+                    render_stats.get("estimated_memory_bytes") or 0
                 ),
             }
         )

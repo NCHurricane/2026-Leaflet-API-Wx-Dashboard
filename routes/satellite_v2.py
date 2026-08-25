@@ -146,7 +146,8 @@ async def get_satellite_v2_tile(
     _LOGGER.info(
         "Satellite tile source=%s cache_status=%s miss_reason=%s "
         "validate_ms=%s elapsed_ms=%s sat_id=%s sector=%s channel=%s "
-        "download_ms=%s decode_ms=%s render_ms=%s frame_key=%s z=%s x=%s y=%s",
+        "download_ms=%s decode_ms=%s render_ms=%s estimated_memory_mb=%s "
+        "frame_key=%s z=%s x=%s y=%s",
         source_label,
         cache_status.upper(),
         str(tile_stats.get("miss_reason") or "none"),
@@ -158,6 +159,7 @@ async def get_satellite_v2_tile(
         int(tile_stats.get("download_elapsed_ms") or 0),
         int(tile_stats.get("decode_elapsed_ms") or 0),
         int(tile_stats.get("render_elapsed_ms") or 0),
+        round(int(tile_stats.get("estimated_memory_bytes") or 0) / (1024 * 1024)),
         frame_key,
         z,
         x,
@@ -218,6 +220,9 @@ async def get_satellite_v2_tile(
     )
     response.headers["X-Satellite-V2-Render-Ms"] = str(
         int(tile_stats.get("render_elapsed_ms") or 0)
+    )
+    response.headers["X-Satellite-V2-Estimated-Memory-MB"] = str(
+        round(int(tile_stats.get("estimated_memory_bytes") or 0) / (1024 * 1024))
     )
     response.headers["Cache-Control"] = _SATELLITE_TILE_CACHE_CONTROL
     response.headers["ETag"] = (

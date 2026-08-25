@@ -237,7 +237,7 @@ so a global bump discards almost nothing. Re-measure before assuming this still 
 
 ### Phase 2 implementation status — 2026-08-24
 
-Phase 2a, 2b, and 2d are implemented in the current uncommitted working tree. Live
+Phase 2a, 2b, and 2d are committed as checkpoint `7b2d9a5`. Live
 neighbor rendering now performs one bounded canvas warp and uses the same crop,
 content-check, negative-marker, validation, and atomic-publication helper as canvas
 warming. Source raster cache keys include the destination-zoom cap: z1–4 use 2048,
@@ -263,8 +263,8 @@ byte-identical gate cannot apply to Phase 2. The automated gate passes 631 Pytho
 plus 42 subtests, all 48 Node tests, repo-wide Ruff/compile, and diff checks. Owner smoke
 passed on 2026-08-24 for Meteosat-12 Channel13 and NighttimeMicrophysics at
 z3/z4/z5/z7, including the requested current/past-frame, seam, detail, transition, and
-console checks. Phase 2 is accepted and ready for its independent commit; Phase 3 remains
-separately gated.
+console checks. Phase 2 is accepted and committed as its independent checkpoint; Phase 3
+remains separately gated.
 
 ## Phase 3 — Memory-guarded render concurrency
 
@@ -280,6 +280,42 @@ Replace the satellite side of the single global slot with **byte-budgeted admiss
   visible channel can never be co-scheduled. This is a **stronger** guarantee than a slot
   count, which is what actually failed in June 2026.
 - Radar keeps `heavy_render_slot` at its current value; the two stop contending.
+
+### Phase 3 implementation status — 2026-08-24
+
+Phase 3 is implemented in the current uncommitted working tree. A fair
+process-local byte queue in `app_core/render_budget.py` uses
+`WX_SATELLITE_RENDER_BUDGET_MB` with a 16384 MB default. Work whose cumulative
+source-grid estimates fit may run concurrently; a request larger than the whole budget
+still runs, but only when no other Satellite render is active. Selection ownership is
+checked while queued, and cancellation removes the waiter without leaking its queue
+position or reservation.
+
+The estimate is the conservative float32 source-grid footprint multiplied by the
+product's unique source-channel count. FCI and SEVIRI use their stable native grid
+dimensions; ABI, AHI, AMI, and the global mosaic retain their configured platform safety
+caps. AHI/AMI/FCI estimates also honor the Phase 2 destination-zoom cap. ABI keeps the
+platform cap because its loader applies zoom decimation only to Full Disk scenes, avoiding
+an underestimate for higher-resolution CONUS sources.
+
+Live tile misses and the app-owned rapid accelerator now use the Satellite byte budget.
+Radar remains on the existing `heavy_render_slot`, so Radar and Satellite no longer wait
+on the same semaphore. Tile responses expose the reservation as
+`X-Satellite-V2-Estimated-Memory-MB`; render versions and pixels are unchanged.
+
+A four-render real-source probe admitted Meteosat-12 Channel13,
+Meteosat-12 NighttimeMicrophysics, Meteosat-9 Channel13, and GOES-19 Channel13
+concurrently. Estimated peak was 757 MB against the 16384 MB budget; process RSS moved
+from 205.9 MB to a 503.6 MB peak and settled at 451.1 MB. Final admission state was zero
+active, zero queued, and zero in-flight bytes. Sequential same-source renders from
+committed Phase 2 (`7b2d9a5`) and the Phase 3 tree matched all 18 GOES/Meteosat PNG
+SHA-256 hashes. The automated gate passes 639 Python tests plus 42 subtests, all 48 Node
+tests, repo-wide Ruff/compile, and diff checks. The restarted simultaneous
+Satellite/Radar owner smoke passed on 2026-08-24: both products loaded and remained
+responsive, Satellite scrub-ahead did not freeze or flash, and the browser console stayed
+clean. A direct response probe also confirmed
+`X-Satellite-V2-Estimated-Memory-MB: 0` on a cache hit. Phase 3 is accepted and awaits
+its independent commit; Phase 4 has not started.
 
 ## Phase 4 — Presence-driven Meteosat tile warming
 
