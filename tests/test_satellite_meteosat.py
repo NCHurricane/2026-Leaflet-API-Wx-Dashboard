@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import struct
+import threading
+import time
 import warnings
 
 import netCDF4
@@ -11,6 +14,7 @@ from config.satellite_v2_config import (
     satellite_v2_render_version_for_satellite,
     source_channels_for_product,
 )
+import satellite_v2.fci_nc as fci_nc
 from satellite_v2.fci_nc import load_fci_rasters
 import satellite_v2.provider_eumetsat as provider_eumetsat
 from satellite_v2.seviri_nat import (
@@ -234,6 +238,38 @@ def test_fci_loader_stitches_body_chunks_and_calibrates_shared_channels(tmp_path
     assert np.isfinite(decimated.values).all()
     assert decimated.src_transform.a > infrared.src_transform.a
     assert satellite_v2_render_version_for_satellite("meteosat12") == "products-fci5"
+
+
+def test_fci_loader_serializes_native_netcdf_access_across_zoom_keys(monkeypatch):
+    active = 0
+    peak = 0
+    guard = threading.Lock()
+
+    def fake_load(paths, requested, max_grid):
+        nonlocal active, peak
+        with guard:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.05)
+        with guard:
+            active -= 1
+        return {channel: max_grid for channel in requested}
+
+    monkeypatch.setattr(fci_nc, "_load_fci_rasters_serialized", fake_load)
+    body_chunk = "FCI-1C-RRAD-FDHSI-CHK-BODY-0001.nc"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(
+            pool.map(
+                lambda max_grid: load_fci_rasters(
+                    [body_chunk], ["Channel13"], max_grid=max_grid
+                ),
+                (2048, 4096),
+            )
+        )
+
+    assert results == [{"Channel13": 2048}, {"Channel13": 4096}]
+    assert peak == 1
 
 
 def test_eumetsat_seviri_catalog_uses_shared_bundle_for_composite(monkeypatch):

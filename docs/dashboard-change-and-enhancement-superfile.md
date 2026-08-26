@@ -536,7 +536,7 @@ products loaded and remained responsive, Satellite scrub-ahead did not freeze
 or flash, and the browser console stayed clean. A direct response probe
 confirmed the estimated-memory header on a cache hit. Phase 3 is accepted.
 
-Phase 4 is implemented in the current uncommitted tree. Meteosat-9/12 presence
+Phase 4's core implementation landed in `68aeb72`. Meteosat-9/12 presence
 jobs chain source prefetch into selected-product warming for the newest two
 frames at z1–z6 using platform-longitude disk bounds and a reusable two-process
 pool. Zooms are scheduled incrementally; selection release or new live tile
@@ -547,8 +547,85 @@ probe completed in 88.4 seconds, peaked 6.28 GiB above baseline, and settled at
 964.2 MiB parent-plus-worker RSS. Warmed/live center-tile deltas stayed within
 the accepted shared-canvas/low-zoom envelope. The automated gate passes 647
 Python tests plus 42 subtests, all 48 Node tests, repo-wide Ruff/compile, and
-diff checks. Restarted owner smoke remains required before Phase 4 is accepted
-or committed; Phase 5 has not started.
+diff checks. The first restarted owner smoke on 2026-08-25 found that a catalog
+refresh could advance foreground ownership while a ready retained layer kept
+its prior tile URL; subsequent pan/zoom misses therefore returned transparent
+`CANCELLED` tiles. The current uncommitted correction advances that retained
+URL without redrawing mounted tiles. Its correction gate passes 647 Python
+tests plus 42 subtests and all 49 Node tests, and a controlled browser
+refresh/zoom loaded z5 256x256 tiles at the new generation while health stayed
+responsive and the console stayed clean. The next owner run loaded and scrubbed
+M12 without flashing, but the server then disappeared twice without a Python
+traceback. Windows Event Viewer recorded both failures as `python.exe` access
+violations in the bundled NetCDF DLL (`0xc0000005`), at 20:45 and 21:10 on
+2026-08-25. The alert refresh at the end of the captured terminal output was a
+timing coincidence, not the crash owner. Different destination zooms use distinct
+FCI raster-cache keys and could therefore enter native NetCDF-C/HDF5 reads
+concurrently. The current uncommitted correction serializes only FCI native file
+access process-wide; calibration, canvas rendering, and unrelated Satellite
+families retain concurrency. The focused FCI gate passes five tests, including a
+two-thread/different-grid-cap ownership regression. A real-source probe loaded all
+40 crash-frame chunks through simultaneous 2048/4096 callers in 5.0 seconds. An
+isolated server returned 200 for simultaneous cold z6/z7 M12 renders; a second run
+overlapped alert refresh with two more cold renders, all requests returned 200, all
+80 health probes over 40 seconds passed, and Windows recorded no new native crash.
+The next restarted owner run on 2026-08-26 did not crash: the server continued
+returning 200 for z4-z7 tile generations and alerts, `/health` stayed responsive,
+and Windows recorded no new NetCDF APPCRASH. A notification activation loaded
+`/workspace?alert=...`; presentation alone does not navigate. Rapid scrubbing
+instead exposed a frontend ownership race. The prior retained-layer correction
+suppressed redraw for incomplete reused layers as well as completed layers, so
+superseded requests could finish as transparent `CANCELLED` PNGs and still satisfy
+Leaflet's loaded-image check. An older pending swap could also detach the same
+layer after a newer scrub request reclaimed it. The current correction preserves
+completed retained tile DOM without redraw, restarts incomplete layers at the new
+generation, and lets only the current pending owner detach an abandoned layer.
+Two deterministic animator regressions failed before the correction and pass
+after it. A cache-busted controlled browser repeated three-frame z7 scrubbing;
+all retained layers stayed attached, exactly one stayed at opacity 1, its tiles
+were 256x256 PNGs, `/health` returned 200, and the console stayed clean. The
+complete gate passes 648 Python tests plus 42 subtests, all 51 Node tests,
+repo-wide Ruff/compile, and diff checks.
+The next owner re-smoke on 2026-08-26 confirmed that rapid scrubbing and stopping
+on an older M12 frame no longer locks the dashboard. It also exposed a catalog-window
+defect: at 21:51Z the one-hour request returned only the 21:00Z and 21:15Z frames,
+while a three-hour request showed the intact 15-minute sequence from 19:00Z through
+21:15Z. The cached-catalog path measured the requested hour from wall-clock time, so
+the provider's 36-minute publication delay consumed most of the animation window.
+The current uncommitted correction anchors fresh and cached lookback filtering to the
+newest available frame, capped at the current time. A regression covers a 40-minute
+delayed feed and passes for both catalog paths. Subsequent owner smoke loaded M12
+Channel09, Channel02, and Dust quickly; each showed five frames, rapid scrubbing stayed
+responsive, and an alert notification arrived without terminal errors, console errors,
+blank tiles, or a lockup. This clears the alert-overlap check, although the catalog change
+still needs an explicitly restarted-server verification.
+
+The current uncommitted tree also adds an RSS-tuned selected-product workflow for
+Meteosat-11. Channel02 and Channel13 retain their existing 12-frame z6-z7 rapid tail;
+other selected channels and composites use a separate `meteosat-rss-tiles` job. It limits
+source prefetch to the newest two frames with no older backfill, then uses the reused
+Meteosat pool to warm the newest four frames at z4-z7 over RSS bounds. The 225-second job
+retains three hours, yields to live work, cancels with selection ownership, and enters the
+shared byte budget. The bounded plan is 1,276 tiles per frame / 5,104 per four-frame tail.
+Pixels and render versions do not change. The complete gate now passes 654 Python tests
+plus 42 subtests and all 51 Node tests, repo-wide Ruff/compile, and diff checks.
+
+The restarted M11 RSS owner re-smoke passed on 2026-08-26. Channel13 remained on the
+rapid path and completed six frames / 6,581 rendered tiles in 2m12s with zero errors;
+the invalid counts were expected off-footprint tiles. Selecting NighttimeMicrophysics
+activated the new RSS source stage, which considered only the newest two frames, found
+both cached, downloaded nothing, pruned four stale source and four stale tile-frame
+directories, and completed with zero errors. Current and older-frame z5 requests returned
+200 while alert refreshes overlapped, and scrubbing and zooming caused no lockup. Softer
+imagery when zoomed is expected from the native 3712-column SEVIRI VIS/IR grid; RSS changes
+cadence and the workflow changes delivery, not source spatial detail. The RSS extension
+is accepted.
+
+The final restarted M12 owner check passed on 2026-08-26: the one-hour catalog showed five
+frames, several FCI products loaded and remained responsive, and Windows Event Viewer's
+Application log contained no new NetCDF error or APPCRASH. Together with the prior
+automated, controlled-browser, runtime, alert-overlap, scrub, and RSS evidence, Phase 4
+is accepted as a whole. Phase 5 has not started.
 
 - Satellite Archive UI on the active satellite-v2 contract.
 - Controls redesign without changing page/engine ownership.
@@ -802,10 +879,13 @@ no-flash, and scrub-ahead work is committed as Satellite-only checkpoint
 `6759832`. Its required scrub-ahead re-smoke passed. Phase 2a/2b/2d and its
 owner visual review are committed as `7b2d9a5`; Phase 2c was rejected by its
 measurement gate. Phase 3 and its passed simultaneous Satellite/Radar owner
-smoke are committed as `7bda975`. Phase 4 is implemented with green automated
-and temporary-cache runtime evidence in the current uncommitted tree; restarted
-owner smoke remains required. Do not begin Phase 5 without separate
-authorization.
+smoke are committed as `7bda975`. Phase 4's core implementation landed in
+`68aeb72`; the retained-layer generation corrections from its failed owner smokes
+and the FCI native-read serialization correction from its two subsequent NetCDF
+DLL crashes and the accepted RSS tuning are currently uncommitted. The complete automated
+gate, isolated cold-render/alert-overlap server smoke, controlled z7 rapid-scrub regression,
+and restarted M12/M11 owner smokes pass. Phase 4 is accepted. Do not begin Phase 5 without
+separate authorization.
 The Section 4.2 base
 monitor and its
 server-session cutoff plus notification-cadence/audio correction and national

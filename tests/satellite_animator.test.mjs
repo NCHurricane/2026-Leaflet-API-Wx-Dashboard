@@ -52,7 +52,11 @@ function createHarness({ clientId = '' } = {}) {
                 addTo() { layers.add(layer); return layer; },
                 setOpacity(value) { layer.opacity = value; return layer; },
                 setZIndex(value) { layer.zIndex = value; return layer; },
-                setUrl(value) { layer.url = value; return layer; },
+                setUrl(value, noRedraw = false) {
+                    layer.url = value;
+                    layer.lastSetUrlNoRedraw = noRedraw;
+                    return layer;
+                },
                 redraw() { return layer; },
             };
             createdLayers.push(layer);
@@ -142,6 +146,79 @@ test('Satellite advances foreground ownership when a newer cold frame is selecte
     markVisible(secondLayer, 'ready-second');
     secondLayer.fire('load');
     assert.equal(await pending, true);
+    harness.animator.destroy();
+});
+
+test('Satellite advances a retained visible layer URL without redrawing it', async () => {
+    const harness = createHarness({ clientId: 'page-owner' });
+    harness.animator.setFrames([{ frame_key: 'frame-a', max_native_zoom: 5 }]);
+
+    assert.equal(await harness.animator.showFrame(0), true);
+    const layer = harness.createdLayers[0];
+    markVisible(layer, 'ready-first');
+
+    assert.equal(await harness.animator.showFrame(0), true);
+    assert.equal(harness.createdLayers.length, 1);
+    assert.match(layer.url, /frame_generation=2/);
+    assert.match(layer.url, /foreground_frame_key=frame-a/);
+    assert.equal(layer.lastSetUrlNoRedraw, true);
+    assert.equal(harness.layers.has(layer), true);
+
+    harness.animator.destroy();
+});
+
+test('Satellite redraws an incomplete pooled layer when foreground ownership advances', async () => {
+    const harness = createHarness({ clientId: 'page-owner' });
+    harness.animator.setFrames([
+        { frame_key: 'frame-a', max_native_zoom: 5 },
+        { frame_key: 'frame-b', max_native_zoom: 5 },
+    ]);
+
+    assert.equal(await harness.animator.showFrame(0), true);
+    const firstLayer = harness.createdLayers[0];
+    markVisible(firstLayer, 'ready-first');
+
+    const firstPending = harness.animator.showFrame(1, { tileTimeoutMs: 1000 });
+    const secondLayer = harness.createdLayers[1];
+    assert.equal(await harness.animator.showFrame(0), true);
+    const reclaimed = harness.animator.showFrame(1, { tileTimeoutMs: 1000 });
+
+    assert.match(secondLayer.url, /frame_generation=4/);
+    assert.equal(secondLayer.lastSetUrlNoRedraw, false);
+
+    markVisible(secondLayer, 'ready-second');
+    secondLayer.fire('load');
+    assert.equal(await firstPending, false);
+    assert.equal(await reclaimed, true);
+    harness.animator.destroy();
+});
+
+test('Satellite stale scrub waits do not detach a layer reclaimed by a newer request', async () => {
+    const harness = createHarness({ clientId: 'page-owner' });
+    harness.animator.setFrames([
+        { frame_key: 'frame-a', max_native_zoom: 5 },
+        { frame_key: 'frame-b', max_native_zoom: 5 },
+    ]);
+
+    assert.equal(await harness.animator.showFrame(0), true);
+    const firstLayer = harness.createdLayers[0];
+    markVisible(firstLayer, 'ready-first');
+
+    const stalePending = harness.animator.showFrame(1, { tileTimeoutMs: 1000 });
+    const secondLayer = harness.createdLayers[1];
+    assert.equal(await harness.animator.showFrame(0), true);
+    const reclaimedPending = harness.animator.showFrame(1, { tileTimeoutMs: 1000 });
+
+    markVisible(secondLayer, 'ready-second');
+    secondLayer.fire('load');
+
+    assert.equal(await stalePending, false);
+    assert.equal(await reclaimedPending, true);
+    assert.equal(harness.animator.getFrameIndex(), 1);
+    assert.equal(harness.layers.has(firstLayer), true);
+    assert.equal(harness.layers.has(secondLayer), true);
+    assert.equal(firstLayer.opacity, 0);
+    assert.equal(secondLayer.opacity, 1);
     harness.animator.destroy();
 });
 

@@ -181,6 +181,7 @@ def _prefetch_one_job(
     max_frames: int,
     keep_hours: int,
     should_continue: Callable[[], bool] | None = None,
+    newest_only: bool = False,
 ) -> dict[str, int]:
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
@@ -213,11 +214,16 @@ def _prefetch_one_job(
         )
         >= cutoff
     ]
-    totals["cataloged"] = len(frames)
+    candidate_frames = (
+        frames[-max(1, int(newest_count)) :] if newest_only else frames
+    )
+    totals["cataloged"] = len(candidate_frames)
     missing = [
-        frame for frame in frames if not _frame_sources_cached(sat_key, sector_key, frame)
+        frame
+        for frame in candidate_frames
+        if not _frame_sources_cached(sat_key, sector_key, frame)
     ]
-    totals["cached"] = len(frames) - len(missing)
+    totals["cached"] = len(candidate_frames) - len(missing)
 
     # Newest missing frames first (current + 1), then the oldest missing frame(s)
     # so the animation window backfills gradually across runs.
@@ -225,7 +231,7 @@ def _prefetch_one_job(
     backfill = [f for f in missing[: max(0, int(backfill_count))] if f not in newest]
     to_download = newest + backfill
     logging.getLogger(__name__).warning(
-        f"[{worker_name}] {sat_key}/{sector_key}: cataloged={len(frames)} "
+        f"[{worker_name}] {sat_key}/{sector_key}: cataloged={len(candidate_frames)} "
         f"already_cached={totals['cached']} missing={len(missing)} "
         f"downloading={[f.frame_key for f in to_download]}"
     )
@@ -279,6 +285,7 @@ def run_satellite_v2_meteosat_prefetch_worker(
     keep_hours: int | None = None,
     worker_name: str = _WORKER_NAME,
     should_continue: Callable[[], bool] | None = None,
+    newest_only: bool = False,
 ) -> dict[str, int]:
     fresh_window = int(SATELLITE_V2_METEOSAT_PREFETCH_FRESH_WINDOW_SECONDS)
     if not force and is_cache_fresh(worker_name, fresh_window):
@@ -327,6 +334,7 @@ def run_satellite_v2_meteosat_prefetch_worker(
                     int(SATELLITE_V2_METEOSAT_PREFETCH_MAX_FRAMES),
                     keep_value,
                     should_continue,
+                    newest_only,
                 )
             except Exception as exc:
                 totals["errors"] += 1

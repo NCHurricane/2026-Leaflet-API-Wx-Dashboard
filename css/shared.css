@@ -62,4 +62,5 @@ header h1:hover {
     display: block;
     width: min(560px, calc(100vw - 32px));
     height: auto;
+    margin: 3rem 0 0;
 }

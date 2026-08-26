@@ -234,6 +234,48 @@ def test_selected_meteosat_product_activates_channel_specific_tile_job(monkeypat
     assert kwargs["run_immediately"] is False
 
 
+def test_selected_meteosat_rss_composite_activates_rss_tuned_tile_job(monkeypatch):
+    coordinator = Mock()
+    coordinator.activate_presence_job.return_value = Mock(
+        status="scheduled", retry_after_seconds=5.0
+    )
+    monkeypatch.setattr(
+        "app_core.refresh_coordinator.get_refresh_coordinator", lambda: coordinator
+    )
+
+    payload = service._activate_satellite_accelerator(
+        "meteosat11", "RSS", "Dust"
+    )
+
+    assert payload["accelerator"] == "meteosat-rss-tiles"
+    kwargs = coordinator.activate_presence_job.call_args.kwargs
+    assert kwargs["key"] == (
+        "satellite",
+        "meteosat-rss-tiles",
+        "meteosat11",
+        "RSS",
+        "Dust",
+    )
+    assert kwargs["run_immediately"] is False
+
+
+def test_meteosat_rss_channels_keep_the_existing_deep_rapid_tail(monkeypatch):
+    coordinator = Mock()
+    coordinator.activate_presence_job.return_value = Mock(
+        status="scheduled", retry_after_seconds=5.0
+    )
+    monkeypatch.setattr(
+        "app_core.refresh_coordinator.get_refresh_coordinator", lambda: coordinator
+    )
+
+    payload = service._activate_satellite_accelerator(
+        "meteosat11", "RSS", "Channel13"
+    )
+
+    assert payload["accelerator"] == "rapid-tiles"
+    assert coordinator.activate_presence_job.call_args.kwargs["key"][1] == "rapid-tiles"
+
+
 def test_selected_meteosat_accelerator_chains_source_and_memory_guarded_tiles(
     monkeypatch,
 ):
@@ -277,6 +319,42 @@ def test_selected_meteosat_accelerator_chains_source_and_memory_guarded_tiles(
     assert result["estimated_memory_bytes"] == 200
     assert slot.call_args.args == (200,)
     assert wait_kwargs[-1]["timeout_seconds"] == 0.0
+
+
+def test_selected_meteosat_rss_accelerator_uses_bounded_source_and_tile_tail(
+    monkeypatch,
+):
+    source_calls = []
+    tile_calls = []
+    slot = Mock(side_effect=lambda *_args, **_kwargs: nullcontext(True))
+    monkeypatch.setattr(service, "_wait_for_live_tile_idle", lambda **_kwargs: True)
+    monkeypatch.setattr(
+        "satellite_v2.meteosat_prefetch_worker.run_satellite_v2_meteosat_prefetch_worker",
+        lambda **kwargs: source_calls.append(kwargs) or {"downloaded": 2},
+    )
+    monkeypatch.setattr(
+        "satellite_v2.meteosat_tile_worker.run_selected_meteosat_tile_warmer",
+        lambda **kwargs: tile_calls.append(kwargs)
+        or {"frames": 4, "rendered": 8, "cancelled": 0},
+    )
+    monkeypatch.setattr("app_core.render_budget.satellite_render_slot", slot)
+    monkeypatch.setattr(service, "estimate_source_grid_bytes", lambda *_args, **_kwargs: 100)
+
+    result = service._run_selected_satellite_accelerator(
+        "meteosat11", "RSS", "Dust", "meteosat-rss-tiles"
+    )
+
+    assert source_calls[0]["jobs"] == (("meteosat11", "RSS"),)
+    assert source_calls[0]["frames"] == 2
+    assert source_calls[0]["backfill"] == 0
+    assert source_calls[0]["newest_only"] is True
+    assert source_calls[0]["hours"] == 2
+    assert source_calls[0]["keep_hours"] == 3
+    assert tile_calls[0]["channel"] == "Dust"
+    assert result["source_downloaded"] == 2
+    assert result["tile_frames"] == 4
+    assert result["tile_rendered"] == 8
+    assert result["estimated_memory_bytes"] == 200
 
 
 def test_meso_accelerator_uses_initial_view_zooms():
@@ -482,7 +560,7 @@ def test_satellite_page_surfaces_cached_provider_capability_state():
     assert "selection/release" in (
         root / "frontend/pages/satellite/satellite-engine.js"
     ).read_text("utf-8")
-    assert "satellite-page.js?v=20260824b" in page
+    assert "satellite-page.js?v=20260826c" in page
 
 
 def test_satellite_png_response_does_not_require_deferred_file_thread(

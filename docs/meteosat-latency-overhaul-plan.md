@@ -345,7 +345,7 @@ Turn the cold path into a cache hit for the frames a user is actually looking at
 
 ### Phase 4 implementation status — 2026-08-24
 
-Phase 4 is implemented in the current uncommitted tree. Channel-specific presence jobs
+Phase 4's core implementation landed in `68aeb72`. Channel-specific presence jobs
 for Meteosat-9/12 chain the existing source prefetch into selected-product warming for the
 newest two frames at z1–z6. Bounds use each platform's `lon_0`; the default two-process
 pool is reused across runs and is shut down with the application. The parent schedules
@@ -365,11 +365,89 @@ markers with no errors. Warmed-versus-live center tiles stayed inside the accept
 canvas/low-zoom envelope: Channel13 max channel delta 2 and NighttimeMicrophysics max 6.
 All temporary probe output was removed.
 
-The focused Phase 4 gate passes 40 tests. The full gate passes 647 Python tests plus 42
-subtests, all 48 Node tests, repo-wide Ruff/compile, and diff checks. A restarted owner
-smoke remains required before Phase 4 is accepted or committed: confirm M9/M12 warming
-and cache hits, M9 eastward disk coverage, live Radar responsiveness, product/navigation
-cancellation, retained no-flash transitions, and clean consoles. Phase 5 has not started.
+The original focused Phase 4 gate passed 40 tests. The full gate passed 647 Python tests
+plus 42 subtests, all 48 Node tests, repo-wide Ruff/compile, and diff checks. The first
+restarted owner smoke on 2026-08-25 exposed a retained-layer ownership race: a catalog
+refresh advanced the foreground generation while a ready Leaflet layer kept its prior
+tile URL, so later pan/zoom misses returned transparent `CANCELLED` responses. The
+uncommitted correction advances the retained layer URL without redrawing its mounted
+tiles and bumps the Satellite/Workspace module entry versions. The correction gate passes
+647 Python tests plus 42 subtests and all 49 Node tests; a controlled browser refresh then
+requested z5 at the new generation, loaded 256x256 tiles, kept `/health` responsive, and
+reported no console warnings/errors. The next owner run confirmed initial M12 loading and no-flash
+scrubbing, but the server then disappeared without a Python traceback. Windows Event
+Viewer recorded two `python.exe` access violations, at 20:45 and 21:10 on 2026-08-25,
+inside `netcdf-655e86525df3b639088152b956fd8f75.dll` (`0xc0000005`). The final alert
+poll was therefore a timing coincidence, not evidence of an alert-worker deadlock.
+Different destination zooms use distinct FCI raster-cache keys and could enter the native
+NetCDF-C/HDF5 reader concurrently. The current uncommitted correction serializes only
+FCI native file access process-wide; NumPy calibration, canvas rendering, and other
+Satellite families retain their existing concurrency. The focused FCI gate passes five
+tests, including a two-thread/different-grid-cap ownership regression. A real-source
+probe loaded all 40 crash-frame chunks through simultaneous 2048/4096 callers in 5.0 s.
+An isolated server then returned 200 for simultaneous cold z6/z7 M12 composite requests;
+30 overlapping health probes had zero failures. A second run overlapped alert refresh
+with two more cold M12 requests: all returned 200, 80 health probes over 40 seconds had
+zero failures, and Windows recorded no new native crash. The next restarted owner run
+on 2026-08-26 kept the server alive: z4-z7 tile generations and alert requests continued
+returning 200, `/health` remained responsive, and Windows recorded no new NetCDF crash.
+The logged `/workspace?alert=...` request proves that the notification was activated;
+notification presentation alone does not navigate. Rapid scrubbing instead exposed two
+frontend ownership races. The prior retained-layer URL correction suppressed redraw for
+incomplete reused layers as well as completed layers, allowing superseded requests to
+finish as transparent `CANCELLED` PNGs that Leaflet still counted as loaded. An older
+pending swap could also detach the same layer after a newer scrub request reclaimed it.
+The current correction preserves completed retained DOM without redraw, restarts an
+incomplete layer at the new foreground generation, and lets only the current pending
+owner detach an abandoned layer. Two deterministic animator regressions failed before
+the correction and pass after it. A cache-busted controlled browser repeated
+three-frame z7 scrubbing; all retained layers stayed attached, exactly one stayed at
+opacity 1, its tiles were 256x256 PNGs, `/health` returned 200, and the console stayed
+clean. The complete gate passes 648 Python tests plus 42 subtests, all 51 Node tests,
+repo-wide Ruff/compile, and diff checks.
+The next owner re-smoke on 2026-08-26 confirmed that rapid scrubbing and stopping
+on an older M12 frame no longer locks the dashboard. It also exposed a catalog-window
+defect: at 21:51Z the one-hour request returned only the 21:00Z and 21:15Z frames,
+while a three-hour request showed the intact 15-minute sequence from 19:00Z through
+21:15Z. The cached-catalog path measured the requested hour from wall-clock time, so
+the provider's 36-minute publication delay consumed most of the animation window.
+The current uncommitted correction anchors fresh and cached lookback filtering to the
+newest available frame, capped at the current time. A regression covers a 40-minute
+delayed feed and passes for both catalog paths. Subsequent owner smoke loaded M12
+Channel09, Channel02, and Dust quickly; each showed five frames, rapid scrubbing stayed
+responsive, and an alert notification arrived without terminal errors, console errors,
+blank tiles, or a lockup. This clears the alert-overlap check, although the catalog change
+still needs an explicitly restarted-server verification.
+
+The current uncommitted tree also extends the selected-product workflow to Meteosat-11
+RSS without duplicating its existing rapid path. Channel02 and Channel13 retain their
+12-frame z6-z7 rapid tail. Every other selected RSS channel/composite activates a distinct
+`meteosat-rss-tiles` job: source prefetch is limited to the newest two frames in a two-hour
+window with no older backfill, while the reused Meteosat process pool warms the newest four
+frames at z4-z7 over the operational RSS bounds. The job refreshes every 225 seconds, keeps
+three hours of source/tile data, yields to live tiles, honors selection cancellation, and
+uses the shared byte-budget admission. Its bounded plan is 1,276 tiles per frame / 5,104
+for the four-frame tail. Pixels and render versions are unchanged. Five focused regressions
+cover RSS routing, preservation of the Channel13 rapid path, policy/bounds, source-tail
+limits, and memory-guarded chaining. The complete gate now passes 654 Python tests plus
+42 subtests and all 51 Node tests, repo-wide Ruff/compile, and diff checks.
+
+The restarted M11 RSS owner re-smoke passed on 2026-08-26. Channel13 remained on the
+rapid path and completed six frames / 6,581 rendered tiles in 2m12s with zero errors;
+the reported invalid counts were expected off-footprint tiles. Selecting
+NighttimeMicrophysics activated the new RSS source stage, which considered exactly the
+newest two frames, found both cached, downloaded nothing, pruned four stale source and
+four stale tile-frame directories, and completed with zero errors. Multiple current and
+older-frame z5 tile requests returned 200 while alert refreshes overlapped, and the owner
+reported successful scrubbing and zooming with no lockup. The softer appearance when
+zoomed is expected from the native 3712-column SEVIRI VIS/IR grid; RSS improves cadence
+and this workflow improves delivery, but neither increases source spatial detail.
+
+The RSS extension is accepted. The final restarted M12 owner check also passed on
+2026-08-26: the one-hour catalog showed five frames, several FCI products loaded and
+remained responsive, and Windows Event Viewer's Application log contained no new NetCDF
+error or APPCRASH. Together with the prior automated, controlled-browser, runtime, alert-
+overlap, scrub, and RSS evidence, this accepts Phase 4 as a whole. Phase 5 has not started.
 
 ## Phase 5 — EUMETSAT fetch path
 

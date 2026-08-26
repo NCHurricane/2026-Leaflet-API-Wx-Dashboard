@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -174,6 +175,59 @@ def test_fresh_satellite_catalog_is_chronological_with_newest_last(
         "20260725T010000Z",
         "20260725T020000Z",
     ]
+
+
+def test_satellite_catalog_lookback_anchors_to_latest_delayed_frame(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(catalog, "count_frame_tiles", lambda *_args: {})
+    monkeypatch.setattr(catalog, "sample_frame_tiles", lambda *_args: [])
+    monkeypatch.setattr(catalog, "atomic_write_json", lambda *_args: None)
+    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    frames = []
+    for minutes_old in (115, 100, 85, 70, 55, 40):
+        frame_time = now - timedelta(minutes=minutes_old)
+        frame_key = frame_time.strftime("%Y%m%dT%H%M%SZ")
+        frames.append(
+            SimpleNamespace(
+                frame_key=frame_key,
+                timestamp_utc=frame_time.isoformat().replace("+00:00", "Z"),
+                provider="test",
+                source_key=frame_key,
+                source_url=f"test://{frame_key}",
+                source_keys={},
+                source_urls={},
+                file_sizes={},
+            )
+        )
+
+    fresh = catalog.build_catalog(
+        str(tmp_path),
+        "meteosat12",
+        "FullDisk",
+        "NighttimeMicrophysics",
+        hours=1,
+        max_frames=6,
+        list_frames_fn=lambda **_kwargs: frames,
+    )
+    cached = catalog._catalog_for_request(
+        {
+            **fresh,
+            "frames": [
+                {
+                    "frame_key": frame.frame_key,
+                    "timestamp_utc": frame.timestamp_utc,
+                }
+                for frame in frames
+            ],
+        },
+        hours=1,
+        max_frames=6,
+    )
+
+    expected_keys = [frame.frame_key for frame in frames[1:]]
+    assert [frame["frame_key"] for frame in fresh["frames"]] == expected_keys
+    assert [frame["frame_key"] for frame in cached["frames"]] == expected_keys
 
 
 def test_global_timestamp_has_independent_data_state_line() -> None:

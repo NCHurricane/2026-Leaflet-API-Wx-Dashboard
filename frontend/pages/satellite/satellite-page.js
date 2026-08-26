@@ -13,7 +13,7 @@ import {
     formatFrameLabel,
     frameIndexForReload,
 } from './satellite-engine.js?v=20260811a';
-import { createSatelliteAnimator } from './satellite-anim.js?v=20260814c';
+import { createSatelliteAnimator } from './satellite-anim.js?v=20260826c';
 
 const byId = (id) => document.getElementById(id);
 const SELECT_CHAIN_MESSAGE = 'Pick a satellite, sector, and product to load imagery.';

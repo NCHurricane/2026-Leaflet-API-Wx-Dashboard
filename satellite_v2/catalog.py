@@ -76,18 +76,22 @@ def _catalog_for_request(
     except ValueError:
         max_native_zoom = payload.get("max_native_zoom")
     frames = [frame for frame in payload.get("frames", []) if isinstance(frame, dict)]
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    parsed_frames = [
+        (frame_time, frame)
+        for frame in frames
+        if (frame_time := _parse_frame_time(frame)) is not None
+    ]
+    newest_frame_time = max(
+        (frame_time for frame_time, _frame in parsed_frames),
+        default=None,
+    )
+    window_end = min(newest_frame_time, datetime.now(timezone.utc)) if newest_frame_time else None
+    cutoff = window_end - timedelta(hours=hours) if window_end else None
     requested_frames = [
         frame
-        for frame in frames
-        if (frame_time := _parse_frame_time(frame)) is not None and frame_time >= cutoff
-    ]
-    requested_frames.sort(
-        key=lambda frame: str(
-            frame.get("timestamp_utc") or frame.get("frame_key") or ""
-        )
-    )
-    requested_frames = requested_frames[-max_frames:]
+        for frame_time, frame in sorted(parsed_frames, key=lambda item: item[0])
+        if cutoff is not None and frame_time >= cutoff
+    ][-max_frames:]
     payload["frames"] = requested_frames
     payload["frame_count"] = len(requested_frames)
     payload["hours"] = hours
@@ -208,7 +212,7 @@ def build_catalog(
     payload["frame_count"] = len(catalog_frames)
     payload["configured_zooms"] = list(zooms)
     atomic_write_json(catalog_path(cache_root, sat_key, sector_key, channel), payload)
-    return payload
+    return _catalog_for_request(payload, hours_value, max_frames_value)
 
 
 def get_catalog(

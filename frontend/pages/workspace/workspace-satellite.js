@@ -1,4 +1,4 @@
-import { createSatelliteAnimator } from '../satellite/satellite-anim.js?v=20260814c';
+import { createSatelliteAnimator } from '../satellite/satellite-anim.js?v=20260826c';
 import {
     SAT_DISPLAY_NAMES,
     createSatelliteEngine,

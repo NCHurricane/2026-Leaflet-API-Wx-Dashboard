@@ -1,4 +1,4 @@
-"""Presence-driven selected-product tile warming for Meteosat Full Disk."""
+"""Presence-driven selected-product tile warming for Meteosat Full Disk/RSS."""
 
 from __future__ import annotations
 
@@ -14,9 +14,13 @@ from config.satellite_v2_config import (
     SATELLITE_V2_METEOSAT_DISK_LONGITUDE_RADIUS_DEGREES,
     SATELLITE_V2_METEOSAT_PREFETCH_HOURS,
     SATELLITE_V2_METEOSAT_PREFETCH_MAX_FRAMES,
+    SATELLITE_V2_METEOSAT_RSS_PREFETCH_HOURS,
+    SATELLITE_V2_METEOSAT_RSS_TILE_WARM_FRAMES,
+    SATELLITE_V2_METEOSAT_RSS_TILE_WARM_ZOOMS,
     SATELLITE_V2_METEOSAT_TILE_WARM_FRAMES,
     SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS,
     SATELLITE_V2_METEOSAT_TILE_WARM_ZOOMS,
+    SATELLITE_V2_RAPID_WORKER_BOUNDS,
     normalize_channel,
     normalize_sat_id,
     normalize_sector,
@@ -44,6 +48,31 @@ def meteosat_disk_bounds(sat_id: str) -> dict[str, float]:
         "east": min(180.0, longitude + radius),
         "north": latitude,
     }
+
+
+def _tile_warm_policy(
+    sat_id: str, sector: str
+) -> tuple[int, tuple[int, ...], int, dict[str, float]] | None:
+    sat_key = normalize_sat_id(sat_id)
+    sector_key = normalize_sector(sector)
+    if sat_key in {"meteosat9", "meteosat12"} and sector_key == "FULLDISK":
+        return (
+            int(SATELLITE_V2_METEOSAT_TILE_WARM_FRAMES),
+            tuple(int(zoom) for zoom in SATELLITE_V2_METEOSAT_TILE_WARM_ZOOMS),
+            int(SATELLITE_V2_METEOSAT_PREFETCH_HOURS),
+            meteosat_disk_bounds(sat_key),
+        )
+    if sat_key == "meteosat11" and sector_key == "RSS":
+        return (
+            int(SATELLITE_V2_METEOSAT_RSS_TILE_WARM_FRAMES),
+            tuple(int(zoom) for zoom in SATELLITE_V2_METEOSAT_RSS_TILE_WARM_ZOOMS),
+            int(SATELLITE_V2_METEOSAT_RSS_PREFETCH_HOURS),
+            {
+                key: float(value)
+                for key, value in SATELLITE_V2_RAPID_WORKER_BOUNDS["RSS"].items()
+            },
+        )
+    return None
 
 
 def _get_tile_pool() -> ProcessPoolExecutor | None:
@@ -78,7 +107,8 @@ def run_selected_meteosat_tile_warmer(
     sat_key = normalize_sat_id(sat_id)
     sector_key = normalize_sector(sector)
     channel_key = normalize_channel(channel)
-    if sat_key not in {"meteosat9", "meteosat12"} or sector_key != "FULLDISK":
+    policy = _tile_warm_policy(sat_key, sector_key)
+    if policy is None:
         return {
             "cataloged": 0,
             "frames": 0,
@@ -98,19 +128,18 @@ def run_selected_meteosat_tile_warmer(
             "cancelled": 1,
         }
 
+    frames_to_warm, zooms, catalog_hours, bounds = policy
     started = time.perf_counter()
     payload = build_catalog(
         cache_root=_CACHE_ROOT,
         sat_id=sat_key,
         sector=sector_key,
         channel_key=channel_key,
-        hours=int(SATELLITE_V2_METEOSAT_PREFETCH_HOURS),
+        hours=catalog_hours,
         max_frames=int(SATELLITE_V2_METEOSAT_PREFETCH_MAX_FRAMES),
     )
     frames = list(payload.get("frames") or [])
-    newest = list(
-        reversed(frames[-max(1, int(SATELLITE_V2_METEOSAT_TILE_WARM_FRAMES)) :])
-    )
+    newest = list(reversed(frames[-max(1, frames_to_warm) :]))
     totals = {
         "cataloged": len(frames),
         "frames": 0,
@@ -119,7 +148,6 @@ def run_selected_meteosat_tile_warmer(
         "errors": 0,
         "cancelled": 0,
     }
-    bounds = meteosat_disk_bounds(sat_key)
     pool = _get_tile_pool()
 
     _LOGGER.info(
@@ -129,7 +157,7 @@ def run_selected_meteosat_tile_warmer(
         sector_key,
         channel_key,
         len(newest),
-        SATELLITE_V2_METEOSAT_TILE_WARM_ZOOMS,
+        zooms,
         SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS,
         bounds,
     )
@@ -147,7 +175,7 @@ def run_selected_meteosat_tile_warmer(
             sector=sector_key,
             channel_key=channel_key,
             frame=frame,
-            zooms=SATELLITE_V2_METEOSAT_TILE_WARM_ZOOMS,
+            zooms=zooms,
             render_workers=int(SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS),
             tile_bounds=bounds,
             pool=pool,
@@ -181,7 +209,7 @@ def run_selected_meteosat_tile_warmer(
             sat_id=sat_key,
             sector=sector_key,
             channel_key=channel_key,
-            hours=int(SATELLITE_V2_METEOSAT_PREFETCH_HOURS),
+            hours=catalog_hours,
             max_frames=int(SATELLITE_V2_METEOSAT_PREFETCH_MAX_FRAMES),
         )
     _LOGGER.info(

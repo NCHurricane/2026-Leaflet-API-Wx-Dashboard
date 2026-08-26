@@ -10,6 +10,7 @@ SourceRaster-compatible geostationary grid used by the shared tile renderer
 from __future__ import annotations
 
 import math
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -23,6 +24,14 @@ from config.satellite_v2_config import (
     SATELLITE_V2_FCI_MAX_GRID,
     fci_channel_for_source_channel,
 )
+
+
+# The Windows NetCDF-C/HDF5 build used by netCDF4 can access-violate when two
+# server threads open/read FCI chunks concurrently. Different destination zooms
+# intentionally use distinct raster-cache keys, so the cache's per-key locks do
+# not serialize those reads. Keep native FCI I/O process-wide single-owner;
+# NumPy calibration and raster rendering continue after the source is loaded.
+_FCI_NETCDF_ACCESS_LOCK = threading.RLock()
 
 
 @dataclass(frozen=True)
@@ -126,6 +135,13 @@ def load_fci_rasters(
     requested = [str(channel) for channel in channels]
     if not requested:
         raise ValueError("No FCI channels were requested.")
+    with _FCI_NETCDF_ACCESS_LOCK:
+        return _load_fci_rasters_serialized(paths, requested, max_grid)
+
+
+def _load_fci_rasters_serialized(
+    paths: Sequence[Path], requested: Sequence[str], max_grid: int
+) -> dict[str, FciRaster]:
     states = {
         channel: _FciChannelState(_normalize_fci_channel(channel))
         for channel in requested

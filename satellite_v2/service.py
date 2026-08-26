@@ -24,6 +24,12 @@ from config.satellite_v2_config import (
     SATELLITE_V2_LEGEND_TICK_COUNT,
     SATELLITE_V2_LIVE_TILE_RENDER_WORKERS,
     SATELLITE_V2_METEOSAT_PREFETCH_JOBS,
+    SATELLITE_V2_METEOSAT_RSS_PREFETCH_FRAMES,
+    SATELLITE_V2_METEOSAT_RSS_PREFETCH_HOURS,
+    SATELLITE_V2_METEOSAT_RSS_PREFETCH_KEEP_HOURS,
+    SATELLITE_V2_METEOSAT_RSS_TILE_WARM_FRESH_WINDOW_SECONDS,
+    SATELLITE_V2_METEOSAT_RSS_TILE_WARM_JOBS,
+    SATELLITE_V2_METEOSAT_RSS_TILE_WARM_ZOOMS,
     SATELLITE_V2_METEOSAT_TILE_WARM_FRESH_WINDOW_SECONDS,
     SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS,
     SATELLITE_V2_METEOSAT_TILE_WARM_ZOOMS,
@@ -412,7 +418,7 @@ def _run_selected_satellite_accelerator(
 ) -> dict[str, int]:
     if not _wait_for_live_tile_idle(should_continue=should_continue):
         return {"cancelled": 1}
-    if accelerator == "meteosat-tiles":
+    if accelerator in {"meteosat-tiles", "meteosat-rss-tiles"}:
         from satellite_v2.meteosat_prefetch_worker import (
             run_satellite_v2_meteosat_prefetch_worker,
         )
@@ -420,11 +426,24 @@ def _run_selected_satellite_accelerator(
             run_selected_meteosat_tile_warmer,
         )
 
+        rss_tuned = accelerator == "meteosat-rss-tiles"
+        source_options = (
+            {
+                "frames": int(SATELLITE_V2_METEOSAT_RSS_PREFETCH_FRAMES),
+                "backfill": 0,
+                "newest_only": True,
+                "hours": int(SATELLITE_V2_METEOSAT_RSS_PREFETCH_HOURS),
+                "keep_hours": int(SATELLITE_V2_METEOSAT_RSS_PREFETCH_KEEP_HOURS),
+            }
+            if rss_tuned
+            else {}
+        )
         source_stats = run_satellite_v2_meteosat_prefetch_worker(
             force=True,
             jobs=((sat_id, sector),),
             worker_name=f"app-meteosat-{sat_id}-{sector}".lower(),
             should_continue=should_continue,
+            **source_options,
         )
         combined = {
             f"source_{key}": int(value or 0) for key, value in source_stats.items()
@@ -438,10 +457,12 @@ def _run_selected_satellite_accelerator(
 
         from app_core.render_budget import satellite_render_slot
 
-        destination_zoom = max(
-            (int(value) for value in SATELLITE_V2_METEOSAT_TILE_WARM_ZOOMS),
-            default=6,
+        configured_zooms = (
+            SATELLITE_V2_METEOSAT_RSS_TILE_WARM_ZOOMS
+            if rss_tuned
+            else SATELLITE_V2_METEOSAT_TILE_WARM_ZOOMS
         )
+        destination_zoom = max((int(value) for value in configured_zooms), default=6)
         estimated_bytes = estimate_source_grid_bytes(
             sat_id,
             channel,
@@ -529,6 +550,18 @@ def _activate_satellite_accelerator(
         accelerator = "rapid-tiles"
         interval_seconds = float(SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS)
         key = ("satellite", "rapid-tiles", sat_key, sector_key, channel_key)
+    elif (sat_key, sector_key) in SATELLITE_V2_METEOSAT_RSS_TILE_WARM_JOBS:
+        accelerator = "meteosat-rss-tiles"
+        interval_seconds = float(
+            SATELLITE_V2_METEOSAT_RSS_TILE_WARM_FRESH_WINDOW_SECONDS
+        )
+        key = (
+            "satellite",
+            "meteosat-rss-tiles",
+            sat_key,
+            sector_key,
+            channel_key,
+        )
     else:
         return {"accelerator": "live-on-demand", "accelerator_status": "not_needed"}
 

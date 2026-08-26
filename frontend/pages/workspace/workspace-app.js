@@ -13,7 +13,7 @@ import { buildSpcOutlookDetailHtml, buildSpcTextDetailHtml, wireSpcDetailContent
 import { CIG_OVERLAY_BY_HAZARD, createSpcEngine } from '../spc/spc-engine.js?v=20260801a';
 import { createSpcRenderer } from '../spc/spc-render.js?v=20260803a';
 import { createWorkspaceDetailCarousel } from './workspace-detail-carousel.js?v=20260801a';
-import { createWorkspaceSatellite } from './workspace-satellite.js?v=20260814b';
+import { createWorkspaceSatellite } from './workspace-satellite.js?v=20260826c';
 import { createWorkspaceRtma } from './workspace-rtma.js?v=20260803b';
 import { createWorkspaceMrms } from './workspace-mrms.js?v=20260804b';
 import { createWorkspaceWater } from './workspace-water.js?v=20260804c';

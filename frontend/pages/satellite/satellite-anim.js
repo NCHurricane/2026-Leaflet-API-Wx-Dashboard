@@ -259,11 +259,15 @@ export function createSatelliteAnimator({
             layerPool.set(key, layer);
         }
         const layer = layerPool.get(key);
-        if (Number(layer?._satFrameGeneration) !== Number(frameGeneration)
-            && !layerReadyForSwap(layer, map.getZoom())) {
+        if (Number(layer?._satFrameGeneration) !== Number(frameGeneration)) {
+            const preserveReadyTiles = layerReadyForSwap(layer, map.getZoom());
             layer._satFrameGeneration = frameGeneration;
             layer._satForegroundFrameKey = frameKey;
-            layer.setUrl(layerTileTemplate(layer, frameKey), false);
+            // Keep a completed retained frame's tile DOM intact, but restart
+            // an incomplete layer at the new generation. Otherwise its old
+            // in-flight requests can be cancelled and promoted as transparent
+            // loaded tiles when rapid scrubbing revisits the same frame.
+            layer.setUrl(layerTileTemplate(layer, frameKey), preserveReadyTiles);
         }
         return layer;
     }
@@ -343,10 +347,7 @@ export function createSatelliteAnimator({
         newLayer.setOpacity(0);
         await new Promise((resolve) => requestAnimationFrame(resolve));
         await new Promise((resolve) => requestAnimationFrame(resolve));
-        if (!canContinue()) {
-            if (map.hasLayer(newLayer)) map.removeLayer(newLayer);
-            return false;
-        }
+        if (!canContinue()) return false;
         const transitionElements = (overlay) => {
             const elements = [];
             const root = overlay._container || null;
@@ -495,7 +496,8 @@ export function createSatelliteAnimator({
                 applyFrame();
                 return true;
             }
-            if (map.hasLayer(nextLayer)) map.removeLayer(nextLayer);
+            if (swapToken === pendingSwapToken && activeLayer !== nextLayer
+                && map.hasLayer(nextLayer)) map.removeLayer(nextLayer);
             return false;
         }
 
@@ -505,7 +507,11 @@ export function createSatelliteAnimator({
                 nextLayer,
                 () => swapToken === pendingSwapToken && canApplyFrame(seq),
             );
-            if (!applied) return false;
+            if (!applied) {
+                if (swapToken === pendingSwapToken && activeLayer !== nextLayer
+                    && map.hasLayer(nextLayer)) map.removeLayer(nextLayer);
+                return false;
+            }
         } else {
             nextLayer.setOpacity(opacity);
         }
