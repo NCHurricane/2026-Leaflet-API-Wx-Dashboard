@@ -217,6 +217,22 @@ Current boundary:
   Windows Event Viewer's Application log contained no new NetCDF error or APPCRASH.
   Together with the prior automated, controlled-browser, runtime, alert-overlap, scrub,
   and RSS evidence, Phase 4 is accepted as a whole. Phase 5 has not started.
+- A pre-Phase-5 basemap provider correction is implemented in the current uncommitted
+  tree. CARTO and USGS sources were removed from the shared map catalog and all canonical
+  selectors now expose Esri World Dark Gray Base, World Light Gray Base, USA Topo Maps,
+  and World Imagery. No separate reference/label overlay is stacked; World Imagery is the
+  label-free imagery choice, USA Topo retains source-baked cartographic labels, and the
+  gray bases retain Esri's minimal built-in reference detail. Dark applies a layer-scoped
+  dark-navy filter to the keyless Esri raster without changing data tiles or the other
+  basemaps. Shared boundary lines are softer and render through one Leaflet canvas. On
+  CONUS-default pages, states remain on, countries show below displayed z7, and counties
+  start at displayed z8. On Satellite and Tropical, countries retain their prior always-on
+  default, states start at displayed z5, and counties start at displayed z8. Hidden boundary
+  datasets are not fetched solely to turn them off. The full gate passes 655 Python tests
+  plus 42 subtests and all 54 Node tests. Controlled Workspace rendering loaded 256-pixel
+  tiles from all four services with no `API KEY REQUIRED` text; later Workspace, Tropical,
+  and Satellite checks confirmed the family-specific z5/z7/z8 transitions, one-canvas
+  boundary rendering, and no browser warnings/errors. Owner cross-page smoke is pending.
 - The bounded shared-branding update is implemented in the current uncommitted
   tree. `frontend/core/branding.js` owns the accessible product-header logo,
   `map-core.js` owns its decorative non-interactive map duplicate, and the

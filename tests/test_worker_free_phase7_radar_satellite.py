@@ -560,7 +560,7 @@ def test_satellite_page_surfaces_cached_provider_capability_state():
     assert "selection/release" in (
         root / "frontend/pages/satellite/satellite-engine.js"
     ).read_text("utf-8")
-    assert "satellite-page.js?v=20260826c" in page
+    assert "satellite-page.js?v=20260826i" in page
 
 
 def test_satellite_png_response_does_not_require_deferred_file_thread(

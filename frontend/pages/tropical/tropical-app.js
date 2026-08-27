@@ -1,6 +1,6 @@
 import { apiUrl } from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
-import { createMapCore } from '../../core/map-core.js?v=20260826a';
+import { createMapCore } from '../../core/map-core.js?v=20260826g';
 import { renderProductNav } from '../../core/nav.js?v=20260826a';
 import { startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260824a';
 import { loadDefaultSettings } from '../../core/settings.js';
@@ -11,7 +11,9 @@ const byId = (id) => document.getElementById(id);
 const L = window.L;
 const _tropicalEngineFactory = window.NCHTropicalEngine;
 const _tropicalPageController = window.NCHTropicalPage;
-const mapCore = createMapCore(byId('weather-map'), { region: 'WORLD', basemap: 'Dark' });
+const mapCore = createMapCore(byId('weather-map'), {
+    region: 'WORLD', basemap: 'Dark', boundaryMode: 'world',
+});
 const map = mapCore.map;
 const legend = createLegendHost(byId('weather-colorbar'), { align: 'left' });
 const status = createStatusReporter({

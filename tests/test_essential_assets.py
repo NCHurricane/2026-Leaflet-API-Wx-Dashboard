@@ -165,14 +165,69 @@ def test_canonical_pages_use_shared_chuck_copeland_branding():
         page = page_path.read_text(encoding="utf-8")
         assert '<div class="core-brand"></div>' in page
         assert ">NCHURRICANE<" not in page
-        assert "/frontend/core/core.css?v=20260826b" in page
+        assert "/frontend/core/core.css?v=20260826e" in page
 
     for script_path in (ROOT / "frontend/pages").glob("*/*.js"):
         script = script_path.read_text(encoding="utf-8")
         if "../../core/map-core.js" in script:
-            assert "../../core/map-core.js?v=20260826a" in script
+            assert "../../core/map-core.js?v=20260826g" in script
         if "../../core/nav.js" in script:
             assert "../../core/nav.js?v=20260826a" in script
+
+
+def test_canonical_map_pages_use_approved_esri_basemaps():
+    map_core = (ROOT / "frontend/core/map-core.js").read_text(encoding="utf-8")
+    approved_services = (
+        "Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        "Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        "USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}",
+        "World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    )
+    for service in approved_services:
+        assert service in map_core
+    assert "basemaps.cartocdn.com" not in map_core
+    assert "basemap.nationalmap.gov" not in map_core
+    assert "className: 'core-basemap-dark-tiles'" in map_core
+    assert "const boundaryRenderer = leaflet.canvas" in map_core
+    assert "renderer: boundaryRenderer" in map_core
+
+    core_css = (ROOT / "frontend/core/core.css").read_text(encoding="utf-8")
+    assert ".leaflet-layer.core-basemap-dark-tiles img.leaflet-tile" in core_css
+    assert "brightness(0.6) contrast(1.05)" in core_css
+    assert "drop-shadow(0 0 0.6px rgba(2, 6, 23, 0.72))" in core_css
+
+    conus_scripts = (
+        "alerts/alerts-page.js",
+        "drought/drought-page.js",
+        "mrms/mrms-page.js",
+        "radar/radar-page.js",
+        "rtma/rtma-page.js",
+        "spc/spc-page.js",
+        "surface/surface-page.js",
+        "water/water-app.js",
+        "workspace/workspace-app.js",
+        "wpc/wpc-page.js",
+    )
+    for relative_path in conus_scripts:
+        script = (ROOT / "frontend/pages" / relative_path).read_text(encoding="utf-8")
+        assert "boundaryMode: 'conus'" in script
+
+    for relative_path in ("satellite/satellite-page.js", "tropical/tropical-app.js"):
+        script = (ROOT / "frontend/pages" / relative_path).read_text(encoding="utf-8")
+        assert "boundaryMode: 'world'" in script
+
+    for page_path in CANONICAL_PAGES[1:]:
+        page = page_path.read_text(encoding="utf-8")
+        select = re.search(
+            r'<select id="[^"]+-basemap">(.*?)</select>', page, re.DOTALL
+        )
+        assert select, page_path.relative_to(ROOT)
+        assert re.findall(r"<option>([^<]+)</option>", select.group(1)) == [
+            "Dark",
+            "Light",
+            "USA Topo",
+            "Satellite",
+        ]
 
 
 def test_split_page_css_excludes_unreachable_monolith_blocks():

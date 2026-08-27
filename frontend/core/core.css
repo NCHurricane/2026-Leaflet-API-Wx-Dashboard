@@ -315,6 +315,13 @@ button:hover { border-color: var(--core-accent); }
     height: calc(256px + var(--core-tile-overlap, 1px)) !important;
     mix-blend-mode: normal;
 }
+
+/* The keyless Esri dark-gray raster is intentionally neutral and fairly light.
+   Tone only that basemap toward the dashboard's near-black navy; data tiles and
+   the Light, Topo, and Satellite basemaps retain their source colors. */
+.leaflet-container .leaflet-layer.core-basemap-dark-tiles img.leaflet-tile {
+    filter: brightness(0.6) contrast(1.08) sepia(0.9) saturate(2.2) hue-rotate(175deg);
+}
 .core-map-legend {
     position: absolute;
     z-index: 640;
@@ -483,8 +490,7 @@ button:hover { border-color: var(--core-accent); }
     text-align: center;
 }
 .leaflet-boundary-lines-pane {
-    filter: drop-shadow(0 0 1px rgba(2, 6, 23, 0.95))
-        drop-shadow(0 0 1px rgba(2, 6, 23, 0.6));
+    filter: drop-shadow(0 0 0.6px rgba(2, 6, 23, 0.72));
 }
 
 .core-segmented {

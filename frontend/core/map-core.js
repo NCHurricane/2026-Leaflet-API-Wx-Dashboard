@@ -53,14 +53,31 @@ const REGION_BOUNDS = Object.freeze({
     WY: [-111.4, -103.7, 40.6, 45.4],
 });
 
+const ESRI_GRAY_ATTRIBUTION =
+    'Tiles © Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS user community';
+
 const BASEMAPS = Object.freeze({
-    Hydro: ['https://basemap.nationalmap.gov/arcgis/rest/services/USGSHydroCached/MapServer/tile/{z}/{y}/{x}', 'Tiles © Esri'],
-    Light: ['http://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png', '© OpenStreetMap © CARTO'],
-    Dark: ['http://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png', '© OpenStreetMap © CARTO'],
-    Voyager: ['https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', '© OpenStreetMap © CARTO'],
-    USGS: ['https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}', 'Tiles courtesy of the U.S. Geological Survey'],
-    USGSTopo: ['https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}', 'Tiles courtesy of the U.S. Geological Survey'],
-    Satellite: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', 'Tiles © Esri'],
+    Dark: {
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        attribution: ESRI_GRAY_ATTRIBUTION,
+        maxNativeZoom: 16,
+        className: 'core-basemap-dark-tiles',
+    },
+    Light: {
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        attribution: ESRI_GRAY_ATTRIBUTION,
+        maxNativeZoom: 16,
+    },
+    'USA Topo': {
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}',
+        attribution: 'Tiles © Esri; © 2013 National Geographic Society, i-cubed',
+        maxNativeZoom: 15,
+    },
+    Satellite: {
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attribution: 'Tiles © Esri, Vantor, Earthstar Geographics, and the GIS User Community',
+        maxNativeZoom: 19,
+    },
 });
 
 const CITY_SOURCES = Object.freeze({
@@ -72,6 +89,22 @@ const CITY_LABEL_HEIGHT_PX = 11;
 const CITY_LABEL_X_PAD = 4;
 const CITY_LABEL_Y_PAD = 2;
 const COUNTRY_WORLD_OFFSETS = Object.freeze([-360, 0, 360]);
+const BOUNDARY_STYLES = Object.freeze({
+    counties: Object.freeze({ color: '#9eb4c7', weight: 0.4, opacity: 0.4, fillOpacity: 0 }),
+    states: Object.freeze({ color: '#c8c6aa', weight: 0.75, opacity: 0.68, fillOpacity: 0 }),
+    countries: Object.freeze({ color: '#b9c8d5', weight: 0.85, opacity: 0.72, fillOpacity: 0 }),
+});
+
+export function getBoundaryVisibilityForZoom(mode, zoom) {
+    const level = Number.isFinite(Number(zoom)) ? Math.round(Number(zoom)) : 0;
+    if (mode === 'conus') {
+        return Object.freeze({ countries: level < 7, states: true, counties: level >= 8 });
+    }
+    if (mode === 'world') {
+        return Object.freeze({ countries: true, states: level >= 5, counties: level >= 8 });
+    }
+    return null;
+}
 
 function cityDistanceRangeKm(source, zoom) {
     if (source === 'world') {
@@ -187,7 +220,10 @@ export function createMapCore(element, options = {}) {
     let citySource = 'off';
     let cityDensity = 0.25;
     let cityRequestSequence = 0;
+    let boundarySyncSequence = 0;
     let activeRegion = String(options.region || 'CONUS').toUpperCase();
+    const boundaryMode = options.boundaryMode === 'conus' || options.boundaryMode === 'world'
+        ? options.boundaryMode : null;
     // The page's home region, fixed at init. The reset (⌂) button returns here no
     // matter what the region dropdown has since been changed to.
     const defaultRegion = activeRegion;
@@ -197,6 +233,7 @@ export function createMapCore(element, options = {}) {
     const boundaryPane = map.createPane('boundary-lines');
     boundaryPane.style.zIndex = '420';
     boundaryPane.style.pointerEvents = 'none';
+    const boundaryRenderer = leaflet.canvas({ pane: 'boundary-lines', padding: 0.5 });
 
     const LogoControl = leaflet.Control.extend({
         options: { position: 'topright' },
@@ -244,6 +281,7 @@ export function createMapCore(element, options = {}) {
         const zoom = Number(map.getZoom()) || 0;
         zoomIndicator.textContent = `z ${Math.round(zoom)}`;
         zoomIndicator.title = `Zoom ${zoom.toFixed(2)}`;
+        requestBoundaryVisibilitySync();
     };
     map.on('zoom zoomend resize', updateZoomIndicator);
 
@@ -269,9 +307,9 @@ export function createMapCore(element, options = {}) {
     function setBasemap(name) {
         const selected = BASEMAPS[name] ? name : 'Dark';
         if (baseLayer) map.removeLayer(baseLayer);
-        const [url, attribution] = BASEMAPS[selected];
+        const { url, attribution, maxNativeZoom, className } = BASEMAPS[selected];
         baseLayer = leaflet.tileLayer(url, {
-            attribution, maxZoom: 19, subdomains: 'abcd', noWrap: false,
+            attribution, maxZoom: 19, maxNativeZoom, className, noWrap: false,
         }).addTo(map);
         return selected;
     }
@@ -306,9 +344,8 @@ export function createMapCore(element, options = {}) {
         if (overlays.has(name)) return;
         overlays.set(name, leaflet.geoJSON({ type: 'FeatureCollection', features }, {
             pane: 'boundary-lines',
-            style: isCounty
-                ? { color: '#a9bfd0', weight: 0.5, opacity: 0.5, fillOpacity: 0 }
-                : { color: '#f4f8fb', weight: 1.1, opacity: 0.9, fillOpacity: 0 },
+            renderer: boundaryRenderer,
+            style: BOUNDARY_STYLES[name],
             interactive: false,
         }));
     }
@@ -322,7 +359,8 @@ export function createMapCore(element, options = {}) {
             const countryLayers = COUNTRY_WORLD_OFFSETS.map((longitudeOffset) => (
                 leaflet.geoJSON(payload, {
                     pane: 'boundary-lines',
-                    style: { color: '#d7e5ef', weight: 1.1, opacity: 0.8, fillOpacity: 0 },
+                    renderer: boundaryRenderer,
+                    style: BOUNDARY_STYLES.countries,
                     coordsToLatLng: ([longitude, latitude, altitude]) => (
                         leaflet.latLng(latitude, longitude + longitudeOffset, altitude)
                     ),
@@ -342,6 +380,7 @@ export function createMapCore(element, options = {}) {
                 weight: latitude % 10 === 0 ? 1 : 0.6,
                 opacity: latitude % 10 === 0 ? 0.48 : 0.28,
                 dashArray: '3, 4',
+                renderer: boundaryRenderer,
                 interactive: false,
             }));
         }
@@ -351,21 +390,62 @@ export function createMapCore(element, options = {}) {
                 weight: longitude % 10 === 0 ? 1 : 0.6,
                 opacity: longitude % 10 === 0 ? 0.48 : 0.28,
                 dashArray: '3, 4',
+                renderer: boundaryRenderer,
                 interactive: false,
             }));
         }
         overlays.set('graticule', group);
     }
 
-    async function setOverlayVisible(name, visible) {
+    async function ensureOverlay(name) {
         if (name === 'states' || name === 'counties') await ensureUsBoundaryLayer(name);
         else if (name === 'countries') await ensureCountries();
         else if (name === 'graticule') ensureGraticule();
         else throw new Error(`Unknown map overlay: ${name}`);
+    }
 
+    function applyOverlayVisibility(name, visible) {
         const layer = overlays.get(name);
         if (visible && layer && !map.hasLayer(layer)) layer.addTo(map);
         if (!visible && layer && map.hasLayer(layer)) map.removeLayer(layer);
+    }
+
+    async function setOverlayVisible(name, visible) {
+        if (visible) await ensureOverlay(name);
+        else if (!['states', 'counties', 'countries', 'graticule'].includes(name)) {
+            throw new Error(`Unknown map overlay: ${name}`);
+        }
+        applyOverlayVisibility(name, visible);
+    }
+
+    function syncBoundaryControls(visibility) {
+        const ownerDocument = element.ownerDocument || document;
+        for (const [name, visible] of Object.entries(visibility)) {
+            const control = ownerDocument.querySelector(`[data-map-overlay="${name}"]`);
+            if (control) control.checked = visible;
+        }
+    }
+
+    async function syncBoundaryVisibility() {
+        const visibility = getBoundaryVisibilityForZoom(boundaryMode, map.getZoom());
+        if (!visibility) return;
+        const sequence = ++boundarySyncSequence;
+        syncBoundaryControls(visibility);
+        await Promise.all(
+            Object.entries(visibility)
+                .filter(([, visible]) => visible)
+                .map(([name]) => ensureOverlay(name)),
+        );
+        if (sequence !== boundarySyncSequence) return;
+        for (const [name, visible] of Object.entries(visibility)) {
+            applyOverlayVisibility(name, visible);
+        }
+    }
+
+    function requestBoundaryVisibilitySync() {
+        void syncBoundaryVisibility().catch((error) => {
+            console.warn('[map-core] Automatic boundary update failed.', error);
+        });
     }
 
     function getCityMinDistanceKm(source = citySource, density = cityDensity) {

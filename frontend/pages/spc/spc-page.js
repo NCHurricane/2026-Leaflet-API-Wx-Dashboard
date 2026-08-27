@@ -1,6 +1,6 @@
 import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
-import { createMapCore, REGION_LABELS } from '../../core/map-core.js?v=20260826a';
+import { createMapCore, REGION_LABELS } from '../../core/map-core.js?v=20260826g';
 import { renderProductNav } from '../../core/nav.js?v=20260826a';
 import { startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260824a';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
@@ -217,6 +217,7 @@ async function initialize() {
     const mapCore = createMapCore(byId('spc-map'), {
         region: regionSelect.value,
         basemap: 'Dark',
+        boundaryMode: 'conus',
     });
     const legend = createLegendHost(byId('spc-legend'), { align: 'left' });
     const status = createStatusReporter({

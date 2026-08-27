@@ -37,9 +37,10 @@ def test_drought_page_includes_shared_map_parity_controls():
 
     assert 'id="global-timestamp"' in page
     assert 'id="drought-age"' in page
-    assert page.index('Dark<option>Dark</option><option>Light</option>') < page.index(
-        '<option>Hydro</option>'
-    )
+    assert '<option>Dark</option>' in page
+    assert '<option>Light</option>' in page
+    assert '<option>USA Topo</option>' in page
+    assert '<option>Satellite</option>' in page
     assert 'data-map-overlay="graticule"' in page
     assert 'data-map-overlay="states"' in page
     assert 'data-map-overlay="countries"' in page
@@ -57,7 +58,12 @@ def test_drought_page_includes_shared_map_parity_controls():
     assert "us-boundaries?layer=state&v=4" in map_core
     assert "us-boundaries?layer=county&v=4" in map_core
     assert "feature?.properties?.layer === layerName" in map_core
-    assert "USGSImageryOnly" in map_core
+    assert "World_Dark_Gray_Base" in map_core
+    assert "World_Light_Gray_Base" in map_core
+    assert "USA_Topo_Maps" in map_core
+    assert "World_Imagery" in map_core
+    assert "basemaps.cartocdn.com" not in map_core
+    assert "basemap.nationalmap.gov" not in map_core
     assert "core-reset-view" in map_core
     assert "core-zoom-indicator" in map_core
     assert "©2026 Chuck Copeland Weather" in map_core
@@ -100,7 +106,7 @@ def test_shared_map_tiles_overlap_and_cache_bust():
     for page_path in (Path(BASE_DIR) / "frontend" / "pages").glob("*/*.html"):
         page = page_path.read_text(encoding="utf-8")
         if "/frontend/core/core.css" in page:
-            assert "/frontend/core/core.css?v=20260826b" in page
+            assert "/frontend/core/core.css?v=20260826e" in page
 
 
 def test_drought_sidebar_uses_accessible_mounted_tab_panels():

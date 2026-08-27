@@ -1,6 +1,6 @@
 import * as api from '../../core/api.js';
 import { createLegendHost } from '../../core/legend.js';
-import { createMapCore, REGION_LABELS } from '../../core/map-core.js?v=20260826a';
+import { createMapCore, REGION_LABELS } from '../../core/map-core.js?v=20260826g';
 import { renderProductNav } from '../../core/nav.js?v=20260826a';
 import { sharedAlertFeatureId, startNonWorkspaceAlertMonitor } from '../../core/non-workspace-alert-monitor.js?v=20260824a';
 import { createSidebarTabs } from '../../core/sidebar-tabs.js';
@@ -33,6 +33,7 @@ async function initialize() {
     const mapCore = createMapCore(byId('alerts-map'), {
         region: regionSelect.value,
         basemap: 'Dark',
+        boundaryMode: 'conus',
         onResetView: () => closeDetail(),
     });
     const legend = createLegendHost(byId('alerts-legend'), { align: 'left' });

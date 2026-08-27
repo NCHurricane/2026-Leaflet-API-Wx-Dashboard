@@ -627,6 +627,25 @@ Application log contained no new NetCDF error or APPCRASH. Together with the pri
 automated, controlled-browser, runtime, alert-overlap, scrub, and RSS evidence, Phase 4
 is accepted as a whole. Phase 5 has not started.
 
+On 2026-08-26, before Phase 5, the shared dashboard basemap catalog was moved off
+unauthenticated CARTO raster tiles after CARTO began rendering an `API KEY REQUIRED`
+watermark. USGS sources were removed. All canonical map pages now expose the same four
+owner-selected Esri services: World Dark Gray Base, World Light Gray Base, USA Topo Maps,
+and World Imagery. No separate Esri reference/label layer is added; World Imagery is the
+label-free imagery choice, while USA Topo has labels baked into its source cartography and
+the gray base services retain Esri's minimal built-in reference detail. The Dark selection
+applies a layer-scoped dark-navy filter to the keyless Esri raster; data tiles and the other
+three basemaps retain their source colors. Shared boundary overlays were also softened and
+moved from thousands of SVG paths to one Leaflet canvas. CONUS-default pages keep states on,
+show countries below displayed zoom 7, and add counties at displayed zoom 8. Satellite and
+Tropical retain countries at every zoom, add states at displayed zoom 5, and add counties at
+displayed zoom 8. Hidden boundary datasets are not fetched solely to turn them off. The full
+automated gate passes 655 Python tests plus 42 subtests and all 54 Node tests. Controlled
+in-app browser checks loaded 256-pixel tiles from each intended Esri service in Workspace
+with no `API KEY REQUIRED` text; later Workspace, Tropical, and Satellite checks confirmed
+the family-specific z5/z7/z8 boundary transitions, one-canvas rendering, and no console
+warnings/errors. Owner cross-page smoke is pending.
+
 - Satellite Archive UI on the active satellite-v2 contract.
 - Controls redesign without changing page/engine ownership.
 - Optional measured GDAL warp-thread tuning; adopt only with repeatable gains

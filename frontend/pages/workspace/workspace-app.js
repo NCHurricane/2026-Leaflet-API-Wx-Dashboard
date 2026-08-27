@@ -1,5 +1,5 @@
 import * as api from '../../core/api.js';
-import { createMapCore } from '../../core/map-core.js?v=20260826a';
+import { createMapCore } from '../../core/map-core.js?v=20260826g';
 import { renderProductNav } from '../../core/nav.js?v=20260826a';
 import { createScrubber } from '../../core/scrubber.js';
 import { loadDefaultSettings } from '../../core/settings.js';
@@ -241,6 +241,7 @@ async function initialize() {
     const mapCore = createMapCore(byId('workspace-map'), {
         region: 'CONUS',
         basemap: 'Dark',
+        boundaryMode: 'conus',
         onResetView: () => resetWorkspaceState(),
     });
     // Delegate to the core region table so CONUS/AK/HI/PR share one source of truth.
