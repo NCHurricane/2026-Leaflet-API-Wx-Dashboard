@@ -283,7 +283,7 @@ Replace the satellite side of the single global slot with **byte-budgeted admiss
 
 ### Phase 3 implementation status — 2026-08-24
 
-Phase 3 is implemented in the current uncommitted working tree. A fair
+Phase 3 is committed in `7bda975`. A fair
 process-local byte queue in `app_core/render_budget.py` uses
 `WX_SATELLITE_RENDER_BUDGET_MB` with a 16384 MB default. Work whose cumulative
 source-grid estimates fit may run concurrently; a request larger than the whole budget
@@ -371,7 +371,8 @@ restarted owner smoke on 2026-08-25 exposed a retained-layer ownership race: a c
 refresh advanced the foreground generation while a ready Leaflet layer kept its prior
 tile URL, so later pan/zoom misses returned transparent `CANCELLED` responses. The
 uncommitted correction advances the retained layer URL without redrawing its mounted
-tiles and bumps the Satellite/Workspace module entry versions. The correction gate passes
+tiles and bumps the Satellite/Workspace module entry versions. This correction was later
+committed in `0e1eacb`. Its gate passes
 647 Python tests plus 42 subtests and all 49 Node tests; a controlled browser refresh then
 requested z5 at the new generation, loaded 256x256 tiles, kept `/health` responsive, and
 reported no console warnings/errors. The next owner run confirmed initial M12 loading and no-flash
@@ -380,7 +381,7 @@ Viewer recorded two `python.exe` access violations, at 20:45 and 21:10 on 2026-0
 inside `netcdf-655e86525df3b639088152b956fd8f75.dll` (`0xc0000005`). The final alert
 poll was therefore a timing coincidence, not evidence of an alert-worker deadlock.
 Different destination zooms use distinct FCI raster-cache keys and could enter the native
-NetCDF-C/HDF5 reader concurrently. The current uncommitted correction serializes only
+NetCDF-C/HDF5 reader concurrently. The correction committed in `0e1eacb` serializes only
 FCI native file access process-wide; NumPy calibration, canvas rendering, and other
 Satellite families retain their existing concurrency. The focused FCI gate passes five
 tests, including a two-thread/different-grid-cap ownership regression. A real-source
@@ -411,7 +412,7 @@ defect: at 21:51Z the one-hour request returned only the 21:00Z and 21:15Z frame
 while a three-hour request showed the intact 15-minute sequence from 19:00Z through
 21:15Z. The cached-catalog path measured the requested hour from wall-clock time, so
 the provider's 36-minute publication delay consumed most of the animation window.
-The current uncommitted correction anchors fresh and cached lookback filtering to the
+The correction committed in `0e1eacb` anchors fresh and cached lookback filtering to the
 newest available frame, capped at the current time. A regression covers a 40-minute
 delayed feed and passes for both catalog paths. Subsequent owner smoke loaded M12
 Channel09, Channel02, and Dust quickly; each showed five frames, rapid scrubbing stayed
@@ -419,7 +420,7 @@ responsive, and an alert notification arrived without terminal errors, console e
 blank tiles, or a lockup. This clears the alert-overlap check, although the catalog change
 still needs an explicitly restarted-server verification.
 
-The current uncommitted tree also extends the selected-product workflow to Meteosat-11
+The `0e1eacb` checkpoint also extends the selected-product workflow to Meteosat-11
 RSS without duplicating its existing rapid path. Channel02 and Channel13 retain their
 12-frame z6-z7 rapid tail. Every other selected RSS channel/composite activates a distinct
 `meteosat-rss-tiles` job: source prefetch is limited to the newest two frames in a two-hour
@@ -447,22 +448,38 @@ The RSS extension is accepted. The final restarted M12 owner check also passed o
 2026-08-26: the one-hour catalog showed five frames, several FCI products loaded and
 remained responsive, and Windows Event Viewer's Application log contained no new NetCDF
 error or APPCRASH. Together with the prior automated, controlled-browser, runtime, alert-
-overlap, scrub, and RSS evidence, this accepts Phase 4 as a whole. Phase 5 has not started.
+overlap, scrub, and RSS evidence, this accepts Phase 4 as a whole. Its final corrections and
+RSS tuning are committed in `0e1eacb`.
 
 ## Phase 5 — EUMETSAT fetch path
 
 Addresses the "obtain" half of the request; largely independent of Phases 2–4.
 
-- **Pagination.** `_search_products` sends `c: 100` with no paging
-  (`provider_eumetsat.py:208-224`). Page until the requested window is covered.
-- **Kill the duplicate search.** `_fci_feature_for_product` (`:243-249`) re-runs a full
-  12-hour search per cold FCI download. Carry the feature forward from `list_recent_frames`,
-  or cache the search response per `(collection, hours)` with a short TTL.
-- **Retry/backoff.** Add bounded exponential backoff for 5xx, timeouts, and connection
-  errors (`:165-172` currently handles only a single 401 refresh).
-- **Download parallelism.** `_FCI_DOWNLOAD_WORKERS` is 2 (`:85-90`) for a 574 MB / 40-chunk
-  frame. Raise the default to 4 — the documented EUMETSAT fair-use ceiling — via the existing
-  `WX_EUMETSAT_DOWNLOAD_WORKERS` override. No higher.
+- **Pagination.** Page the `c: 100` OpenSearch request with the API's zero-based `si`
+  offset until the requested window is covered, bounded by the service's 10,000-result cap.
+- **Kill the duplicate search.** Carry complete FCI feature metadata forward from
+  `list_recent_frames` in a five-minute process cache. Keep the 12-hour search only as a
+  fallback for persisted catalogs used after a process restart.
+- **Retry/backoff.** Preserve the one-time 401 token refresh and add three bounded retries at
+  0.5 / 1 / 2 seconds for 5xx responses, timeouts, and connection errors. Do not retry other
+  4xx responses.
+- **Download parallelism.** Raise the default from 2 to a conservative project cap of 4 via
+  the existing `WX_EUMETSAT_DOWNLOAD_WORKERS` override. Never allow the override above 4.
+  This remains below EUMETSAT's current authenticated parallel-connection allowance in its
+  [Data Store detailed guide](https://user.eumetsat.int/resources/user-guides/data-store-detailed-guide).
+
+**Implementation status (2026-08-26): accepted; commit pending.** A live 12-hour
+M11 RSS search returned 156 unique products across offsets 0 and 100. A live M12 catalog
+listed five frames and its subsequent feature lookup reused that result without a second
+request. Five alternating live samples reduced the catalog-plus-feature-lookup request count
+from 2 to 1 and improved p50/p95 from 3.871/4.537 seconds to 1.341/1.505 seconds. Focused
+validation passes 117 Python tests and 8 Satellite animator tests. The full gate passes 662
+Python tests plus 42 subtests, all 54 Node tests, repo-wide Ruff, and diff checks. This phase
+does not touch render code, pixels, or render versions, so render goldens and a visual pixel
+comparison are not required. Evidence is in `docs/perf/2026-08-26-meteosat-phase5/`.
+The restarted owner smoke then passed the newly available M12 acquisition, five-frame
+catalog, responsive scrubbing, and clean terminal/console checks. This closes the Phase 5
+acceptance gate.
 
 ---
 
@@ -525,4 +542,5 @@ reverted independently. Update `docs/perf/` with before/after p50s as each lands
   budgeting bytes rather than slots, so an oversized render still runs alone.
 - **Phase 4 adds background CPU while the satellite page is open.** Bounded by the existing
   presence lease and live-tile-idle gating; it stops when the user leaves the page.
-- **Phase 5 touches EUMETSAT fair use.** Download workers stay at the documented ceiling of 4.
+- **Phase 5 touches EUMETSAT fair use.** Download workers stay at the conservative project
+  ceiling of 4, below the current authenticated service allowance.

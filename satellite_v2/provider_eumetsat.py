@@ -79,21 +79,31 @@ _NON_FULLDISK_SECTOR = {
 
 _HTTP_TIMEOUT = 60
 _DOWNLOAD_TIMEOUT = 600
+_HTTP_RETRY_DELAYS = (0.5, 1.0, 2.0)
+_SEARCH_PAGE_SIZE = 100
+_SEARCH_MAX_RESULTS = 10_000
+_FCI_FEATURE_CACHE_TTL_SECONDS = 300.0
 
 # Full-disk source downloads are deliberately conservative because each FCI
 # frame is roughly 800 MB and can overlap on-demand tile work.
-try:
-    _FCI_DOWNLOAD_WORKERS = max(
-        1, min(2, int(os.environ.get("WX_EUMETSAT_DOWNLOAD_WORKERS", "2")))
-    )
-except ValueError:
-    _FCI_DOWNLOAD_WORKERS = 2
+def _configured_fci_download_workers() -> int:
+    try:
+        return max(
+            1, min(4, int(os.environ.get("WX_EUMETSAT_DOWNLOAD_WORKERS", "4")))
+        )
+    except ValueError:
+        return 4
+
+
+_FCI_DOWNLOAD_WORKERS = _configured_fci_download_workers()
 # Written into the frame's FCI source dir after all chunks are verified on
 # disk; its presence lets later loads skip the product re-search API call.
 _FCI_MANIFEST_NAME = "manifest.json"
 
 _TOKEN_LOCK = threading.Lock()
 _TOKEN: dict[str, object] = {"value": "", "expires_at": 0.0}
+_FCI_FEATURE_CACHE_LOCK = threading.Lock()
+_FCI_FEATURE_CACHE: dict[tuple[str, str], tuple[float, dict]] = {}
 
 
 def _env_first(*names: str) -> str:
@@ -163,13 +173,39 @@ def _bearer_headers(force_refresh: bool = False) -> dict[str, str]:
 
 
 def _authorized_get(url: str, **kwargs) -> requests.Response:
-    response = requests.get(url, headers=_bearer_headers(), **kwargs)
-    if response.status_code == 401:
-        # Token revoked or expired server-side; refresh once and retry.
-        response = requests.get(
-            url, headers=_bearer_headers(force_refresh=True), **kwargs
-        )
-    return response
+    token_refreshed = False
+    for attempt in range(len(_HTTP_RETRY_DELAYS) + 1):
+        try:
+            response = requests.get(url, headers=_bearer_headers(), **kwargs)
+        except (requests.ConnectionError, requests.Timeout):
+            if attempt >= len(_HTTP_RETRY_DELAYS):
+                raise
+            time.sleep(_HTTP_RETRY_DELAYS[attempt])
+            continue
+
+        if response.status_code == 401 and not token_refreshed:
+            # Token revoked or expired server-side; refresh once and retry.
+            response.close()
+            token_refreshed = True
+            try:
+                response = requests.get(
+                    url, headers=_bearer_headers(force_refresh=True), **kwargs
+                )
+            except (requests.ConnectionError, requests.Timeout):
+                if attempt >= len(_HTTP_RETRY_DELAYS):
+                    raise
+                time.sleep(_HTTP_RETRY_DELAYS[attempt])
+                continue
+
+        if 500 <= response.status_code <= 599:
+            if attempt >= len(_HTTP_RETRY_DELAYS):
+                return response
+            response.close()
+            time.sleep(_HTTP_RETRY_DELAYS[attempt])
+            continue
+        return response
+
+    raise RuntimeError("EUMETSAT request retry loop exhausted unexpectedly.")
 
 
 def _collection_for(sat_key: str) -> str:
@@ -208,20 +244,49 @@ def _slot_time(sat_key: str, start_iso: str) -> datetime:
 def _search_products(collection: str, hours: int) -> list[dict]:
     now = datetime.now(timezone.utc)
     start = now - timedelta(hours=max(1, int(hours)) + 1)
-    response = _authorized_get(
-        _SEARCH_URL,
-        params={
-            "format": "json",
-            "pi": collection,
-            "dtstart": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "dtend": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "c": 100,
-        },
-        timeout=_HTTP_TIMEOUT,
-    )
-    response.raise_for_status()
-    features = response.json().get("features") or []
-    return [feature for feature in features if feature.get("id")]
+    base_params = {
+        "format": "json",
+        "pi": collection,
+        "dtstart": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "dtend": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "c": _SEARCH_PAGE_SIZE,
+    }
+    features: list[dict] = []
+    seen_ids: set[str] = set()
+    offset = 0
+    while offset < _SEARCH_MAX_RESULTS:
+        params = dict(base_params)
+        if offset:
+            params["si"] = offset
+        response = _authorized_get(
+            _SEARCH_URL,
+            params=params,
+            timeout=_HTTP_TIMEOUT,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        page = payload.get("features") or []
+        for feature in page:
+            product_id = str(feature.get("id") or "")
+            if product_id and product_id not in seen_ids:
+                seen_ids.add(product_id)
+                features.append(feature)
+
+        try:
+            total_results = min(
+                _SEARCH_MAX_RESULTS, max(0, int(payload.get("totalResults") or 0))
+            )
+            page_start = max(0, int(payload.get("startIndex") or offset))
+            items_per_page = max(
+                0, int(payload.get("itemsPerPage") or len(page))
+            )
+        except (TypeError, ValueError):
+            break
+        next_offset = page_start + items_per_page
+        if not page or next_offset >= total_results or next_offset <= offset:
+            break
+        offset = next_offset
+    return features
 
 
 def _feature_entries(feature: dict) -> list[dict]:
@@ -240,11 +305,44 @@ def _fci_body_entries(feature: dict) -> list[dict]:
     return sorted(entries, key=lambda entry: str(entry.get("title") or ""))
 
 
+def _cache_fci_feature(collection: str, feature: dict) -> None:
+    product_id = str(feature.get("id") or "")
+    if not product_id:
+        return
+    now = time.monotonic()
+    with _FCI_FEATURE_CACHE_LOCK:
+        expired = [
+            key
+            for key, (cached_at, _feature) in _FCI_FEATURE_CACHE.items()
+            if now - cached_at > _FCI_FEATURE_CACHE_TTL_SECONDS
+        ]
+        for key in expired:
+            _FCI_FEATURE_CACHE.pop(key, None)
+        _FCI_FEATURE_CACHE[(collection, product_id)] = (now, feature)
+
+
+def _cached_fci_feature(collection: str, product_id: str) -> dict | None:
+    key = (collection, product_id)
+    with _FCI_FEATURE_CACHE_LOCK:
+        cached = _FCI_FEATURE_CACHE.get(key)
+        if cached is None:
+            return None
+        cached_at, feature = cached
+        if time.monotonic() - cached_at > _FCI_FEATURE_CACHE_TTL_SECONDS:
+            _FCI_FEATURE_CACHE.pop(key, None)
+            return None
+        return feature
+
+
 def _fci_feature_for_product(collection: str, product_id: str) -> dict:
-    # Product download happens immediately after catalog listing in normal use,
-    # so a recent search is enough and avoids a second product-specific API.
+    cached = _cached_fci_feature(collection, product_id)
+    if cached is not None:
+        return cached
+    # A persisted catalog can survive a process restart, so retain a bounded
+    # search fallback when no feature was carried forward by this process.
     for feature in _search_products(collection, 12):
         if str(feature.get("id") or "") == product_id:
+            _cache_fci_feature(collection, feature)
             return feature
     raise RuntimeError(f"EUMETSAT product is no longer listed: {product_id}")
 
@@ -279,8 +377,10 @@ def list_recent_frames(
             .get("size")
             or 0
         )
-        if instrument == "FCI" and not _fci_body_entries(feature):
-            continue
+        if instrument == "FCI":
+            if not _fci_body_entries(feature):
+                continue
+            _cache_fci_feature(collection, feature)
         # SEVIRI channels share one .nat; FCI channels share one chunk set.
         frames[frame_key] = SourceFrame(
             frame_key=frame_key,

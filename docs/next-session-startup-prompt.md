@@ -152,7 +152,7 @@ Current boundary:
   Ruff/compile, and diff checks. The first restarted owner smoke on 2026-08-25
   exposed a retained-layer ownership race after a catalog refresh: later
   pan/zoom requests used the prior frame generation and returned transparent
-  `CANCELLED` tiles. The current uncommitted correction advances a retained
+  `CANCELLED` tiles. The correction later committed in `0e1eacb` advances a retained
   layer's URL without redrawing its mounted tiles. The correction gate passes
   647 Python tests plus 42 subtests and all 49 Node tests; a controlled browser
   refresh/zoom loaded z5 256x256 tiles at the new generation with responsive
@@ -161,8 +161,8 @@ Current boundary:
   Windows Event Viewer identified both failures as `python.exe` access violations
   in the bundled NetCDF DLL (`0xc0000005`), not alert-worker failures; the alert
   refresh merely coincided with the second crash. Different zoom-derived FCI
-  raster keys could read native NetCDF concurrently. The current uncommitted
-  correction gates only FCI native file access process-wide while leaving raster
+  raster keys could read native NetCDF concurrently. The correction committed in
+  `0e1eacb` gates only FCI native file access process-wide while leaving raster
   calibration and rendering concurrent. Its focused gate passes five FCI tests,
   including two-thread/different-grid-cap ownership. A real-source probe loaded
   all 40 crash-frame chunks through simultaneous 2048/4096 callers in 5.0 s. An
@@ -190,12 +190,13 @@ Current boundary:
   21:15Z. The cached path measured the requested hour from wall-clock time, allowing
   the provider's 36-minute publication delay to consume most of the loop. The current
   uncommitted correction anchors fresh and cached filtering to the newest available
-  frame, capped at the current time. Its delayed-feed regression passes for both paths;
+  frame, capped at the current time. This correction is committed in `0e1eacb`; its
+  delayed-feed regression passes for both paths;
   subsequent owner smoke loaded M12 Channel09, Channel02, and Dust quickly with five
   frames each. Rapid scrubbing plus a live alert notification produced no errors, blanks,
   lockup, or server loss, clearing the alert-overlap check. An explicitly restarted-server
   catalog verification is still required.
-- The current uncommitted tree adds an RSS-tuned selected-product workflow for M11.
+- The `0e1eacb` checkpoint adds an RSS-tuned selected-product workflow for M11.
   Channel02/Channel13 retain the existing 12-frame z6-z7 rapid tail. Other selected RSS
   products use `meteosat-rss-tiles`: latest-two-only source prefetch over two hours, no
   older backfill, then newest-four tile warming at z4-z7 over RSS bounds with the reused
@@ -216,9 +217,10 @@ Current boundary:
   catalog showed five frames, several FCI products loaded and remained responsive, and
   Windows Event Viewer's Application log contained no new NetCDF error or APPCRASH.
   Together with the prior automated, controlled-browser, runtime, alert-overlap, scrub,
-  and RSS evidence, Phase 4 is accepted as a whole. Phase 5 has not started.
-- A pre-Phase-5 basemap provider correction is implemented in the current uncommitted
-  tree. CARTO and USGS sources were removed from the shared map catalog and all canonical
+  and RSS evidence, Phase 4 is accepted as a whole. Its final corrections and RSS tuning
+  are committed in `0e1eacb`.
+- The pre-Phase-5 basemap provider correction and boundary policy are committed in
+  `6020906`. CARTO and USGS sources were removed from the shared map catalog and all canonical
   selectors now expose Esri World Dark Gray Base, World Light Gray Base, USA Topo Maps,
   and World Imagery. No separate reference/label overlay is stacked; World Imagery is the
   label-free imagery choice, USA Topo retains source-baked cartographic labels, and the
@@ -232,9 +234,21 @@ Current boundary:
   plus 42 subtests and all 54 Node tests. Controlled Workspace rendering loaded 256-pixel
   tiles from all four services with no `API KEY REQUIRED` text; later Workspace, Tropical,
   and Satellite checks confirmed the family-specific z5/z7/z8 transitions, one-canvas
-  boundary rendering, and no browser warnings/errors. Owner cross-page smoke is pending.
-- The bounded shared-branding update is implemented in the current uncommitted
-  tree. `frontend/core/branding.js` owns the accessible product-header logo,
+  boundary rendering, and no browser warnings/errors. The owner cross-page smoke passed.
+- Meteosat Phase 5 is implemented in the current uncommitted tree. EUMETSAT search now pages
+  with the live API's zero-based `si` offset; FCI feature metadata is carried from listing to
+  download through a five-minute process cache; three bounded 0.5 / 1 / 2 second retries cover
+  5xx responses, timeouts, and connection errors without changing other 4xx behavior; the
+  one-time 401 token refresh remains; and FCI downloads default to four workers with a hard
+  ceiling of four. The live 12-hour M11 RSS probe returned 156 unique products across offsets
+  0 and 100. Five M12 samples reduced catalog-plus-feature lookup from two requests to one and
+  improved p50/p95 from 3.871/4.537 seconds to 1.341/1.505 seconds. Focused validation passes
+  117 Python tests and 8 animator tests; the full gate passes 662 Python tests plus 42 subtests,
+  all 54 Node tests, repo-wide Ruff, and diff checks. No render code, pixels, or version changed.
+  The restarted owner smoke passed the newly available M12 acquisition, five-frame catalog,
+  responsive scrubbing, and clean terminal/console checks. Phase 5 is accepted; commit pending.
+- The bounded shared-branding update is committed in `68aeb72`, with position corrections
+  in `e0995f0` and `8d5eb56`. `frontend/core/branding.js` owns the accessible product-header logo,
   `map-core.js` owns its decorative non-interactive map duplicate, and the
   landing shell uses the same canonical SVG. The SVG animates only
   `#lightning-bolt` and disables that pulse while keeping the bolt visible for
@@ -270,10 +284,11 @@ Default next discussion:
   checkpoint without mixing the Satellite boundary.
 - Meteosat Phase 2 is committed as `7b2d9a5`.
 - Meteosat Phase 3 is committed as `7bda975`.
-- Phase 4 is accepted after its final restarted M12/M11 owner smokes. Reconcile and commit
-  its remaining uncommitted corrections and RSS tuning before advancing.
-- Do not begin Phase 5 without explicit authorization; its EUMETSAT fetch-path changes
-  remain a separate gate.
+- Phase 4 is accepted after its final restarted M12/M11 owner smokes; its remaining
+  corrections and RSS tuning are committed in `0e1eacb`.
+- Phase 5 was explicitly authorized and is implemented with automated and bounded live gates
+  passing. The restarted M12 acquisition owner smoke also passed. Phase 5 is accepted and
+  ready for its isolated commit.
 - The Satellite prerequisite is closed and does not choose that enhancement.
   Radar WebGL is first only by document order. Section 4.7 is a future unified
   cross-page Archive workflow, not an independent Surface-only completion.

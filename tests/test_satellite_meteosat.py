@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import struct
 import threading
 import time
+from unittest.mock import Mock
 import warnings
 
 import netCDF4
@@ -346,3 +347,155 @@ def test_eumetsat_fci_catalog_skips_products_without_body_chunks(monkeypatch):
     assert [frame.frame_key for frame in frames] == ["20260807T121500Z"]
     assert frames[0].source_key == "FCI-COMPLETE"
     assert frames[0].source_keys == {"Channel13": "FCI-COMPLETE"}
+
+
+def test_eumetsat_search_pages_until_the_window_is_covered(monkeypatch):
+    pages = [
+        {
+            "totalResults": 3,
+            "itemsPerPage": 2,
+            "startIndex": 0,
+            "features": [{"id": "newest"}, {"id": "middle"}],
+        },
+        {
+            "totalResults": 3,
+            "itemsPerPage": 2,
+            "startIndex": 2,
+            "features": [{"id": "oldest"}],
+        },
+    ]
+    requested_params = []
+
+    def fake_authorized_get(_url, **kwargs):
+        requested_params.append(kwargs["params"])
+        response = Mock()
+        response.json.return_value = pages.pop(0)
+        return response
+
+    monkeypatch.setattr(provider_eumetsat, "_authorized_get", fake_authorized_get)
+
+    features = provider_eumetsat._search_products("collection", hours=12)
+
+    assert [feature["id"] for feature in features] == [
+        "newest",
+        "middle",
+        "oldest",
+    ]
+    assert "si" not in requested_params[0]
+    assert requested_params[1]["si"] == 2
+    assert all(
+        params["c"] == provider_eumetsat._SEARCH_PAGE_SIZE
+        for params in requested_params
+    )
+
+
+def test_eumetsat_fci_listing_carries_feature_into_download_lookup(monkeypatch):
+    collection = provider_eumetsat._COLLECTIONS["meteosat12"]
+    feature = {
+        "id": "FCI-CARRIED-FORWARD",
+        "properties": {
+            "date": "2026-08-07T12:22:00Z/2026-08-07T12:32:00Z",
+            "productInformation": {"size": 987_654},
+            "links": {
+                "sip-entries": [
+                    {
+                        "title": "FCI-1C-RRAD-FDHSI-CHK-BODY-0001.nc",
+                        "href": "https://example.invalid/body-1.nc",
+                    }
+                ]
+            },
+        },
+    }
+    calls = []
+    with provider_eumetsat._FCI_FEATURE_CACHE_LOCK:
+        provider_eumetsat._FCI_FEATURE_CACHE.clear()
+
+    def fake_search(*args, **kwargs):
+        calls.append((args, kwargs))
+        return [feature]
+
+    monkeypatch.setattr(provider_eumetsat, "_search_products", fake_search)
+
+    frames = provider_eumetsat.list_recent_frames(
+        "meteosat12", "FULLDISK", "Channel13", hours=1, max_frames=5
+    )
+    carried = provider_eumetsat._fci_feature_for_product(
+        collection, frames[0].source_key
+    )
+
+    assert carried is feature
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [provider_eumetsat.requests.ConnectionError, provider_eumetsat.requests.Timeout],
+)
+def test_eumetsat_authorized_get_retries_transport_errors(monkeypatch, error_type):
+    response = Mock(status_code=200)
+    attempts = [error_type("temporary"), response]
+    sleeps = []
+    monkeypatch.setattr(provider_eumetsat, "_bearer_headers", lambda **_kwargs: {})
+    monkeypatch.setattr(provider_eumetsat.time, "sleep", sleeps.append)
+
+    def fake_get(*_args, **_kwargs):
+        result = attempts.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(provider_eumetsat.requests, "get", fake_get)
+
+    assert provider_eumetsat._authorized_get("https://example.invalid") is response
+    assert sleeps == [provider_eumetsat._HTTP_RETRY_DELAYS[0]]
+
+
+def test_eumetsat_authorized_get_bounds_5xx_retries(monkeypatch):
+    response = Mock(status_code=503)
+    attempts = []
+    sleeps = []
+    monkeypatch.setattr(provider_eumetsat, "_bearer_headers", lambda **_kwargs: {})
+    monkeypatch.setattr(provider_eumetsat.time, "sleep", sleeps.append)
+
+    def fake_get(*_args, **_kwargs):
+        attempts.append(1)
+        return response
+
+    monkeypatch.setattr(provider_eumetsat.requests, "get", fake_get)
+
+    assert provider_eumetsat._authorized_get("https://example.invalid") is response
+    assert len(attempts) == len(provider_eumetsat._HTTP_RETRY_DELAYS) + 1
+    assert sleeps == list(provider_eumetsat._HTTP_RETRY_DELAYS)
+    assert response.close.call_count == len(provider_eumetsat._HTTP_RETRY_DELAYS)
+
+
+def test_eumetsat_authorized_get_refreshes_401_once(monkeypatch):
+    unauthorized = Mock(status_code=401)
+    success = Mock(status_code=200)
+    responses = [unauthorized, success]
+    refreshes = []
+    monkeypatch.setattr(
+        provider_eumetsat,
+        "_bearer_headers",
+        lambda force_refresh=False: refreshes.append(force_refresh) or {},
+    )
+    monkeypatch.setattr(
+        provider_eumetsat.requests,
+        "get",
+        lambda *_args, **_kwargs: responses.pop(0),
+    )
+
+    assert provider_eumetsat._authorized_get("https://example.invalid") is success
+    assert refreshes == [False, True]
+    unauthorized.close.assert_called_once_with()
+
+
+def test_eumetsat_fci_download_worker_configuration_is_capped(monkeypatch):
+    monkeypatch.delenv("WX_EUMETSAT_DOWNLOAD_WORKERS", raising=False)
+    assert provider_eumetsat._configured_fci_download_workers() == 4
+    monkeypatch.setenv("WX_EUMETSAT_DOWNLOAD_WORKERS", "99")
+    assert provider_eumetsat._configured_fci_download_workers() == 4
+    monkeypatch.setenv("WX_EUMETSAT_DOWNLOAD_WORKERS", "0")
+    assert provider_eumetsat._configured_fci_download_workers() == 1
+    monkeypatch.setenv("WX_EUMETSAT_DOWNLOAD_WORKERS", "invalid")
+    assert provider_eumetsat._configured_fci_download_workers() == 4

@@ -550,7 +550,7 @@ Python tests plus 42 subtests, all 48 Node tests, repo-wide Ruff/compile, and
 diff checks. The first restarted owner smoke on 2026-08-25 found that a catalog
 refresh could advance foreground ownership while a ready retained layer kept
 its prior tile URL; subsequent pan/zoom misses therefore returned transparent
-`CANCELLED` tiles. The current uncommitted correction advances that retained
+`CANCELLED` tiles. The correction later committed in `0e1eacb` advances that retained
 URL without redrawing mounted tiles. Its correction gate passes 647 Python
 tests plus 42 subtests and all 49 Node tests, and a controlled browser
 refresh/zoom loaded z5 256x256 tiles at the new generation while health stayed
@@ -561,7 +561,7 @@ violations in the bundled NetCDF DLL (`0xc0000005`), at 20:45 and 21:10 on
 2026-08-25. The alert refresh at the end of the captured terminal output was a
 timing coincidence, not the crash owner. Different destination zooms use distinct
 FCI raster-cache keys and could therefore enter native NetCDF-C/HDF5 reads
-concurrently. The current uncommitted correction serializes only FCI native file
+concurrently. The correction committed in `0e1eacb` serializes only FCI native file
 access process-wide; calibration, canvas rendering, and unrelated Satellite
 families retain concurrency. The focused FCI gate passes five tests, including a
 two-thread/different-grid-cap ownership regression. A real-source probe loaded all
@@ -592,7 +592,7 @@ defect: at 21:51Z the one-hour request returned only the 21:00Z and 21:15Z frame
 while a three-hour request showed the intact 15-minute sequence from 19:00Z through
 21:15Z. The cached-catalog path measured the requested hour from wall-clock time, so
 the provider's 36-minute publication delay consumed most of the animation window.
-The current uncommitted correction anchors fresh and cached lookback filtering to the
+The correction committed in `0e1eacb` anchors fresh and cached lookback filtering to the
 newest available frame, capped at the current time. A regression covers a 40-minute
 delayed feed and passes for both catalog paths. Subsequent owner smoke loaded M12
 Channel09, Channel02, and Dust quickly; each showed five frames, rapid scrubbing stayed
@@ -600,7 +600,7 @@ responsive, and an alert notification arrived without terminal errors, console e
 blank tiles, or a lockup. This clears the alert-overlap check, although the catalog change
 still needs an explicitly restarted-server verification.
 
-The current uncommitted tree also adds an RSS-tuned selected-product workflow for
+The `0e1eacb` checkpoint also adds an RSS-tuned selected-product workflow for
 Meteosat-11. Channel02 and Channel13 retain their existing 12-frame z6-z7 rapid tail;
 other selected channels and composites use a separate `meteosat-rss-tiles` job. It limits
 source prefetch to the newest two frames with no older backfill, then uses the reused
@@ -625,7 +625,7 @@ The final restarted M12 owner check passed on 2026-08-26: the one-hour catalog s
 frames, several FCI products loaded and remained responsive, and Windows Event Viewer's
 Application log contained no new NetCDF error or APPCRASH. Together with the prior
 automated, controlled-browser, runtime, alert-overlap, scrub, and RSS evidence, Phase 4
-is accepted as a whole. Phase 5 has not started.
+is accepted as a whole. Its remaining corrections and RSS tuning are committed in `0e1eacb`.
 
 On 2026-08-26, before Phase 5, the shared dashboard basemap catalog was moved off
 unauthenticated CARTO raster tiles after CARTO began rendering an `API KEY REQUIRED`
@@ -644,7 +644,22 @@ automated gate passes 655 Python tests plus 42 subtests and all 54 Node tests. C
 in-app browser checks loaded 256-pixel tiles from each intended Esri service in Workspace
 with no `API KEY REQUIRED` text; later Workspace, Tropical, and Satellite checks confirmed
 the family-specific z5/z7/z8 boundary transitions, one-canvas rendering, and no console
-warnings/errors. Owner cross-page smoke is pending.
+warnings/errors. The owner cross-page smoke passed and the basemap/boundary checkpoint is
+committed in `6020906`.
+
+Meteosat latency Phase 5 is implemented in the current uncommitted tree. EUMETSAT searches
+now page through the requested window with the live API's zero-based `si` offset; complete
+FCI feature metadata is retained for five minutes so the immediate download path does not
+repeat a 12-hour search; 5xx responses, timeouts, and connection errors receive three bounded
+0.5 / 1 / 2 second retries while the existing one-time 401 token refresh remains; and the
+FCI download default is raised from two to a hard ceiling of four. A live 12-hour M11 RSS
+probe returned 156 unique products across two pages. Five M12 samples cut the catalog-plus-
+feature request count from two to one and improved p50/p95 from 3.871/4.537 seconds to
+1.341/1.505 seconds. The full gate passes 662 Python tests plus 42 subtests, all 54 Node
+tests, repo-wide Ruff, and diff checks. No render code, pixels, or render version changed.
+The restarted owner smoke passed the newly available M12 acquisition, five-frame catalog,
+responsive scrubbing, and clean terminal/console checks. Phase 5 is accepted; its commit is
+pending.
 
 - Satellite Archive UI on the active satellite-v2 contract.
 - Controls redesign without changing page/engine ownership.
@@ -899,12 +914,12 @@ no-flash, and scrub-ahead work is committed as Satellite-only checkpoint
 owner visual review are committed as `7b2d9a5`; Phase 2c was rejected by its
 measurement gate. Phase 3 and its passed simultaneous Satellite/Radar owner
 smoke are committed as `7bda975`. Phase 4's core implementation landed in
-`68aeb72`; the retained-layer generation corrections from its failed owner smokes
-and the FCI native-read serialization correction from its two subsequent NetCDF
-DLL crashes and the accepted RSS tuning are currently uncommitted. The complete automated
-gate, isolated cold-render/alert-overlap server smoke, controlled z7 rapid-scrub regression,
-and restarted M12/M11 owner smokes pass. Phase 4 is accepted. Do not begin Phase 5 without
-separate authorization.
+`68aeb72`; its retained-layer generation corrections, FCI native-read serialization
+correction, and accepted RSS tuning are committed in `0e1eacb`. The complete automated gate,
+isolated cold-render/alert-overlap server smoke, controlled z7 rapid-scrub regression, and
+restarted M12/M11 owner smokes pass. Phase 4 is accepted. Phase 5 was separately authorized
+on 2026-08-26 and is implemented with automated and bounded live gates passing. Its restarted
+M12 acquisition owner smoke also passed. Phase 5 is accepted and its commit remains pending.
 The Section 4.2 base
 monitor and its
 server-session cutoff plus notification-cadence/audio correction and national

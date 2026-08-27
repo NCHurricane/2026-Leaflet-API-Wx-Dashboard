@@ -65,6 +65,8 @@ perf/
 tests/
 !docs/perf/
 docs/perf/*
+!docs/perf/2026-08-26-meteosat-phase5/
+!docs/perf/2026-08-26-meteosat-phase5/**
 !docs/perf/2026-07-26-radar-phase3/
 !docs/perf/2026-07-26-radar-phase3/**
 !docs/perf/2026-07-26-radar-phase4/

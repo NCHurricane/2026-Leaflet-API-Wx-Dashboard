@@ -521,7 +521,7 @@ def test_new_foreground_frame_cancels_queued_work_for_superseded_frame(
 def test_eumetsat_download_concurrency_is_bounded():
     from satellite_v2 import provider_eumetsat
 
-    assert 1 <= provider_eumetsat._FCI_DOWNLOAD_WORKERS <= 2
+    assert 1 <= provider_eumetsat._FCI_DOWNLOAD_WORKERS <= 4
 
 
 def test_eumetsat_forbidden_error_maps_to_license_required(monkeypatch):

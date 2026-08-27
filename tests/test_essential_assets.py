@@ -193,7 +193,7 @@ def test_canonical_map_pages_use_approved_esri_basemaps():
 
     core_css = (ROOT / "frontend/core/core.css").read_text(encoding="utf-8")
     assert ".leaflet-layer.core-basemap-dark-tiles img.leaflet-tile" in core_css
-    assert "brightness(0.6) contrast(1.05)" in core_css
+    assert "brightness(0.6) contrast(1.08)" in core_css
     assert "drop-shadow(0 0 0.6px rgba(2, 6, 23, 0.72))" in core_css
 
     conus_scripts = (
