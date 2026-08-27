@@ -1,20 +1,25 @@
 # NCH Weather Studio Greenfield Rewrite Plan
 
-**Status:** active separate-project plan
+**Status:** parked separate-project design; dashboard parity reconciliation
+required before any implementation phase
 
-**Rewritten:** 2026-08-09
+**Last reconciled:** 2026-08-09
 
 **Supersedes for future planning:** the preserved 2026-06-30 plan at
 [`archive/2026-08-07-consolidation-sources/nch-weather-studio-greenfield-plan.md`](archive/2026-08-07-consolidation-sources/nch-weather-studio-greenfield-plan.md)
 
-**Current-dashboard comparison baseline:** repository commit `f994c0a`, plus
+**Historical dashboard comparison baseline:** repository commit `f994c0a`, plus
 the shared non-Workspace alert monitor documented as implemented in the
-2026-08-09 working tree. Reconfirm the baseline before implementation because
-the operational dashboard may continue to change.
+2026-08-09 working tree. The operational dashboard has since advanced through
+at least `3773d47`. Before any phase is authorized, reconcile the parity matrix,
+provider contracts, and dependencies against `3773d47` or the newer current
+checkpoint, plus the current superfile, architecture, and patterns.
 
-This is the implementation-ready plan for a clean-room standalone desktop
-program named `nch-weather-studio`. It replaces the old plan as the active
-Greenfield specification without changing the archived historical copy.
+This is the retained design for a clean-room standalone desktop program named
+`nch-weather-studio`. It is not implementation-ready against the current
+dashboard until the bounded reconciliation above is complete. It replaces the
+old plan as the current Greenfield design record without changing the archived
+historical copy.
 
 The June plan chose a sound general direction, but it described an older
 dashboard. Since then, the dashboard gained standalone ES-module product pages,
@@ -1464,12 +1469,14 @@ failure behavior, and ownership/cancellation matter.
 16. Stop development listeners and sidecars at session end unless the owner
     asks to keep them running.
 
-## 18. First Implementation Session Checklist
+## 18. Reconciliation and First Implementation Session Checklist
 
 1. Confirm `F:\Python\dashboard_2026` and inspect `git status`.
-2. Read this active plan and the current superfile Greenfield boundary.
-3. Reconfirm the current parity baseline and record drift.
-4. Confirm the selected work is Phase 0 only.
+2. Read this parked design and the current superfile Greenfield boundary.
+3. Reconcile the parity baseline and record dashboard/provider/tooling drift in
+   this document.
+4. Obtain explicit owner authorization, update the plan status, and confirm the
+   selected work is Phase 0 only.
 5. Create `nch-weather-studio/` and its README/decision records.
 6. Initialize pnpm, uv, and Cargo workspaces with committed lockfiles.
 7. Create minimal FastAPI health/readiness and generated-client pipeline.

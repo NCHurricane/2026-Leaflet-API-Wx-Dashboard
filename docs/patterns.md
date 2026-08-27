@@ -270,6 +270,22 @@ The satellite platform views in `NAMED_VIEW_PRESETS`
 `setView`-vs-`fitBounds` dispatch — retune the GOES full-disk or CONUS presets the same
 way (capture with `mapViewportLog`, paste the center/zoom).
 
+## Shared Basemap and Boundary Pattern
+
+- Define canonical map sources only in `frontend/core/map-core.js`; product
+  pages select a shared name and do not instantiate provider-specific label or
+  reference layers.
+- Keep visual filters scoped to the basemap tile class. Never filter data,
+  alert, radar, or satellite layers while tuning the Dark basemap.
+- Select `boundaryMode: 'conus'` for CONUS-default pages and
+  `boundaryMode: 'world'` for Tropical/Satellite. Do not duplicate zoom rules in
+  page controllers.
+- CONUS mode keeps states visible, shows countries below displayed zoom 7, and
+  shows counties at displayed zoom 8+. World mode keeps countries visible,
+  shows states at displayed zoom 5+, and shows counties at displayed zoom 8+.
+- Use the shared Leaflet canvas renderer and avoid fetching a hidden boundary
+  dataset solely to turn it off.
+
 ## Projection Pattern
 
 - Weather page (Leaflet): Web Mercator (EPSG:3857), tile-based, vector overlays

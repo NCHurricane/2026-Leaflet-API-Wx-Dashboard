@@ -2,7 +2,10 @@
 
 ## Source Control (2026-04-16)
 
-Private GitHub repository. Rollback via `git restore`/`git revert`. High-risk refactors should be committed in small checkpoints. PR-based merges to `main` are the preferred gate for structural backend changes.
+Private GitHub repository. Rollback uses `git restore`/`git revert` as
+appropriate. High-risk refactors should be committed in small, independently
+revertible checkpoints after the required validation and explicit owner
+authorization.
 
 ## Phase 1+ State (Leaflet Map)
 
@@ -53,6 +56,13 @@ Active root pages and their JS in this checkout:
   versioned browser Cache Storage. Boundary builders retain decoded runtime
   cache data in memory, while the routes expose state/county filtering and
   long-lived immutable response caching.
+  The shared keyless basemap catalog contains Esri World Dark Gray Base, World
+  Light Gray Base, USA Topo Maps, and World Imagery. No separate label/reference
+  layer is composed over them; only Dark receives the layer-scoped navy filter.
+  Boundary lines share one Leaflet canvas. Pages using `boundaryMode: 'conus'`
+  keep states visible, show countries below displayed zoom 7, and show counties
+  at displayed zoom 8+. Pages using `boundaryMode: 'world'` keep countries
+  visible, show states at displayed zoom 5+, and show counties at zoom 8+.
 - `frontend/core/sidebar-tabs.js` is the shared standalone-page sidebar
   controller. It keeps tab panels mounted, manages accessible selected/hidden
   state and roving focus, and allows a page-defined optional fourth tab. Shared

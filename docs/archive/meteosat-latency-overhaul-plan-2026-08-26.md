@@ -1,5 +1,11 @@
 # Meteosat Satellite Pipeline — Latency Overhaul Plan
 
+**Final status:** completed and owner-accepted through Phase 5 on 2026-08-26;
+committed in `3773d47`.
+
+**Record type:** historical execution plan. It is not an active roadmap and does
+not authorize additional Satellite work.
+
 Prepared 2026-08-11. Scope: the Meteosat (EUMETSAT) path of `satellite_v2` and the
 Satellite page frontend. Companion/predecessor:
 `docs/archive/satellite-render-optimization-plan.md` (executed 2026-07-22, Phases 0–5
@@ -398,7 +404,7 @@ frontend ownership races. The prior retained-layer URL correction suppressed red
 incomplete reused layers as well as completed layers, allowing superseded requests to
 finish as transparent `CANCELLED` PNGs that Leaflet still counted as loaded. An older
 pending swap could also detach the same layer after a newer scrub request reclaimed it.
-The current correction preserves completed retained DOM without redraw, restarts an
+The correction committed in `0e1eacb` preserves completed retained DOM without redraw, restarts an
 incomplete layer at the new foreground generation, and lets only the current pending
 owner detach an abandoned layer. Two deterministic animator regressions failed before
 the correction and pass after it. A cache-busted controlled browser repeated
@@ -417,8 +423,8 @@ newest available frame, capped at the current time. A regression covers a 40-min
 delayed feed and passes for both catalog paths. Subsequent owner smoke loaded M12
 Channel09, Channel02, and Dust quickly; each showed five frames, rapid scrubbing stayed
 responsive, and an alert notification arrived without terminal errors, console errors,
-blank tiles, or a lockup. This clears the alert-overlap check, although the catalog change
-still needs an explicitly restarted-server verification.
+blank tiles, or a lockup. This cleared the alert-overlap check. The later final restarted
+M12 owner check also verified the corrected catalog window.
 
 The `0e1eacb` checkpoint also extends the selected-product workflow to Meteosat-11
 RSS without duplicating its existing rapid path. Channel02 and Channel13 retain their
@@ -468,7 +474,7 @@ Addresses the "obtain" half of the request; largely independent of Phases 2–4.
   This remains below EUMETSAT's current authenticated parallel-connection allowance in its
   [Data Store detailed guide](https://user.eumetsat.int/resources/user-guides/data-store-detailed-guide).
 
-**Implementation status (2026-08-26): accepted; commit pending.** A live 12-hour
+**Implementation status (2026-08-26): accepted and committed in `3773d47`.** A live 12-hour
 M11 RSS search returned 156 unique products across offsets 0 and 100. A live M12 catalog
 listed five frames and its subsequent feature lookup reused that result without a second
 request. Five alternating live samples reduced the catalog-plus-feature-lookup request count

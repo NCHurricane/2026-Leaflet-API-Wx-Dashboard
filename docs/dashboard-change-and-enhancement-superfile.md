@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-**Canonical status:** current source of truth as of 2026-08-14
+**Canonical status:** current source of truth as of 2026-08-26
 
 **Repository:** `F:\Python\dashboard_2026`
 
@@ -19,7 +19,8 @@ preserved unchanged under
 The ledgers below are deliberately separate:
 
 1. **Current truth** describes behavior that must remain functional.
-2. **Cleanup program** records audit findings and the safe order for later work.
+2. **Completed cleanup program** preserves the Wave A–E audit, execution, and
+   validation boundaries as history.
 3. **Current-dashboard enhancements** records proposals that remain eligible.
 4. **Version 2 and separate-project lanes** prevent long-range ideas from being
    mistaken for current work.
@@ -136,11 +137,17 @@ Status vocabulary:
 - `tests/` is retained. Static checks, unit tests, API probes, native decode
   tests, controlled-browser checks, and owner smoke tests are distinct evidence
   categories and must be reported accurately.
-- `tools/` and all reviewed worker modules are retained pending bounded cleanup.
+- Remaining `tools/` and worker modules are retained because their current
+  callers or validation roles survived the completed cleanup program. Any later
+  removal requires a new bounded caller/asset trace.
 - `pal_preview/` remains a root-dependent standalone utility and may later gain
   Satellite colortable previews.
 
-## 3. Cleanup program
+## 3. Completed cleanup program (historical execution record)
+
+The Wave A–E bullets below preserve the approved execution boundaries and
+validation design. They are not open tasks; the completion record is in section
+3.6.
 
 ### 3.1 Audit conclusion
 
@@ -474,7 +481,9 @@ cadence, projection, legends, geographic metadata, and graceful source failure.
 
 ### 4.4 Satellite
 
-A bounded Meteosat latency overhaul is in progress. Phase 0 captured a fresh
+A bounded Meteosat latency overhaul completed through Phase 5 and closed at
+`3773d47`. The detailed paragraphs below are completion evidence, not active
+tasks. Phase 0 captured a fresh
 benchmark matrix and tolerance-capable golden harness; Phase 1 removed
 redundant tile cache-busting, corrected native-zoom floors, detached inactive
 frame layers, reduced redundant selection releases, deferred success copy until
@@ -491,8 +500,8 @@ replacement-readiness gate. Restoring the last known working contract then
 passed owner re-smoke: completed Leaflet frame layers stay mounted at opacity 0,
 incomplete/abandoned layers detach, and replacements remain readiness-gated.
 That re-smoke exposed a separate GOES-19 Meso 2 starvation case when manual
-scrubbing jumped ahead of not-yet-rendered animation frames. The current
-cache-busted tree coalesces drag input to its resting frame and gives each
+scrubbing jumped ahead of not-yet-rendered animation frames. The correction
+committed in `6759832` coalesces drag input to its resting frame and gives each
 foreground frame a monotonic page generation, so superseded queued renders lose
 ownership before entering the heavy render slot. Playback still pauses on
 manual input and the retained no-flash layer pool is unchanged. The automated
@@ -577,7 +586,8 @@ instead exposed a frontend ownership race. The prior retained-layer correction
 suppressed redraw for incomplete reused layers as well as completed layers, so
 superseded requests could finish as transparent `CANCELLED` PNGs and still satisfy
 Leaflet's loaded-image check. An older pending swap could also detach the same
-layer after a newer scrub request reclaimed it. The current correction preserves
+layer after a newer scrub request reclaimed it. The correction committed in
+`0e1eacb` preserves
 completed retained tile DOM without redraw, restarts incomplete layers at the new
 generation, and lets only the current pending owner detach an abandoned layer.
 Two deterministic animator regressions failed before the correction and pass
@@ -597,8 +607,8 @@ newest available frame, capped at the current time. A regression covers a 40-min
 delayed feed and passes for both catalog paths. Subsequent owner smoke loaded M12
 Channel09, Channel02, and Dust quickly; each showed five frames, rapid scrubbing stayed
 responsive, and an alert notification arrived without terminal errors, console errors,
-blank tiles, or a lockup. This clears the alert-overlap check, although the catalog change
-still needs an explicitly restarted-server verification.
+blank tiles, or a lockup. This cleared the alert-overlap check. The later final restarted
+M12 owner check also verified the corrected catalog window.
 
 The `0e1eacb` checkpoint also adds an RSS-tuned selected-product workflow for
 Meteosat-11. Channel02 and Channel13 retain their existing 12-frame z6-z7 rapid tail;
@@ -647,7 +657,7 @@ the family-specific z5/z7/z8 boundary transitions, one-canvas rendering, and no 
 warnings/errors. The owner cross-page smoke passed and the basemap/boundary checkpoint is
 committed in `6020906`.
 
-Meteosat latency Phase 5 is implemented in the current uncommitted tree. EUMETSAT searches
+Meteosat latency Phase 5 is committed in `3773d47`. EUMETSAT searches
 now page through the requested window with the live API's zero-based `si` offset; complete
 FCI feature metadata is retained for five minutes so the immediate download path does not
 repeat a 12-hour search; 5xx responses, timeouts, and connection errors receive three bounded
@@ -658,8 +668,10 @@ feature request count from two to one and improved p50/p95 from 3.871/4.537 seco
 1.341/1.505 seconds. The full gate passes 662 Python tests plus 42 subtests, all 54 Node
 tests, repo-wide Ruff, and diff checks. No render code, pixels, or render version changed.
 The restarted owner smoke passed the newly available M12 acquisition, five-frame catalog,
-responsive scrubbing, and clean terminal/console checks. Phase 5 is accepted; its commit is
-pending.
+responsive scrubbing, and clean terminal/console checks. Phase 5 is accepted and the
+bounded latency family is complete.
+
+Remaining eligible Satellite proposals are:
 
 - Satellite Archive UI on the active satellite-v2 contract.
 - Controls redesign without changing page/engine ownership.
@@ -836,9 +848,11 @@ decision.
 
 ## 7. Separate Greenfield project
 
-The NCH Weather Studio Greenfield plan is a **separate project**, not Version 2
-of this repository and not part of the current dashboard backlog. Its active,
-current-dashboard-aware plan is
+The NCH Weather Studio Greenfield plan is a **separate parked project design**,
+not Version 2 of this repository and not part of the current dashboard backlog.
+Its last dashboard comparison baseline is dated 2026-08-09, so its parity
+matrix and dependencies must be reconciled against the current dashboard before
+any phase can be authorized. The retained design is
 [`nch-weather-studio-greenfield-plan.md`](nch-weather-studio-greenfield-plan.md).
 The superseded 2026-06-30 plan remains unchanged at
 [`archive/2026-08-07-consolidation-sources/nch-weather-studio-greenfield-plan.md`](archive/2026-08-07-consolidation-sources/nch-weather-studio-greenfield-plan.md).
@@ -871,8 +885,8 @@ project boundaries without an explicit owner decision.
 - [`next-session-startup-prompt.md`](next-session-startup-prompt.md) — concise
   startup procedure.
 - [`nch-weather-studio-greenfield-plan.md`](nch-weather-studio-greenfield-plan.md)
-  — active plan for the separate Greenfield project; it does not authorize
-  current-dashboard or Greenfield implementation by itself.
+  — parked design for the separate Greenfield project; reconcile its dashboard
+  parity baseline before authorization.
 - [`architecture.md`](architecture.md) — implemented architecture only.
 - [`patterns.md`](patterns.md) — reusable implemented patterns only.
 
@@ -880,8 +894,10 @@ project boundaries without an explicit owner decision.
 
 The consolidation source archive contains the former superfile/startup prompt,
 post-refactor observations, Version 2 proposals, Greenfield plan, and completed
-cleanup Phase 2/4 records. Its README records hashes. Existing material under
-`docs/archive/` remains historical and unchanged.
+cleanup Phase 2/4 records. Its README records hashes. The archive also contains
+the completed Meteosat Phase 0–5 execution plan and the superseded pre-`3773d47`
+startup handoff. Existing material under `docs/archive/` remains historical and
+unchanged after it is placed there.
 
 ### 9.3 Performance evidence
 
@@ -918,8 +934,9 @@ smoke are committed as `7bda975`. Phase 4's core implementation landed in
 correction, and accepted RSS tuning are committed in `0e1eacb`. The complete automated gate,
 isolated cold-render/alert-overlap server smoke, controlled z7 rapid-scrub regression, and
 restarted M12/M11 owner smokes pass. Phase 4 is accepted. Phase 5 was separately authorized
-on 2026-08-26 and is implemented with automated and bounded live gates passing. Its restarted
-M12 acquisition owner smoke also passed. Phase 5 is accepted and its commit remains pending.
+on 2026-08-26, passed its automated and bounded live gates, and is committed in `3773d47`.
+Its restarted M12 acquisition owner smoke also passed. Phase 5 and the bounded Meteosat
+latency family are closed; the execution plan is preserved under `docs/archive/`.
 The Section 4.2 base
 monitor and its
 server-session cutoff plus notification-cadence/audio correction and national

@@ -1,6 +1,7 @@
 # NCHurricane Dashboard 2026
 
-A FastAPI-powered weather visualization dashboard for personal weather operations, with isolated workflows for current and archive views across:
+A FastAPI-powered weather visualization dashboard for personal weather
+operations, with live and bounded archive workflows across:
 
 - Surface observations
 - Alerts
@@ -26,17 +27,9 @@ NCHurricane Dashboard 2026 is an operational weather workstation app designed fo
 
 - Private GitHub repository is active for this project as of 2026-04-16.
 - Default workflow is commit-first for high-risk refactors so rollback is immediate.
-- Recommended checkpoint pattern:
-  - Commit before large structural edits
-  - Use short-lived feature branches for refactors
-  - Tag known-good milestones when major phases complete
+- Recommended checkpoint pattern: commit before large structural edits and keep
+  each high-risk change independently revertible.
 - Preferred recovery path is now `git restore`/`git revert` instead of manual file recovery.
-
-Suggested branch protections on `main`:
-
-- Require pull request before merge
-- Require at least one passing check for merge
-- Block force-pushes and branch deletion
 
 ## Key Capabilities
 
@@ -89,7 +82,7 @@ Suggested branch protections on `main`:
 ## Project Layout
 
 ```text
-2026-Dashboard/
+dashboard_2026/
   main.py
   requirements.txt
   index.html
@@ -245,9 +238,16 @@ Notes:
 ### Satellite v2 Rapid Worker
 
 Satellite v2 Full Disk and CONUS imagery are live-rendered on demand with
-tile-cache reuse and supertiles. No scheduled Satellite v2 warmer is required.
+tile-cache reuse and supertiles. Application-owned selection/presence workflows
+also perform bounded Meteosat warming: Meteosat-9/12 Full Disk selected products
+warm the newest two frames incrementally at z1-z6, while non-rapid Meteosat-11
+RSS selections warm the newest four frames at z4-z7 from a two-frame source
+tail. Both yield to foreground requests, honor selection ownership, and enter
+the shared Satellite byte budget.
+
 The narrow rapid-sector implementation remains available as an optional manual
-cache primer for high-cadence sectors where animation latency matters.
+cache primer for high-cadence Channel02/Channel13 sectors where animation
+latency matters.
 
 Default rapid worker scope:
 
@@ -305,17 +305,6 @@ curl "http://127.0.0.1:8000/api/satellite-v2/catalog?sat_id=goes19&sector=CONUS&
 
 ```
 
-## Basemap Cache Pre-Rendering (Optional but Recommended)
-
-Pre-render static basemaps to reduce first-render latency:
-
-```powershell
-python surface/generate_basemaps.py
-python radar/generate_radar_basemaps.py
-```
-
-Use `--force` to rebuild cache artifacts.
-
 ## Configuration Notes
 
 - Product and style defaults live under `config/` and domain modules.
@@ -336,13 +325,15 @@ an open page or a scheduled task. There is no public purge endpoint.
 - For large archive ranges, rendering and network time can be significant.
 - Radar/Satellite source availability can vary by provider/time window.
 
-## Roadmap (Concise)
+## Planning and Documentation
 
-- Add reproducible environment setup for geospatial dependencies (Windows-first lockfile strategy)
-- Expand endpoint docs into OpenAPI-focused usage examples per workflow
-- Add automated tests for API validation and renderer regression checks
-- Improve observability with structured logging and task metrics
-- Add optional auth and tighter CORS profiles for non-local deployments
+- Start with [`docs/README.md`](docs/README.md).
+- [`docs/dashboard-change-and-enhancement-superfile.md`](docs/dashboard-change-and-enhancement-superfile.md)
+  is the only active roadmap for the current dashboard and Version 2 lane.
+- [`docs/architecture.md`](docs/architecture.md) records implemented ownership;
+  [`docs/patterns.md`](docs/patterns.md) records established reusable patterns.
+- Completed/superseded plans live under [`docs/archive/`](docs/archive/), and
+  benchmark evidence lives under [`docs/perf/`](docs/perf/).
 
 ## Contributing
 
@@ -351,15 +342,3 @@ This project currently supports personal operations first. If you contribute:
 - Keep changes scoped by workflow (`surface`, `alerts`, `radar`, etc.)
 - Preserve current route contracts unless a cleanup batch explicitly retires them
 - Include clear reproduction steps for rendering/data-source bugs
-
-## License Recommendation
-
-Recommended: MIT License.
-
-Reasoning:
-
-- Best fit for a practical tooling repository that may benefit from broad reuse
-- Minimal friction for weather/dev contributors
-- Compatible with mixed Python + frontend utility projects
-
-If you adopt this recommendation, add a `LICENSE` file with MIT text and update this section to a final license statement.
