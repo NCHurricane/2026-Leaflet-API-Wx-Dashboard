@@ -1,6 +1,6 @@
 # Dashboard Change and Enhancement Superfile
 
-**Canonical status:** current source of truth as of 2026-08-26
+**Canonical status:** current source of truth as of 2026-09-06
 
 **Repository:** `F:\Python\dashboard_2026`
 
@@ -40,6 +40,11 @@ Status vocabulary:
 - **Rejected:** removed from the plan; do not reintroduce without a new decision.
 - **Historical:** completed or superseded evidence only.
 
+The owner selected a new high-cost rendering-workflow audit as the next focus
+on 2026-09-06. Its plan will be agreed after this reconciliation and the accepted
+working-tree changes are committed. See section 4.8; no renderer implementation
+or tuning is selected by that decision.
+
 ## 2. Current truth and invariants
 
 ### 2.1 Application and frontend
@@ -58,6 +63,9 @@ Status vocabulary:
   WPC, and Water. Drought remains standalone-only.
 - The Workspace shared timeline synchronizes Radar, MRMS, Satellite, and RTMA.
   WPC retains its own issuance/product cadence.
+- The owner reconfirmed the current Workspace layer order on 2026-09-06:
+  MRMS and SPC remain below Satellite. Proposals to move them above it are
+  deferred, not current defects.
 - Browser dependencies are vendored under `frontend/lib/`. The seven retained
   fonts are active assets. `css/shared.css` remains active for the landing page.
 - `frontend/core/branding.js` renders the shared Chuck Copeland Weather header
@@ -142,6 +150,25 @@ Status vocabulary:
   removal requires a new bounded caller/asset trace.
 - `pal_preview/` remains a root-dependent standalone utility and may later gain
   Satellite colortable previews.
+
+### 2.5 Accepted September checkpoint and evidence boundary
+
+On 2026-09-06 the owner confirmed that the existing MRMS transition and
+Satellite zoom/sharpness changes passed their own checks. The accepted changes
+are committed in `e200f74`. Their scope is:
+
+- Satellite request ceilings: CONUS z9, Full Disk z8, and Meso z9.
+- Shared CSS preserves discrete Satellite tile and Radar PNG pixels during
+  browser scaling; native MRMS loaded tiles are opaque before promotion.
+- Incoming MRMS PNGs remain hidden until they own the displayed frame, including
+  while the user changes opacity. The old complete image remains visible.
+- Product-page CSS versions and corresponding existing tests are reconciled.
+- `img/20260831_nchurricane_logo.svg` is retained as an additional owner asset;
+  it does not replace the canonical Chuck Copeland Weather branding.
+
+The checkpoint commit and fresh automated results are recorded in the startup
+handoff. Owner acceptance is distinct from automated checks; this reconciliation
+does not claim a new controlled-browser run or new performance measurements.
 
 ## 3. Completed cleanup program (historical execution record)
 
@@ -380,8 +407,9 @@ UI slices. Temporary listeners were closed after every runtime breakpoint.
 
 ## 4. Approved current-dashboard enhancement ledger
 
-These items may be selected after the cleanup foundation is stable. Selection
-still requires a bounded implementation plan.
+The cleanup foundation is complete. These proposals remain eligible, but the
+current selected focus is the rendering audit in section 4.8. Implementation
+still requires an agreed bounded plan.
 
 ### 4.1 Radar WebGL expansion
 
@@ -681,11 +709,14 @@ Remaining eligible Satellite proposals are:
 - Storm-centered Satellite viewport behavior for Tropical.
 - Meteosat SO2 recipe overrides and remaining reachable non-NOAA
   visible/composite/solar normalization.
-- Robust resume/retry for large Meteosat downloads after incomplete transfers
-  and upstream 503s.
+- Recovery/resume for interrupted large Meteosat streamed transfers. Phase 5
+  already provides bounded connection/timeout/5xx request retries and reuse of
+  completed FCI chunks; partial individual transfers are discarded on failure.
+  Define the remaining transfer-level contract before proposing further work.
 
-Unreachable registry recipes are not future placeholders; they belong to
-Cleanup Wave C unless the owner explicitly selects a named recipe first.
+Unreachable registry recipes and their disconnected composite branches were
+removed in Cleanup Wave C (`c0e6ced`). They are completed cleanup history, not
+remaining candidates or future placeholders.
 
 ### 4.5 RTMA and MRMS retention
 
@@ -734,12 +765,39 @@ bounded older-observation strategy because AWC's practical 24-hour window
 cannot satisfy older targets and IEM access must avoid unbounded
 per-state/per-frame request multiplication.
 
+### 4.8 High-cost rendering-workflow audit — selected focus, plan pending
+
+Owner decision, 2026-09-06: focus the next audit on Satellite, especially
+Meteosat; Radar, including the five named WebGL additions in section 4.1; MRMS;
+and RTMA. First reconcile the documentation and commit the accepted local
+changes. Agree the audit plan with the owner afterward.
+
+The audit should account for acquisition, decode, reprojection/rendering,
+publication/cache reuse, resource/queue ownership, and browser presentation,
+including first-frame availability and history warming in standalone pages and
+Workspace. These are topics for the upcoming plan, not new measured findings
+or an approved benchmark execution matrix.
+
+Retain historical performance evidence with its exact environment and distinguish
+it from any fresh baseline. Closed worker-free, Radar, cleanup, and Meteosat
+phases stay closed; their accepted contracts inform regression checks. Preserve
+PNG authority/fallback, source identity, bounded work, current layer order, and
+Satellite/MRMS display ownership. Renderer changes, WebGL activation/expansion,
+tuning, new providers, and retention changes await a separate agreed work slice.
+Other enhancement families and the separate Greenfield project remain deferred.
+
 ## 5. Post-refactor observation register
 
 These observations were collected on 2026-08-05. They are preserved as
 **unverified/open observations**, not confirmed current defects unless a later
 owner-smoke note says otherwise. Reproduce and reconcile each against current
 code before implementation.
+
+Reconciliation, 2026-09-06: entries explicitly marked corrected remain closed;
+measurements remain dated evidence; all other reports remain unverified unless
+a dated disposition below says otherwise. This review did not reproduce the
+entire register. Rendering-related observations may inform section 4.8, but
+their presence does not preselect a fix.
 
 The 2026-08-08 post-cleanup owner smoke passed the global shell, Surface display
 and product behavior, Satellite, Tropical, Water, Workspace, and the quick
@@ -754,13 +812,16 @@ General observations:
 Testing batch:
 
 1. Workspace Home may not turn off selected Storm Reports.
-2. Place SPC products and Mesoscale Discussions above Satellite.
+2. **Deferred by owner, 2026-09-06:** retain SPC/Mesoscale Discussions below
+   Satellite; moving them above it is not requested at this time.
 3. Put WPC Day pills above family pills and make the workflow day-first.
 4. WPC products may not load and Day pills may not activate; reconcile with 3.
-5. Ensure MRMS layers appear above Satellite.
+5. **Deferred by owner, 2026-09-06:** retain MRMS below Satellite.
 6. Ensure every enabled active layer has a combined-tabbed-legend entry.
 7. Standalone Satellite should fit Target, Mesoscale, and Rapid sectors.
-8. Add retry/resume handling for incomplete/503 Meteosat downloads.
+8. **Partially implemented:** Phase 5 added bounded request retries, including
+   503s. Interrupted streamed-transfer recovery/resume remains eligible under
+   section 4.4; the new rendering audit may assess its current cost.
 9. GMGSI Full Disk target: bounds `[-228.69, 103.01, -69.35, 62.27]`, center
    `[-8.67, -62.84]`, zoom `3`.
 10. Investigate unusually small GMGSI Global Z3 tiles.
@@ -811,7 +872,9 @@ Testing batch:
     IEM is decided before nearest-time filtering, CONUS has no historical IEM
     fallback, and the service can cache empty provider frames as
     `status: success`.
-28. **Measured 2026-08-09:** tile responses and logs now expose source/download,
+28. **Historical measurement, 2026-08-09:** later accepted Meteosat Phases 0–5
+    supersede this as a candidate optimization starting point. Tile responses
+    and logs expose source/download,
     decode/renderer construction, and final tile render/publication separately.
     Three uncached z6 Meteosat-12 Channel 13 tiles from distinct cached-source
     frames recorded median HTTP `3.021 s`, source resolution `7 ms`, decode
@@ -850,9 +913,11 @@ decision.
 
 The NCH Weather Studio Greenfield plan is a **separate parked project design**,
 not Version 2 of this repository and not part of the current dashboard backlog.
-Its last dashboard comparison baseline is dated 2026-08-09, so its parity
-matrix and dependencies must be reconciled against the current dashboard before
-any phase can be authorized. The retained design is
+Its documented dashboard comparison was refreshed on 2026-09-06 for accepted
+rendering/display contracts, shared basemaps, and alert routing/cutoffs. Exact
+per-family parity, provider/dependency currency, and target-platform feasibility
+still need verification before any implementation phase. This was a limited
+documentation reconciliation, not Greenfield implementation readiness. The design is
 [`nch-weather-studio-greenfield-plan.md`](nch-weather-studio-greenfield-plan.md).
 The superseded 2026-06-30 plan remains unchanged at
 [`archive/2026-08-07-consolidation-sources/nch-weather-studio-greenfield-plan.md`](archive/2026-08-07-consolidation-sources/nch-weather-studio-greenfield-plan.md).
@@ -872,8 +937,8 @@ project boundaries without an explicit owner decision.
 - Unbounded retention for RTMA/MRMS: rejected.
 - Persistent cross-process leases for the current single-process deployment:
   closed unless deployment changes.
-- The 36 unreachable Satellite registry entries and 12 unreachable composite
-  branches: approved cleanup candidates, not a dormant product roadmap.
+- The unreachable Satellite registry entries and 12 unreachable composite
+  branches: removed in `c0e6ced`, not remaining cleanup or a dormant roadmap.
 - Removing `tl_2025_us_state.*`: rejected; it is the retained state fallback.
 
 ## 9. History, evidence, and document ownership
@@ -890,7 +955,25 @@ project boundaries without an explicit owner decision.
 - [`architecture.md`](architecture.md) — implemented architecture only.
 - [`patterns.md`](patterns.md) — reusable implemented patterns only.
 
-### 9.2 Preserved planning sources
+### 9.2 Closed gate reference
+
+- Worker-free Phases 0–8 were accepted and archived. The Alerts near-one-second
+  Phase 0 gate explicitly passed with 0.082 seconds of post-response work in
+  its recorded run; it is not an outstanding continuation prerequisite. See
+  [`archive/worker-free-render-plan.md`](archive/worker-free-render-plan.md).
+- Original Radar WebGL Phases 6–8 are closed. Earlier performance READMEs that
+  say the next phase is gated are historical snapshots; the later Phase 8
+  completion record governs that family. The five additions in section 4.1
+  remain separate proposals, not completed work.
+- Cleanup Waves A–E and Meteosat Phases 0–5 are closed. Meteosat Phase 2c FCI
+  hyperslab pushdown was measured and rejected, not left unfinished.
+- Single-process ownership, bounded resources, PNG fallback, publication
+  safety, output parity, and applicable browser/owner validation remain current
+  contracts. Closed phase gates do not require blanket reruns for unrelated work.
+
+These are historical acceptance records, not a fresh performance certification.
+
+### 9.3 Preserved planning sources
 
 The consolidation source archive contains the former superfile/startup prompt,
 post-refactor observations, Version 2 proposals, Greenfield plan, and completed
@@ -899,7 +982,7 @@ the completed Meteosat Phase 0–5 execution plan and the superseded pre-`3773d4
 startup handoff. Existing material under `docs/archive/` remains historical and
 unchanged after it is placed there.
 
-### 9.3 Performance evidence
+### 9.4 Performance evidence
 
 All reviewed `docs/perf/` evidence remains retained and tracked. Every reviewed
 phase directory has a README, and all JSON/JSONL records parsed during the
@@ -909,7 +992,7 @@ gate recorded with it; it is not browser proof.
 Four older Radar evidence directories cited by planning text are unavailable
 and were never tracked; see the consolidation-source README for their names.
 
-### 9.4 Local-only token guide
+### 9.5 Local-only token guide
 
 `docs/token-saver-maybe.md` is intentionally ignored and local-only. It is not
 an installed skill, cannot auto-trigger, and must never be a prerequisite for a
@@ -918,10 +1001,11 @@ developer, repository, user, and selected-skill instructions.
 
 ## 10. Choosing the next slice
 
-Cleanup Waves A through E are complete. The default next decision is to select
-one bounded item from the approved current-dashboard enhancement ledger in
-section 4. The ledger order does not establish priority or authorization; name
-the selected family and define its exact implementation boundary before editing.
+Cleanup Waves A through E are complete. The owner selected the high-cost
+rendering-workflow audit in section 4.8 on 2026-09-06. After the accepted local
+changes and this reconciliation are committed, agree that audit's plan. Do not
+ask the owner to select an enhancement family again or start renderer changes
+from the ledger order.
 
 The post-cleanup Satellite cross-page blocking prerequisite is complete. A
 separate bounded Meteosat latency family was selected; its Phase 0/1 baseline,
@@ -949,6 +1033,7 @@ Radar WebGL remains listed first without priority. Section 4.7 retains one
 future unified cross-page Archive family, not an independently selectable
 Surface-only completion.
 
-Before starting, confirm current Git status, inspect only the named paths and
-their callers, define validation and rollback/fallback behavior, state explicit
-exclusions, and keep unrelated work untouched.
+Before the audit, confirm current Git status and agree its bounded evidence and
+measurement scope. Implementation, validation gates, and rollback/fallback
+decisions follow the findings and a separately selected work slice. Preserve
+unrelated work throughout.

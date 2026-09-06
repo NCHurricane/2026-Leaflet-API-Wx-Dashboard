@@ -10,7 +10,8 @@ This directory separates current operating truth from historical evidence.
   — canonical decision, cleanup, enhancement, Version 2, and evidence ledger.
 - [`nch-weather-studio-greenfield-plan.md`](nch-weather-studio-greenfield-plan.md)
   — parked design for the explicitly separate NCH Weather Studio project; its
-  dashboard parity baseline must be reconciled before any phase is authorized.
+  documented parity was refreshed on 2026-09-06, while exact family parity,
+  provider/dependency currency, and platform feasibility still need verification.
 - [`architecture.md`](architecture.md) — implemented system architecture.
 - [`patterns.md`](patterns.md) — reusable patterns already used by the project.
 
@@ -20,6 +21,17 @@ superfile explicitly routes to it; it is not part of the current-dashboard
 backlog and is not implementation-ready against the current dashboard. Neither
 document authorizes implementation by itself. A proposal appearing only in an
 archived file is historical.
+
+## Current decision — 2026-09-06
+
+The owner accepted the existing MRMS transition and Satellite zoom/sharpness
+changes and retained the current Workspace layer order. The next focus is a
+high-cost rendering-workflow audit of Satellite (especially Meteosat), Radar
+(including the five named WebGL additions), MRMS, and RTMA. Its plan will be
+agreed after this reconciliation and the accepted changes are committed.
+Section 4.8 of the superfile records that boundary; it does not authorize
+renderer changes or activate an old phase. Closed-gate references are in
+section 9.2. Other enhancement families and Greenfield remain deferred.
 
 ## Historical records
 

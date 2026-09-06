@@ -51,9 +51,10 @@ delay when immediate execution could compete with first paint.
 
 Do not add raw daemon threads or per-service in-flight sets. Provider minimum
 intervals, concurrency, retry/backoff, state reporting, periodic cleanup, and
-graceful shutdown belong to the coordinator. Phase 1 is explicitly
-single-process; persistent coordination is required before multi-worker Uvicorn
-or optional OS warmers can safely share ownership.
+graceful shutdown belong to the coordinator. The supported runtime is
+single-process. Optional OS warmers call its local API and share that process's
+coordination; they do not require persistent cross-process leases. A future
+multi-worker deployment would require a separate coordination design.
 
 There is no in-process scheduler compatibility layer. Existing direct-write
 Windows task definitions are not coordinator-compatible. Migrated heavy cold
@@ -285,6 +286,19 @@ way (capture with `mapViewportLog`, paste the center/zoom).
   shows states at displayed zoom 5+, and shows counties at displayed zoom 8+.
 - Use the shared Leaflet canvas renderer and avoid fetching a hidden boundary
   dataset solely to turn it off.
+
+## Weather Imagery Display Pattern
+
+For browser scaling, shared CSS scopes discrete-pixel rendering to Satellite
+tile images and Radar PNG images in their named panes. Preserve normal browser
+filtering for basemaps and unrelated overlays. Satellite's accepted request
+ceilings are CONUS z9, Full Disk z8, and Meso z9; these are source-tile request
+limits, not restrictions on the displayed map zoom.
+
+For MRMS, keep the previous complete PNG visible while a replacement loads at
+opacity 0. Apply the latest user opacity only when that replacement owns the
+displayed frame. Native tiles must finish their internal opacity transition
+before the layer replaces the PNG; the layer container owns user opacity.
 
 ## Projection Pattern
 

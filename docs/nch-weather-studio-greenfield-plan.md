@@ -1,23 +1,25 @@
 # NCH Weather Studio Greenfield Rewrite Plan
 
-**Status:** parked separate-project design; dashboard parity reconciliation
-required before any implementation phase
+**Status:** parked separate-project design; exact parity and feasibility
+verification required before any implementation phase
 
-**Last reconciled:** 2026-08-09
+**Documented dashboard comparison updated:** 2026-09-06
 
 **Supersedes for future planning:** the preserved 2026-06-30 plan at
 [`archive/2026-08-07-consolidation-sources/nch-weather-studio-greenfield-plan.md`](archive/2026-08-07-consolidation-sources/nch-weather-studio-greenfield-plan.md)
 
-**Historical dashboard comparison baseline:** repository commit `f994c0a`, plus
-the shared non-Workspace alert monitor documented as implemented in the
-2026-08-09 working tree. The operational dashboard has since advanced through
-at least `3773d47`. Before any phase is authorized, reconcile the parity matrix,
-provider contracts, and dependencies against `3773d47` or the newer current
-checkpoint, plus the current superfile, architecture, and patterns.
+**Dashboard comparison baseline:** the accepted September rendering/display
+checkpoint `e200f74` identified in `next-session-startup-prompt.md`, following functional
+checkpoint `3773d47` and docs checkpoint `c8a4193`. The 2026-09-06 update records
+known alert routing/cutoff, shared basemap, rendering ownership, and display
+contracts. It does not revalidate the exact per-family inventory, provider or
+dependency currency, or desktop target feasibility. Verify those against the
+current checkpoint before authorizing Greenfield. The earlier `f994c0a` plus
+2026-08-09 working-tree comparison is historical.
 
 This is the retained design for a clean-room standalone desktop program named
 `nch-weather-studio`. It is not implementation-ready against the current
-dashboard until the bounded reconciliation above is complete. It replaces the
+dashboard until the verification above is complete. It replaces the
 old plan as the current Greenfield design record without changing the archived
 historical copy.
 
@@ -32,6 +34,10 @@ baseline.
 Greenfield remains separate from both the current-dashboard backlog and the
 Version 2 lane. Work begins only when the owner explicitly authorizes an
 implementation phase.
+
+The owner chose a current-dashboard rendering audit on 2026-09-06; Greenfield
+remains deferred. This documentation refresh does not change its technology,
+platform, clean-room, or cutover decisions.
 
 ## 1. Owner Decisions Already Made
 
@@ -491,6 +497,12 @@ Additional parity boundaries:
 - The six-event non-Workspace monitor allowlist is Tornado Warning, Tornado
   Watch, Severe Thunderstorm Warning, Severe Thunderstorm Watch, Flash Flood
   Warning, and Flash Flood Watch.
+- Current shared basemap choices are keyless Esri World Dark Gray Base, World
+  Light Gray Base, USA Topo Maps, and World Imagery. Their shared boundary policy
+  is documented in `architecture.md`; verify equivalent behavior and provider
+  terms when designing the MapLibre adapter.
+- Workspace currently keeps MRMS and SPC below Satellite. The owner retained
+  this order on 2026-09-06; no layer-order enhancement is part of current parity.
 
 ## 7. Core Architecture
 
@@ -901,7 +913,13 @@ name guarantees performance.
   the fixed six-event allowlist, baselines existing alerts, and presents one
   in-app banner/sound/border cue per new alert.
 - Alerts owns the persisted On/Off setting. Clicking in Alerts selects and
-  zooms in place; clicking elsewhere navigates to Alerts and selects/zooms.
+  zooms in place; clicking elsewhere opens the selected/zoomed Workspace alert
+  context. The current browser implementation uses `/workspace?alert=...` in a
+  new tab; define the equivalent desktop navigation without losing that context.
+- Preserve issuance eligibility after both the monitor-session and backend
+  server-session boundaries; missing issuance/boundary data fails closed.
+  Preserve cache-aware cadence and audio readiness so old alerts are not
+  replayed and the start of the first sound is not clipped.
 - Workspace retains its separate Workspace warning behavior and Projected
   Arrival context.
 - The app is single-instance, so browser-tab leader election is unnecessary.
@@ -937,6 +955,8 @@ inventory.
   event colors, severity/event filters, active-warning list, detail selection,
   live Local Storm Reports, and last-valid immutable generations.
 - Cold missing cache reports warming/backoff, never false empty success.
+- The active-warning rail remains national; viewport filtering applies to the
+  map/legend, not rail membership.
 - Stale complete data remains visible while one deduplicated refresh runs.
 - Preserve severe warning visual prominence, with reduced-motion/non-color
   alternatives.
@@ -979,6 +999,17 @@ inventory.
 - Source download, decode, warp, and tile render timings are measured separately.
 - Page/workspace ownership cancels queued heavy work after selection/navigation
   changes; an already-publishing reusable artifact may finish atomically.
+- Preserve accepted no-flash retained-frame ownership, scrub debounce/generation
+  cancellation, byte-budget admission, and FCI native-read serialization.
+  Selected-product warming yields to live work; delayed-feed catalogs retain
+  valid available frames. Treat these as behavior/ownership requirements, not
+  permission to copy the current implementation.
+- The September comparison includes CONUS z9, Full Disk z8, and Meso z9 request
+  ceilings and discrete-pixel browser scaling. Any different desktop rendering
+  strategy requires an explicit detail/resource comparison.
+- EUMETSAT pagination, metadata reuse, bounded transient request retries, and
+  completed-chunk reuse are current behavior. Partial-stream resume remains a
+  proposal, not an existing parity feature.
 
 ### 10.5 SPC
 

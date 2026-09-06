@@ -7,7 +7,7 @@ appropriate. High-risk refactors should be committed in small, independently
 revertible checkpoints after the required validation and explicit owner
 authorization.
 
-## Phase 1+ State (Leaflet Map)
+## Current State (Leaflet Map)
 
 The application landing page is `index.html`, served at `/`. The severe-weather
 workspace is `frontend/pages/workspace/workspace.html`, served at `/workspace`;
@@ -20,6 +20,10 @@ workspace is `frontend/pages/workspace/workspace.html`, served at `/workspace`;
   and Alerts 440+
 - Pre-rendered raster overlays + frame-locked value points (RTMA)
 - Radar live overlays from cache-first per-site/per-product PNG streams
+
+The owner reconfirmed this Workspace pane order on 2026-09-06. MRMS and SPC
+remain below Satellite; older observations proposing a different order are
+deferred.
 
 Active root pages and their JS in this checkout:
 
@@ -36,8 +40,8 @@ Active root pages and their JS in this checkout:
   WPC retains its issuance/product cadence and does not join that timeline.
   Satellite sector pills
   select imagery sources without changing the Workspace viewport; Region and
-  Home own recentering/reset. Satellite Archive and other product details remain
-  on their existing paths pending a later gate.
+  Home own recentering/reset. Dedicated product controls remain page-owned;
+  a unified cross-page Archive workflow is future work in the superfile.
 - `/drought` — first true Stage 2 standalone page, served from
   `frontend/pages/drought/drought.html`; it loads ES modules from
   `frontend/core/` and its own directory and does not load `js/weather.js`.
@@ -182,7 +186,8 @@ Archive tab remains a future-tools placeholder.
 
 The current coordinator supports one application process. `WEB_CONCURRENCY` and
 `UVICORN_WORKERS` above 1 are rejected, and CLI multi-worker launches are
-unsupported until persistent cross-process leases/provider state exist.
+unsupported. Persistent cross-process leases/provider state are closed as
+unnecessary for this deployment; a deployment change requires a new design.
 Existing direct-write OS tasks are not safe to overlap with migrated paths.
 There is no in-process worker scheduler; `WX_INPROC_WORKERS` no longer restores
 the retired fixed schedule.
@@ -322,10 +327,17 @@ Satellite v2 tile endpoints:
    use platform-longitude disk bounds, stop scheduling on selection release or
    new live work, and prune tile-frame caches with the seven-hour source window.
    They do not replace the live on-demand tile path.
-8. Source downloads deduplicate by platform/sector/frame. EUMETSAT FCI uses
-   one or two download connections and reports `credentials_required` or
-   `license_required` instead of hanging or presenting a generic provider
-   failure.
+8. Source downloads deduplicate by platform/sector/frame. EUMETSAT acquisition
+   follows search pagination, reuses feature metadata for five minutes, and
+   bounds FCI download concurrency with a four-worker hard ceiling. Authorized
+   requests retry connection/timeout/5xx failures with bounded backoff; completed
+   FCI chunks are reusable. An interrupted individual stream discards its partial
+   file and raises; byte-range resume is not implemented. Credential/license
+   states remain explicit.
+9. Accepted source-tile request ceilings are CONUS z9, Full Disk z8, and Meso
+   z9. Leaflet can display higher map zooms by scaling the available imagery.
+   Shared CSS scopes discrete-pixel scaling to Satellite tiles and Radar PNGs,
+   preserving ordinary browser filtering for basemaps and unrelated overlays.
 
 Cache served as static files via `/cache` mount (StaticFiles).
 
@@ -502,8 +514,9 @@ Alpha ownership is deliberately split by product semantics:
 Phase 2 canvas/zoom-cap render namespaces carrying this contract are
 `products-v9` for the default/GOES/SEVIRI path, `products-ahi5` for Himawari-9,
 `products-fci5` for Meteosat-12, `products-ami3` for GK2A, and
-`products-gmgsi2` for GMGSI. Golden tiles from the preceding namespaces remain
-the comparison baseline for the Phase 2 owner visual gate.
+`products-gmgsi2` for GMGSI. Golden tiles from preceding namespaces remain
+historical comparison evidence for the accepted Phase 2 visual gate. Any new
+rendering audit needs a baseline identified against the current checkpoint.
 
 ## Radar / Satellite Product Pages (Current State)
 
@@ -523,10 +536,8 @@ synchronous vector/data responses with deterministic JSON caching. They remain
 backend groundwork, while the standalone Surface and Alerts Archive tabs are
 placeholders pending one future unified cross-page workflow.
 
-Direction:
-
-- Continue migrating any remaining tabs toward the cache-first pre-render/tile contract.
-- Alerts remain on the vector GeoJSON workflow.
+Alerts remain on the vector GeoJSON workflow. Future rendering changes belong
+in the superfile; this architecture section does not authorize more migration.
 
 ## Weather Radar Live Notes (2026-05-05)
 
@@ -544,6 +555,10 @@ workflows are not part of the runtime.
 - `/api/overlay/latest` and `/api/overlay/frames` expose bounded frame history.
 - The native-detail tile path is preferred where a frame is preparable, with
   the complete PNG overlay retained as rollback/fallback.
+- During a frame swap, the old complete PNG remains visible and its replacement
+  starts at opacity 0. Opacity controls do not expose a pending replacement;
+  promotion applies the latest selected opacity. Loaded native tiles are opaque
+  before promotion, avoiding Leaflet's per-tile fade over the PNG fallback.
 - Frame identity comes from source metadata, including `latest_source.json`,
   rather than file modification time.
 - The current UI window is approximately 12 hours. Storage and preparation are

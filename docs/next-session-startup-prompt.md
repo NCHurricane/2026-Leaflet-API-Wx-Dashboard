@@ -3,6 +3,8 @@
 Use this as the bounded handoff for the next dashboard session. It summarizes
 current operating truth; archived plans are evidence, not authorization.
 
+Updated 2026-09-06 after owner decisions and checkpoint validation.
+
 ## 1. Orient before editing
 
 1. Work only in `F:\Python\dashboard_2026`.
@@ -12,15 +14,39 @@ current operating truth; archived plans are evidence, not authorization.
    system area.
 4. Inspect `git status --short` and recent `git log --oneline`. Preserve all
    unrelated dirty work. Do not commit or push without explicit owner approval.
-5. Select one bounded item from the superfile, trace its callers/assets/tests,
-   state the validation gate, and obtain any required phase authorization before
-   implementation.
+5. The next focus is already selected: a high-cost rendering-workflow audit of
+   Satellite (especially Meteosat), Radar and the five named WebGL proposals,
+   MRMS, and RTMA. Agree the audit plan after the accepted checkpoint and docs
+   reconciliation are committed. Do not start renderer changes.
 
 ## 2. Current checkpoint
 
-The last functional code checkpoint before this documentation-only
-reconciliation is `3773d47`; Git HEAD may later include a docs-only checkpoint.
-The important recent completed checkpoints are:
+The September functional checkpoint `e200f74` records the owner-accepted MRMS
+transition and Satellite zoom/sharpness changes, related page/test updates, and the
+additional `img/20260831_nchurricane_logo.svg` asset. It follows `3773d47`
+(functional) and `c8a4193` (documentation). The owner confirmed acceptance on
+2026-09-06:
+
+- Satellite request ceilings are CONUS z9, Full Disk z8, and Meso z9.
+- Shared CSS preserves discrete Satellite tile/Radar PNG pixels during scaling
+  and removes the native MRMS per-tile fade before promotion.
+- MRMS keeps incoming PNGs hidden until display ownership changes; opacity
+  controls do not reveal pending images.
+- The additional logo is retained as an asset; canonical branding is unchanged.
+- MRMS and SPC remain below Satellite in Workspace. The owner deferred the
+  older proposals to move them above it.
+
+Fresh verification on 2026-09-06: 77 focused Python tests passed after correcting
+three stale CSS-version assertions to match the existing MRMS/Workspace pages.
+The full suite passed **662 Python tests plus 42 subtests** and **54 Node tests**;
+scoped Ruff, MRMS JavaScript syntax, and the added SVG's XML/embedded-content
+checks passed. Diff whitespace checks and all 26 local Markdown links in the
+seven active documents passed. Python reported 52 Matplotlib/xarray/NumPy
+deprecation warnings.
+Owner acceptance is recorded separately; no new controlled-browser run or
+rendering benchmark was performed during this reconciliation.
+
+Earlier completed checkpoints remain evidence:
 
 - `3773d47` — Meteosat Phase 5 EUMETSAT acquisition improvements. Search
   pagination, five-minute feature metadata reuse, bounded transient retries, and
@@ -52,6 +78,9 @@ for later edits. Re-run the narrowest relevant gate after any change.
 ## 3. Closed work and retained evidence
 
 - Cleanup Waves A through E are complete.
+- Worker-free Phases 0–8 and the original Radar WebGL Phases 6–8 are complete.
+  The Alerts near-one-second gate passed in its recorded run; older next-phase
+  wording is historical. See the superfile section 9.2 closed-gate reference.
 - The post-cleanup Satellite cross-page blocking prerequisite is complete.
 - The bounded Meteosat latency family is complete through Phase 5. Its execution
   record is
@@ -66,27 +95,32 @@ for later edits. Re-run the narrowest relevant gate after any change.
 ## 4. What is active now
 
 `docs/dashboard-change-and-enhancement-superfile.md` is the only active roadmap
-for the current dashboard and Version 2 lane. No next enhancement is selected by
-this handoff. The remaining Satellite proposals include Archive UI, controls
-redesign, measured GDAL tuning, explicitly opt-in CONUS warming, Tropical
-storm-centered viewport behavior, remaining Meteosat normalization, and robust
-large-download resume/retry. Their document order is not priority or approval.
+for the current dashboard and Version 2 lane. Section 4.8 records the selected
+rendering-audit focus. Audit questions include stage costs, first-frame/history
+behavior, cache reuse, resource/queue ownership, and standalone/Workspace
+presentation. Exact evidence collection and measurement scope remain to be
+agreed with the owner; no new bottleneck or performance result is claimed yet.
 
-Radar WebGL remains first only in ledger order. The unified cross-page Archive
-family remains future work. Choose a family and define a bounded slice before
-editing.
+The five Radar WebGL additions are `L2_RHO`, `L3_N0C`, `L3_DPR`, `L3_DAA`, and
+`L3_DTA`. They are included in audit/planning scope, not authorized for
+implementation or activation. Other enhancement families, including the unified
+Archive workflow, remain deferred. Meteosat request-level retries are already
+implemented; interrupted individual streamed-transfer resume is still a proposal.
 
 `docs/nch-weather-studio-greenfield-plan.md` is a separate parked design, not a
-dashboard phase. Its dashboard comparison baseline was last reconciled on
-2026-08-09 and must be updated against the current checkpoint before the owner
-can authorize any Greenfield implementation.
+dashboard phase. Its documented comparison was refreshed on 2026-09-06; exact
+per-family parity, provider/dependency currency, and desktop feasibility still
+need verification before any implementation. Greenfield is not the selected
+next focus.
 
 ## 5. Operating boundaries
 
 - Preserve application-owned refresh coordination and the single-process
   deployment contract unless a new design is explicitly approved.
 - Preserve Satellite ready-layer/no-flash ownership, scrub debounce/generation
-  cancellation, render budgeting, and FCI native-read serialization.
+  cancellation, render budgeting, and FCI native-read serialization; preserve
+  the accepted MRMS pending-image/native-tile promotion behavior.
+- Keep current Workspace pane ordering and Radar/MRMS PNG authority/fallback.
 - Keep Alerts rail entries national; viewport filtering belongs only to the
   legend.
 - Keep basemap and boundary behavior shared through `frontend/core/map-core.js`.
@@ -97,7 +131,9 @@ can authorize any Greenfield implementation.
 
 ## 6. Exact next action
 
-At the start of the next work session, confirm Git state and then ask the owner
-to select one bounded item from the current-dashboard enhancement ledger. Do not
-automatically continue Meteosat, start Greenfield, or infer priority from list
-order.
+Confirm the committed baseline, then work with the owner to define the rendering
+audit plan for the already-selected four product families. Agree evidence and
+measurement scope before expensive live runs. Record findings in the superfile
+and dated evidence only when produced. Renderer changes follow an
+agreed implementation slice after the audit; do not reopen completed phases or
+start Greenfield from old handoff language.

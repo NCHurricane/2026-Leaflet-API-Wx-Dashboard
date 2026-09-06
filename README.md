@@ -1,13 +1,15 @@
 # NCHurricane Dashboard 2026
 
 A FastAPI-powered weather visualization dashboard for personal weather
-operations, with live and bounded archive workflows across:
+operations, with live products and bounded history across:
 
 - Surface observations
 - Alerts
 - Radar
 - Satellite
 - MRMS
+- RTMA, SPC, WPC, Tropical, Water, and Drought
+- A shared multi-product Workspace
 
 The app combines a Python API backend with static HTML/CSS/JS frontends and generates map images/animations on demand.
 
@@ -35,11 +37,15 @@ NCHurricane Dashboard 2026 is an operational weather workstation app designed fo
 
 ### Data Workflows
 
-- Surface maps (current and archive animation)
+- Surface maps with current observations and bounded recent Live lookback
 - Alert maps + active alert polygons (GeoJSON)
 - Radar (Level 2 and Level 3, current and archive)
-- GOES satellite imagery (current and archive)
+- GOES, Himawari, Meteosat, GK2A, and GMGSI satellite imagery on satellite-v2
 - MRMS products from NOAA public data
+
+Surface and Alerts retain archive APIs as backend groundwork; their standalone
+Archive tabs are placeholders. A unified cross-page Archive workflow remains
+future work, separate from current Live history and Tropical archive features.
 
 ### Rendering and Performance
 
@@ -71,7 +77,8 @@ NCHurricane Dashboard 2026 is an operational weather workstation app designed fo
 
 - `main.py` hosts the FastAPI app, endpoint routing, and static mounts.
 - `index.html` is the main dashboard landing page served at `/`.
-- `/workspace` composes active Alerts and live Radar engines on one Leaflet map;
+- `/workspace` composes Alerts, Radar, SPC, Satellite, RTMA, MRMS, WPC, and Water
+  engines on one Leaflet map, with a shared Radar/MRMS/Satellite/RTMA timeline;
   `/weather.html` redirects there.
 - Canonical standalone product pages exist for Alerts, Radar, Satellite, SPC,
   Surface, MRMS, RTMA, Drought, Tropical, WPC, and Water.
@@ -149,10 +156,11 @@ python main.py
 The app-owned refresh coordinator always starts with the API. Requests own
 refresh, rendering, history filling, and current-season Tropical archive
 updates; application lifecycle owns six-hour cache cleanup. `WX_INPROC_WORKERS`
-no longer enables a broad fixed worker schedule. Phase 8 supports exactly one
+no longer enables a broad fixed worker schedule. The supported runtime has one
 application process. Do not launch Uvicorn with multiple workers or set
-`WEB_CONCURRENCY` / `UVICORN_WORKERS` above 1 until persistent cross-process
-leases are available.
+`WEB_CONCURRENCY` / `UVICORN_WORKERS` above 1. Persistent cross-process leases
+are closed as unnecessary for this deployment; a deployment change requires a
+new coordination design. Optional warmers below delegate to the local API.
 
 Windows scheduled tasks are optional. Preview existing tasks and the bounded
 localhost warmer profiles without changing anything:
@@ -334,6 +342,10 @@ an open page or a scheduled task. There is no public purge endpoint.
   [`docs/patterns.md`](docs/patterns.md) records established reusable patterns.
 - Completed/superseded plans live under [`docs/archive/`](docs/archive/), and
   benchmark evidence lives under [`docs/perf/`](docs/perf/).
+- As of 2026-09-06, the owner selected a high-cost rendering-workflow audit for
+  Satellite (especially Meteosat), Radar and its five proposed WebGL additions,
+  MRMS, and RTMA. Agree the audit plan after the accepted checkpoint and docs
+  reconciliation are committed; renderer implementation remains deferred.
 
 ## Contributing
 
