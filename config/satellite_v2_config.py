@@ -588,9 +588,9 @@ def satellite_v2_render_version_for_satellite(sat_id: str | None) -> str:
 # Max zoom levels the frontend is allowed to request.
 # These are request ceilings. Live rendering, supertiles, and any narrow
 # rapid-sector warming decide what is actually generated ahead of time.
-SATELLITE_V2_MAX_NATIVE_ZOOM_CONUS = 10
-SATELLITE_V2_MAX_NATIVE_ZOOM_FULLDISK = 10
-SATELLITE_V2_MAX_NATIVE_ZOOM_MESO = 10
+SATELLITE_V2_MAX_NATIVE_ZOOM_CONUS = 9
+SATELLITE_V2_MAX_NATIVE_ZOOM_FULLDISK = 8
+SATELLITE_V2_MAX_NATIVE_ZOOM_MESO = 9
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:

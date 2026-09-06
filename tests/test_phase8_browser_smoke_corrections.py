@@ -265,7 +265,11 @@ def test_all_pages_receive_the_shared_timestamp_state_assets() -> None:
         page_dir = ROOT / "frontend/pages" / page_name
         markup = (page_dir / f"{page_name}.html").read_text(encoding="utf-8")
         script = (page_dir / entry_name).read_text(encoding="utf-8")
-        assert "core.css?v=20260826e" in markup
+        core_version = (
+            "20260905-mrms" if page_name in {"mrms", "workspace"}
+            else "20260904a"
+        )
+        assert f"core.css?v={core_version}" in markup
         assert f"/frontend/pages/{page_name}/{entry_name}?v=" in markup
         assert "status.js?v=20260808a" in script
         assert f"source: byId('{page_name}-source')" not in script

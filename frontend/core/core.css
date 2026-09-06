@@ -310,10 +310,27 @@ button:hover { border-color: var(--core-accent); }
     background: var(--core-bg);
 }
 
+/* MRMS promotes a complete tile layer over its PNG on `load`. Leaflet fires
+   that event before its 200ms tile fade finishes; loaded pixels must already
+   be opaque inside the layer (whose container owns the user's opacity). */
+.mrms-native-tile-overlay .leaflet-tile-loaded {
+    opacity: 1 !important;
+    transition: none !important;
+}
+
 .leaflet-container img.leaflet-tile {
     width: calc(256px + var(--core-tile-overlap, 1px)) !important;
     height: calc(256px + var(--core-tile-overlap, 1px)) !important;
     mix-blend-mode: normal;
+}
+
+/* Preserve discrete source pixels when Leaflet scales weather imagery. Keep
+   basemap tiles and unrelated image overlays on the browser's default filter. */
+.leaflet-container .leaflet-satellite-overlays-pane img.leaflet-tile,
+.leaflet-container .leaflet-radar-overlays-pane img.leaflet-image-layer {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
 }
 
 /* The keyless Esri dark-gray raster is intentionally neutral and fairly light.

@@ -165,7 +165,11 @@ def test_canonical_pages_use_shared_chuck_copeland_branding():
         page = page_path.read_text(encoding="utf-8")
         assert '<div class="core-brand"></div>' in page
         assert ">NCHURRICANE<" not in page
-        assert "/frontend/core/core.css?v=20260826e" in page
+        core_version = (
+            "20260905-mrms" if page_path.parent.name in {"mrms", "workspace"}
+            else "20260904a"
+        )
+        assert f"/frontend/core/core.css?v={core_version}" in page
 
     for script_path in (ROOT / "frontend/pages").glob("*/*.js"):
         script = script_path.read_text(encoding="utf-8")
@@ -195,6 +199,9 @@ def test_canonical_map_pages_use_approved_esri_basemaps():
     assert ".leaflet-layer.core-basemap-dark-tiles img.leaflet-tile" in core_css
     assert "brightness(0.6) contrast(1.08)" in core_css
     assert "drop-shadow(0 0 0.6px rgba(2, 6, 23, 0.72))" in core_css
+    assert ".leaflet-satellite-overlays-pane img.leaflet-tile" in core_css
+    assert ".leaflet-radar-overlays-pane img.leaflet-image-layer" in core_css
+    assert "image-rendering: pixelated" in core_css
 
     conus_scripts = (
         "alerts/alerts-page.js",

@@ -71,11 +71,16 @@ test('workspace MRMS pane retains the loaded image until its replacement loads',
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(layers.has(overlays[0]), true, 'old MRMS image remains while the replacement loads');
     assert.equal(layers.has(overlays[1]), true);
+    assert.equal(overlays[1].options.opacity, 0, 'incoming image cannot stack over the displayed frame');
+    engine.setOpacity(0.6);
+    assert.equal(overlays[0].opacity, 0.6);
+    assert.equal(overlays[1].opacity, undefined, 'opacity changes do not expose a pending image');
     overlays[1].trigger('load');
     const second = await secondPromise;
     assert.equal(second.refreshing, false);
     assert.equal(layers.has(overlays[0]), false);
     assert.equal(layers.has(overlays[1]), true);
+    assert.equal(overlays[1].opacity, 0.6);
 
     engine.clear();
     assert.equal(layers.size, 0);

@@ -155,7 +155,7 @@ export function createMrmsEngine({ api, mapCore, legend, status, paneName = '' }
         if (!Number.isFinite(parsed)) return;
         opacity = parsed;
         overlay?.setOpacity(tileOverlay ? 0 : opacity);
-        pendingOverlay?.setOpacity(opacity);
+        // Pending images stay hidden until they own the displayed frame.
         tileOverlay?.setOpacity(opacity);
     }
 
@@ -310,7 +310,7 @@ export function createMrmsEngine({ api, mapCore, legend, status, paneName = '' }
         const oldOverlay = overlay;
         const swapSeq = ++overlaySwapSeq;
         const newOverlay = leaflet.imageOverlay(api.apiUrl(imageUrl), leafletBounds, {
-            opacity,
+            opacity: 0,
             className: 'mrms-gradient-overlay',
             ...(paneName ? { pane: paneName } : {}),
         });

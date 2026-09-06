@@ -131,4 +131,8 @@ def test_shared_core_css_is_cache_busted_on_every_product_page():
     pages = list((FRONTEND / "pages").glob("*/*.html"))
     assert len(pages) == 12
     for page in pages:
-        assert "/frontend/core/core.css?v=20260826e" in _read(page)
+        core_version = (
+            "20260905-mrms" if page.parent.name in {"mrms", "workspace"}
+            else "20260904a"
+        )
+        assert f"/frontend/core/core.css?v={core_version}" in _read(page)

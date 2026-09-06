@@ -106,7 +106,11 @@ def test_shared_map_tiles_overlap_and_cache_bust():
     for page_path in (Path(BASE_DIR) / "frontend" / "pages").glob("*/*.html"):
         page = page_path.read_text(encoding="utf-8")
         if "/frontend/core/core.css" in page:
-            assert "/frontend/core/core.css?v=20260826e" in page
+            core_version = (
+                "20260905-mrms" if page_path.parent.name in {"mrms", "workspace"}
+                else "20260904a"
+            )
+            assert f"/frontend/core/core.css?v={core_version}" in page
 
 
 def test_drought_sidebar_uses_accessible_mounted_tab_panels():
