@@ -343,9 +343,11 @@ an open page or a scheduled task. There is no public purge endpoint.
 - Completed/superseded plans live under [`docs/archive/`](docs/archive/), and
   benchmark evidence lives under [`docs/perf/`](docs/perf/).
 - As of 2026-09-06, the owner selected a high-cost rendering-workflow audit for
-  Satellite (especially Meteosat), Radar and its five proposed WebGL additions,
-  MRMS, and RTMA. Agree the audit plan after the accepted checkpoint and docs
-  reconciliation are committed; renderer implementation remains deferred.
+  Satellite (especially Meteosat), Radar with product-specific WebGL evaluation,
+  MRMS, and RTMA. The expanded brief includes alternative architectures,
+  hardware-adaptive budgets, and compatibility across modern Chromium, WebKit,
+  and Gecko browsers. See superfile section 4.8; renderer implementation remains
+  deferred pending the audit and plan review.
 
 ## Contributing
 

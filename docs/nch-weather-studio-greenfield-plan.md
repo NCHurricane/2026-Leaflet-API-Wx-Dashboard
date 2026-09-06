@@ -477,7 +477,7 @@ Workspace. The Greenfield parity baseline is:
 | RTMA | Hourly and rapid-update streams, CONUS/AK/HI/PR, exposed native/derived products, frame-locked points/raster, and approximately 12-hour history |
 | MRMS | Current product groups, progressive frames, legends, approximately 12-hour history, native-detail tiles, source identity, and PNG fallback |
 | Drought | Available dates/categories, national layer, state statistics, details, and legitimate-empty/source states |
-| WPC | ERO Days 1–5, QPF 6-hour/24-hour/multiday, Winter guidance through Days 6–7, FOP, MPDs, Significant Weather Days 1–3, and surface analysis/forecast |
+| WPC | ERO Days 1–5, QPF 6-hour/24-hour/multiday, catalog-backed Winter probabilities for Days 1–3, FOP, MPDs, Significant Weather Days 1–3, and surface analysis/forecast |
 | Tropical | Live storms/basins, advisory and GIS layers, official graphics, archives, forecast track/cone, and floater imagery behavior |
 | Water | River, CO-OPS coastal, and NDBC stations; viewport/network/flood filters; detail enrichment; and stage gauge |
 | Workspace | Alerts, Radar, SPC, Satellite, RTMA, MRMS, WPC, and Water composition; layer ordering/legends; Projected Arrival Tool; and one Radar/MRMS/Satellite/RTMA shared timeline |
@@ -1059,7 +1059,10 @@ inventory.
 
 - Excessive Rainfall Outlook Days 1–5.
 - QPF 6-hour, 24-hour, and multiday ranges currently exposed.
-- Winter guidance through the current Days 6–7 range.
+- Catalog-backed Winter probabilities for Days 1–3: snow over 4/8/12 inches and
+  ice over 0.25 inch. Later-day controls do not establish Days 4–7 source/catalog
+  support; extending that range is a deferred current-dashboard proposal,
+  not an implemented Greenfield parity requirement.
 - Five-Day River Flood Outlook, active MPDs, Significant Weather Days 1–3,
   Surface Analysis, and Surface Forecast.
 - Preserve explicit no-significant-weather/no-area issuance separately from

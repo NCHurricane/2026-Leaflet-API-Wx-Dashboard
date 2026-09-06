@@ -3,7 +3,8 @@
 Use this as the bounded handoff for the next dashboard session. It summarizes
 current operating truth; archived plans are evidence, not authorization.
 
-Updated 2026-09-06 after owner decisions and checkpoint validation.
+Updated 2026-09-06 after owner decisions and checkpoint validation; expanded
+with the subsequent resource-adaptation and browser-support audit brief.
 
 ## 1. Orient before editing
 
@@ -15,9 +16,10 @@ Updated 2026-09-06 after owner decisions and checkpoint validation.
 4. Inspect `git status --short` and recent `git log --oneline`. Preserve all
    unrelated dirty work. Do not commit or push without explicit owner approval.
 5. The next focus is already selected: a high-cost rendering-workflow audit of
-   Satellite (especially Meteosat), Radar and the five named WebGL proposals,
-   MRMS, and RTMA. Agree the audit plan after the accepted checkpoint and docs
-   reconciliation are committed. Do not start renderer changes.
+   Satellite (especially Meteosat), Radar with product-specific WebGL evaluation,
+   MRMS, and RTMA. The owner broadened architectural scope and requested
+   adaptation to different machines and all three major browser engines.
+   Develop the bounded audit plan for review; do not start renderer changes.
 
 ## 2. Current checkpoint
 
@@ -45,6 +47,10 @@ seven active documents passed. Python reported 52 Matplotlib/xarray/NumPy
 deprecation warnings.
 Owner acceptance is recorded separately; no new controlled-browser run or
 rendering benchmark was performed during this reconciliation.
+
+Documentation checkpoint `5096e74` records that acceptance and initial audit
+handoff. Subsequent planning edits broaden the brief in superfile section 4.8;
+they do not change or newly benchmark the `e200f74` runtime.
 
 Earlier completed checkpoints remain evidence:
 
@@ -95,17 +101,29 @@ for later edits. Re-run the narrowest relevant gate after any change.
 ## 4. What is active now
 
 `docs/dashboard-change-and-enhancement-superfile.md` is the only active roadmap
-for the current dashboard and Version 2 lane. Section 4.8 records the selected
-rendering-audit focus. Audit questions include stage costs, first-frame/history
-behavior, cache reuse, resource/queue ownership, and standalone/Workspace
-presentation. Exact evidence collection and measurement scope remain to be
-agreed with the owner; no new bottleneck or performance result is claimed yet.
+for the current dashboard and Version 2 lane. Section 4.8 records the owner's
+expanded brief and proposed resource/browser criteria. Audit questions include
+stage costs, source-resolution/zoom correctness, first-frame/history behavior,
+cache reuse, resource/queue ownership, and standalone/Workspace presentation.
+Evaluate alternative architectures; old rendering exclusions do not constrain
+recommendations. Exact evidence collection and measurement scope remain to be
+agreed; no new bottleneck or performance result is claimed yet.
 
-The five Radar WebGL additions are `L2_RHO`, `L3_N0C`, `L3_DPR`, `L3_DAA`, and
-`L3_DTA`. They are included in audit/planning scope, not authorized for
-implementation or activation. Other enhancement families, including the unified
+The previously named Radar WebGL candidates are `L2_RHO`, `L3_N0C`, `L3_DPR`,
+`L3_DAA`, and `L3_DTA`. Evaluate other products for measured benefit too; native
+low-resolution products do not automatically need WebGL. No renderer expansion
+or activation is implemented by this brief. Other families, including the unified
 Archive workflow, remain deferred. Meteosat request-level retries are already
 implemented; interrupted individual streamed-transfer resume is still a proposal.
+
+Plan separate backend-host and browser-client resource budgets, conservative
+defaults/calibration, and overrides that preserve final quality. Treat hardware
+hints as approximate; do not size every installation for the owner's rig.
+Browser targets cover Blink/Chromium, WebKit, and Gecko. The proposed policy is a
+rolling 30-month release-compatibility window plus a Baseline Widely available
+feature floor, with optional acceleration and quality-equivalent fallbacks.
+Pin the exact browser/OS/hardware matrix in the execution plan; see section 4.8
+for sources and the distinction between feature maturity and tested releases.
 
 `docs/nch-weather-studio-greenfield-plan.md` is a separate parked design, not a
 dashboard phase. Its documented comparison was refreshed on 2026-09-06; exact
@@ -120,7 +138,9 @@ next focus.
 - Preserve Satellite ready-layer/no-flash ownership, scrub debounce/generation
   cancellation, render budgeting, and FCI native-read serialization; preserve
   the accepted MRMS pending-image/native-tile promotion behavior.
-- Keep current Workspace pane ordering and Radar/MRMS PNG authority/fallback.
+- Keep current Workspace pane ordering. Preserve current runtime fallbacks
+  while auditing; alternatives to PNG and existing rendering internals may be
+  recommended with quality, correctness, resource, and compatibility evidence.
 - Keep Alerts rail entries national; viewport filtering belongs only to the
   legend.
 - Keep basemap and boundary behavior shared through `frontend/core/map-core.js`.

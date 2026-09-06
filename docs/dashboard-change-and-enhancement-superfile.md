@@ -2,6 +2,10 @@
 
 **Canonical status:** current source of truth as of 2026-09-06
 
+**Active path:** `docs/dashboard-change-and-enhancement-superfile.md`. The
+same-named file under `docs/archive/2026-08-07-consolidation-sources/` is a frozen
+historical source, not a second current roadmap.
+
 **Repository:** `F:\Python\dashboard_2026`
 
 **Baseline at consolidation:** `d6b8238` on `main`
@@ -40,10 +44,19 @@ Status vocabulary:
 - **Rejected:** removed from the plan; do not reintroduce without a new decision.
 - **Historical:** completed or superseded evidence only.
 
-The owner selected a new high-cost rendering-workflow audit as the next focus
-on 2026-09-06. Its plan will be agreed after this reconciliation and the accepted
-working-tree changes are committed. See section 4.8; no renderer implementation
-or tuning is selected by that decision.
+An approved/retained proposal is not a claim that its provider access,
+feasibility, or benefit has been proven. Unless section 4.8 selects it for the
+rendering audit, it remains deferred. Historical sections deliberately retain
+old paths, counts, measurements, and execution instructions as dated evidence;
+those are not current implementation or deletion orders. Section 5 gives
+explicit dispositions to the old observations, including items still needing
+runtime reproduction. A documentation cross-check cannot certify those as fixed.
+
+The owner selected a new high-cost rendering-workflow audit on 2026-09-06 and
+then broadened its scope to alternative architectures, product-specific Radar
+WebGL eligibility, and adaptation to different machines and browser engines.
+The baseline is committed as `e200f74` plus docs checkpoint `5096e74`. Section
+4.8 records the audit brief; renderer implementation still follows plan review.
 
 ## 2. Current truth and invariants
 
@@ -52,8 +65,8 @@ or tuning is selected by that decision.
 - FastAPI serves the landing page and canonical extensionless product routes:
   `/alerts`, `/radar`, `/satellite`, `/spc`, `/surface`, `/mrms`, `/rtma`,
   `/drought`, `/tropical`, `/wpc`, `/water`, and `/workspace`.
-- `frontend/` is the current UI implementation. All 76 files found in its audit
-  are retained, and the shared alert monitor adds one current core module.
+- `frontend/` is the current UI implementation, including the shared alert
+  monitor. Historical file counts are not a current asset inventory.
   Product pages import narrow shared capabilities from
   `frontend/core/`; Workspace composes engine APIs and must not import sibling
   page controllers.
@@ -66,8 +79,10 @@ or tuning is selected by that decision.
 - The owner reconfirmed the current Workspace layer order on 2026-09-06:
   MRMS and SPC remain below Satellite. Proposals to move them above it are
   deferred, not current defects.
-- Browser dependencies are vendored under `frontend/lib/`. The seven retained
-  fonts are active assets. `css/shared.css` remains active for the landing page.
+- Leaflet and selected browser dependencies are vendored under `frontend/lib/`.
+  Product pages still load Font Awesome CSS from an external CDN; full offline
+  dependency independence is not implemented. The seven retained fonts are
+  local assets. `css/shared.css` remains active for the landing page.
 - `frontend/core/branding.js` renders the shared Chuck Copeland Weather header
   logo, while `map-core.js` renders the decorative map duplicate. The landing
   shell uses the same canonical `/img/chuck-copeland-weather-logo.svg` asset.
@@ -94,11 +109,15 @@ or tuning is selected by that decision.
 - Satellite tile routes await their bounded render futures on a Satellite-owned
   request executor rather than AnyIO's shared synchronous-request workers.
   Standalone and Workspace tile URLs carry page ownership; changing selection
-  or leaving the page releases it. Work still waiting for the heavy-render slot
+  or leaving the page releases it. Work still waiting for render-budget admission
   stops when no page owns the selection, while an already-running render may
   finish and atomically publish its reusable cache artifact.
 
 ### 2.3 Product contracts to preserve
+
+These describe the current runtime baseline. Section 4.8 permits proposals to
+replace rendering internals, including the PNG/tile architecture, with evidence
+of equivalent final quality/correctness and worthwhile resource behavior.
 
 - **Alerts:** immutable cache generations, zoom-aware geometry, stale-complete
   service while a deduplicated refresh runs, explicit warming/backoff on a cold
@@ -133,7 +152,7 @@ or tuning is selected by that decision.
   `tl_2025_us_state.*` as the explicit TIGER state fallback.
 - **Data:** all reviewed files under `data/` are retained as city/label inputs.
 - **Palettes:** Radar palettes live in `config/radar_colortables/`; Satellite
-  `.cmap` files live in `config/sat_cmaps/`; `bv.pal` remains restored at its
+  `.cmap` files live in `config/sat_cmaps/`; `BV.pal` remains restored at its
   active Radar path.
 
 ### 2.4 Retained development and repository paths
@@ -405,7 +424,7 @@ JavaScript tests, repo-wide Ruff/compile/diff checks, direct worker/tool entry
 points, affected API probes, and the controlled-browser checks required by the
 UI slices. Temporary listeners were closed after every runtime breakpoint.
 
-## 4. Approved current-dashboard enhancement ledger
+## 4. Current-dashboard work and deferred proposals
 
 The cleanup foundation is complete. These proposals remain eligible, but the
 current selected focus is the rendering audit in section 4.8. Implementation
@@ -413,7 +432,9 @@ still requires an agreed bounded plan.
 
 ### 4.1 Radar WebGL expansion
 
-Expand the existing WebGL path only to:
+Evaluate every exposed Radar product for a worthwhile WebGL path. The earlier
+five-product limit was superseded by the owner's expanded audit scope on
+2026-09-06. Previously named candidates remain:
 
 - `L2_RHO` — Level II correlation coefficient
 - `L3_N0C` — Level III correlation coefficient
@@ -422,11 +443,17 @@ Expand the existing WebGL path only to:
 - `L3_DTA` — digital storm-total accumulation
 
 High-zoom use matters for tornado debris signatures and localized rainfall
-assessment. Preserve the current server-generated PNG as authority/fallback,
-and validate color/value parity, no-data handling, legends, inspector values,
-frame timing, memory, and browser compatibility. All-product WebGL beyond this
-set is **parked**. Retiring PNG and adding a current-dashboard Radar tile server
-are **rejected**.
+assessment. Native resolution alone does not establish a benefit: assess detail,
+upload/render/playback cost, color/value parity, no-data handling, legends,
+inspector values, frame timing, memory, and browser fallback per product. A
+native low-resolution product is not automatically an expansion candidate.
+
+The current PNG path remains the implemented reference/fallback during the
+audit. Alternative tile architectures and replacing PNG may now be evaluated;
+the prior architectural exclusions no longer limit recommendations. No such
+change is implemented or selected merely by widening the audit. A replacement
+must retain final quality, data correctness, supported-browser behavior, and
+demonstrable resource efficiency.
 
 Filtered Reflectivity is **rejected and removed**; custom `.pal` files provide
 the desired display alternative.
@@ -699,7 +726,8 @@ The restarted owner smoke passed the newly available M12 acquisition, five-frame
 responsive scrubbing, and clean terminal/console checks. Phase 5 is accepted and the
 bounded latency family is complete.
 
-Remaining eligible Satellite proposals are:
+Remaining Satellite scope is below. Rendering-specific items may be assessed
+under section 4.8; Archive and standalone control redesign remain deferred:
 
 - Satellite Archive UI on the active satellite-v2 contract.
 - Controls redesign without changing page/engine ownership.
@@ -707,8 +735,10 @@ Remaining eligible Satellite proposals are:
   and output parity.
 - Optional CONUS light warming, explicitly opt-in and measured.
 - Storm-centered Satellite viewport behavior for Tropical.
-- Meteosat SO2 recipe overrides and remaining reachable non-NOAA
-  visible/composite/solar normalization.
+- Investigate remaining Meteosat SO2 recipe differences and reachable non-NOAA
+  visible/composite/solar normalization. EUMETSAT-specific recipe handling
+  already exists in `satellite_v2/composites.py`; inventory actual gaps before
+  treating the whole normalization family as unimplemented.
 - Recovery/resume for interrupted large Meteosat streamed transfers. Phase 5
   already provides bounded connection/timeout/5xx request retries and reuse of
   completed FCI chunks; partial individual transfers are discarded on failure.
@@ -727,11 +757,26 @@ retention is **rejected**.
 
 ### 4.6 Water, WPC, and shared UI
 
-- Water: clustering/density, WPC/flood-impact overlays, WaterWatch percentiles,
-  and an interactive NWPS hydrograph.
-- WPC: probabilistic QPF, expanded Days 1–3 and Days 4–7 Winter guidance,
-  Days 1–3 Significant Weather, Days 3–7 Heat Index, and optional
-  mixed-geometry Significant Weather.
+**Code/documentation reconciliation, 2026-09-06:** WPC Significant Weather
+Days 1–3 plus the combined Days 1–3 product are implemented in the catalog,
+parser, service, and frontend; this is not future base-product work.
+`config/wpc_config.py` defines Winter probabilities for Days 1–3 (snow over
+4/8/12 inches and ice over 0.25 inch). Later-day buttons in the page do not
+establish catalog support for Days 4–7. Water already displays provider
+hydrograph images linked to the gauge page. These are static source findings,
+not a fresh live-provider or browser acceptance run.
+
+Remaining deferred proposals:
+
+- Water: station clustering/density, WPC/flood-impact overlays, WaterWatch
+  percentiles, and an interactive NWPS time-series hydrograph beyond the
+  existing linked image. City-label density is already a separate control.
+- WPC: probabilistic QPF; specifically identified Winter additions beyond the
+  existing Days 1–3 thresholds and an investigated Days 4–7 source contract;
+  Days 3–7 Heat Index; and non-polygon/mixed-geometry Significant Weather
+  beyond the existing polygon parser. Do not relist implemented base products
+  as enhancements. Source availability and feasibility need verification when
+  selected.
 - Promote the shared tabbed legend pattern where product semantics support it.
 - Marine and Fire/Smoke product research.
 - User preference persistence with explicit reset/migration behavior.
@@ -765,39 +810,412 @@ bounded older-observation strategy because AWC's practical 24-hour window
 cannot satisfy older targets and IEM access must avoid unbounded
 per-state/per-frame request multiplication.
 
-### 4.8 High-cost rendering-workflow audit — selected focus, plan pending
+### 4.8 High-cost rendering-workflow audit — owner brief, plan review next
 
-Owner decision, 2026-09-06: focus the next audit on Satellite, especially
-Meteosat; Radar, including the five named WebGL additions in section 4.1; MRMS;
-and RTMA. First reconcile the documentation and commit the accepted local
-changes. Agree the audit plan with the owner afterward.
+Owner decisions, 2026-09-06: audit Satellite (especially Meteosat), Radar, MRMS,
+and RTMA for efficient modern rendering, including approaches that replace the
+existing architecture. Evaluate all Radar products for worthwhile WebGL benefits;
+the earlier five-product list is a starting point. Adapt to users' available
+resources rather than treating the owner's high-end CPU/DRAM/VRAM as universal.
+Support modern Blink/Chromium, WebKit, and Gecko browsers with compatibility
+extending at least a couple of years. Baseline commits are `e200f74` and
+`5096e74`; their acceptance does not exempt current caps or architecture from
+review. No implementation or new performance measurements have been performed.
 
-The audit should account for acquisition, decode, reprojection/rendering,
-publication/cache reuse, resource/queue ownership, and browser presentation,
-including first-frame availability and history warming in standalone pages and
-Workspace. These are topics for the upcoming plan, not new measured findings
-or an approved benchmark execution matrix.
+#### Scope and quality criteria
 
-Retain historical performance evidence with its exact environment and distinguish
-it from any fresh baseline. Closed worker-free, Radar, cleanup, and Meteosat
-phases stay closed; their accepted contracts inform regression checks. Preserve
-PNG authority/fallback, source identity, bounded work, current layer order, and
-Satellite/MRMS display ownership. Renderer changes, WebGL activation/expansion,
-tuning, new providers, and retention changes await a separate agreed work slice.
-Other enhancement families and the separate Greenfield project remain deferred.
+- Trace acquisition, decoding, reprojection/resampling, rendering, publication,
+  cache reuse, queue ownership, transfer/upload, and browser presentation.
+  Cover first frames, cached frames, history/playback, and concurrent standalone
+  and Workspace use. Compare current and candidate work at equal output quality.
+- Review Satellite resolution end to end for each platform, channel/composite,
+  sector, location, and display scale: native source detail, loader decimation,
+  projection geometry, tile zoom ceilings/floors, default views, device pixel
+  ratio, and browser scaling. Identify both premature caps that discard available
+  detail and higher zooms that only enlarge the same source pixels. Do not
+  equate a higher tile zoom or a sharper-looking filter with new source detail.
+- Preserve meaningful native detail, values, palette/legend/inspector agreement,
+  projection alignment, coverage/alpha, frame identity, and requested time
+  semantics. No efficiency claim may rely on degraded final output or hidden
+  frame dropping. Existing no-flash behavior and navigation responsiveness are
+  acceptance outcomes, while their internal implementation may be reconsidered.
+- Compare total CPU/GPU work, wall time, peak/resident memory, cache footprint,
+  and I/O at the same workload. More concurrency or a larger cache alone does
+  not prove greater efficiency. Report tradeoffs instead of collapsing them into
+  one speed number. Implementation remains a separate decision after findings.
+
+#### Resource adaptation — proposed audit design
+
+- Budget the Python/backend host and each browser client separately, including
+  shared-machine competition. Do not infer client GPU capacity from server RAM.
+- Evaluate conservative startup budgets, bounded calibration, live performance
+  observations, and explicit user overrides. On the backend, inspect available
+  memory and effective CPU resources; treat browser hardware hints as optional
+  and approximate. WebGL exposes no portable total/free-VRAM query, and browser
+  memory/core hints are not reliable complete inventories. See
+  [MDN device memory](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory),
+  [hardware concurrency](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/hardwareConcurrency),
+  and [WebGL memory budgeting](https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#estimate_a_per-pixel_vram_budget).
+- Scale concurrency, cache residency, prefetch, and background warming within
+  measured budgets, keeping foreground work responsive and leaving headroom for
+  other applications. Under pressure, reduce speculative work/residency first;
+  do not silently lower final resolution, alter values, or shorten requested
+  history. A weaker machine may complete the same work more slowly.
+- Include lower-resource/integrated-GPU and ordinary midrange systems alongside
+  the owner's high-end machine in the planned evidence matrix. Resource limits
+  on the owner's rig are useful stress probes, not proof for other hardware.
+  Provider concurrency/rate ceilings remain independent of machine capacity.
+
+#### Browser support — proposed acceptance policy
+
+- Cover Blink/Chromium, WebKit, and Gecko through representative Chrome/Edge,
+  Safari, and Firefox runs; include applicable mobile/OS combinations when
+  claiming those targets. A shared engine name alone is not complete browser
+  or GPU-driver proof. Record exact browser/OS/GPU evidence and untested gaps.
+- Use Baseline **Widely available** as the default feature floor. It means a
+  feature has been interoperable across the core browser set for 30 months,
+  not that every release from the last 30 months has been tested. This is a
+  compatibility guide, not a universal support mandate. See
+  [Web Platform Baseline](https://web.dev/baseline).
+- Propose a rolling 30-month browser-release compatibility target to make
+  "at least a couple of years" concrete. Pin representative oldest/current
+  versions and supported ESR/OS combinations in the execution plan; enumerate
+  coverage rather than claiming every release was exercised.
+- Feature-detect and validate optional acceleration, with a quality-equivalent
+  compatible path when APIs/extensions are unavailable, a context cannot be
+  created, or GPU work fails. Newly available capabilities may be optional
+  candidates; an API existing does not establish useful performance.
+
+Historical phase acceptances remain closed and retain their recorded evidence.
+Prior rendering choices, caps, and rejected architectures may be reassessed with
+fresh evidence under this new scope. Current Workspace layer order remains
+unchanged. Other enhancement families and the separate Greenfield project stay
+deferred. Agree the bounded audit execution/measurement plan before expensive
+live runs, then select implementation slices from its findings.
+
+#### Bounded audit and measurement plan — proposed 2026-09-06
+
+**Review status:** draft for owner review. This adds a plan to the existing
+working-tree brief, not authorization to run benchmarks or change renderers.
+Git inspection confirmed HEAD `5096e74` immediately after `e200f74`, with the
+five expected documentation files modified. Findings below come from read-only
+source tracing and primary-source research; no app startup, native decode,
+provider acquisition, timing run, or browser test was performed in this audit.
+
+**Recommended order:** resolve source-detail and resource-accounting questions
+first, capture a small baseline second, then select at most two architecture
+experiments across the four families. Do not expand every combination of
+platform, product, zoom, cache state, browser, and machine into a benchmark.
+
+##### A. What is known, and what still needs evidence
+
+| Area | Verified source behavior | Question for the audit |
+| --- | --- | --- |
+| Satellite request policy | `max_native_zoom_for_product` in `config/satellite_v2_config.py` uses sector only: Full Disk/Global z8; Meso z9; other sectors, including RSS/Japan/Target, z9. The channel argument does not affect the result. | Where do these limits discard visible source detail, and where do they request larger images without additional information? |
+| Satellite floors and views | `frontend/pages/satellite/satellite-anim.js` uses Full Disk floor z1, Global z2, RSS/Target z4, and z5 otherwise; 256-pixel tiles can be displayed through z19. Standalone presets include GMGSI z2, GK2A z3, M12/RSS z4, M9 z5, Japan z6, and dynamic Meso/Target bounds. Workspace reuses the animator but has its own curated selections and map view. | Check actual opening zoom after container sizing, sector aliases, bounds fitting, fractional zoom, and DPR. Warming zooms, catalog availability, request floors, and displayed zoom are different controls. |
+| Satellite loading and warping | `satellite_v2/renderer.py` applies 2048/4096 source caps at z1–4/z5–6 and platform caps at z7+. ABI decimation applies to Full Disk; AHI/AMI/FCI enforce caps in their loaders. SEVIRI/GMGSI retain their separate native paths. Scalar channels use bilinear warp, categorical ADP uses nearest; composites combine warped channels. Live misses normally produce a 3x3 supertile. | Measure sampling loss/aliasing before warp, duplicate decode across zoom-cap keys, and the useful fraction of neighbor tiles. Does selective window reading or a reusable native grid beat repeated decode without changing output? |
+| FCI detail and admission estimate | FCI defaults to a 10848 grid cap and chooses a power-of-two stride. An input with 11136 columns would therefore retain 5568 even at z7+. The admission estimator assumes an FCI side no larger than 5568; native access is serialized inside each process. | Verify actual channel dimensions in the selected `EO:EUM:DAT:0662` files. Check visible/NIR loss and whether higher configured caps make the estimator undercount. Full chunk reads precede the current stride; retained-array bytes are not peak decode memory. This is a conditional code finding, not a newly reproduced image defect. |
+| Backend and browser budgets | Defaults include 16 GiB Satellite in-flight admission, 4 GiB source-raster cache, ten live tile request workers, two Meteosat warming processes, and up to 72 retained Satellite layers. Oversized Satellite admissions can run alone. Radar/MRMS/RTMA heavy work uses a separate semaphore. | Count parent/child caches, transient native arrays, renderer references, GDAL buffers, other families, decoded images and GPU allocations together. Neither an admission estimate nor a frame-count limit establishes a whole-machine memory bound. Verify effective settings rather than assuming defaults are active. |
+| Radar | `radar/webgl_artifact.py` supports `L2_REF`, `L2_VEL`, `L2_SRV`, `L3_N0B`, and `L3_N0G`; configuration defaults their acceleration switches off. PNG rendering precedes optional artifact publication. Current thresholds are prefetch z10/activation z11, four textures/two loads; canvas DPR is capped at 2. | Compare full PNG plus artifact cost with alternatives, including upload and first display. Trace actual ray/gate geometry, encoding precision, masks, and palette behavior for all 19 configured products. A nominal PNG dimension does not prove native polar detail is retained. |
+| MRMS | `mrms/mrms_tiles.py` already writes a tiled float32 GeoTIFF and warps source bands to 256-pixel PNG tiles with nearest sampling. Tiles start at z7; RotationTrack/AzShear cap at z8 and other products at z7. The whole-overlay fallback is capped at 4096 pixels. | Establish high-zoom tile/fallback detail, repeated preparation cost, source reuse, and whether any scalar GPU path would repay its extra preparation and transfer. The tiled source is not yet evidence that a COG conversion would help. |
+| MRMS first display | Workspace calls `loadLatest` before starting history. Standalone calls `loadFrames` first and uses `loadLatest` when no frames return. | Measure each page's response-to-display path. This call order does not establish that standalone waits for the entire history to render. Trace coordinator work and PNG/native-tile promotion separately. |
+| RTMA | For 2D coordinates, `rtma/rtma_utils.py` uses four-neighbor inverse-distance interpolation onto latitude/longitude, with `cKDTree.query(workers=-1)`, then another warp to Mercator using the shared 4096 cap. Points are source-frame-locked. | Can valid native CRS/transform metadata support one direct warp? Otherwise can a reusable geolocation mapping reduce work? Check all regions and derived products; do not assume every grid is affine or that the intermediate interpolation is expendable without quality evidence. |
+
+Source-resolution checks must distinguish the instrument's best capability
+from the particular delivered channel/collection. For example, the
+[EUMETSAT FCI guide](https://user.eumetsat.int/resources/user-guides/mtg-fci-level-1c-data-guide)
+distinguishes normal/high-resolution channels, while the
+[ABI specification](https://www.goes-r.gov/spacesegment/abi.html) and
+[JMA AHI table](https://www.data.jma.go.jp/mscweb/en/himawari89/space_segment/spsg_ahi.html)
+show differing visible/IR resolutions. Actual file dimensions, calibration,
+projection, channel mapping and scan mode must populate the inventory.
+
+GMGSI needs an explicit provenance check: the loader comment describes an 8 km
+Mercator grid, whereas the current
+[NOAA product page](https://www.ospo.noaa.gov/products/imagery/gmgsi/) describes
+approximately 3 km imagery. These may describe different deliverables. Inspect
+the actual `noaa-gmgsi-pds` NetCDF dimensions/coordinates before assigning either
+number to the app or interpreting the reported small z3 tiles.
+
+Observation dispositions remain intact. Include testing-batch items 7–10, 16
+and 26 in this audit. Use item 6 only for the selected layers' legend parity
+and item 19 for MRMS value/statistic provenance. Items 15/28 are regression
+contracts/historical measurements, not newly open defects. Item 14 remains a
+deferred standalone RTMA control proposal. MRMS/SPC stay below Satellite;
+unrelated observations, Archive and Greenfield remain deferred.
+
+##### B. Inventory and representative cases
+
+Finish a lightweight inventory of every exposed Satellite platform/sector and
+product recipe, all Radar products, and MRMS/RTMA grid/product classes. Group
+identical paths after recording exceptions; do not benchmark every channel.
+For Satellite, each inventory row should contain:
+
+- Provider/collection, native channel names, source shape/dtype/calibration,
+  scan footprint, source CRS/transform and local pixel footprints.
+- Loader stride and sampling offset at each cap transition, retained shape,
+  unique composite inputs, resampling rule and alpha/no-data treatment.
+- Opening view, fit limits, request floor/ceiling, cached/warmed zooms, display
+  zoom, tile size, viewport CSS pixels, physical pixels/DPR, and browser scaling.
+- Requested versus actually useful source samples and output pixels; identify
+  which stage loses detail or enlarges already sampled data.
+
+Compare local source pixel footprints with destination pixel footprints in both
+axes, including near the geostationary limb. For orientation, a 256-pixel
+Mercator tile has approximately `156543.03 * cos(latitude) / 2^z` ground metres
+per pixel; use the actual transforms for decisions. Track physical display
+sampling separately. A larger tile zoom, DPR, or nearest-looking CSS filter
+does not recover samples discarded by the loader. Conversely, avoiding
+upscaling must not prevent useful map zooming; native imagery can be enlarged
+for inspection without generating redundant source requests.
+[Leaflet's native zoom controls](https://leafletjs.com/reference.html#gridlayer-maxnativezoom)
+explicitly scale tiles above/below their native limits.
+
+| Case family | Required representative coverage | Initial timing selection |
+| --- | --- | --- |
+| M12 FCI | Channel13 IR, Channel02 visible, NighttimeMicrophysics multi-channel; default view, z4/5 and z6/7 transitions, z8 and display above the cap; disk interior and limb/chunk seam | Three cells: IR z5, visible z8, composite z5 |
+| M9/M11 SEVIRI | M9 Full Disk scalar/composite; M11 RSS rapid Channel13 and selected non-rapid composite; cropped coverage and current/history ownership | One cell: RSS non-rapid composite at z5 |
+| GOES-18/19 ABI | Full Disk highest-detail visible and IR; CONUS and both Meso defaults; mixed-resolution RGB; sparse ADP/AOD/FRP alpha/value checks | One cell: Full Disk Channel02 at z8 |
+| Himawari/GK2A/GMGSI | AHI Full Disk visible plus Japan/Target fit; AMI visible/mixed-resolution RGB; all four GMGSI products' metadata, z2/z3 view and longitude seam | One cell: GMGSI Channel13 at z3; promote AHI/AMI only if their trace differs materially |
+| Radar | Existing `L2_REF` WebGL control; `L2_RHO`/`L3_N0C` debris-signature detail; `L3_DPR`/`L3_DAA`/`L3_DTA` precipitation precision/range; categorical `L3_N0H`; native coarse `L3_EET`/`L3_DVL` controls; near/far range and azimuth seam | Two cells: `L2_REF` at z11 and `L2_RHO` PNG at z11; later candidate choice may substitute a precipitation product |
+| MRMS | Standard-grid MESH and finer RotationTrack/AzShear; CONUS versus local z7/8/above-cap; latest, history, pending PNG and tile promotion | Two cells: MESH z7 and one RotationTrack z8 |
+| RTMA | CONUS hourly temperature; rapid-update Workspace Winds; AK plus one small HI/PR grid for geometry; Feels Like and one time-difference product for input reuse | Two cells: CONUS temperature and rapid-update Winds at the selected default view |
+
+The initial selection is **12 timing cells**, not a claim that the other
+coverage rows have been exercised. Metadata/small quality samples cover the
+exceptions; a newly identified path replaces a timing cell or returns for
+review instead of silently expanding the matrix. Pin exact available source
+IDs/times/hashes and map coordinates before running. Favor retained fixtures;
+do not assume an old source still exists or substitute today's changing feed
+inside a comparison. Choose a small-feature scene for detail and a masked or
+edge scene for coverage; reuse files across products where possible.
+
+##### C. Measurement protocol and stopping limits
+
+After owner review, the first measurement pass would use existing renderers
+and existing instrumentation. Review `satellite_v2/bench.py`,
+`satellite_v2/_bench_timing.py`, `radar/bench.py`, tile response headers and
+coordinator metrics before adding instrumentation. Satellite's CLI can purge
+target frame tiles; always give it a verified, isolated scratch cache. Preserve
+owner caches, historical goldens, listeners and optional-warmer settings.
+
+1. **Cache states:** (a) local source present, fresh renderer process and no
+   derived artifact; (b) decoded source warm but requested derived artifact
+   absent; (c) derived artifact hit. If a family has no decoded-cache state,
+   mark it not applicable. Browser HTTP cache and decoded-image/texture state
+   are separate labels. A fresh process is not a cold OS filesystem cache.
+2. **Bounds:** at most three repetitions per applicable state per timing cell
+   (108 samples maximum), 45 minutes of active measurement and 10 GiB of new
+   scratch artifacts on the first host, stopping at whichever limit occurs
+   first. No new provider downloads in this initial pass; missing fixtures
+   become evidence gaps. Stop on native crash, OOM, sustained paging or
+   responsiveness failure and preserve the trace rather than retrying blindly.
+3. **Acquisition:** if missing-source latency matters after local results,
+   propose a separate named-source batch with bytes/request/time ceilings
+   before downloads. Measure catalog, transfer, retries and publication delay
+   separately; do not call source-prefetch time a render benchmark.
+4. **Attribution:** record queue/admission wait, download, native decode and
+   calibration, source-to-target warp, composite/colorization, encoding,
+   atomic publication, response transfer, browser decode, texture upload, and
+   first complete visible frame. Preserve critical-path wall time and aggregate
+   CPU-seconds/process-tree memory; overlapping stage durations must not simply
+   be added and reported as elapsed time.
+5. **Resources:** record peak and settled process-tree RSS/private memory,
+   host available memory/commit/paging, effective threads/processes, source and
+   derived disk bytes, bytes read/written/transferred, cache hit/miss/eviction,
+   useful versus speculative tiles, cancelled/stale work, and browser process,
+   decoded-image and estimated texture bytes. JS heap alone is insufficient.
+   Use GPU timers/counters where available; label CPU submission time and
+   estimated allocations honestly when actual GPU duration/residency is absent.
+6. **Interaction:** on four anchors (M12, existing Radar WebGL, MRMS, RTMA),
+   observe current-first load, a fixed up-to-12-frame sequence at source cadence,
+   play/pause, rapid scrub and release, pan/zoom, product switch, teardown and
+   navigation. Then run one Workspace combination plus one same-source
+   standalone tab to expose reuse, contention and multi-client cancellation.
+   Keep frame IDs/counts constant across comparisons; shorter diagnostic loops
+   do not alter the application's requested history. Include one bounded full
+   existing MRMS/RTMA history request to test history scheduling when fixtures
+   exist. Browser work is a separate, capped 20-minute trace batch on the first
+   available configuration, not nine configurations times the full benchmark.
+7. **Statistics:** three samples establish ranges/medians and identify missing
+   instrumentation, not a reliable p95. Only a promising comparison earns a
+   follow-up batch of at least 20 paired runs, with alternating control/candidate
+   order and variability reported. Estimate interaction tails from many events
+   within the fixed trace, labeled separately from frame-load sample counts.
+
+Produce a new dated `docs/perf/` evidence record only when measurements exist:
+manifest, commands/configuration, source hashes, raw timings/resource samples,
+quality comparisons, browser/OS/GPU identities, unavailable metrics and the
+exact coverage gaps. Historical results remain dated context, never the fresh
+control for a different scene, machine or renderer.
+
+##### D. Architecture comparison to carry into the findings
+
+These are hypotheses to rank, not preselected implementations. Compare both
+time-to-first-use and total work over the same completed workload; include
+preparation, cache storage, publication and fallback costs.
+
+| Option | Where it could help | Cost or correctness question |
+| --- | --- | --- |
+| Direct bounded CPU warp with reusable geometry, decoded channels and viewport-aligned canvases | RTMA's intermediate interpolation; repeated Satellite/MRMS transforms; Radar mesh reuse | Verify native grid geometry and halo/seam handling. Benchmark reuse lifetime and invalidation by grid/sector, not just product name. Nested threads and larger supertiles can increase total work. |
+| Decode once into native scalar blocks, optionally with selected overviews; generate lossless tiles on demand | Large FCI/AHI/AMI sources, repeated pan/zoom/history; compare with MRMS's existing tiled GeoTIFF | Include first-frame preparation, extra disk writes and duplicate caches. Overviews must use product-appropriate sampling and retain original detail; building every level for short-lived frames may never repay its cost. |
+| Native polar WebGL for Radar; scalar tiles plus palette shader for suitable grids | High-zoom Radar gates, palette reuse, avoiding oversized whole-frame transfers | Preserve units, category codes, sentinel masks, precision, geometry and frame identity. Measure client upload/draw cost and total server work; the existing PNG-plus-artifact path still pays PNG cost. Keep low-resolution products on the simpler path if it wins. |
+| Worker/OffscreenCanvas processing with transferable buffers and bounded uploads | Browser main-thread stalls during decode/preparation/presentation | Moving work can improve responsiveness without reducing CPU work; account for copies, worker startup and memory. Test the exact context/API combination and retain a compatible presentation path. |
+| Optional WebGPU or backend GPU compute | A demonstrated warp/composite bottleneck with enough reuse to amortize transfer | Include upload/readback, driver support, device loss and implementation complexity. No required GPU baseline; rank below simpler options unless measurements justify it. |
+| Lossless delivery alternatives and progressive preparation | Encoding/transfer bottlenecks; current-frame-first versus speculative history | Compare decoded pixels/alpha, decode latency and size. A lower-detail preview may precede completion, but final quality and explicit frame timing remain mandatory; lossy delivery or hidden dropped frames cannot establish a win. |
+
+Research basis: Rasterio supports
+[direct source/destination reprojection](https://rasterio.readthedocs.io/en/stable/topics/reproject.html);
+GDAL documents [bounded warp memory and threading](https://gdal.org/en/stable/programs/gdalwarp.html)
+and [tiled COG layouts/overview controls](https://gdal.org/en/stable/drivers/raster/cog.html).
+These capabilities establish feasible comparisons, not speedups in this app.
+[OffscreenCanvas transfer](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/transferControlToOffscreen)
+is broadly available, but each worker rendering path needs its own probe.
+[WebGPU](https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API) remains an
+optional capability with secure-context and platform constraints. The prior
+FCI hyperslab experiment remains a measured rejection of that implementation;
+only a materially different, explained approach should consume a new trial.
+
+##### E. Hardware adaptation and browser matrix
+
+Use separate backend and per-client budgets, with an aggregate cap when they
+share a host. Proposed hardware targets are an 8 GiB, 2–4 effective-core
+integrated-GPU machine; a 16 GiB, 4–8 effective-core ordinary machine; and the
+owner's high-end machine. These are measurement profiles, not certified minimum
+requirements. Include an 8 GiB Apple Silicon Mac for real WebKit evidence if
+available. Record storage, GPU/driver, power mode, free memory, viewport/DPR and
+network topology. Start on an ordinary machine where available; constrained
+owner-machine runs are only surrogates until real lower-resource evidence exists.
+
+Budget design to evaluate:
+
+- Begin with one heavy foreground job and no speculative warming when capacity
+  is unknown. Estimate peak working sets from source metadata plus measured
+  transient overhead, and reserve host headroom before choosing concurrency.
+  Bound process pools, native-library threads and all family caches together;
+  `workers=-1` and independent family semaphores need explicit accounting.
+- Increase concurrency/cache only after bounded observations show headroom and
+  stable responsiveness; back off with hysteresis under pressure. Keep provider
+  ceilings independent. Allow user caps and a conservative override, recording
+  effective settings so comparisons remain reproducible.
+- On clients, count bytes for current/incoming imagery, adjacent frames,
+  backbuffers and tiles, including DPR-squared growth and resize. Feature-probe
+  texture limits; do not infer usable VRAM from browser core/memory hints or
+  display size alone. Start from a tested conservative byte ceiling and reduce
+  prefetch/residency before affecting foreground work.
+- For work that cannot fit even when run alone, compare block/window processing
+  or disk-backed intermediates that preserve samples. The current oversized-job
+  exception is not a sufficient low-memory policy. If no quality-preserving
+  path fits, report the unsupported workload explicitly; do not silently lower
+  final resolution, shorten history or churn until the process fails.
+
+The browser policy retains two independent requirements: a default Baseline
+Widely available feature floor and a rolling 30-month release-compatibility
+target. [Baseline](https://web.dev/baseline) describes feature maturity across
+its core browsers; it is not proof that a browser version, OS or GPU was tested.
+For this dated plan the window reaches **2024-03-06**. Include the stable
+version available at that boundary even when its release slightly predates it.
+
+| Engine/browser | Proposed release coverage | OS/hardware and evidence scope |
+| --- | --- | --- |
+| Chromium: Chrome and Edge | Chrome 122 and Edge 122 boundary smoke; current stable of each at execution | Windows 11 x64, integrated GPU plus ordinary/high-end profiles; run four fixture anchors, do deeper timing only on the selected performance host |
+| Gecko: Firefox | Firefox 123 boundary; current stable and supported ESR at execution | Windows 11 x64 on the same ordinary/integrated-GPU host for engine comparison; pin ESR versions during any release overlap |
+| WebKit: Safari | Safari 17.4 boundary; current stable at execution | Real macOS/Safari on a compatible Apple Silicon machine; Safari 17.4/macOS 14.4 is a proposed historical pair; pin the current supported pair at execution |
+| Mobile browser clients | Proposed extension: current Android Chrome/Firefox and iOS/iPadOS Safari, plus boundary equivalents if mobile support is claimed | Real devices connected to the Windows backend; DPR 2/3, touch, resize and memory-pressure coverage. Outside the initial desktop timing batch; desktop emulation cannot certify these targets |
+
+Boundary sources:
+[Chrome 122](https://chromereleases.googleblog.com/2024/02/stable-channel-update-for-desktop_20.html),
+[Edge 122](https://learn.microsoft.com/en-ca/deployedge/microsoft-edge-relnotes-security),
+[Firefox 123](https://developer.mozilla.org/en-US/docs/Mozilla/Firefox/Releases/123),
+and [Safari 17.4](https://developer.apple.com/documentation/safari-release-notes/safari-17_4-release-notes).
+Pin full browser builds, OS builds, GPU/driver and test-harness versions in the
+execution manifest. Do not guess future current-stable/ESR numbers or equate a
+planned row with available hardware. Unavailable historical binaries/Macs remain
+explicit gaps. Use historical browsers only with isolated local fixtures for
+compatibility work, not as the recommended daily browser. Do not inherit the
+parked Greenfield platform matrix as a current-dashboard support promise.
+
+Use engine automation for deterministic coverage, followed by real browser
+checks for promotion, sharpness and GPU behavior. In particular,
+[Playwright WebKit](https://playwright.dev/docs/browsers#webkit) is a patched
+WebKit build, not the shipping Safari browser. Add an intermediate release only
+when a capability/driver change or failure warrants it; the plan does not claim
+every release in the window was exercised.
+
+**Fallback acceptance:** probe context creation, shader/texture support and
+actual rendered output; test acceleration disabled, context/device loss,
+oversized textures, worker failure, memory pressure and fractional-DPR resize.
+Keep the last complete frame until the same requested frame is ready on the
+fallback, then restore appropriate opacity and inspector/legend identity.
+A native-detail server tile or bounded CPU render is a candidate compatible
+path. Existing Radar/MRMS capped PNGs remain current runtime fallbacks, but
+cannot automatically be called quality-equivalent at high zoom. If they lose
+meaningful detail against the chosen reference, a replacement proposal must
+include a suitable fallback before acceleration can be accepted. Missing
+`deviceMemory`, worker context support or GPU timers must not block basic use.
+MDN documents [approximate memory hints](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory),
+[optional core-count limits](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/hardwareConcurrency)
+and [WebGL memory/limit constraints](https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices).
+
+##### F. Proposed success criteria and next decision
+
+- **Quality is mandatory:** compare identical source/frame/viewport inputs
+  against both the accepted renderer and a bounded full-native reference.
+  Existing decimated output alone cannot certify native-detail preservation.
+  Require exact category/no-data codes, source timestamps, units, palette and
+  inspector contracts. Same-algorithm output should match decoded RGBA exactly;
+  genuinely changed resampling requires a separately agreed, product-specific
+  numeric/spatial tolerance and visual acceptance before performance can count.
+  Report scalar error, masks, thin features, extrema, seams, limb/antimeridian
+  alignment and alpha; do not use a single image similarity score or a global
+  RGB tolerance to hide local damage.
+- **Responsiveness targets for review:** p95 input-to-feedback at or below
+  100 ms and no renderer-caused main-thread stall above 200 ms in the fixed
+  interaction trace; warm requested-frame promotion within 250 ms; existing
+  160 ms Satellite scrub coalescing measured separately from render time.
+  Cold work may take longer but must preserve controls and an honest loading
+  state. Page navigation must remain usable during warming. No flash, stale
+  promotion, hidden frame dropping or publication of incomplete artifacts.
+- **Efficiency threshold for review:** on an ordinary/lower-resource profile,
+  a candidate should improve its declared dominant cost by at least 20% and
+  beyond observed run-to-run variation. Report first-complete-frame latency,
+  CPU work, GPU work where measurable, peak/settled memory, I/O and history cost
+  alongside it. A default replacement should not regress other critical costs
+  by more than 5% outside measurement noise; a larger tradeoff needs an explicit
+  owner decision. Faster first paint bought with more total work is a tradeoff,
+  not an unqualified efficiency win. Three baseline samples cannot pass this
+  threshold as a statistical certification.
+- **Resource behavior:** every profile completes the same selected workload
+  within its declared budgets/headroom or produces an explicit evidence gap.
+  No crash/OOM, sustained paging, runaway speculative queues or monotonic cache
+  growth across three identical selection/play/teardown cycles. Residual memory
+  must be accounted for as bounded cache, not assumed to be a leak or ignored.
+- **Compatibility:** each claimed browser/OS row passes the four anchors and
+  fallback checks at final quality; acceleration may differ by capability.
+  Browser execution and owner visual acceptance remain separate evidence.
+
+The review decision is whether to accept this inventory, 12-cell baseline,
+hardware/browser targets and provisional thresholds. Approval of that bounded
+measurement pass would not authorize renderer implementation or an unrestricted
+benchmark campaign. Return its findings with a product-specific recommendation:
+retain the existing path, improve its scheduling/reuse, or propose a different
+renderer. Select at most two subsequent experiments with exact workload,
+quality reference, resource limits and rollback scope for another review.
+No commit, push, layer-order change or Greenfield work is included.
 
 ## 5. Post-refactor observation register
 
-These observations were collected on 2026-08-05. They are preserved as
-**unverified/open observations**, not confirmed current defects unless a later
-owner-smoke note says otherwise. Reproduce and reconcile each against current
-code before implementation.
+These observations originated on 2026-08-05. Their dated dispositions below
+govern whether they are corrected history, deferred proposals, audit topics,
+or reports that still need reproduction. They are not a blanket list of
+confirmed current defects or approved implementation tasks.
 
-Reconciliation, 2026-09-06: entries explicitly marked corrected remain closed;
-measurements remain dated evidence; all other reports remain unverified unless
-a dated disposition below says otherwise. This review did not reproduce the
-entire register. Rendering-related observations may inform section 4.8, but
-their presence does not preselect a fix.
+Reconciliation, 2026-09-06: **Corrected** entries remain closed; **Historical**
+entries retain dated evidence; **Deferred proposal** is not a current defect;
+**Unverified report** still needs runtime reproduction; **Partly superseded**
+identifies current code that has overtaken part of an old observation. The
+source review did not reproduce every workflow. Rendering-related reports may
+inform section 4.8, but their presence does not preselect a fix.
 
 The 2026-08-08 post-cleanup owner smoke passed the global shell, Surface display
 and product behavior, Satellite, Tropical, Water, Workspace, and the quick
@@ -806,31 +1224,48 @@ recorded below.
 
 General observations:
 
-1. Investigate Workspace Alerts loading time.
-2. Add first-frame and last-frame buttons to every project scrubber.
+1. **Unverified report:** Workspace Alerts loading time. Distinguish page load
+   from the already-closed worker refresh timing gate when reproducing it.
+2. **Deferred proposal:** first-frame and last-frame buttons on project
+   scrubbers. The shared scrubber currently has previous/next/play controls;
+   do not treat the desired extra buttons as an implemented feature.
 
 Testing batch:
 
-1. Workspace Home may not turn off selected Storm Reports.
+1. **Unverified report with code support:** Workspace Home clears the selected
+   LSR detail, but its reset handler does not uncheck the LSR-enabled control.
+   Reproduce the intended reset behavior before calling this fixed or changing it.
 2. **Deferred by owner, 2026-09-06:** retain SPC/Mesoscale Discussions below
    Satellite; moving them above it is not requested at this time.
-3. Put WPC Day pills above family pills and make the workflow day-first.
-4. WPC products may not load and Day pills may not activate; reconcile with 3.
+3. **Deferred proposal:** move WPC Day pills above family pills and make the
+   workflow day-first. Current controls remain family-first.
+4. **Unverified report:** WPC products/day pills may not load or activate.
+   Identify the actual group/day/product; section 4.6 distinguishes unsupported
+   later-day Winter selections from already implemented products.
 5. **Deferred by owner, 2026-09-06:** retain MRMS below Satellite.
-6. Ensure every enabled active layer has a combined-tabbed-legend entry.
-7. Standalone Satellite should fit Target, Mesoscale, and Rapid sectors.
+6. **Unverified report:** check combined legend membership for every enabled
+   layer; the shared tray already exists, so this is a coverage check.
+7. **Partly superseded:** standalone Satellite already has dynamic current-bound
+   fitting for GOES Meso and Himawari Target plus a Meteosat RSS preset.
+   Recheck other platform/sector defaults under the new resolution/view audit;
+   this is not a blanket missing-fit feature.
 8. **Partially implemented:** Phase 5 added bounded request retries, including
    503s. Interrupted streamed-transfer recovery/resume remains eligible under
    section 4.4; the new rendering audit may assess its current cost.
-9. GMGSI Full Disk target: bounds `[-228.69, 103.01, -69.35, 62.27]`, center
-   `[-8.67, -62.84]`, zoom `3`.
-10. Investigate unusually small GMGSI Global Z3 tiles.
-11. Generalize clear Loading/Stale/Legitimate Empty product UX after owner
-    clarification, including whether the old product remains visible.
-12. Mesoscale Discussions should load latest after warming/loading.
-13. Separate Mesoscale Discussion and Storm Report pills.
-14. RTMA Wind Speed should select Wind Direction; Direction remains independently
-    removable and follows Wind Speed in the control order.
+9. **Unselected view proposal:** GMGSI's actual sector is Global. The old
+   proposed bounds `[-228.69, 103.01, -69.35, 62.27]`, center `[-8.67, -62.84]`,
+   zoom `3` are not the current preset (`[0, 0]`, z2). Reassess during the audit.
+10. **Unverified report:** unusually small GMGSI Global Z3 tiles; assess source
+    detail and projection before inferring an incorrect render size.
+11. **Deferred proposal:** generalize Loading/Stale/Legitimate Empty UX after
+    defining each product's existing behavior and retained-image policy.
+12. **Unverified report:** latest Mesoscale Discussions after warming/loading.
+13. **Deferred proposal:** separate standalone SPC Mesoscale Discussion and
+    Storm Report pills; the current page groups them under Reports/MDs.
+14. **Deferred standalone RTMA proposal:** selecting Wind Speed also selects
+    independently removable Wind Direction. The current standalone page allows
+    the pair without auto-selecting the second checkbox; Workspace already has
+    a combined Winds product. Do not conflate the two page contracts.
 15. **Corrected 2026-08-09 after the confirmed 2026-08-08 smoke failure:**
     Satellite tile waits no longer occupy AnyIO's shared synchronous-request
     workers. Tile and prefetch requests carry the same per-page client identity
@@ -848,21 +1283,35 @@ Testing batch:
     loaded Meteosat-12 Channel 13 current/past frames, then switched to another
     page while past-frame work was active; both frame loading and immediate
     cross-page navigation passed.
-16. Determine whether MRMS blocks current display on full animation warming.
-17. Research zooming MESH to the location behind `Largest Hail`.
-18. Consider dual useful units in `mrms-legend-units`.
-19. Verify whether Rotation Track’s statistic uses underlying data or legend
-    scale maximum.
-20. Investigate filling Drought gaps; obtain screenshots when selected.
-21. Tropical Outlook card selection should show only that card’s element.
-22. Atlantic viewport: bounds `[-98.48, -17.36, 8.02, 46.35]`, center
+16. **Partly superseded / measurement pending:** Workspace MRMS loads the latest
+    image before starting history. Check standalone behavior and actual cold
+    timing under section 4.8 before claiming full-history blocking or its absence.
+17. **Deferred proposal:** MESH zoom to the location behind `Largest Hail`.
+18. **Deferred proposal:** dual useful units in `mrms-legend-units`.
+19. **Unverified report:** Rotation Track statistic provenance (underlying data
+    versus legend-scale maximum).
+20. **Unverified report:** Drought gaps; collect a specific reproduction before
+    selecting work.
+21. **Deferred proposal:** isolate a Tropical Outlook card's element. The current
+    handler selects/zooms/opens its detail; isolated rendering needs separate
+    verification/design.
+22. **Unselected Atlantic viewport proposal:** bounds
+    `[-98.48, -17.36, 8.02, 46.35]`, center
     `[28.92, -57.92]`, zoom `5`.
-23. Eastern Pacific viewport: bounds `[-155.74, -74.62, -1.85, 39.1]`, center
+23. **Unselected Eastern Pacific viewport proposal:** bounds
+    `[-155.74, -74.62, -1.85, 39.1]`, center
     `[19.93, -115.18]`, zoom `5`.
-24. Central Pacific viewport: bounds `[-225.06, -110.33, -11.89, 45.21]`, center
+24. **Unselected Central Pacific viewport proposal:** bounds
+    `[-225.06, -110.33, -11.89, 45.21]`, center
     `[19.05, -167.69]`, zoom `4.5`.
-25. Replace WPC QPF subproduct dropdown repetition with time-range pills.
-26. Measure current-frame-first loading with user-triggered lookback warming.
+    Items 22–24 are historical proposed coordinates, not current defaults in
+    `frontend/pages/tropical/tropical-app.js`.
+25. **Partly superseded / deferred UX proposal:** standalone WPC now builds
+    catalog-driven product lists and a QPF6-hour scrubber; the old dropdown
+    description is stale. Any remaining time-range-pill redesign needs a new
+    comparison against the current page.
+26. **Audit measurement topic:** current-frame-first loading with user-triggered
+    lookback warming, across the selected rendering families in section 4.8.
 27. **Corrected product boundary, 2026-08-08:** the July 1 Surface probe exposed
     an unsupported partial UI, not a Cleanup Wave regression. Surface now keeps
     its bounded recent lookback in Live; Surface and Alerts Archive tabs are
@@ -882,7 +1331,7 @@ Testing batch:
     The earlier `jobs=1 downloaded=3 errors=0 pruned=27 elapsed=0h 2m 39s`
     result came from the source-prefetch worker, which does not decode or render
     tiles; its old total also includes catalog/prune overhead and cannot be
-    reconstructed more finely. Future source-prefetch runs now report explicit
+    reconstructed more finely. The implemented source-prefetch telemetry reports
     `download_ms`. Keep both observations separate and preserve output parity;
     neither is by itself an optimization baseline.
 
@@ -890,6 +1339,10 @@ Testing batch:
 
 These are incremental evolutions of the existing dashboard and remain parked
 until a specific design is selected:
+
+The rendering-specific portions of resource adaptation, memory budgets, and GPU
+research are now audit topics in section 4.8. This does not start the broader
+Version 2 settings, diagnostics, or desktop-project programs below.
 
 - Measured performance profiles and conservative automatic worker guidance.
 - Browser/server memory budgets, bounded caches, and diagnostics.
@@ -931,9 +1384,11 @@ project boundaries without an explicit owner decision.
 - Windows service or always-on background monitoring: rejected.
 - Shared notification ownership inside Workspace: rejected; Workspace stays
   separate.
-- Current-dashboard all-product Radar WebGL: parked beyond the named five.
-- Current-dashboard Radar PNG retirement: rejected.
-- Current-dashboard Radar server tile migration: rejected.
+- Radar WebGL beyond the named five: reopened for product-specific evaluation
+  under section 4.8; no blanket conversion decision.
+- Radar PNG retirement and server tile migration: previous exclusions
+  superseded for audit recommendations on 2026-09-06. The current PNG runtime
+  remains intact until an evidenced replacement plan is accepted.
 - Unbounded retention for RTMA/MRMS: rejected.
 - Persistent cross-process leases for the current single-process deployment:
   closed unless deployment changes.
@@ -946,7 +1401,8 @@ project boundaries without an explicit owner decision.
 ### 9.1 Active documents
 
 - [`README.md`](README.md) — documentation map.
-- This file — decisions, active candidates, and ordered work.
+- This file — decisions, dispositions, evidence, and the selected audit brief;
+  proposal list order does not establish priority.
 - [`next-session-startup-prompt.md`](next-session-startup-prompt.md) — concise
   startup procedure.
 - [`nch-weather-studio-greenfield-plan.md`](nch-weather-studio-greenfield-plan.md)
@@ -963,13 +1419,15 @@ project boundaries without an explicit owner decision.
   [`archive/worker-free-render-plan.md`](archive/worker-free-render-plan.md).
 - Original Radar WebGL Phases 6–8 are closed. Earlier performance READMEs that
   say the next phase is gated are historical snapshots; the later Phase 8
-  completion record governs that family. The five additions in section 4.1
-  remain separate proposals, not completed work.
+  completion record governs that family. Further products in section 4.1
+  remain audit/implementation candidates, not completed work.
 - Cleanup Waves A–E and Meteosat Phases 0–5 are closed. Meteosat Phase 2c FCI
   hyperslab pushdown was measured and rejected, not left unfinished.
-- Single-process ownership, bounded resources, PNG fallback, publication
-  safety, output parity, and applicable browser/owner validation remain current
-  contracts. Closed phase gates do not require blanket reruns for unrelated work.
+- Single-process ownership, bounded resources, publication safety, output
+  parity, and applicable browser/owner validation remain current contracts.
+  PNG is the existing fallback; section 4.8 explicitly permits evidenced
+  replacement proposals. Closed gates do not require blanket reruns for
+  unrelated work or prohibit reassessing the old rendering architecture.
 
 These are historical acceptance records, not a fresh performance certification.
 
@@ -977,10 +1435,10 @@ These are historical acceptance records, not a fresh performance certification.
 
 The consolidation source archive contains the former superfile/startup prompt,
 post-refactor observations, Version 2 proposals, Greenfield plan, and completed
-cleanup Phase 2/4 records. Its README records hashes. The archive also contains
-the completed Meteosat Phase 0–5 execution plan and the superseded pre-`3773d47`
-startup handoff. Existing material under `docs/archive/` remains historical and
-unchanged after it is placed there.
+cleanup Phase 2/4 records. Its README records hashes. Separately, `docs/archive/`
+contains the completed Meteosat Phase 0–5 execution plan and the superseded
+pre-`3773d47` startup handoff. Existing material under `docs/archive/` remains
+historical and unchanged after it is placed there.
 
 ### 9.4 Performance evidence
 
@@ -1001,11 +1459,11 @@ developer, repository, user, and selected-skill instructions.
 
 ## 10. Choosing the next slice
 
-Cleanup Waves A through E are complete. The owner selected the high-cost
-rendering-workflow audit in section 4.8 on 2026-09-06. After the accepted local
-changes and this reconciliation are committed, agree that audit's plan. Do not
-ask the owner to select an enhancement family again or start renderer changes
-from the ledger order.
+Cleanup Waves A through E are complete. The accepted functional/docs baseline
+is `e200f74` plus `5096e74`. The owner has supplied the expanded rendering-audit
+brief in section 4.8; turn it into the bounded execution/measurement plan for
+review. Do not ask the owner to select the product families again or start
+renderer changes from the ledger order.
 
 The post-cleanup Satellite cross-page blocking prerequisite is complete. A
 separate bounded Meteosat latency family was selected; its Phase 0/1 baseline,

@@ -2,6 +2,10 @@
 
 This directory separates current operating truth from historical evidence.
 
+Use the superfile directly under `docs/` for current decisions. The same-named
+file under `archive/2026-08-07-consolidation-sources/` is deliberately frozen;
+its old instructions and references are historical, not current project status.
+
 ## Start here
 
 - [`next-session-startup-prompt.md`](next-session-startup-prompt.md) — concise
@@ -27,10 +31,13 @@ archived file is historical.
 The owner accepted the existing MRMS transition and Satellite zoom/sharpness
 changes and retained the current Workspace layer order. The next focus is a
 high-cost rendering-workflow audit of Satellite (especially Meteosat), Radar
-(including the five named WebGL additions), MRMS, and RTMA. Its plan will be
-agreed after this reconciliation and the accepted changes are committed.
-Section 4.8 of the superfile records that boundary; it does not authorize
-renderer changes or activate an old phase. Closed-gate references are in
+(including any products with worthwhile WebGL benefits), MRMS, and RTMA. The
+accepted baseline is committed as `e200f74` plus docs checkpoint `5096e74`.
+The expanded brief covers alternative architectures, source-resolution/zoom
+correctness, hardware-adaptive budgets, and Blink/Chromium, WebKit, and Gecko
+compatibility extending at least a couple of years. Section 4.8 of the superfile
+records the brief and proposed support criteria; the execution plan is next for
+review. Renderer changes remain deferred. Closed-gate references are in
 section 9.2. Other enhancement families and Greenfield remain deferred.
 
 ## Historical records
