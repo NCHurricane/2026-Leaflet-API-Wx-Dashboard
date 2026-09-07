@@ -148,7 +148,8 @@ def run_selected_meteosat_tile_warmer(
         "errors": 0,
         "cancelled": 0,
     }
-    pool = _get_tile_pool()
+    pool = None if sat_key == "meteosat12" else _get_tile_pool()
+    render_workers = 1 if sat_key == "meteosat12" else int(SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS)
 
     _LOGGER.info(
         "Meteosat tile warm start selection=%s/%s/%s frames=%s zooms=%s "
@@ -158,7 +159,7 @@ def run_selected_meteosat_tile_warmer(
         channel_key,
         len(newest),
         zooms,
-        SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS,
+        render_workers,
         bounds,
     )
     for frame in newest:
@@ -176,7 +177,7 @@ def run_selected_meteosat_tile_warmer(
             channel_key=channel_key,
             frame=frame,
             zooms=zooms,
-            render_workers=int(SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS),
+            render_workers=render_workers,
             tile_bounds=bounds,
             pool=pool,
             should_continue=should_continue,

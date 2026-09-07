@@ -73,7 +73,7 @@ def test_canvas_warm_stops_scheduling_zooms_when_live_work_arrives(
 
     stats = tiler.warm_frame_tiles_from_canvas(
         cache_root=tmp_path,
-        sat_id="meteosat12",
+        sat_id="meteosat9",
         sector="FULLDISK",
         channel_key="Channel13",
         frame={"frame_key": "frame-a"},

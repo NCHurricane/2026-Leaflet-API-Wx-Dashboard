@@ -1,0 +1,48 @@
+{
+  "category": "automated_backend_validation_not_owner_browser_acceptance",
+  "head": "215729e",
+  "runtime_sha256": {
+    "satellite_v2/fci_windows.py": "72e11b4522f6d254bdaaa0e152cd37d33a5925ca567ccaef16f9748115547824",
+    "satellite_v2/fci_nc.py": "1fa78241ed5b97b52da0a0c9a1999a219d701cba85d93f267eb2c4a4395c3169",
+    "satellite_v2/renderer.py": "0979ece6771f770a31d986629dac3f23a09b41518543b6d56f2ce95465852e0b",
+    "satellite_v2/tiler.py": "2d2a6a2d777ff5770cdbe4fdae41409618bebee8e89cdd523fe205acf1170139",
+    "satellite_v2/service.py": "3fa2751ead28a1f0367630c22aeb9b5c6b78cd1dddf64726102dee369ecefa10",
+    "app_core/render_budget.py": "580737e5250ff64234f0a85a4f1d4f5a1984e92e15384a20b9e080b5e8fb19a4",
+    "config/satellite_v2_config.py": "1fab0dcc19d0c3897166f2256eb3932f3c114d2d3f1e7d9c7e40fa93a60addee",
+    "satellite_v2/meteosat_tile_worker.py": "edc2e9c6df54bdb0b604b327de434a7bd7a607e62931cb32a2bc7216bc14a4ae"
+  },
+  "python": {
+    "command": ".venv/Scripts/python.exe -m pytest -q",
+    "passed": 694,
+    "subtests_passed": 42,
+    "warnings": 52,
+    "seconds": 13.14
+  },
+  "ruff": {
+    "passed": true,
+    "paths": [
+      "satellite_v2/fci_windows.py",
+      "tests/test_fci_windows.py",
+      "docs/perf/2026-09-06-rendering-audit/check_fci_limb_correction.py"
+    ]
+  },
+  "node": {
+    "rerun": false,
+    "unchanged_frontend_prior_passed": 54
+  },
+  "native_quality_cases_exact": 10,
+  "owner_frame_tiles_exact": 40,
+  "service_cases_passed": 2,
+  "local_markdown_links_resolved": 40,
+  "new_timed_samples_used": 2,
+  "prior_timed_samples_used": 108,
+  "new_downloads": 0,
+  "dashboard_restarted": false,
+  "scratch_bytes_new_correction": 581948846,
+  "open_acceptance": [
+    "owner restart and uncached-frame smoke",
+    "source acquisition and total first-fill latency",
+    "browser/OBS and secondary machines",
+    "multi-frame navigation and source validity/overlays inside limb"
+  ]
+}

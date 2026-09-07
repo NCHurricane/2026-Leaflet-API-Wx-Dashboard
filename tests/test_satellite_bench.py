@@ -79,7 +79,7 @@ def test_default_full_disk_center_is_platform_specific():
     assert bench._default_center("goes19", "MESO1") == (-95.0, 38.0)
 
 
-def test_source_grid_memory_estimate_uses_zoom_and_product_channel_count():
+def test_fci_coarse_memory_estimate_keeps_native_dimensions_at_every_zoom():
     z4_single = renderer.estimate_source_grid_bytes(
         "meteosat12", "Channel13", destination_zoom=4
     )
@@ -93,10 +93,13 @@ def test_source_grid_memory_estimate_uses_zoom_and_product_channel_count():
         "meteosat12", "NighttimeMicrophysics", destination_zoom=5
     )
 
-    assert z4_single == 2048 * 2048 * 4
-    assert z5_single == 4096 * 4096 * 4
+    assert z4_single == 5568 * 5568 * 4
+    assert z5_single == z4_single
     assert z7_single == 5568 * 5568 * 4
     assert z5_three_channel == z5_single * 3
+    assert renderer.estimate_source_grid_bytes("meteosat12", "Channel02", 4) == 11136**2 * 4
+    # Channel13/14 are aliases of one physical FCI channel in the Dust recipe.
+    assert renderer.estimate_source_grid_bytes("meteosat12", "Dust", 7) == 5568**2 * 4 * 3
 
 
 def test_goes_memory_estimate_keeps_conservative_platform_cap():

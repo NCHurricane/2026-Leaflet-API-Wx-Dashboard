@@ -1,0 +1,133 @@
+{
+  "category": "prototype_quality_check_not_implementation_acceptance",
+  "run_id": "fci-window-quality-v1",
+  "gate": {
+    "max_rgb_delta": 1,
+    "alpha_mismatch_pixels": 0
+  },
+  "cases": [
+    {
+      "case": "interior",
+      "product": "Channel02",
+      "target": [
+        8,
+        127,
+        123,
+        129,
+        125
+      ],
+      "loader": {
+        "channels": [
+          {
+            "native_channel": "vis_06",
+            "window": [
+              5406,
+              4790,
+              5886,
+              5263
+            ],
+            "mode": "window",
+            "halo": 5,
+            "full_array_bytes": 496041984,
+            "selected_array_bytes": 908160,
+            "cache_hit": false,
+            "strips_read": 2,
+            "decompressed_storage_bytes_estimate": 13363200
+          }
+        ],
+        "cache_bytes": 908160,
+        "cache_limit": 67108864
+      },
+      "max_rgb_delta": 0,
+      "alpha_mismatch_pixels": 0,
+      "rgb_difference_mean": 0.0,
+      "rgb_difference_gt_1_pixels": 0,
+      "pass": true,
+      "candidate_path": "cache/rendering-audit-20260906/fci-window-quality-v1/interior-window.png",
+      "reference_path": "cache/rendering-audit-20260906/m12-detail-reference/interior-native.png"
+    },
+    {
+      "case": "equatorial-chunk-boundary",
+      "product": "Channel02",
+      "target": [
+        8,
+        127,
+        127,
+        129,
+        129
+      ],
+      "loader": {
+        "channels": [
+          {
+            "native_channel": "vis_06",
+            "window": [
+              5406,
+              5407,
+              5886,
+              5884
+            ],
+            "mode": "window",
+            "halo": 5,
+            "full_array_bytes": 496041984,
+            "selected_array_bytes": 915840,
+            "cache_hit": false,
+            "strips_read": 3,
+            "decompressed_storage_bytes_estimate": 20044800
+          }
+        ],
+        "cache_bytes": 915840,
+        "cache_limit": 67108864
+      },
+      "max_rgb_delta": 0,
+      "alpha_mismatch_pixels": 0,
+      "rgb_difference_mean": 0.0,
+      "rgb_difference_gt_1_pixels": 0,
+      "pass": true,
+      "candidate_path": "cache/rendering-audit-20260906/fci-window-quality-v1/equatorial-chunk-boundary-window.png",
+      "reference_path": "cache/rendering-audit-20260906/m12-detail-reference/equatorial-chunk-boundary-native.png"
+    },
+    {
+      "case": "east-limb",
+      "product": "Channel02",
+      "target": [
+        8,
+        183,
+        127,
+        185,
+        129
+      ],
+      "loader": {
+        "channels": [
+          {
+            "native_channel": "vis_06",
+            "window": [
+              0,
+              0,
+              11136,
+              11136
+            ],
+            "mode": "full_native_partial_projection",
+            "halo": 0,
+            "full_array_bytes": 496041984,
+            "selected_array_bytes": 496041984,
+            "cache_hit": false,
+            "strips_read": 40,
+            "decompressed_storage_bytes_estimate": 267264000
+          }
+        ],
+        "cache_bytes": 0,
+        "cache_limit": 67108864
+      },
+      "max_rgb_delta": 0,
+      "alpha_mismatch_pixels": 0,
+      "rgb_difference_mean": 0.0,
+      "rgb_difference_gt_1_pixels": 0,
+      "pass": true,
+      "candidate_path": "cache/rendering-audit-20260906/fci-window-quality-v1/east-limb-window.png",
+      "reference_path": "cache/rendering-audit-20260906/m12-detail-reference/east-limb-native.png"
+    }
+  ],
+  "peak_rss_sampled": 1286672384,
+  "wall_seconds": 10.172000000005937,
+  "all_selected_cases_passed": true
+}

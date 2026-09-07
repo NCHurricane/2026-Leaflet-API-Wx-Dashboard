@@ -238,7 +238,7 @@ def test_fci_loader_stitches_body_chunks_and_calibrates_shared_channels(tmp_path
     assert decimated.values.shape == (2, 2)
     assert np.isfinite(decimated.values).all()
     assert decimated.src_transform.a > infrared.src_transform.a
-    assert satellite_v2_render_version_for_satellite("meteosat12") == "products-fci5"
+    assert satellite_v2_render_version_for_satellite("meteosat12") == "products-fci6"
 
 
 def test_fci_loader_serializes_native_netcdf_access_across_zoom_keys(monkeypatch):

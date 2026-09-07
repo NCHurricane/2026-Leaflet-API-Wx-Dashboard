@@ -1,0 +1,939 @@
+{
+  "case": "m12-visible",
+  "iteration": 1,
+  "settings": {
+    "SATELLITE_V2_AHI_MAX_GRID": 10848,
+    "SATELLITE_V2_AMI_MAX_GRID": 10848,
+    "SATELLITE_V2_FCI_MAX_GRID": 10848,
+    "SATELLITE_V2_GOES_FULLDISK_MAX_GRID": 10848,
+    "SATELLITE_V2_LIVE_TILE_RENDER_WORKERS": 10,
+    "SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS": 2,
+    "SATELLITE_V2_NETCDF_CACHE_SIZE": 16,
+    "SATELLITE_V2_RAPID_WORKER_FRAMES": 12,
+    "SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS": 225,
+    "SATELLITE_V2_RAPID_WORKER_HOURS": 2,
+    "SATELLITE_V2_RAPID_WORKER_MAX_FRAMES": 120,
+    "SATELLITE_V2_RAPID_WORKER_TILE_BUFFER": 1,
+    "SATELLITE_V2_RAPID_WORKER_TILE_WORKERS": 2,
+    "SATELLITE_V2_RENDERER_CACHE_SIZE": 8,
+    "SATELLITE_V2_SOURCE_RASTER_CACHE_MB": 4096,
+    "radar_webgl": {
+      "enabled": true,
+      "animation_enabled": true,
+      "product": "L2_REF",
+      "products": [
+        "L2_REF"
+      ],
+      "animation_products": [
+        "L2_REF"
+      ],
+      "artifact_version": 2,
+      "prefetch_zoom": 10,
+      "activate_zoom": 11,
+      "release_grace_ms": 1500,
+      "texture_budget": 4,
+      "min_forward_textures": 2,
+      "max_concurrent_loads": 2
+    },
+    "radar_figure_size_inches": 12,
+    "radar_dpi": 200,
+    "satellite_context": {
+      "sat_id": "meteosat12",
+      "sector": "FULLDISK",
+      "product": "Channel02",
+      "frame_key": "20260906T120000Z",
+      "z": 8,
+      "x": 128,
+      "y": 124,
+      "tiles": "3x3"
+    },
+    "satellite_native_timings": [
+      {
+        "cache_status": "miss",
+        "composite_ms": 11.292,
+        "download_ms": 0.58,
+        "encode_ms": 24.629,
+        "frame_key": "20260906T120000Z",
+        "iteration": 1,
+        "parse_ms{Channel02}": 3726.58,
+        "pid": 35960,
+        "product": "Channel02",
+        "run_id": "audit-m12-visible-1",
+        "sat_id": "meteosat12",
+        "scenario": "source_local_fresh_process_no_artifact",
+        "sector": "FULLDISK",
+        "total_ms": 3905.158,
+        "validate_ms": 50.05,
+        "warp_ms{Channel02}": 67.089,
+        "write_ms": 1.828,
+        "x": 128,
+        "y": 124,
+        "z": 8
+      },
+      {
+        "cache_status": "miss",
+        "composite_ms": 15.55,
+        "download_ms": 0.67,
+        "encode_ms": 15.893,
+        "frame_key": "20260906T120000Z",
+        "iteration": 2,
+        "pid": 35960,
+        "product": "Channel02",
+        "run_id": "audit-m12-visible-1",
+        "sat_id": "meteosat12",
+        "scenario": "decoded_source_warm_no_artifact",
+        "sector": "FULLDISK",
+        "total_ms": 148.224,
+        "validate_ms": 53.512,
+        "warp_ms{Channel02}": 50.107,
+        "write_ms": 2.129,
+        "x": 128,
+        "y": 124,
+        "z": 8
+      },
+      {
+        "cache_status": "miss",
+        "composite_ms": 15.563,
+        "download_ms": 0.7,
+        "encode_ms": 15.548,
+        "frame_key": "20260906T120000Z",
+        "iteration": 3,
+        "pid": 35960,
+        "product": "Channel02",
+        "run_id": "audit-m12-visible-1",
+        "sat_id": "meteosat12",
+        "scenario": "decoded_source_warm_no_artifact",
+        "sector": "FULLDISK",
+        "total_ms": 154.633,
+        "validate_ms": 54.238,
+        "warp_ms{Channel02}": 50.416,
+        "write_ms": 1.955,
+        "x": 128,
+        "y": 124,
+        "z": 8
+      },
+      {
+        "cache_status": "miss",
+        "composite_ms": 15.741,
+        "download_ms": 0.636,
+        "encode_ms": 15.931,
+        "frame_key": "20260906T120000Z",
+        "iteration": 4,
+        "pid": 35960,
+        "product": "Channel02",
+        "run_id": "audit-m12-visible-1",
+        "sat_id": "meteosat12",
+        "scenario": "decoded_source_warm_no_artifact",
+        "sector": "FULLDISK",
+        "total_ms": 146.594,
+        "validate_ms": 50.257,
+        "warp_ms{Channel02}": 51.809,
+        "write_ms": 2.073,
+        "x": 128,
+        "y": 124,
+        "z": 8
+      },
+      {
+        "cache_status": "hit",
+        "frame_key": "20260906T120000Z",
+        "iteration": 5,
+        "pid": 35960,
+        "product": "Channel02",
+        "run_id": "audit-m12-visible-1",
+        "sat_id": "meteosat12",
+        "scenario": "derived_artifact_hit",
+        "sector": "FULLDISK",
+        "total_ms": 0.15,
+        "validate_ms": 0.09950000094249845,
+        "x": 128,
+        "y": 124,
+        "z": 8
+      },
+      {
+        "cache_status": "hit",
+        "frame_key": "20260906T120000Z",
+        "iteration": 6,
+        "pid": 35960,
+        "product": "Channel02",
+        "run_id": "audit-m12-visible-1",
+        "sat_id": "meteosat12",
+        "scenario": "derived_artifact_hit",
+        "sector": "FULLDISK",
+        "total_ms": 0.281,
+        "validate_ms": 0.23589999182149768,
+        "x": 128,
+        "y": 124,
+        "z": 8
+      },
+      {
+        "cache_status": "hit",
+        "frame_key": "20260906T120000Z",
+        "iteration": 7,
+        "pid": 35960,
+        "product": "Channel02",
+        "run_id": "audit-m12-visible-1",
+        "sat_id": "meteosat12",
+        "scenario": "derived_artifact_hit",
+        "sector": "FULLDISK",
+        "total_ms": 0.178,
+        "validate_ms": 0.1292000088142231,
+        "x": 128,
+        "y": 124,
+        "z": 8
+      }
+    ]
+  },
+  "rows": [
+    {
+      "state": "source_local_fresh_process_no_artifact",
+      "wall_seconds": 3.912341400005971,
+      "cpu_seconds": 3.890625,
+      "rss_peak_sampled": 496316416,
+      "private_peak_sampled": 2012819456,
+      "rss_after": 385921024,
+      "io_delta": {
+        "read_count": 74535,
+        "write_count": 44,
+        "read_bytes": 311268966,
+        "write_bytes": 800178,
+        "other_count": 1364,
+        "other_bytes": 583914
+      },
+      "samples": [
+        {
+          "seconds": 0.0003912000101990998,
+          "rss": 213925888,
+          "private": 1721786368,
+          "threads": 54,
+          "host_available": 106168532992
+        },
+        {
+          "seconds": 0.06426840000494849,
+          "rss": 231534592,
+          "private": 1736986624,
+          "threads": 54,
+          "host_available": 106114629632
+        },
+        {
+          "seconds": 0.1307158999989042,
+          "rss": 269135872,
+          "private": 1774194688,
+          "threads": 54,
+          "host_available": 106089111552
+        },
+        {
+          "seconds": 0.19846980000147596,
+          "rss": 299319296,
+          "private": 1804550144,
+          "threads": 54,
+          "host_available": 106054074368
+        },
+        {
+          "seconds": 0.2633323000045493,
+          "rss": 270716928,
+          "private": 1777184768,
+          "threads": 54,
+          "host_available": 106073649152
+        },
+        {
+          "seconds": 0.32968090000213124,
+          "rss": 264462336,
+          "private": 1770352640,
+          "threads": 54,
+          "host_available": 106068385792
+        },
+        {
+          "seconds": 0.39769410000008065,
+          "rss": 277573632,
+          "private": 1783549952,
+          "threads": 54,
+          "host_available": 106094755840
+        },
+        {
+          "seconds": 0.4632311000023037,
+          "rss": 309542912,
+          "private": 1827627008,
+          "threads": 54,
+          "host_available": 106050232320
+        },
+        {
+          "seconds": 0.5296632000099635,
+          "rss": 281870336,
+          "private": 1803554816,
+          "threads": 54,
+          "host_available": 106089644032
+        },
+        {
+          "seconds": 0.5964650000096299,
+          "rss": 284000256,
+          "private": 1790943232,
+          "threads": 54,
+          "host_available": 106091745280
+        },
+        {
+          "seconds": 0.6641530000051716,
+          "rss": 286830592,
+          "private": 1793847296,
+          "threads": 54,
+          "host_available": 106093158400
+        },
+        {
+          "seconds": 0.7285321000090335,
+          "rss": 309567488,
+          "private": 1816477696,
+          "threads": 54,
+          "host_available": 106068795392
+        },
+        {
+          "seconds": 0.7941367000021273,
+          "rss": 290226176,
+          "private": 1797074944,
+          "threads": 54,
+          "host_available": 106032181248
+        },
+        {
+          "seconds": 0.8562190000084229,
+          "rss": 294019072,
+          "private": 1800695808,
+          "threads": 54,
+          "host_available": 106034597888
+        },
+        {
+          "seconds": 0.9191052000096533,
+          "rss": 312852480,
+          "private": 1819389952,
+          "threads": 54,
+          "host_available": 106011848704
+        },
+        {
+          "seconds": 0.9810186000104295,
+          "rss": 296886272,
+          "private": 1803288576,
+          "threads": 54,
+          "host_available": 106027679744
+        },
+        {
+          "seconds": 1.0435836000106065,
+          "rss": 300568576,
+          "private": 1806737408,
+          "threads": 54,
+          "host_available": 106028261376
+        },
+        {
+          "seconds": 1.1072377000091365,
+          "rss": 314699776,
+          "private": 1825878016,
+          "threads": 54,
+          "host_available": 106008883200
+        },
+        {
+          "seconds": 1.1705344000074547,
+          "rss": 303235072,
+          "private": 1809448960,
+          "threads": 54,
+          "host_available": 106019598336
+        },
+        {
+          "seconds": 1.2333326000079978,
+          "rss": 306835456,
+          "private": 1813032960,
+          "threads": 54,
+          "host_available": 106019790848
+        },
+        {
+          "seconds": 1.2957940000051167,
+          "rss": 321523712,
+          "private": 1832267776,
+          "threads": 54,
+          "host_available": 105999917056
+        },
+        {
+          "seconds": 1.3583533000055468,
+          "rss": 309485568,
+          "private": 1815711744,
+          "threads": 54,
+          "host_available": 106011176960
+        },
+        {
+          "seconds": 1.4211218999989796,
+          "rss": 301162496,
+          "private": 1806495744,
+          "threads": 54,
+          "host_available": 106006781952
+        },
+        {
+          "seconds": 1.482841400007601,
+          "rss": 329662464,
+          "private": 1836810240,
+          "threads": 54,
+          "host_available": 105990967296
+        },
+        {
+          "seconds": 1.5450062000018079,
+          "rss": 316190720,
+          "private": 1823232000,
+          "threads": 54,
+          "host_available": 106005762048
+        },
+        {
+          "seconds": 1.6079134000028716,
+          "rss": 316600320,
+          "private": 1823105024,
+          "threads": 54,
+          "host_available": 106004746240
+        },
+        {
+          "seconds": 1.6708499000087613,
+          "rss": 332603392,
+          "private": 1845465088,
+          "threads": 54,
+          "host_available": 105989525504
+        },
+        {
+          "seconds": 1.7328984000050696,
+          "rss": 322539520,
+          "private": 1829421056,
+          "threads": 54,
+          "host_available": 106007293952
+        },
+        {
+          "seconds": 1.7943345000094268,
+          "rss": 326180864,
+          "private": 1833103360,
+          "threads": 54,
+          "host_available": 106004545536
+        },
+        {
+          "seconds": 1.8571549000043888,
+          "rss": 334266368,
+          "private": 1852092416,
+          "threads": 54,
+          "host_available": 105992454144
+        },
+        {
+          "seconds": 1.9201977000047918,
+          "rss": 328921088,
+          "private": 1835405312,
+          "threads": 54,
+          "host_available": 106001436672
+        },
+        {
+          "seconds": 1.9827353000000585,
+          "rss": 334155776,
+          "private": 1840443392,
+          "threads": 54,
+          "host_available": 106002690048
+        },
+        {
+          "seconds": 2.046508700004779,
+          "rss": 346951680,
+          "private": 1859710976,
+          "threads": 54,
+          "host_available": 105983381504
+        },
+        {
+          "seconds": 2.109243700004299,
+          "rss": 335564800,
+          "private": 1842786304,
+          "threads": 54,
+          "host_available": 105993646080
+        },
+        {
+          "seconds": 2.1806608000042615,
+          "rss": 328650752,
+          "private": 1834258432,
+          "threads": 54,
+          "host_available": 105990262784
+        },
+        {
+          "seconds": 2.2430934000003617,
+          "rss": 372576256,
+          "private": 1881333760,
+          "threads": 54,
+          "host_available": 105956048896
+        },
+        {
+          "seconds": 2.30620479999925,
+          "rss": 346099712,
+          "private": 1868599296,
+          "threads": 54,
+          "host_available": 105981030400
+        },
+        {
+          "seconds": 2.3684499000082724,
+          "rss": 342491136,
+          "private": 1849290752,
+          "threads": 54,
+          "host_available": 105981546496
+        },
+        {
+          "seconds": 2.431150800010073,
+          "rss": 366469120,
+          "private": 1886171136,
+          "threads": 54,
+          "host_available": 105946574848
+        },
+        {
+          "seconds": 2.4931471000018064,
+          "rss": 355721216,
+          "private": 1877245952,
+          "threads": 54,
+          "host_available": 105967194112
+        },
+        {
+          "seconds": 2.5618143000028795,
+          "rss": 353243136,
+          "private": 1859915776,
+          "threads": 54,
+          "host_available": 105972105216
+        },
+        {
+          "seconds": 2.628417400002945,
+          "rss": 357449728,
+          "private": 1863929856,
+          "threads": 54,
+          "host_available": 105973805056
+        },
+        {
+          "seconds": 2.689984700002242,
+          "rss": 370688000,
+          "private": 1883439104,
+          "threads": 54,
+          "host_available": 105955049472
+        },
+        {
+          "seconds": 2.7535427000111667,
+          "rss": 358633472,
+          "private": 1865158656,
+          "threads": 54,
+          "host_available": 105967009792
+        },
+        {
+          "seconds": 2.8162414000107674,
+          "rss": 356466688,
+          "private": 1861648384,
+          "threads": 54,
+          "host_available": 105969156096
+        },
+        {
+          "seconds": 2.879148300009547,
+          "rss": 376709120,
+          "private": 1883594752,
+          "threads": 54,
+          "host_available": 105951485952
+        },
+        {
+          "seconds": 2.9415109000110533,
+          "rss": 364003328,
+          "private": 1870934016,
+          "threads": 54,
+          "host_available": 105961975808
+        },
+        {
+          "seconds": 3.0096028999978444,
+          "rss": 361648128,
+          "private": 1868283904,
+          "threads": 54,
+          "host_available": 105958072320
+        },
+        {
+          "seconds": 3.0728469000023324,
+          "rss": 382115840,
+          "private": 1889599488,
+          "threads": 54,
+          "host_available": 105944678400
+        },
+        {
+          "seconds": 3.1366517999995267,
+          "rss": 379322368,
+          "private": 1902387200,
+          "threads": 54,
+          "host_available": 105950937088
+        },
+        {
+          "seconds": 3.1995470999972895,
+          "rss": 374427648,
+          "private": 1881411584,
+          "threads": 54,
+          "host_available": 105958494208
+        },
+        {
+          "seconds": 3.262305900003412,
+          "rss": 371060736,
+          "private": 1876873216,
+          "threads": 54,
+          "host_available": 105955561472
+        },
+        {
+          "seconds": 3.3273038000043016,
+          "rss": 424488960,
+          "private": 1932644352,
+          "threads": 54,
+          "host_available": 105908867072
+        },
+        {
+          "seconds": 3.389449499998591,
+          "rss": 381730816,
+          "private": 1888624640,
+          "threads": 54,
+          "host_available": 105950253056
+        },
+        {
+          "seconds": 3.451086800007033,
+          "rss": 375693312,
+          "private": 1881124864,
+          "threads": 54,
+          "host_available": 105948254208
+        },
+        {
+          "seconds": 3.5133780000032857,
+          "rss": 410361856,
+          "private": 1923338240,
+          "threads": 54,
+          "host_available": 105918119936
+        },
+        {
+          "seconds": 3.5761592000053497,
+          "rss": 396210176,
+          "private": 1917181952,
+          "threads": 54,
+          "host_available": 105931808768
+        },
+        {
+          "seconds": 3.6446538000018336,
+          "rss": 390721536,
+          "private": 1898209280,
+          "threads": 54,
+          "host_available": 105950355456
+        },
+        {
+          "seconds": 3.7105515000002924,
+          "rss": 438382592,
+          "private": 2012819456,
+          "threads": 54,
+          "host_available": 105856987136
+        },
+        {
+          "seconds": 3.7718491999985417,
+          "rss": 496316416,
+          "private": 2008936448,
+          "threads": 54,
+          "host_available": 105832873984
+        },
+        {
+          "seconds": 3.8337868000089657,
+          "rss": 388100096,
+          "private": 1888616448,
+          "threads": 54,
+          "host_available": 105947602944
+        },
+        {
+          "seconds": 3.89707069999713,
+          "rss": 388259840,
+          "private": 1888636928,
+          "threads": 54,
+          "host_available": 105946636288
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-fci5/meteosat12/FULLDISK/Channel02/20260906T120000Z/8/128/124.png",
+        "bytes": 87341,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "1fd13965cb344e5ef64008a6e8a9c75f74bbff65edaba30e3af6ab29d084745c",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "decoded_source_warm_no_artifact",
+      "wall_seconds": 0.15558019999298267,
+      "cpu_seconds": 0.125,
+      "rss_peak_sampled": 393875456,
+      "private_peak_sampled": 1895727104,
+      "rss_after": 385957888,
+      "io_delta": {
+        "read_count": 44,
+        "write_count": 44,
+        "read_bytes": 806461,
+        "write_bytes": 800140,
+        "other_count": 543,
+        "other_bytes": 23880
+      },
+      "samples": [
+        {
+          "seconds": 0.00027540000155568123,
+          "rss": 385949696,
+          "private": 1886265344,
+          "threads": 54,
+          "host_available": 105948381184
+        },
+        {
+          "seconds": 0.06072929999209009,
+          "rss": 393875456,
+          "private": 1895727104,
+          "threads": 54,
+          "host_available": 105939468288
+        },
+        {
+          "seconds": 0.1308831999922404,
+          "rss": 388321280,
+          "private": 1888641024,
+          "threads": 54,
+          "host_available": 105945526272
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-fci5/meteosat12/FULLDISK/Channel02/20260906T120000Z/8/128/124.png",
+        "bytes": 87341,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "1fd13965cb344e5ef64008a6e8a9c75f74bbff65edaba30e3af6ab29d084745c",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "decoded_source_warm_no_artifact",
+      "wall_seconds": 0.16200039999966975,
+      "cpu_seconds": 0.09375,
+      "rss_peak_sampled": 396173312,
+      "private_peak_sampled": 1900466176,
+      "rss_after": 385961984,
+      "io_delta": {
+        "read_count": 44,
+        "write_count": 44,
+        "read_bytes": 806461,
+        "write_bytes": 800140,
+        "other_count": 543,
+        "other_bytes": 23880
+      },
+      "samples": [
+        {
+          "seconds": 0.00026929999876301736,
+          "rss": 385961984,
+          "private": 1886265344,
+          "threads": 54,
+          "host_available": 105947312128
+        },
+        {
+          "seconds": 0.0678392999980133,
+          "rss": 396173312,
+          "private": 1900466176,
+          "threads": 54,
+          "host_available": 105933828096
+        },
+        {
+          "seconds": 0.13768729999719653,
+          "rss": 388329472,
+          "private": 1888641024,
+          "threads": 54,
+          "host_available": 105944494080
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-fci5/meteosat12/FULLDISK/Channel02/20260906T120000Z/8/128/124.png",
+        "bytes": 87341,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "1fd13965cb344e5ef64008a6e8a9c75f74bbff65edaba30e3af6ab29d084745c",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "decoded_source_warm_no_artifact",
+      "wall_seconds": 0.15402159999939613,
+      "cpu_seconds": 0.109375,
+      "rss_peak_sampled": 389513216,
+      "private_peak_sampled": 1890992128,
+      "rss_after": 385961984,
+      "io_delta": {
+        "read_count": 44,
+        "write_count": 44,
+        "read_bytes": 806461,
+        "write_bytes": 800142,
+        "other_count": 543,
+        "other_bytes": 23880
+      },
+      "samples": [
+        {
+          "seconds": 0.00021720000950153917,
+          "rss": 385966080,
+          "private": 1886265344,
+          "threads": 54,
+          "host_available": 105946599424
+        },
+        {
+          "seconds": 0.06162130000302568,
+          "rss": 389513216,
+          "private": 1890992128,
+          "threads": 54,
+          "host_available": 105942278144
+        },
+        {
+          "seconds": 0.12260600000445265,
+          "rss": 388329472,
+          "private": 1888641024,
+          "threads": 54,
+          "host_available": 105944137728
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-fci5/meteosat12/FULLDISK/Channel02/20260906T120000Z/8/128/124.png",
+        "bytes": 87341,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "1fd13965cb344e5ef64008a6e8a9c75f74bbff65edaba30e3af6ab29d084745c",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "derived_artifact_hit",
+      "wall_seconds": 0.007981899994774722,
+      "cpu_seconds": 0.015625,
+      "rss_peak_sampled": 385966080,
+      "private_peak_sampled": 1886265344,
+      "rss_after": 386240512,
+      "io_delta": {
+        "read_count": 5,
+        "write_count": 1,
+        "read_bytes": 62989,
+        "write_bytes": 282,
+        "other_count": 37,
+        "other_bytes": 1104
+      },
+      "samples": [
+        {
+          "seconds": 0.00024670000129844993,
+          "rss": 385966080,
+          "private": 1886265344,
+          "threads": 54,
+          "host_available": 105946066944
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-fci5/meteosat12/FULLDISK/Channel02/20260906T120000Z/8/128/124.png",
+        "bytes": 87341,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "1fd13965cb344e5ef64008a6e8a9c75f74bbff65edaba30e3af6ab29d084745c",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "derived_artifact_hit",
+      "wall_seconds": 0.0066026999993482605,
+      "cpu_seconds": 0.0,
+      "rss_peak_sampled": 386244608,
+      "private_peak_sampled": 1886527488,
+      "rss_after": 386240512,
+      "io_delta": {
+        "read_count": 1,
+        "write_count": 1,
+        "read_bytes": 8192,
+        "write_bytes": 283,
+        "other_count": 15,
+        "other_bytes": 344
+      },
+      "samples": [
+        {
+          "seconds": 0.00025579999783076346,
+          "rss": 386244608,
+          "private": 1886527488,
+          "threads": 54,
+          "host_available": 105945677824
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-fci5/meteosat12/FULLDISK/Channel02/20260906T120000Z/8/128/124.png",
+        "bytes": 87341,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "1fd13965cb344e5ef64008a6e8a9c75f74bbff65edaba30e3af6ab29d084745c",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "derived_artifact_hit",
+      "wall_seconds": 0.005920399999013171,
+      "cpu_seconds": 0.015625,
+      "rss_peak_sampled": 386244608,
+      "private_peak_sampled": 1886527488,
+      "rss_after": 386240512,
+      "io_delta": {
+        "read_count": 1,
+        "write_count": 1,
+        "read_bytes": 8192,
+        "write_bytes": 282,
+        "other_count": 15,
+        "other_bytes": 344
+      },
+      "samples": [
+        {
+          "seconds": 0.00017949999892152846,
+          "rss": 386244608,
+          "private": 1886527488,
+          "threads": 54,
+          "host_available": 105945677824
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-fci5/meteosat12/FULLDISK/Channel02/20260906T120000Z/8/128/124.png",
+        "bytes": 87341,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "1fd13965cb344e5ef64008a6e8a9c75f74bbff65edaba30e3af6ab29d084745c",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    }
+  ],
+  "logical_cpus": 32,
+  "host_memory_bytes": 137107320832,
+  "limitations": [
+    "No browser/OBS or concurrent request test; ambient desktop load was not controlled.",
+    "50 ms process RSS/private sampling can miss transient peaks; no GPU residency or paging telemetry.",
+    "Process CPU includes sampler; startup/import time excluded from per-state measurements.",
+    "Fresh process does not mean cold operating-system file cache.",
+    "RTMA warm state retains parsed datasets; lazy field arrays can still decode on access."
+  ]
+}

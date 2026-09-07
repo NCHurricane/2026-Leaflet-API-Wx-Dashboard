@@ -1,0 +1,145 @@
+{
+  "category": "integrated_backend_quality_and_publication_checks_not_browser_acceptance",
+  "cases": [
+    {
+      "case": "interior",
+      "whole_rgba_exact": true,
+      "rgba_sha256": "2e3607b4e5439265017d4a57f1022236e3336947d39f063b889a358eb258ba77",
+      "estimated_memory_bytes": 310585088,
+      "retained_cache_bytes": 908160,
+      "candidate_path": "cache/rendering-audit-20260906/fci-integration-quality/interior.png"
+    },
+    {
+      "case": "equatorial-chunk-boundary",
+      "whole_rgba_exact": true,
+      "rgba_sha256": "9678685baebc96886e985c38086b480c5cef14f1b2e62985bb14d495846e576e",
+      "estimated_memory_bytes": 310600448,
+      "retained_cache_bytes": 1824000,
+      "candidate_path": "cache/rendering-audit-20260906/fci-integration-quality/equatorial-chunk-boundary.png"
+    },
+    {
+      "case": "east-limb",
+      "whole_rgba_exact": true,
+      "rgba_sha256": "7ab1c7029574dae394d91b2d45e823cf120eadad5c3b62a9ee92c1e867c6dda7",
+      "estimated_memory_bytes": 1300852736,
+      "retained_cache_bytes": 1824000,
+      "candidate_path": "cache/rendering-audit-20260906/fci-integration-quality/east-limb.png"
+    },
+    {
+      "case": "visible-z4",
+      "whole_rgba_exact": true,
+      "rgba_sha256": "ead1b904b1270dac24a42306c48fdbdfcf1bc096b89d7b4d8da505ce4e3bd26f",
+      "estimated_memory_bytes": 574969808,
+      "retained_cache_bytes": 134924520,
+      "candidate_path": "cache/rendering-audit-20260906/fci-integration-quality/visible-z4.png"
+    },
+    {
+      "case": "visible-z5",
+      "whole_rgba_exact": true,
+      "rgba_sha256": "7562a887fce0c981fd48303d0c345c2e3f7cbf7517b0d33ae1d36f126510b8fe",
+      "estimated_memory_bytes": 385821824,
+      "retained_cache_bytes": 173451048,
+      "candidate_path": "cache/rendering-audit-20260906/fci-integration-quality/visible-z5.png"
+    },
+    {
+      "case": "visible-z6",
+      "whole_rgba_exact": true,
+      "rgba_sha256": "86fd1eea0052cdae4e2474f9fb63f8b7355d05d9bcb6e56953af67a65e7cf77b",
+      "estimated_memory_bytes": 330560528,
+      "retained_cache_bytes": 184346928,
+      "candidate_path": "cache/rendering-audit-20260906/fci-integration-quality/visible-z6.png"
+    },
+    {
+      "case": "visible-z7",
+      "whole_rgba_exact": true,
+      "rgba_sha256": "21f1aaf99cc47f28621a281b847a591630f163aae708e6d13bba845b44b7b7ea",
+      "estimated_memory_bytes": 314504432,
+      "retained_cache_bytes": 187214760,
+      "candidate_path": "cache/rendering-audit-20260906/fci-integration-quality/visible-z7.png"
+    },
+    {
+      "case": "ir-z5",
+      "whole_rgba_exact": true,
+      "rgba_sha256": "9af838b8ff659ff953edad4d254b8dffc4d8c217bb91c8fc2b4de07b14c5ee25",
+      "estimated_memory_bytes": 275290272,
+      "retained_cache_bytes": 200542712,
+      "candidate_path": "cache/rendering-audit-20260906/fci-integration-quality/ir-z5.png"
+    },
+    {
+      "case": "night-composite-z5",
+      "whole_rgba_exact": true,
+      "rgba_sha256": "602635ed2e10e47339ef94af52c6a138380f13eaa0732670cb7bc299bca71813",
+      "estimated_memory_bytes": 366350816,
+      "retained_cache_bytes": 227198616,
+      "candidate_path": "cache/rendering-audit-20260906/fci-integration-quality/night-composite-z5.png"
+    },
+    {
+      "case": "mixed-grid-diagnostic-z7",
+      "whole_rgba_exact": true,
+      "rgba_sha256": "e649584482a54648eac2ac7228a19f19032c32e0db29dd7cb90f1cef50323d08",
+      "estimated_memory_bytes": 383327360,
+      "retained_cache_bytes": 236166360,
+      "candidate_path": "cache/rendering-audit-20260906/fci-integration-quality/mixed-grid-diagnostic-z7.png"
+    }
+  ],
+  "service": [
+    {
+      "case": "interior",
+      "native_centre_exact": true,
+      "cache_hit_without_download": true,
+      "path": "cache/rendering-audit-20260906/fci-integration-quality/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T120000Z/8/128/124.png",
+      "stats": {
+        "cache_status": "miss",
+        "rendered": 1,
+        "skipped": 0,
+        "errors": 0,
+        "download_elapsed_ms": 0,
+        "decode_elapsed_ms": 0,
+        "render_elapsed_ms": 222,
+        "supertile_rendered": 8,
+        "supertile_skipped": 0,
+        "supertile_invalid": 0,
+        "supertile_errors": 0,
+        "supertile_radius": 1,
+        "estimated_memory_bytes": 310585088
+      }
+    },
+    {
+      "case": "east-limb",
+      "native_centre_exact": true,
+      "cache_hit_without_download": true,
+      "path": "cache/rendering-audit-20260906/fci-integration-quality/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T120000Z/8/184/128.png",
+      "stats": {
+        "cache_status": "miss",
+        "rendered": 1,
+        "skipped": 0,
+        "errors": 0,
+        "download_elapsed_ms": 0,
+        "decode_elapsed_ms": 0,
+        "render_elapsed_ms": 4109,
+        "supertile_rendered": 5,
+        "supertile_skipped": 0,
+        "supertile_invalid": 3,
+        "supertile_errors": 0,
+        "supertile_radius": 1,
+        "estimated_memory_bytes": 1300852736
+      }
+    }
+  ],
+  "runtime_sha256": {
+    "satellite_v2/fci_windows.py": "28ce5e4c9d832daf1b2615fb09c1cad473718f0bfc21f32714764ec7fb0f1321",
+    "satellite_v2/fci_nc.py": "c17ddb4d5f3464e28efa524cab41f615cf9122b334d3be32d685e0cbc5c45920",
+    "satellite_v2/renderer.py": "9d93d6ae54587cfa3ef9e8c2ac924d7c34b2c9b931abd721c3a7ca3fa28e6ed6",
+    "satellite_v2/tiler.py": "2d2a6a2d777ff5770cdbe4fdae41409618bebee8e89cdd523fe205acf1170139",
+    "satellite_v2/service.py": "3fa2751ead28a1f0367630c22aeb9b5c6b78cd1dddf64726102dee369ecefa10",
+    "app_core/render_budget.py": "580737e5250ff64234f0a85a4f1d4f5a1984e92e15384a20b9e080b5e8fb19a4",
+    "config/satellite_v2_config.py": "1fab0dcc19d0c3897166f2256eb3932f3c114d2d3f1e7d9c7e40fa93a60addee",
+    "satellite_v2/meteosat_tile_worker.py": "edc2e9c6df54bdb0b604b327de434a7bd7a607e62931cb32a2bc7216bc14a4ae"
+  },
+  "all_checks_passed": true,
+  "diagnostic_peak_sampled_bytes": {
+    "rss": 1532174336,
+    "private": 3043188736
+  },
+  "diagnostic_wall_seconds_not_benchmark": 24.625
+}

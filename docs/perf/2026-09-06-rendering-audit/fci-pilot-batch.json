@@ -1,0 +1,421 @@
+{
+  "category": "paired_equal_native_quality_prototype_pilot",
+  "runs": [
+    {
+      "case": "visible-z8",
+      "variant": "full",
+      "iteration": 1,
+      "child_seconds": 6.4060000000026776,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z8",
+        "--variant",
+        "full",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "visible-z8",
+      "variant": "window",
+      "iteration": 1,
+      "child_seconds": 4.35899999999674,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z8",
+        "--variant",
+        "window",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "visible-z8",
+      "variant": "window",
+      "iteration": 2,
+      "child_seconds": 4.046999999991385,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z8",
+        "--variant",
+        "window",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "visible-z8",
+      "variant": "full",
+      "iteration": 2,
+      "child_seconds": 6.01600000000326,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z8",
+        "--variant",
+        "full",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "visible-z8",
+      "variant": "full",
+      "iteration": 3,
+      "child_seconds": 6.078000000008615,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z8",
+        "--variant",
+        "full",
+        "--iteration",
+        "3"
+      ]
+    },
+    {
+      "case": "visible-z8",
+      "variant": "window",
+      "iteration": 3,
+      "child_seconds": 4.077999999994063,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z8",
+        "--variant",
+        "window",
+        "--iteration",
+        "3"
+      ]
+    },
+    {
+      "case": "visible-z4",
+      "variant": "full",
+      "iteration": 1,
+      "child_seconds": 6.23399999999674,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z4",
+        "--variant",
+        "full",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "visible-z4",
+      "variant": "window",
+      "iteration": 1,
+      "child_seconds": 5.9689999999973224,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z4",
+        "--variant",
+        "window",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "visible-z4",
+      "variant": "window",
+      "iteration": 2,
+      "child_seconds": 5.875,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z4",
+        "--variant",
+        "window",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "visible-z4",
+      "variant": "full",
+      "iteration": 2,
+      "child_seconds": 6.4210000000020955,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z4",
+        "--variant",
+        "full",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "visible-z4",
+      "variant": "full",
+      "iteration": 3,
+      "child_seconds": 6.530999999988126,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z4",
+        "--variant",
+        "full",
+        "--iteration",
+        "3"
+      ]
+    },
+    {
+      "case": "visible-z4",
+      "variant": "window",
+      "iteration": 3,
+      "child_seconds": 5.703000000008615,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z4",
+        "--variant",
+        "window",
+        "--iteration",
+        "3"
+      ]
+    },
+    {
+      "case": "night-z5",
+      "variant": "full",
+      "iteration": 1,
+      "child_seconds": 7.578000000008615,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "night-z5",
+        "--variant",
+        "full",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "night-z5",
+      "variant": "window",
+      "iteration": 1,
+      "child_seconds": 7.702999999994063,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "night-z5",
+        "--variant",
+        "window",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "night-z5",
+      "variant": "window",
+      "iteration": 2,
+      "child_seconds": 6.172000000005937,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "night-z5",
+        "--variant",
+        "window",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "night-z5",
+      "variant": "full",
+      "iteration": 2,
+      "child_seconds": 5.9689999999973224,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "night-z5",
+        "--variant",
+        "full",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "night-z5",
+      "variant": "full",
+      "iteration": 3,
+      "child_seconds": 5.937999999994645,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "night-z5",
+        "--variant",
+        "full",
+        "--iteration",
+        "3"
+      ]
+    },
+    {
+      "case": "night-z5",
+      "variant": "window",
+      "iteration": 3,
+      "child_seconds": 6.25,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "night-z5",
+        "--variant",
+        "window",
+        "--iteration",
+        "3"
+      ]
+    },
+    {
+      "case": "limb-z8",
+      "variant": "full",
+      "iteration": 1,
+      "child_seconds": 5.969000000011874,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "limb-z8",
+        "--variant",
+        "full",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "limb-z8",
+      "variant": "window",
+      "iteration": 1,
+      "child_seconds": 7.765999999988708,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "limb-z8",
+        "--variant",
+        "window",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "limb-z8",
+      "variant": "window",
+      "iteration": 2,
+      "child_seconds": 7.89100000000326,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "limb-z8",
+        "--variant",
+        "window",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "limb-z8",
+      "variant": "full",
+      "iteration": 2,
+      "child_seconds": 6.0310000000026776,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "limb-z8",
+        "--variant",
+        "full",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "limb-z8",
+      "variant": "full",
+      "iteration": 3,
+      "child_seconds": 6.062999999994645,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "limb-z8",
+        "--variant",
+        "full",
+        "--iteration",
+        "3"
+      ]
+    },
+    {
+      "case": "limb-z8",
+      "variant": "window",
+      "iteration": 3,
+      "child_seconds": 7.952999999994063,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "limb-z8",
+        "--variant",
+        "window",
+        "--iteration",
+        "3"
+      ]
+    }
+  ],
+  "limits": {
+    "child_seconds": 600,
+    "new_source_downloads": 0,
+    "samples": 36,
+    "total_audit_scratch_bytes": 10737418240
+  },
+  "prototype_sha256": "8995bcca5b79522ab3a8e35594148a978575783cb6cfe478d038b3cd8eeea9f5",
+  "wall_seconds": 149.21899999999732
+}

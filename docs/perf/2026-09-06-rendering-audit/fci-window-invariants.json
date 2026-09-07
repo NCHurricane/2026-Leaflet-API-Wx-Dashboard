@@ -1,0 +1,127 @@
+{
+  "category": "prototype_invariant_checks_not_browser_acceptance",
+  "prototype_sha256": "10969c287b72456ccbf399df202b4e563cb219b018e69bfa4c14ff72f1ba5f24",
+  "eviction": {
+    "pass": true,
+    "cache_limit": 2097152,
+    "steps": [
+      {
+        "offset": 1,
+        "retained_array_bytes": 1814428,
+        "cache_entries": 2,
+        "plan_entries": 2
+      },
+      {
+        "offset": 2,
+        "retained_array_bytes": 1812536,
+        "cache_entries": 2,
+        "plan_entries": 3
+      },
+      {
+        "offset": 3,
+        "retained_array_bytes": 1812536,
+        "cache_entries": 2,
+        "plan_entries": 4
+      },
+      {
+        "offset": 4,
+        "retained_array_bytes": 1814452,
+        "cache_entries": 2,
+        "plan_entries": 5
+      },
+      {
+        "offset": 5,
+        "retained_array_bytes": 1810668,
+        "cache_entries": 2,
+        "plan_entries": 6
+      },
+      {
+        "offset": 6,
+        "retained_array_bytes": 1803076,
+        "cache_entries": 2,
+        "plan_entries": 7
+      },
+      {
+        "offset": 7,
+        "retained_array_bytes": 1795504,
+        "cache_entries": 2,
+        "plan_entries": 8
+      },
+      {
+        "offset": 8,
+        "retained_array_bytes": 1787936,
+        "cache_entries": 2,
+        "plan_entries": 8
+      },
+      {
+        "offset": 9,
+        "retained_array_bytes": 1778496,
+        "cache_entries": 2,
+        "plan_entries": 8
+      }
+    ],
+    "reloaded_float32_source_sha256": "1e5be09f349ee488663d9ffccc5ea69818dbe65197bc7cd0df3a99a9411d023e",
+    "caller_reference_valid_after_eviction": true
+  },
+  "physical_channel_alias": {
+    "pass": true,
+    "loader": {
+      "channels": [
+        {
+          "native_channel": "ir_105",
+          "window": [
+            2701,
+            2393,
+            2945,
+            2633
+          ],
+          "mode": "window",
+          "halo": 4,
+          "full_array_bytes": 124010496,
+          "selected_array_bytes": 234240,
+          "cache_hit": false,
+          "strips_read": 2,
+          "decompressed_storage_bytes_estimate": 3340800
+        }
+      ],
+      "cache_bytes": 234240,
+      "cache_limit": 2097152,
+      "plan_cache_hit": false,
+      "index_seconds": 1.681089499994414
+    }
+  },
+  "zero_cache_limit": {
+    "pass": true
+  },
+  "limb_visibility": {
+    "target": [
+      8,
+      183,
+      127,
+      185,
+      129
+    ],
+    "ellipsoid_metres": {
+      "a": 6378137.0,
+      "b": 6356752.31424518,
+      "satellite_height": 35786400.0,
+      "lon0": 0.0
+    },
+    "visible_pixel_centres": 552706,
+    "masks": {
+      "current": {
+        "opaque_pixels": 334460,
+        "opaque_outside_geometric_earth": 0,
+        "visible_but_transparent_pixels": 218246
+      },
+      "native": {
+        "opaque_pixels": 307013,
+        "opaque_outside_geometric_earth": 0,
+        "visible_but_transparent_pixels": 245693
+      }
+    },
+    "formula": "N=a/sqrt(1-(1-b*b/(a*a))*sin(lat)^2); visible=(a+h)*N*cos(lat)*cos(lon-lon0)/(a*a)>1",
+    "limitation": "Detects opacity outside the visible ellipsoid only; source validity inside the limb and geographic overlay alignment remain unverified."
+  },
+  "all_checks_passed": true
+}

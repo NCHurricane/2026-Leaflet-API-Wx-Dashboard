@@ -1,0 +1,609 @@
+{
+  "category": "read_only_pinned_source_dependency_trace_not_timing_or_partial_ingest_implementation",
+  "frame": "20260906T233000Z",
+  "native_grid": [
+    11136,
+    11136
+  ],
+  "bundle_chunks": 40,
+  "bundle_bytes": 571931767,
+  "viewport_chunk_count": 28,
+  "viewport_source_bytes": 436583487,
+  "first_tile": {
+    "xyz": [
+      4,
+      8,
+      7
+    ],
+    "source_chunk_count": 10,
+    "source_bytes": 174325707,
+    "source_window": [
+      5526,
+      3190,
+      8015,
+      5610
+    ]
+  },
+  "cases": [
+    {
+      "xyz": [
+        4,
+        8,
+        7
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 174325707,
+      "source_window": [
+        5526,
+        3190,
+        8015,
+        5610
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        8,
+        6
+      ],
+      "source_chunk_count": 8,
+      "source_bytes": 122049614,
+      "source_window": [
+        5530,
+        1559,
+        7813,
+        3304
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        9,
+        7
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 174325707,
+      "source_window": [
+        7733,
+        3224,
+        9875,
+        5609
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        9,
+        5
+      ],
+      "source_chunk_count": 5,
+      "source_bytes": 62800817,
+      "source_window": [
+        6807,
+        734,
+        8737,
+        1784
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        9,
+        6
+      ],
+      "source_chunk_count": 8,
+      "source_bytes": 122049614,
+      "source_window": [
+        7283,
+        1606,
+        9530,
+        3387
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        8,
+        5
+      ],
+      "source_chunk_count": 5,
+      "source_bytes": 62800817,
+      "source_window": [
+        5537,
+        695,
+        7349,
+        1672
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        9,
+        4
+      ],
+      "source_chunk_count": 3,
+      "source_bytes": 29203420,
+      "source_window": [
+        6423,
+        347,
+        7883,
+        884
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        10,
+        5
+      ],
+      "source_chunk_count": 4,
+      "source_bytes": 52855909,
+      "source_window": [
+        7839,
+        840,
+        9529,
+        1933
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        8,
+        8
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 166077421,
+      "source_window": [
+        5526,
+        5525,
+        8015,
+        7946
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        7,
+        7
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 174325707,
+      "source_window": [
+        3121,
+        3190,
+        5611,
+        5610
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        9,
+        8
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 166077421,
+      "source_window": [
+        7733,
+        5526,
+        9875,
+        7912
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        10,
+        6
+      ],
+      "source_chunk_count": 7,
+      "source_bytes": 108140943,
+      "source_window": [
+        8675,
+        1722,
+        10476,
+        3499
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        8,
+        4
+      ],
+      "source_chunk_count": 2,
+      "source_bytes": 17666086,
+      "source_window": [
+        5545,
+        318,
+        6859,
+        786
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        7,
+        6
+      ],
+      "source_chunk_count": 8,
+      "source_bytes": 122049614,
+      "source_window": [
+        3323,
+        1559,
+        5607,
+        3304
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        7,
+        5
+      ],
+      "source_chunk_count": 5,
+      "source_bytes": 62800817,
+      "source_window": [
+        3787,
+        695,
+        5600,
+        1672
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        10,
+        7
+      ],
+      "source_chunk_count": 9,
+      "source_bytes": 158173651,
+      "source_window": [
+        9456,
+        3313,
+        10878,
+        5607
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        7,
+        4
+      ],
+      "source_chunk_count": 2,
+      "source_bytes": 17666086,
+      "source_window": [
+        4277,
+        318,
+        5592,
+        786
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        10,
+        4
+      ],
+      "source_chunk_count": 3,
+      "source_bytes": 29203420,
+      "source_window": [
+        7147,
+        424,
+        8494,
+        1020
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        6,
+        6
+      ],
+      "source_chunk_count": 8,
+      "source_bytes": 122049614,
+      "source_window": [
+        1606,
+        1606,
+        3853,
+        3387
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        11,
+        6
+      ],
+      "source_chunk_count": 8,
+      "source_bytes": 126136645,
+      "source_window": [
+        9201,
+        1673,
+        11015,
+        3714
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        7,
+        8
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 166077421,
+      "source_window": [
+        3121,
+        5525,
+        5611,
+        7946
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        10,
+        8
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 166077421,
+      "source_window": [
+        9456,
+        5528,
+        10878,
+        7823
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        6,
+        5
+      ],
+      "source_chunk_count": 5,
+      "source_bytes": 62800817,
+      "source_window": [
+        2399,
+        734,
+        4329,
+        1784
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        11,
+        5
+      ],
+      "source_chunk_count": 6,
+      "source_bytes": 77901876,
+      "source_window": [
+        8237,
+        757,
+        10004,
+        2185
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        6,
+        7
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 174325707,
+      "source_window": [
+        1261,
+        3224,
+        3403,
+        5609
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        11,
+        7
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 174325707,
+      "source_window": [
+        10059,
+        3260,
+        11136,
+        5745
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        6,
+        4
+      ],
+      "source_chunk_count": 3,
+      "source_bytes": 29203420,
+      "source_window": [
+        3253,
+        347,
+        4713,
+        884
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        11,
+        4
+      ],
+      "source_chunk_count": 4,
+      "source_bytes": 42018788,
+      "source_window": [
+        7411,
+        313,
+        8891,
+        1261
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        6,
+        8
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 166077421,
+      "source_window": [
+        1261,
+        5526,
+        3403,
+        7912
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        11,
+        8
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 166077421,
+      "source_window": [
+        10059,
+        5391,
+        11136,
+        7876
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        5,
+        6
+      ],
+      "source_chunk_count": 7,
+      "source_bytes": 108140943,
+      "source_window": [
+        660,
+        1722,
+        2461,
+        3499
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        12,
+        6
+      ],
+      "source_chunk_count": 0,
+      "source_bytes": 0,
+      "source_window": null
+    },
+    {
+      "xyz": [
+        4,
+        5,
+        5
+      ],
+      "source_chunk_count": 4,
+      "source_bytes": 52855909,
+      "source_window": [
+        1607,
+        840,
+        3297,
+        1933
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        12,
+        5
+      ],
+      "source_chunk_count": 0,
+      "source_bytes": 0,
+      "source_window": null
+    },
+    {
+      "xyz": [
+        4,
+        5,
+        7
+      ],
+      "source_chunk_count": 9,
+      "source_bytes": 158173651,
+      "source_window": [
+        258,
+        3313,
+        1680,
+        5607
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        12,
+        7
+      ],
+      "source_chunk_count": 0,
+      "source_bytes": 0,
+      "source_window": null
+    },
+    {
+      "xyz": [
+        4,
+        5,
+        4
+      ],
+      "source_chunk_count": 3,
+      "source_bytes": 29203420,
+      "source_window": [
+        2642,
+        424,
+        3989,
+        1020
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        12,
+        4
+      ],
+      "source_chunk_count": 0,
+      "source_bytes": 0,
+      "source_window": null
+    },
+    {
+      "xyz": [
+        4,
+        5,
+        8
+      ],
+      "source_chunk_count": 10,
+      "source_bytes": 166077421,
+      "source_window": [
+        258,
+        5528,
+        1680,
+        7823
+      ]
+    },
+    {
+      "xyz": [
+        4,
+        12,
+        8
+      ],
+      "source_chunk_count": 0,
+      "source_bytes": 0,
+      "source_window": null
+    }
+  ],
+  "limitations": [
+    "Uses complete metadata and windows from the existing pinned 23:30Z fixture, not a proven cold-start partial source planner.",
+    "Chunk dependencies count whole delivered NetCDF files; all their channels remain bundled.",
+    "Endpoint/header acquisition, source identity changes, gap/overlap checks, cancellation and fallback require design before partial rendering."
+  ]
+}

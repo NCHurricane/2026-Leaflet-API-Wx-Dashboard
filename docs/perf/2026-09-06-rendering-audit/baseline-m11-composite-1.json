@@ -1,0 +1,627 @@
+{
+  "case": "m11-composite",
+  "iteration": 1,
+  "settings": {
+    "SATELLITE_V2_AHI_MAX_GRID": 10848,
+    "SATELLITE_V2_AMI_MAX_GRID": 10848,
+    "SATELLITE_V2_FCI_MAX_GRID": 10848,
+    "SATELLITE_V2_GOES_FULLDISK_MAX_GRID": 10848,
+    "SATELLITE_V2_LIVE_TILE_RENDER_WORKERS": 10,
+    "SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS": 2,
+    "SATELLITE_V2_NETCDF_CACHE_SIZE": 16,
+    "SATELLITE_V2_RAPID_WORKER_FRAMES": 12,
+    "SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS": 225,
+    "SATELLITE_V2_RAPID_WORKER_HOURS": 2,
+    "SATELLITE_V2_RAPID_WORKER_MAX_FRAMES": 120,
+    "SATELLITE_V2_RAPID_WORKER_TILE_BUFFER": 1,
+    "SATELLITE_V2_RAPID_WORKER_TILE_WORKERS": 2,
+    "SATELLITE_V2_RENDERER_CACHE_SIZE": 8,
+    "SATELLITE_V2_SOURCE_RASTER_CACHE_MB": 4096,
+    "radar_webgl": {
+      "enabled": true,
+      "animation_enabled": true,
+      "product": "L2_REF",
+      "products": [
+        "L2_REF"
+      ],
+      "animation_products": [
+        "L2_REF"
+      ],
+      "artifact_version": 2,
+      "prefetch_zoom": 10,
+      "activate_zoom": 11,
+      "release_grace_ms": 1500,
+      "texture_budget": 4,
+      "min_forward_textures": 2,
+      "max_concurrent_loads": 2
+    },
+    "radar_figure_size_inches": 12,
+    "radar_dpi": 200,
+    "satellite_context": {
+      "sat_id": "meteosat11",
+      "sector": "RSS",
+      "product": "NighttimeMicrophysics",
+      "frame_key": "20260906T120000Z",
+      "z": 5,
+      "x": 16,
+      "y": 12,
+      "tiles": "3x3"
+    },
+    "satellite_native_timings": [
+      {
+        "cache_status": "miss",
+        "composite_ms": 23.292,
+        "download_ms": 0.113,
+        "encode_ms": 30.239,
+        "frame_key": "20260906T120000Z",
+        "iteration": 1,
+        "parse_ms{Channel07}": 84.18,
+        "parse_ms{Channel13}": 86.906,
+        "parse_ms{Channel15}": 93.211,
+        "pid": 40440,
+        "product": "NighttimeMicrophysics",
+        "run_id": "audit-m11-composite-1",
+        "sat_id": "meteosat11",
+        "scenario": "source_local_fresh_process_no_artifact",
+        "sector": "RSS",
+        "total_ms": 583.846,
+        "validate_ms": 59.41,
+        "warp_ms{Channel07}": 67.511,
+        "warp_ms{Channel13}": 55.868,
+        "warp_ms{Channel15}": 62.109,
+        "write_ms": 2.08,
+        "x": 16,
+        "y": 12,
+        "z": 5
+      },
+      {
+        "cache_status": "miss",
+        "composite_ms": 28.507,
+        "download_ms": 0.14,
+        "encode_ms": 24.81,
+        "frame_key": "20260906T120000Z",
+        "iteration": 2,
+        "pid": 40440,
+        "product": "NighttimeMicrophysics",
+        "run_id": "audit-m11-composite-1",
+        "sat_id": "meteosat11",
+        "scenario": "decoded_source_warm_no_artifact",
+        "sector": "RSS",
+        "total_ms": 300.342,
+        "validate_ms": 57.702,
+        "warp_ms{Channel07}": 60.583,
+        "warp_ms{Channel13}": 56.759,
+        "warp_ms{Channel15}": 59.685,
+        "write_ms": 2.178,
+        "x": 16,
+        "y": 12,
+        "z": 5
+      },
+      {
+        "cache_status": "miss",
+        "composite_ms": 26.271,
+        "download_ms": 0.122,
+        "encode_ms": 25.365,
+        "frame_key": "20260906T120000Z",
+        "iteration": 3,
+        "pid": 40440,
+        "product": "NighttimeMicrophysics",
+        "run_id": "audit-m11-composite-1",
+        "sat_id": "meteosat11",
+        "scenario": "decoded_source_warm_no_artifact",
+        "sector": "RSS",
+        "total_ms": 311.018,
+        "validate_ms": 72.934,
+        "warp_ms{Channel07}": 54.738,
+        "warp_ms{Channel13}": 61.862,
+        "warp_ms{Channel15}": 56.279,
+        "write_ms": 2.216,
+        "x": 16,
+        "y": 12,
+        "z": 5
+      },
+      {
+        "cache_status": "miss",
+        "composite_ms": 28.432,
+        "download_ms": 0.123,
+        "encode_ms": 21.193,
+        "frame_key": "20260906T120000Z",
+        "iteration": 4,
+        "pid": 40440,
+        "product": "NighttimeMicrophysics",
+        "run_id": "audit-m11-composite-1",
+        "sat_id": "meteosat11",
+        "scenario": "decoded_source_warm_no_artifact",
+        "sector": "RSS",
+        "total_ms": 297.146,
+        "validate_ms": 64.157,
+        "warp_ms{Channel07}": 57.626,
+        "warp_ms{Channel13}": 57.916,
+        "warp_ms{Channel15}": 55.819,
+        "write_ms": 2.117,
+        "x": 16,
+        "y": 12,
+        "z": 5
+      },
+      {
+        "cache_status": "hit",
+        "frame_key": "20260906T120000Z",
+        "iteration": 5,
+        "pid": 40440,
+        "product": "NighttimeMicrophysics",
+        "run_id": "audit-m11-composite-1",
+        "sat_id": "meteosat11",
+        "scenario": "derived_artifact_hit",
+        "sector": "RSS",
+        "total_ms": 0.119,
+        "validate_ms": 0.07999999797903001,
+        "x": 16,
+        "y": 12,
+        "z": 5
+      },
+      {
+        "cache_status": "hit",
+        "frame_key": "20260906T120000Z",
+        "iteration": 6,
+        "pid": 40440,
+        "product": "NighttimeMicrophysics",
+        "run_id": "audit-m11-composite-1",
+        "sat_id": "meteosat11",
+        "scenario": "derived_artifact_hit",
+        "sector": "RSS",
+        "total_ms": 0.194,
+        "validate_ms": 0.14370000280905515,
+        "x": 16,
+        "y": 12,
+        "z": 5
+      },
+      {
+        "cache_status": "hit",
+        "frame_key": "20260906T120000Z",
+        "iteration": 7,
+        "pid": 40440,
+        "product": "NighttimeMicrophysics",
+        "run_id": "audit-m11-composite-1",
+        "sat_id": "meteosat11",
+        "scenario": "derived_artifact_hit",
+        "sector": "RSS",
+        "total_ms": 0.167,
+        "validate_ms": 0.12350000906735659,
+        "x": 16,
+        "y": 12,
+        "z": 5
+      }
+    ]
+  },
+  "rows": [
+    {
+      "state": "source_local_fresh_process_no_artifact",
+      "wall_seconds": 0.5909804999973858,
+      "cpu_seconds": 0.5625,
+      "rss_peak_sampled": 345411584,
+      "private_peak_sampled": 1863286784,
+      "rss_after": 292081664,
+      "io_delta": {
+        "read_count": 504,
+        "write_count": 56,
+        "read_bytes": 4178458,
+        "write_bytes": 1300043,
+        "other_count": 752,
+        "other_bytes": 29456
+      },
+      "samples": [
+        {
+          "seconds": 0.0005006999999750406,
+          "rss": 213618688,
+          "private": 1721532416,
+          "threads": 54,
+          "host_available": 106061131776
+        },
+        {
+          "seconds": 0.05922309999004938,
+          "rss": 275288064,
+          "private": 1800187904,
+          "threads": 54,
+          "host_available": 105981276160
+        },
+        {
+          "seconds": 0.12436089999391697,
+          "rss": 272535552,
+          "private": 1795969024,
+          "threads": 54,
+          "host_available": 105984606208
+        },
+        {
+          "seconds": 0.19280989999242593,
+          "rss": 292737024,
+          "private": 1790980096,
+          "threads": 54,
+          "host_available": 105974784000
+        },
+        {
+          "seconds": 0.25634429999627173,
+          "rss": 345411584,
+          "private": 1863286784,
+          "threads": 54,
+          "host_available": 105914363904
+        },
+        {
+          "seconds": 0.32472749998851214,
+          "rss": 316968960,
+          "private": 1819439104,
+          "threads": 54,
+          "host_available": 105954418688
+        },
+        {
+          "seconds": 0.38951389999419916,
+          "rss": 320430080,
+          "private": 1822773248,
+          "threads": 54,
+          "host_available": 105951645696
+        },
+        {
+          "seconds": 0.45740079999086447,
+          "rss": 317153280,
+          "private": 1819484160,
+          "threads": 54,
+          "host_available": 105954623488
+        },
+        {
+          "seconds": 0.5228909999859752,
+          "rss": 294428672,
+          "private": 1797345280,
+          "threads": 54,
+          "host_available": 105974939648
+        },
+        {
+          "seconds": 0.5816793999983929,
+          "rss": 294432768,
+          "private": 1797345280,
+          "threads": 54,
+          "host_available": 105972314112
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-v9/meteosat11/RSS/NighttimeMicrophysics/20260906T120000Z/5/16/12.png",
+        "bytes": 136579,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "17a2dd7b14df61f00b4dd44711e2e6ef74bb9e64217d8b48110335bd08377523",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "decoded_source_warm_no_artifact",
+      "wall_seconds": 0.30821970000397414,
+      "cpu_seconds": 0.28125,
+      "rss_peak_sampled": 320827392,
+      "private_peak_sampled": 1823715328,
+      "rss_after": 292159488,
+      "io_delta": {
+        "read_count": 53,
+        "write_count": 56,
+        "read_bytes": 1299499,
+        "write_bytes": 1299950,
+        "other_count": 547,
+        "other_bytes": 17356
+      },
+      "samples": [
+        {
+          "seconds": 0.00032070001179818064,
+          "rss": 292110336,
+          "private": 1794973696,
+          "threads": 54,
+          "host_available": 105974050816
+        },
+        {
+          "seconds": 0.06196500000078231,
+          "rss": 320827392,
+          "private": 1823715328,
+          "threads": 54,
+          "host_available": 105953361920
+        },
+        {
+          "seconds": 0.1265249000134645,
+          "rss": 300400640,
+          "private": 1822797824,
+          "threads": 54,
+          "host_available": 105952346112
+        },
+        {
+          "seconds": 0.18552360001194756,
+          "rss": 299245568,
+          "private": 1802084352,
+          "threads": 54,
+          "host_available": 105972281344
+        },
+        {
+          "seconds": 0.2491448000073433,
+          "rss": 294518784,
+          "private": 1797345280,
+          "threads": 54,
+          "host_available": 105992269824
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-v9/meteosat11/RSS/NighttimeMicrophysics/20260906T120000Z/5/16/12.png",
+        "bytes": 136579,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "17a2dd7b14df61f00b4dd44711e2e6ef74bb9e64217d8b48110335bd08377523",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "decoded_source_warm_no_artifact",
+      "wall_seconds": 0.3190625999995973,
+      "cpu_seconds": 0.296875,
+      "rss_peak_sampled": 323850240,
+      "private_peak_sampled": 1828450304,
+      "rss_after": 292163584,
+      "io_delta": {
+        "read_count": 53,
+        "write_count": 56,
+        "read_bytes": 1299499,
+        "write_bytes": 1299952,
+        "other_count": 547,
+        "other_bytes": 17356
+      },
+      "samples": [
+        {
+          "seconds": 0.0002390000008745119,
+          "rss": 292163584,
+          "private": 1794973696,
+          "threads": 54,
+          "host_available": 105994194944
+        },
+        {
+          "seconds": 0.06666579999728128,
+          "rss": 315166720,
+          "private": 1820426240,
+          "threads": 54,
+          "host_available": 105970622464
+        },
+        {
+          "seconds": 0.13712240000313614,
+          "rss": 323850240,
+          "private": 1828450304,
+          "threads": 54,
+          "host_available": 105974816768
+        },
+        {
+          "seconds": 0.19408349999866914,
+          "rss": 306409472,
+          "private": 1818644480,
+          "threads": 54,
+          "host_available": 105980731392
+        },
+        {
+          "seconds": 0.26226479999604635,
+          "rss": 294531072,
+          "private": 1797345280,
+          "threads": 54,
+          "host_available": 105991147520
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-v9/meteosat11/RSS/NighttimeMicrophysics/20260906T120000Z/5/16/12.png",
+        "bytes": 136579,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "17a2dd7b14df61f00b4dd44711e2e6ef74bb9e64217d8b48110335bd08377523",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "decoded_source_warm_no_artifact",
+      "wall_seconds": 0.30504629999632016,
+      "cpu_seconds": 0.28125,
+      "rss_peak_sampled": 323215360,
+      "private_peak_sampled": 1826082816,
+      "rss_after": 293089280,
+      "io_delta": {
+        "read_count": 53,
+        "write_count": 56,
+        "read_bytes": 1299499,
+        "write_bytes": 1299952,
+        "other_count": 547,
+        "other_bytes": 17356
+      },
+      "samples": [
+        {
+          "seconds": 0.0002810000005410984,
+          "rss": 292167680,
+          "private": 1794973696,
+          "threads": 54,
+          "host_available": 105992110080
+        },
+        {
+          "seconds": 0.05945639999117702,
+          "rss": 320847872,
+          "private": 1823715328,
+          "threads": 54,
+          "host_available": 105970204672
+        },
+        {
+          "seconds": 0.11713059998874087,
+          "rss": 323215360,
+          "private": 1826082816,
+          "threads": 54,
+          "host_available": 105968041984
+        },
+        {
+          "seconds": 0.183301199998823,
+          "rss": 302960640,
+          "private": 1806819328,
+          "threads": 54,
+          "host_available": 105980551168
+        },
+        {
+          "seconds": 0.24963999999454245,
+          "rss": 294539264,
+          "private": 1797345280,
+          "threads": 54,
+          "host_available": 105986203648
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-v9/meteosat11/RSS/NighttimeMicrophysics/20260906T120000Z/5/16/12.png",
+        "bytes": 136579,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "17a2dd7b14df61f00b4dd44711e2e6ef74bb9e64217d8b48110335bd08377523",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "derived_artifact_hit",
+      "wall_seconds": 0.007378099995548837,
+      "cpu_seconds": 0.0,
+      "rss_peak_sampled": 293093376,
+      "private_peak_sampled": 1795936256,
+      "rss_after": 293138432,
+      "io_delta": {
+        "read_count": 5,
+        "write_count": 1,
+        "read_bytes": 62989,
+        "write_bytes": 290,
+        "other_count": 37,
+        "other_bytes": 1104
+      },
+      "samples": [
+        {
+          "seconds": 0.00021969999943394214,
+          "rss": 293093376,
+          "private": 1795936256,
+          "threads": 54,
+          "host_available": 105984684032
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-v9/meteosat11/RSS/NighttimeMicrophysics/20260906T120000Z/5/16/12.png",
+        "bytes": 136579,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "17a2dd7b14df61f00b4dd44711e2e6ef74bb9e64217d8b48110335bd08377523",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "derived_artifact_hit",
+      "wall_seconds": 0.006286000003456138,
+      "cpu_seconds": 0.015625,
+      "rss_peak_sampled": 293142528,
+      "private_peak_sampled": 1795936256,
+      "rss_after": 293138432,
+      "io_delta": {
+        "read_count": 1,
+        "write_count": 1,
+        "read_bytes": 8192,
+        "write_bytes": 290,
+        "other_count": 15,
+        "other_bytes": 344
+      },
+      "samples": [
+        {
+          "seconds": 0.0002564000023994595,
+          "rss": 293142528,
+          "private": 1795936256,
+          "threads": 54,
+          "host_available": 105983442944
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-v9/meteosat11/RSS/NighttimeMicrophysics/20260906T120000Z/5/16/12.png",
+        "bytes": 136579,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "17a2dd7b14df61f00b4dd44711e2e6ef74bb9e64217d8b48110335bd08377523",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "state": "derived_artifact_hit",
+      "wall_seconds": 0.0055890000076033175,
+      "cpu_seconds": 0.0,
+      "rss_peak_sampled": 293146624,
+      "private_peak_sampled": 1795936256,
+      "rss_after": 293142528,
+      "io_delta": {
+        "read_count": 1,
+        "write_count": 1,
+        "read_bytes": 8192,
+        "write_bytes": 290,
+        "other_count": 15,
+        "other_bytes": 344
+      },
+      "samples": [
+        {
+          "seconds": 0.00017699999443721026,
+          "rss": 293146624,
+          "private": 1795936256,
+          "threads": 54,
+          "host_available": 105983172608
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-v9/meteosat11/RSS/NighttimeMicrophysics/20260906T120000Z/5/16/12.png",
+        "bytes": 136579,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "17a2dd7b14df61f00b4dd44711e2e6ef74bb9e64217d8b48110335bd08377523",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    }
+  ],
+  "logical_cpus": 32,
+  "host_memory_bytes": 137107320832,
+  "limitations": [
+    "No browser/OBS or concurrent request test; ambient desktop load was not controlled.",
+    "50 ms process RSS/private sampling can miss transient peaks; no GPU residency or paging telemetry.",
+    "Process CPU includes sampler; startup/import time excluded from per-state measurements.",
+    "Fresh process does not mean cold operating-system file cache.",
+    "RTMA warm state retains parsed datasets; lazy field arrays can still decode on access."
+  ]
+}

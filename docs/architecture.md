@@ -307,17 +307,30 @@ Satellite v2 tile endpoints:
    warp for the requested 3x3 supertile, then crops, validates, and atomically
    publishes each tile through the same helper used by canvas warming. Explicit
    single-tile prefetch remains single-tile.
-4. Loaders with an existing source-grid cap key their decoded-raster cache by
+4. M12 FCI defers source loading until its destination canvas is known, selects
+   native windows, and bounds partial limbs using conservative continuous
+   ellipsoid/projection intervals plus warp padding. Proven off-disk rectangles
+   skip radiance reads/warps and retain the product's exact transparent RGBA
+   through normal colorization. Invalid corners alone cannot discard a disk
+   inside the canvas. Out-of-stored-grid ambiguity retains full-native fallback
+   using actual source dimensions.
+   Its byte-bounded cache deduplicates physical channels and keys every source
+   file's path/size/mtime plus the native window; tile identity is `products-fci6`.
+   Other loaders with an existing source-grid cap key their decoded-raster cache by
    destination zoom: z1–4 cap at 2048, z5–6 at 4096, and z7+ retain the platform
    cap. SEVIRI and GMGSI retain native loader behavior; frame-bound discovery
    omits destination zoom and therefore retains its prior source behavior.
-5. Live tile misses, the app-owned rapid accelerator, and presence-driven
-   Meteosat Full Disk warming reserve a conservative float32 source-grid
-   estimate from a fair process-local byte budget. The
-   `WX_SATELLITE_RENDER_BUDGET_MB` default is 16384 MB; work may overlap while
-   cumulative estimates fit, and an oversized render runs alone. Queued work
-   retains selection-cancellation behavior. Radar remains on its existing
-   `heavy_render_slot` and no longer contends with Satellite admission.
+5. Satellite work uses a fair process-local byte budget. Its capacity follows
+   the smallest of `WX_SATELLITE_RENDER_BUDGET_MB` (default 16384 MiB), total host
+   RAM / 4 and available RAM / 2. Other Satellite paths retain coarse source-grid
+   estimates; M12 reserves actual windows, transient/caller/GDAL/output allowances
+   and retained cache bytes after planning. M12 additionally checks available
+   headroom before native decoding and defers under pressure without reducing
+   resolution. Its retained-array cache defaults to a 256-MiB ceiling, further
+   limited by total RAM / 128 and available RAM / 32. An oversized queue job
+   still runs alone; one M12 render owns native arrays per process. Queued work
+   retains selection cancellation. These are allocation estimates, not a hard
+   whole-process memory bound. Radar retains its separate `heavy_render_slot`.
 6. Filled satellite images own the basemap inside valid coverage (PNG alpha
    255); invalid/off-disk pixels remain transparent. ADP, AOD, and FRP retain
    product-specific sparse-overlay alpha.
@@ -326,7 +339,9 @@ Satellite v2 tile endpoints:
    Meteosat-9/12 warm only the selected product's newest two frames at z1–z6,
    use platform-longitude disk bounds, stop scheduling on selection release or
    new live work, and prune tile-frame caches with the seven-hour source window.
-   They do not replace the live on-demand tile path.
+   M12 warming divides work into at most 3x3 canvases and runs inline, sharing
+   the live cache/admission and yielding between canvases. M9/M11 retain their
+   process pools. They do not replace the live on-demand tile path.
 8. Source downloads deduplicate by platform/sector/frame. EUMETSAT acquisition
    follows search pagination, reuses feature metadata for five minutes, and
    bounds FCI download concurrency with a four-worker hard ceiling. Authorized

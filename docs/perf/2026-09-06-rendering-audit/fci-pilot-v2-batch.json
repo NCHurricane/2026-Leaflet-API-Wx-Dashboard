@@ -1,0 +1,217 @@
+{
+  "category": "targeted_prototype_revision_followup_using_prior_controls",
+  "runs": [
+    {
+      "case": "visible-z8",
+      "variant": "window-v2",
+      "iteration": 1,
+      "child_seconds": 4.26600000000326,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z8",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "visible-z8",
+      "variant": "window-v2",
+      "iteration": 2,
+      "child_seconds": 3.7810000000026776,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z8",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "visible-z8",
+      "variant": "window-v2",
+      "iteration": 3,
+      "child_seconds": 3.827999999994063,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z8",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "3"
+      ]
+    },
+    {
+      "case": "visible-z4",
+      "variant": "window-v2",
+      "iteration": 1,
+      "child_seconds": 5.547000000005937,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z4",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "visible-z4",
+      "variant": "window-v2",
+      "iteration": 2,
+      "child_seconds": 5.7189999999973224,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z4",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "visible-z4",
+      "variant": "window-v2",
+      "iteration": 3,
+      "child_seconds": 5.6560000000026776,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "visible-z4",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "3"
+      ]
+    },
+    {
+      "case": "night-z5",
+      "variant": "window-v2",
+      "iteration": 1,
+      "child_seconds": 6.437000000005355,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "night-z5",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "night-z5",
+      "variant": "window-v2",
+      "iteration": 2,
+      "child_seconds": 5.046999999991385,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "night-z5",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "night-z5",
+      "variant": "window-v2",
+      "iteration": 3,
+      "child_seconds": 5.109000000011292,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "night-z5",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "3"
+      ]
+    },
+    {
+      "case": "limb-z8",
+      "variant": "window-v2",
+      "iteration": 1,
+      "child_seconds": 5.984000000011292,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "limb-z8",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "1"
+      ]
+    },
+    {
+      "case": "limb-z8",
+      "variant": "window-v2",
+      "iteration": 2,
+      "child_seconds": 5.922000000005937,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "limb-z8",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "2"
+      ]
+    },
+    {
+      "case": "limb-z8",
+      "variant": "window-v2",
+      "iteration": 3,
+      "child_seconds": 6.0,
+      "exit_code": 0,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\bench_fci_window.py",
+        "--case",
+        "limb-z8",
+        "--variant",
+        "window-v2",
+        "--iteration",
+        "3"
+      ]
+    }
+  ],
+  "limits": {
+    "child_seconds": 600,
+    "new_source_downloads": 0,
+    "samples": 18,
+    "total_audit_scratch_bytes": 10737418240
+  },
+  "prototype_sha256": "10969c287b72456ccbf399df202b4e563cb219b018e69bfa4c14ff72f1ba5f24",
+  "wall_seconds": 63.48399999999674
+}

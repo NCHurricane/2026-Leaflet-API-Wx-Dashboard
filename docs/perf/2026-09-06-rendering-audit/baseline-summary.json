@@ -1,0 +1,432 @@
+{
+  "timing_cells_exercised": 7,
+  "samples": 48,
+  "active_child_seconds_including_imports": 120.70705280001857,
+  "scratch_bytes_including_sources": 1414230579,
+  "pixel_repeatability": {
+    "m11-composite": {
+      "distinct_rgba_hashes": 1,
+      "sha256": [
+        "17a2dd7b14df61f00b4dd44711e2e6ef74bb9e64217d8b48110335bd08377523"
+      ]
+    },
+    "m12-composite": {
+      "distinct_rgba_hashes": 1,
+      "sha256": [
+        "411912fdeda3f4e14b4e1762a2f3363a125eec671d11533c656838f2115e619f"
+      ]
+    },
+    "m12-ir": {
+      "distinct_rgba_hashes": 1,
+      "sha256": [
+        "76071c619d66711c2f62ad188f79f5b194a8c96f9553085bdbf7a0bb5d6926b7"
+      ]
+    },
+    "m12-visible": {
+      "distinct_rgba_hashes": 1,
+      "sha256": [
+        "1fd13965cb344e5ef64008a6e8a9c75f74bbff65edaba30e3af6ab29d084745c"
+      ]
+    },
+    "radar-ref": {
+      "distinct_rgba_hashes": 1,
+      "sha256": [
+        "f9a77b58acc198fcc6122c97b51e4f9c9123e89523cc4ecfd20fb57a418fdb23"
+      ]
+    },
+    "radar-rho": {
+      "distinct_rgba_hashes": 1,
+      "sha256": [
+        "48acc301244cd8a9b2f59aa42fbba62e64ac9edf994c147f02cd0de0a78c9f5b"
+      ]
+    },
+    "rtma-winds": {
+      "distinct_rgba_hashes": 1,
+      "sha256": [
+        "5e9148657b719172cb6fedc5491529951790f4939884f413036475c0c3de6681"
+      ]
+    }
+  },
+  "summaries": [
+    {
+      "case": "m11-composite",
+      "state": "source_local_fresh_process_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 0.5955250999977579,
+      "wall_range_seconds": [
+        0.5909804999973858,
+        0.5966439999901922
+      ],
+      "cpu_median_seconds": 0.5625,
+      "rss_max_bytes": 345411584,
+      "private_max_bytes": 1863286784,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 105758728192,
+      "native_stage_medians_ms": {
+        "composite_ms": 22.196,
+        "download_ms": 0.132,
+        "encode_ms": 30.239,
+        "parse_ms{Channel07}": 87.495,
+        "parse_ms{Channel13}": 88.15,
+        "parse_ms{Channel15}": 93.211,
+        "total_ms": 587.655,
+        "validate_ms": 66.32,
+        "warp_ms{Channel07}": 67.181,
+        "warp_ms{Channel13}": 55.868,
+        "warp_ms{Channel15}": 57.063,
+        "write_ms": 2.119
+      }
+    },
+    {
+      "case": "m11-composite",
+      "state": "decoded_source_warm_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 0.30821970000397414,
+      "wall_range_seconds": [
+        0.30504629999632016,
+        0.3190625999995973
+      ],
+      "cpu_median_seconds": 0.28125,
+      "rss_max_bytes": 323850240,
+      "private_max_bytes": 1828450304,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 105952346112,
+      "native_stage_medians_ms": {
+        "composite_ms": 28.432,
+        "download_ms": 0.123,
+        "encode_ms": 24.81,
+        "total_ms": 300.342,
+        "validate_ms": 64.157,
+        "warp_ms{Channel07}": 57.626,
+        "warp_ms{Channel13}": 57.916,
+        "warp_ms{Channel15}": 56.279,
+        "write_ms": 2.178
+      }
+    },
+    {
+      "case": "m11-composite",
+      "state": "derived_artifact_hit",
+      "samples": 3,
+      "wall_median_seconds": 0.006286000003456138,
+      "wall_range_seconds": [
+        0.0055890000076033175,
+        0.007378099995548837
+      ],
+      "cpu_median_seconds": 0.0,
+      "rss_max_bytes": 293146624,
+      "private_max_bytes": 1795936256,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 105983172608,
+      "native_stage_medians_ms": {
+        "total_ms": 0.167,
+        "validate_ms": 0.12350000906735659
+      }
+    },
+    {
+      "case": "m12-composite",
+      "state": "source_local_fresh_process_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 3.566083700003219,
+      "wall_range_seconds": [
+        3.45392030000221,
+        3.569471800001338
+      ],
+      "cpu_median_seconds": 3.5625,
+      "rss_max_bytes": 405479424,
+      "private_max_bytes": 1931927552,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 105800220672,
+      "native_stage_medians_ms": {
+        "composite_ms": 22.543,
+        "download_ms": 0.662,
+        "encode_ms": 22.643,
+        "parse_ms{FCI-batch}": 3189.036,
+        "total_ms": 3557.838,
+        "validate_ms": 58.791,
+        "warp_ms{Channel07}": 80.329,
+        "warp_ms{Channel13}": 67.604,
+        "warp_ms{Channel15}": 71.74,
+        "write_ms": 1.982
+      }
+    },
+    {
+      "case": "m12-composite",
+      "state": "decoded_source_warm_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 0.32969309999316465,
+      "wall_range_seconds": [
+        0.3248609000002034,
+        0.35145750000083353
+      ],
+      "cpu_median_seconds": 0.296875,
+      "rss_max_bytes": 405745664,
+      "private_max_bytes": 1906429952,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 105915326464,
+      "native_stage_medians_ms": {
+        "composite_ms": 21.484,
+        "download_ms": 0.65,
+        "encode_ms": 17.78,
+        "total_ms": 323.599,
+        "validate_ms": 60.378,
+        "warp_ms{Channel07}": 69.532,
+        "warp_ms{Channel13}": 71.728,
+        "warp_ms{Channel15}": 69.751,
+        "write_ms": 2.118
+      }
+    },
+    {
+      "case": "m12-composite",
+      "state": "derived_artifact_hit",
+      "samples": 3,
+      "wall_median_seconds": 0.0073955000116257,
+      "wall_range_seconds": [
+        0.005568499997025356,
+        0.007917499999166466
+      ],
+      "cpu_median_seconds": 0.0,
+      "rss_max_bytes": 362024960,
+      "private_max_bytes": 1862606848,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 105958359040,
+      "native_stage_medians_ms": {
+        "total_ms": 0.143,
+        "validate_ms": 0.10069999552797526
+      }
+    },
+    {
+      "case": "m12-ir",
+      "state": "source_local_fresh_process_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 2.657646999999997,
+      "wall_range_seconds": [
+        2.5633716999873286,
+        2.7203600999928312
+      ],
+      "cpu_median_seconds": 2.609375,
+      "rss_max_bytes": 332271616,
+      "private_max_bytes": 1833492480,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 106064986112,
+      "native_stage_medians_ms": {
+        "composite_ms": 6.972,
+        "download_ms": 0.66,
+        "encode_ms": 28.269,
+        "parse_ms{Channel13}": 2458.856,
+        "total_ms": 2649.604,
+        "validate_ms": 51.039,
+        "warp_ms{Channel13}": 82.014,
+        "write_ms": 2.146
+      }
+    },
+    {
+      "case": "m12-ir",
+      "state": "decoded_source_warm_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 0.1750391999958083,
+      "wall_range_seconds": [
+        0.1696358000044711,
+        0.17604039999423549
+      ],
+      "cpu_median_seconds": 0.15625,
+      "rss_max_bytes": 336465920,
+      "private_max_bytes": 1837993984,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 106199793664,
+      "native_stage_medians_ms": {
+        "composite_ms": 6.518,
+        "download_ms": 0.618,
+        "encode_ms": 22.616,
+        "total_ms": 167.666,
+        "validate_ms": 54.508,
+        "warp_ms{Channel13}": 71.147,
+        "write_ms": 1.942
+      }
+    },
+    {
+      "case": "m12-ir",
+      "state": "derived_artifact_hit",
+      "samples": 3,
+      "wall_median_seconds": 0.006266600001254119,
+      "wall_range_seconds": [
+        0.005585599996265955,
+        0.007559299992863089
+      ],
+      "cpu_median_seconds": 0.0,
+      "rss_max_bytes": 297467904,
+      "private_max_bytes": 1798909952,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 106236248064,
+      "native_stage_medians_ms": {
+        "total_ms": 0.143,
+        "validate_ms": 0.0965999934123829
+      }
+    },
+    {
+      "case": "m12-visible",
+      "state": "source_local_fresh_process_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 3.902905399998417,
+      "wall_range_seconds": [
+        3.893924200005131,
+        3.912341400005971
+      ],
+      "cpu_median_seconds": 3.953125,
+      "rss_max_bytes": 511078400,
+      "private_max_bytes": 2019635200,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 105832873984,
+      "native_stage_medians_ms": {
+        "composite_ms": 11.292,
+        "download_ms": 0.651,
+        "encode_ms": 21.127,
+        "parse_ms{Channel02}": 3718.659,
+        "total_ms": 3894.655,
+        "validate_ms": 57.989,
+        "warp_ms{Channel02}": 67.089,
+        "write_ms": 1.937
+      }
+    },
+    {
+      "case": "m12-visible",
+      "state": "decoded_source_warm_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 0.15558019999298267,
+      "wall_range_seconds": [
+        0.15402159999939613,
+        0.16200039999966975
+      ],
+      "cpu_median_seconds": 0.109375,
+      "rss_max_bytes": 396173312,
+      "private_max_bytes": 1900466176,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 105933828096,
+      "native_stage_medians_ms": {
+        "composite_ms": 15.563,
+        "download_ms": 0.67,
+        "encode_ms": 15.893,
+        "total_ms": 148.224,
+        "validate_ms": 53.512,
+        "warp_ms{Channel02}": 50.416,
+        "write_ms": 2.073
+      }
+    },
+    {
+      "case": "m12-visible",
+      "state": "derived_artifact_hit",
+      "samples": 3,
+      "wall_median_seconds": 0.0066026999993482605,
+      "wall_range_seconds": [
+        0.005920399999013171,
+        0.007981899994774722
+      ],
+      "cpu_median_seconds": 0.015625,
+      "rss_max_bytes": 386244608,
+      "private_max_bytes": 1886527488,
+      "peak_threads": 54,
+      "minimum_host_available_bytes": 105945677824,
+      "native_stage_medians_ms": {
+        "total_ms": 0.178,
+        "validate_ms": 0.1292000088142231
+      }
+    },
+    {
+      "case": "radar-ref",
+      "state": "source_local_fresh_process_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 5.009682000003522,
+      "wall_range_seconds": [
+        4.9846725999959745,
+        5.012249799998244
+      ],
+      "cpu_median_seconds": 5.59375,
+      "rss_max_bytes": 1354018816,
+      "private_max_bytes": 2892931072,
+      "peak_threads": 55,
+      "minimum_host_available_bytes": 105171505152,
+      "stage_medians": {
+        "read_ms": 2399.004999999306,
+        "field_ms": 131.11339999886695,
+        "plot_ms": 905.7683999999426,
+        "encode_ms": 1206.3463999947999,
+        "webgl_artifact_ms": 25.067699985811487,
+        "png_size": 5747320,
+        "webgl_artifact_bytes": 1322756
+      }
+    },
+    {
+      "case": "radar-rho",
+      "state": "source_local_fresh_process_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 4.951152699999511,
+      "wall_range_seconds": [
+        4.909361199999694,
+        4.95678140000382
+      ],
+      "cpu_median_seconds": 5.65625,
+      "rss_max_bytes": 1344950272,
+      "private_max_bytes": 2889469952,
+      "peak_threads": 55,
+      "minimum_host_available_bytes": 105354919936,
+      "stage_medians": {
+        "read_ms": 2446.297799993772,
+        "field_ms": 85.48959999461658,
+        "plot_ms": 918.5842000006232,
+        "encode_ms": 1134.7256000008201,
+        "png_size": 5334527
+      }
+    },
+    {
+      "case": "rtma-winds",
+      "state": "source_local_fresh_process_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 3.6188931000069715,
+      "wall_range_seconds": [
+        3.605896200009738,
+        3.6242103000113275
+      ],
+      "cpu_median_seconds": 9.546875,
+      "rss_max_bytes": 1565900800,
+      "private_max_bytes": 3072638976,
+      "peak_threads": 86,
+      "minimum_host_available_bytes": 105172238336,
+      "stage_medians_seconds": {
+        "_extract_dataset": 1.9032306000008248,
+        "_crop_grid": 0.07494530000258237,
+        "_warp_to_latlon_grid": 1.2374471999937668,
+        "warp_array_to_mercator": 0.21210059999430086
+      }
+    },
+    {
+      "case": "rtma-winds",
+      "state": "parsed_dataset_cache_warm_no_artifact",
+      "samples": 3,
+      "wall_median_seconds": 1.6325995000079274,
+      "wall_range_seconds": [
+        1.6112312999903224,
+        1.6569107999966945
+      ],
+      "cpu_median_seconds": 7.53125,
+      "rss_max_bytes": 1595789312,
+      "private_max_bytes": 3096387584,
+      "peak_threads": 86,
+      "minimum_host_available_bytes": 105133195264,
+      "stage_medians_seconds": {
+        "_extract_dataset": 0.03655319999961648,
+        "_crop_grid": 0.07755170000018552,
+        "_warp_to_latlon_grid": 1.2473796999984188,
+        "warp_array_to_mercator": 0.08241329999873415
+      }
+    }
+  ],
+  "collector_sha256": {
+    "acquire_meteosat.py": "fcd0983e9dae659c423401a3386211d0e24c165dff5cf60deeda80dc0e03064e",
+    "baseline.py": "39ca28367635f7279812a21d3797aa460d0a462c11ad207e93787b1b1ff42f9a",
+    "inspect_meteosat.py": "7e341c0aa315f0ca43ef619cff7d1ed0bf703b0824d8bcfe9d0209db552ca7f8",
+    "policy_inventory.py": "377c47a3eb6b352968c51c1f3a26a4a792242b4356cf399f1514941afb5bb137",
+    "preflight.py": "317bc92c11d283e34ab8c6dd7a949a8111ac0bf1ab1e893f4d0a032f11aa1700",
+    "summarize.py": "0868284f9d84969ec6cda9a8a5f1e02e681920e484af9e74757f753c6bd99b27",
+    "validate_local.py": "41742fe9be48146b15b6c62a637e536131369ae232337198b503e7acbff69ecb"
+  },
+  "timing_note": "Outer wall includes resource sampler startup. Use native Satellite timing for sub-millisecond hit work; sampler overhead dominates its outer wall."
+}

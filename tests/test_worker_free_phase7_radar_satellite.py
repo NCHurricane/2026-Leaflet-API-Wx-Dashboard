@@ -316,8 +316,8 @@ def test_selected_meteosat_accelerator_chains_source_and_memory_guarded_tiles(
     assert calls == ["live-idle", "source", "live-idle", "tiles", "live-idle"]
     assert result["source_downloaded"] == 1
     assert result["tile_rendered"] == 4
-    assert result["estimated_memory_bytes"] == 200
-    assert slot.call_args.args == (200,)
+    assert "estimated_memory_bytes" not in result
+    slot.assert_not_called()  # Each native canvas owns its actual reservation.
     assert wait_kwargs[-1]["timeout_seconds"] == 0.0
 
 
@@ -402,7 +402,7 @@ def test_live_tile_uses_estimated_satellite_memory_budget(tmp_path, monkeypatch)
     )
 
     path, stats = service._render_tile_with_budget(
-        sat_id="meteosat12",
+        sat_id="meteosat9",
         channel_key="Channel13",
         z=5,
     )

@@ -1,0 +1,5 @@
+{
+  "mode": "quality",
+  "status": "failed",
+  "error": "First off-disk tile [4, 12, 6] differed in invisible RGB: full-native (255,255,255,0), initial shortcut (0,0,0,0). Alpha/visible appearance matched; exact RGBA gate failed. Corrected shortcut now uses existing product colorization. No timed pair had started."
+}

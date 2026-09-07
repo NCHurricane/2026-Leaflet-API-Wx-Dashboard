@@ -1,0 +1,22 @@
+{
+  "limits": {
+    "samples": 2,
+    "child_seconds": 240,
+    "new_downloads": 0
+  },
+  "runs": [
+    {
+      "mode": "control",
+      "exit_code": 0,
+      "child_seconds": 59.09399999999732
+    },
+    {
+      "mode": "candidate",
+      "exit_code": 0,
+      "child_seconds": 22.656000000002678
+    }
+  ],
+  "previous_allocation_used": "108/108",
+  "total_samples_after_success": 110,
+  "both_passed": true
+}

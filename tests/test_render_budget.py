@@ -1,8 +1,31 @@
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 import threading
 import time
 
 from app_core import render_budget
+
+
+def test_satellite_capacity_tracks_host_headroom_and_explicit_ceiling(monkeypatch):
+    gib = 1024**3
+    monkeypatch.setenv("WX_SATELLITE_RENDER_BUDGET_MB", "16384")
+    monkeypatch.setattr(render_budget.psutil, "virtual_memory", lambda: SimpleNamespace(total=8*gib, available=6*gib))
+    assert render_budget._satellite_capacity_bytes() == 2*gib
+    monkeypatch.setattr(render_budget.psutil, "virtual_memory", lambda: SimpleNamespace(total=8*gib, available=gib))
+    assert render_budget._satellite_capacity_bytes() == gib//2
+    monkeypatch.setenv("WX_SATELLITE_RENDER_BUDGET_MB", "128")
+    assert render_budget._satellite_capacity_bytes() == 128*1024**2
+
+
+def test_live_capacity_drop_prevents_additional_admission():
+    capacity = [100]
+    budget = render_budget._ByteBudget(100, capacity_provider=lambda: capacity[0])
+    acquired, weight = budget.acquire(40)
+    assert acquired
+    capacity[0] = 50
+    assert not budget._can_admit(20)
+    assert budget._can_admit(10)
+    budget.release(weight)
 
 
 def _run_slot(weight, entered, release, results):

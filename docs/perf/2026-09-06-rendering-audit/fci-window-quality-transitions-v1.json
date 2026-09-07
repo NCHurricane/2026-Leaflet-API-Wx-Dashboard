@@ -1,0 +1,373 @@
+{
+  "category": "prototype_quality_check_not_implementation_acceptance",
+  "run_id": "fci-window-quality-transitions-v1",
+  "gate": {
+    "max_rgb_delta": 1,
+    "alpha_mismatch_pixels": 0
+  },
+  "cases": [
+    {
+      "case": "visible-z4",
+      "product": "Channel02",
+      "target": [
+        4,
+        7,
+        5,
+        9,
+        7
+      ],
+      "loader": {
+        "channels": [
+          {
+            "native_channel": "vis_06",
+            "window": [
+              3121,
+              684,
+              9876,
+              5610
+            ],
+            "mode": "window",
+            "halo": 42,
+            "full_array_bytes": 496041984,
+            "selected_array_bytes": 133100520,
+            "cache_hit": false,
+            "strips_read": 19,
+            "decompressed_storage_bytes_estimate": 126950400
+          }
+        ],
+        "cache_bytes": 0,
+        "cache_limit": 67108864
+      },
+      "max_rgb_delta": 0,
+      "alpha_mismatch_pixels": 0,
+      "rgb_difference_mean": 0.0,
+      "rgb_difference_gt_1_pixels": 0,
+      "pass": true,
+      "candidate_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/visible-z4-window.png",
+      "reference_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/visible-z4-reference.png"
+    },
+    {
+      "case": "visible-z5",
+      "product": "Channel02",
+      "target": [
+        5,
+        16,
+        12,
+        18,
+        14
+      ],
+      "loader": {
+        "channels": [
+          {
+            "native_channel": "vis_06",
+            "window": [
+              5546,
+              1575,
+              8947,
+              4407
+            ],
+            "mode": "window",
+            "halo": 22,
+            "full_array_bytes": 496041984,
+            "selected_array_bytes": 38526528,
+            "cache_hit": false,
+            "strips_read": 11,
+            "decompressed_storage_bytes_estimate": 73497600
+          }
+        ],
+        "cache_bytes": 38526528,
+        "cache_limit": 67108864
+      },
+      "max_rgb_delta": 0,
+      "alpha_mismatch_pixels": 0,
+      "rgb_difference_mean": 0.0,
+      "rgb_difference_gt_1_pixels": 0,
+      "pass": true,
+      "candidate_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/visible-z5-window.png",
+      "reference_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/visible-z5-reference.png"
+    },
+    {
+      "case": "visible-z6",
+      "product": "Channel02",
+      "target": [
+        6,
+        34,
+        26,
+        36,
+        28
+      ],
+      "loader": {
+        "channels": [
+          {
+            "native_channel": "vis_06",
+            "window": [
+              6581,
+              2307,
+              8379,
+              3822
+            ],
+            "mode": "window",
+            "halo": 12,
+            "full_array_bytes": 496041984,
+            "selected_array_bytes": 10895880,
+            "cache_hit": false,
+            "strips_read": 6,
+            "decompressed_storage_bytes_estimate": 40089600
+          }
+        ],
+        "cache_bytes": 10895880,
+        "cache_limit": 67108864
+      },
+      "max_rgb_delta": 0,
+      "alpha_mismatch_pixels": 0,
+      "rgb_difference_mean": 0.0,
+      "rgb_difference_gt_1_pixels": 0,
+      "pass": true,
+      "candidate_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/visible-z6-window.png",
+      "reference_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/visible-z6-reference.png"
+    },
+    {
+      "case": "visible-z7",
+      "product": "Channel02",
+      "target": [
+        7,
+        69,
+        54,
+        71,
+        56
+      ],
+      "loader": {
+        "channels": [
+          {
+            "native_channel": "vis_06",
+            "window": [
+              6908,
+              2752,
+              7826,
+              3533
+            ],
+            "mode": "window",
+            "halo": 7,
+            "full_array_bytes": 496041984,
+            "selected_array_bytes": 2867832,
+            "cache_hit": false,
+            "strips_read": 3,
+            "decompressed_storage_bytes_estimate": 20044800
+          }
+        ],
+        "cache_bytes": 2867832,
+        "cache_limit": 67108864
+      },
+      "max_rgb_delta": 0,
+      "alpha_mismatch_pixels": 0,
+      "rgb_difference_mean": 0.0,
+      "rgb_difference_gt_1_pixels": 0,
+      "pass": true,
+      "candidate_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/visible-z7-window.png",
+      "reference_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/visible-z7-reference.png"
+    },
+    {
+      "case": "ir-z5",
+      "product": "Channel13",
+      "target": [
+        5,
+        15,
+        14,
+        17,
+        16
+      ],
+      "loader": {
+        "channels": [
+          {
+            "native_channel": "ir_105",
+            "window": [
+              2152,
+              1604,
+              3999,
+              3408
+            ],
+            "mode": "window",
+            "halo": 12,
+            "full_array_bytes": 124010496,
+            "selected_array_bytes": 13327952,
+            "cache_hit": false,
+            "strips_read": 14,
+            "decompressed_storage_bytes_estimate": 23385600
+          }
+        ],
+        "cache_bytes": 13327952,
+        "cache_limit": 67108864
+      },
+      "max_rgb_delta": 0,
+      "alpha_mismatch_pixels": 0,
+      "rgb_difference_mean": 0.0,
+      "rgb_difference_gt_1_pixels": 0,
+      "pass": true,
+      "candidate_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/ir-z5-window.png",
+      "reference_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/ir-z5-reference.png"
+    },
+    {
+      "case": "night-composite-z5",
+      "product": "NighttimeMicrophysics",
+      "target": [
+        5,
+        15,
+        14,
+        17,
+        16
+      ],
+      "loader": {
+        "channels": [
+          {
+            "native_channel": "ir_38",
+            "window": [
+              2152,
+              1604,
+              3999,
+              3408
+            ],
+            "mode": "window",
+            "halo": 12,
+            "full_array_bytes": 124010496,
+            "selected_array_bytes": 13327952,
+            "cache_hit": false,
+            "strips_read": 14,
+            "decompressed_storage_bytes_estimate": 23385600
+          },
+          {
+            "native_channel": "ir_105",
+            "window": [
+              2152,
+              1604,
+              3999,
+              3408
+            ],
+            "mode": "window",
+            "halo": 12,
+            "full_array_bytes": 124010496,
+            "selected_array_bytes": 13327952,
+            "cache_hit": false,
+            "strips_read": 14,
+            "decompressed_storage_bytes_estimate": 23385600
+          },
+          {
+            "native_channel": "ir_123",
+            "window": [
+              2152,
+              1604,
+              3999,
+              3408
+            ],
+            "mode": "window",
+            "halo": 12,
+            "full_array_bytes": 124010496,
+            "selected_array_bytes": 13327952,
+            "cache_hit": false,
+            "strips_read": 14,
+            "decompressed_storage_bytes_estimate": 23385600
+          }
+        ],
+        "cache_bytes": 39983856,
+        "cache_limit": 67108864
+      },
+      "max_rgb_delta": 0,
+      "alpha_mismatch_pixels": 0,
+      "rgb_difference_mean": 0.0,
+      "rgb_difference_gt_1_pixels": 0,
+      "pass": true,
+      "candidate_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/night-composite-z5-window.png",
+      "reference_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/night-composite-z5-reference.png"
+    },
+    {
+      "case": "mixed-grid-diagnostic-z7",
+      "product": "DaySnowFog",
+      "target": [
+        7,
+        63,
+        61,
+        65,
+        63
+      ],
+      "loader": {
+        "channels": [
+          {
+            "native_channel": "vis_08",
+            "window": [
+              5248,
+              4636,
+              6200,
+              5575
+            ],
+            "mode": "window",
+            "halo": 7,
+            "full_array_bytes": 496041984,
+            "selected_array_bytes": 3575712,
+            "cache_hit": false,
+            "strips_read": 5,
+            "decompressed_storage_bytes_estimate": 33408000
+          },
+          {
+            "native_channel": "nir_16",
+            "window": [
+              5248,
+              4636,
+              6200,
+              5575
+            ],
+            "mode": "window",
+            "halo": 7,
+            "full_array_bytes": 496041984,
+            "selected_array_bytes": 3575712,
+            "cache_hit": false,
+            "strips_read": 5,
+            "decompressed_storage_bytes_estimate": 33408000
+          },
+          {
+            "native_channel": "ir_38",
+            "window": [
+              2622,
+              2316,
+              3102,
+              2789
+            ],
+            "mode": "window",
+            "halo": 5,
+            "full_array_bytes": 124010496,
+            "selected_array_bytes": 908160,
+            "cache_hit": false,
+            "strips_read": 5,
+            "decompressed_storage_bytes_estimate": 8352000
+          },
+          {
+            "native_channel": "ir_105",
+            "window": [
+              2622,
+              2316,
+              3102,
+              2789
+            ],
+            "mode": "window",
+            "halo": 5,
+            "full_array_bytes": 124010496,
+            "selected_array_bytes": 908160,
+            "cache_hit": false,
+            "strips_read": 5,
+            "decompressed_storage_bytes_estimate": 8352000
+          }
+        ],
+        "cache_bytes": 8967744,
+        "cache_limit": 67108864
+      },
+      "max_rgb_delta": 0,
+      "alpha_mismatch_pixels": 0,
+      "rgb_difference_mean": 0.0,
+      "rgb_difference_gt_1_pixels": 0,
+      "pass": true,
+      "candidate_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/mixed-grid-diagnostic-z7-window.png",
+      "reference_path": "cache/rendering-audit-20260906/fci-window-quality-transitions-v1/mixed-grid-diagnostic-z7-reference.png"
+    }
+  ],
+  "peak_rss_sampled": 2556628992,
+  "wall_seconds": 53.64100000000326,
+  "all_selected_cases_passed": true
+}

@@ -1,0 +1,89 @@
+{
+  "category": "integrated_candidate_followup_against_prior_full_native_controls",
+  "limits": {
+    "samples": 6,
+    "child_seconds": 120,
+    "scratch_bytes": 10737418240,
+    "new_downloads": 0
+  },
+  "combined_timed_samples_after_completion": 108,
+  "runs": [
+    {
+      "case": "visible-z8",
+      "iteration": 1,
+      "child_seconds": 4.077999999994063,
+      "exit_code": 0
+    },
+    {
+      "case": "visible-z8",
+      "iteration": 2,
+      "child_seconds": 4.4689999999973224,
+      "exit_code": 0
+    },
+    {
+      "case": "visible-z8",
+      "iteration": 3,
+      "child_seconds": 4.35899999999674,
+      "exit_code": 0
+    },
+    {
+      "case": "limb-z8",
+      "iteration": 1,
+      "child_seconds": 6.01600000000326,
+      "exit_code": 0
+    },
+    {
+      "case": "limb-z8",
+      "iteration": 2,
+      "child_seconds": 6.797000000005937,
+      "exit_code": 0
+    },
+    {
+      "case": "limb-z8",
+      "iteration": 3,
+      "child_seconds": 6.063000000009197,
+      "exit_code": 0
+    }
+  ],
+  "comparisons": [
+    {
+      "case": "visible-z8",
+      "medians": {
+        "wall_seconds": 2.460900500009302,
+        "cpu_seconds": 2.34375
+      },
+      "maximum_sampled_bytes": {
+        "peak_rss_sampled": 283258880,
+        "peak_private_sampled": 1791127552
+      },
+      "wall_reduction_percent": 40.662157049171476,
+      "maximum_sampled_rss_reduction_percent": 77.48977917816781
+    },
+    {
+      "case": "limb-z8",
+      "medians": {
+        "wall_seconds": 4.31763740000315,
+        "cpu_seconds": 4.21875
+      },
+      "maximum_sampled_bytes": {
+        "peak_rss_sampled": 1265524736,
+        "peak_private_sampled": 2771234816
+      },
+      "wall_reduction_percent": -2.8056538049014534,
+      "maximum_sampled_rss_reduction_percent": -0.6541611555978433
+    }
+  ],
+  "runtime_sha256": {
+    "satellite_v2/fci_windows.py": "28ce5e4c9d832daf1b2615fb09c1cad473718f0bfc21f32714764ec7fb0f1321",
+    "satellite_v2/fci_nc.py": "1fa78241ed5b97b52da0a0c9a1999a219d701cba85d93f267eb2c4a4395c3169",
+    "satellite_v2/renderer.py": "0979ece6771f770a31d986629dac3f23a09b41518543b6d56f2ce95465852e0b",
+    "satellite_v2/tiler.py": "2d2a6a2d777ff5770cdbe4fdae41409618bebee8e89cdd523fe205acf1170139",
+    "satellite_v2/service.py": "3fa2751ead28a1f0367630c22aeb9b5c6b78cd1dddf64726102dee369ecefa10",
+    "app_core/render_budget.py": "580737e5250ff64234f0a85a4f1d4f5a1984e92e15384a20b9e080b5e8fb19a4",
+    "config/satellite_v2_config.py": "1fab0dcc19d0c3897166f2256eb3932f3c114d2d3f1e7d9c7e40fa93a60addee",
+    "satellite_v2/meteosat_tile_worker.py": "edc2e9c6df54bdb0b604b327de434a7bd7a607e62931cb32a2bc7216bc14a4ae"
+  },
+  "limitations": "Three fresh-process samples per case, local source and uncontrolled desktop/OS file cache. Prior full-native controls; no browser, OBS, history, low-memory-machine or p95 acceptance.",
+  "all_six_completed": true,
+  "wall_seconds": 31.937000000005355
+}

@@ -55,8 +55,14 @@ runtime reproduction. A documentation cross-check cannot certify those as fixed.
 The owner selected a new high-cost rendering-workflow audit on 2026-09-06 and
 then broadened its scope to alternative architectures, product-specific Radar
 WebGL eligibility, and adaptation to different machines and browser engines.
-The baseline is committed as `e200f74` plus docs checkpoint `5096e74`. Section
-4.8 records the audit brief; renderer implementation still follows plan review.
+The runtime baseline is `e200f74`; the audit plan is committed in `215729e`
+after docs checkpoint `5096e74`. The owner approved the bounded audit and
+measurement pass and then the selected M12 native-window integration. Section 4.8
+records the backend/prototype/integration evidence and OBS workload/hardware
+clarification. M12's rendering correction is validated in the working tree, but
+the restarted owner smoke still took about 115 seconds. The concrete first-use
+acquisition/scheduling design in section 4.8 awaits review; other renderer slices
+follow this open first-fill issue.
 
 ## 2. Current truth and invariants
 
@@ -810,7 +816,7 @@ bounded older-observation strategy because AWC's practical 24-hour window
 cannot satisfy older targets and IEM access must avoid unbounded
 per-state/per-frame request multiplication.
 
-### 4.8 High-cost rendering-workflow audit — owner brief, plan review next
+### 4.8 High-cost rendering-workflow audit — M12 first-use design for review
 
 Owner decisions, 2026-09-06: audit Satellite (especially Meteosat), Radar, MRMS,
 and RTMA for efficient modern rendering, including approaches that replace the
@@ -820,7 +826,10 @@ resources rather than treating the owner's high-end CPU/DRAM/VRAM as universal.
 Support modern Blink/Chromium, WebKit, and Gecko browsers with compatibility
 extending at least a couple of years. Baseline commits are `e200f74` and
 `5096e74`; their acceptance does not exempt current caps or architecture from
-review. No implementation or new performance measurements have been performed.
+review. Backend baseline, prototype and owner-authorized M12 integration evidence
+are recorded below. The restarted M12 smoke supports the rendering correction
+but leaves first-fill latency open; no browser/OBS or secondary-machine
+acceptance is claimed.
 
 #### Scope and quality criteria
 
@@ -890,17 +899,435 @@ Historical phase acceptances remain closed and retain their recorded evidence.
 Prior rendering choices, caps, and rejected architectures may be reassessed with
 fresh evidence under this new scope. Current Workspace layer order remains
 unchanged. Other enhancement families and the separate Greenfield project stay
-deferred. Agree the bounded audit execution/measurement plan before expensive
-live runs, then select implementation slices from its findings.
+deferred. The owner approved the bounded audit execution/measurement plan below;
+select subsequent renderer implementation slices from its findings.
 
-#### Bounded audit and measurement plan — proposed 2026-09-06
+#### Bounded audit and measurement plan — approved 2026-09-06
 
-**Review status:** draft for owner review. This adds a plan to the existing
-working-tree brief, not authorization to run benchmarks or change renderers.
-Git inspection confirmed HEAD `5096e74` immediately after `e200f74`, with the
-five expected documentation files modified. Findings below come from read-only
-source tracing and primary-source research; no app startup, native decode,
-provider acquisition, timing run, or browser test was performed in this audit.
+**Execution status:** the owner committed the planning documents and approved
+the bounded audit/measurement pass. Fresh Git inspection confirmed clean `main`
+at `215729e`, after `5096e74` and runtime checkpoint `e200f74`. The initial
+findings below came from read-only tracing and research. Preparation now includes
+a local hardware inventory, the owner's supplied second-PC report, and the
+OBS/browser/document workload clarification. Subsequent execution validated
+native inputs, completed an owner-authorized two-frame Meteosat source batch,
+and measured seven available timing cells. Controlled-browser/OBS acceptance
+and lower-resource runs remain outstanding.
+Approval covers the bounded measurement pass; subsequent renderer experiments
+still follow its findings and a selected implementation slice.
+
+**Initial preparation evidence:** the first dated
+[source inventory](perf/2026-09-06-rendering-audit/README.md) found local input
+candidates for three of twelve timing cells (Radar REF/RHO and RTMA rapid Winds).
+The remaining nine exact cells lack selected local source inputs; the old
+pinned Radar sources are also absent. File existence/hashes do not yet validate
+fields or grids. No rendering measurement is claimed by that initial inventory.
+
+**First available-input backend batch, 2026-09-06:**
+[Dated findings](perf/2026-09-06-rendering-audit/findings.md) record 48 samples
+across seven of twelve timing cells, 120.71 seconds of fresh-child execution
+including imports, and 1.32 GiB of scratch data including sources. No render
+failed. The original KMHX file was absent before validation; a retained KRAX
+volume and the original rapid RTMA GRIB were copied/hashed into isolated storage.
+One M12 and one M11 source frame were then acquired under separate owner-approved
+2-GiB/100-request/600-second ceilings: 44 requests and 1,246,146,067 received body
+bytes in 53.125 seconds. Provider acquisition and rendering remain separately
+labeled; the dashboard/warmers were not launched or reconfigured.
+
+Native FCI headers now confirm the formerly conditional detail finding:
+`vis_06` is 11,136 by 11,136, and the effective 10,848 cap selects a stride of two,
+retaining 5,568 by 5,568. `ir_105` is natively 5,568 square and fits intact at high
+zoom. A cap-only increase would require corrected admission accounting as well
+as quality/resource proof. M12 source decoding dominated the selected fresh
+tiles; RTMA's repeated geographic interpolation dominated its warm render;
+Radar still produced PNG before its enabled L2_REF artifact. See the dated record
+for timings and caveats, rather than treating these as whole-page latency.
+
+Selected output pixels repeated exactly across measured states/repetitions;
+this does not establish full native detail or geographic/browser correctness.
+Five timing cells still lack inputs (GOES Full Disk visible, GMGSI IR, MESH,
+RotationTrack and RTMA hourly temperature). Browser/OBS, fixed history sequences,
+limb/seam detail and secondary machines remain evidence gaps. The strongest first
+experiment candidates are native-detail-preserving M12 source access with
+corrected memory accounting, and RTMA native-grid warp/reusable mapping. These
+are recommendations for review, not renderer changes or a completed audit.
+
+**M12 native-detail follow-up:** the subsequent
+[six-canvas reference check](perf/2026-09-06-rendering-audit/m12-detail-reference.md)
+compared current and full-native visible grids at z8 using the same pinned frame
+and renderer. Its current center tile reproduced the baseline hash. Interior
+clouds differed by more than one grayscale level in 43.16% of mutually opaque
+pixels; the selected east-limb canvas had 47,697 alpha mismatches. This confirms
+output impact, while independent limb geometry remains unverified. The combined
+diagnostic took 8.438 seconds after hashing; it is not an equal-quality timing
+comparison. No runtime settings or renderer code changed.
+
+**Concrete first M12 candidate slice for review:** preserve native visible detail
+through source-strip/window selection and correct resource accounting, using
+the existing PNG/calibration/warp path as the initial presentation contract.
+
+- Prototype against pinned files in the audit cache first. Select source strips
+  from the requested canvas footprint with enough sampling margin; calibrate
+  only needed values and preserve the native affine transform. Retain serialized
+  NetCDF access and bounded reuse keyed by frame, native channel and source window.
+  Inspected FCI storage chunks span 300 rows by 11,136 columns, so a narrow column
+  slice alone cannot avoid decompressing a full-width chunk. Measure strip
+  skipping, allocations and repeated-use cost rather than assuming ROI reads win.
+- Validate output against full-native interior/chunk-boundary references and
+  independently check the limb mask. Include a scalar IR control and a composite
+  with mixed native resolutions. Treat transparency/alignment changes as quality
+  findings, not acceptable collateral effects of sharper visible output.
+- Size admission/cache entries from actual selected channel/window dimensions,
+  dtype and transient buffers; avoid promoting the whole 11,136 grid as the
+  default resident cache. Keep a correct, bounded fallback for footprints that
+  cannot yet be selected safely. Output quality must not vary by hardware tier.
+- Compare total work, peak memory and latency against a full-native reference at
+  equal quality. The old strided output is useful for regression context, but
+  cannot establish an equal-quality speedup. Keep the section 4.8 measurement
+  limits and retain the 20% benefit/no-unexplained-critical-regression criteria.
+- Integration follows a successful prototype and slice review. The existing
+  no-flash/scrub ownership and Workspace pane order remain acceptance contracts.
+  RTMA and Radar/MRMS continue as separate slices; this does not activate WebGL
+  for additional products or complete the outstanding browser/hardware audit.
+
+**M12 prototype result, 2026-09-06:** after the owner's instruction to continue,
+the [isolated native-window prototype](perf/2026-09-06-rendering-audit/fci-window-findings.md)
+passed all ten selected canvas cases with zero RGB/alpha differences from the
+full-native reference. The cases include visible z4–8, source-chunk boundaries,
+the limb, scalar IR, a night composite and a mixed-grid backend diagnostic.
+An independent ellipsoid visibility check found no outside-Earth opaque pixels
+in either old or native limb output; source validity inside the limb and full
+overlay alignment remain open. Cache eviction/reload, alias deduplication and
+retained-array byte/plan limits passed focused checks.
+
+Against prior equal-native controls, the revised candidate's fresh median wall
+time fell 50.0% for visible z8, 21.0% for the night composite and 14.9% for
+visible z4. Their maximum sampled RSS fell 77.1%, 65.2% and 55.1%; the full-native
+limb fallback was essentially unchanged. Process read bytes increased for the
+composite and z4 because metadata indexing/reopening still costs I/O. Preserve
+the failed first revision's evidence: its composite/limb latency regressions
+were addressed by grouped channel reads, reused plans and earlier fallback.
+The revision follow-up reused earlier controls; these three-sample comparisons
+are a pilot, not p95, browser/OBS or lower-resource acceptance.
+
+The 54 prototype timing samples plus 48 baseline samples use **102/108** of the
+recorded allowance. Total isolated scratch is 1.37 GiB; no new source acquisition
+or dashboard/warmer start was needed. Preserve all reports and source revisions;
+do not reset the allowance when continuing another family. The resulting
+integration recommendation is M12 native windows, safe frame/channel/window
+cache identity and actual allocation/admission accounting, including full-native
+fallback and caller-held/transient memory. Review that concrete slice before
+application integration. The 64-MiB prototype cache is not a whole-process
+budget or a proposed universal default. Production caps, cache identity, queue
+ownership and frontend behavior are unchanged by the prototype.
+
+**M12 application integration, 2026-09-06:** the owner reviewed the prototype and
+authorized continuing to a runtime change suitable for smoke testing. The
+[integrated native-window path](perf/2026-09-06-rendering-audit/fci-integration-findings.md)
+now uses actual native windows and source-file identities, deduplicated physical
+channels, memory-pressure-aware admission and bounded cache reuse. Ambiguous
+geometry keeps the native full-grid fallback. M12 tiles use `products-fci6`;
+old sources/tiles were retained. M12 warming now runs inline in small canvases,
+sharing live cache/admission and yielding between canvases. NetCDF serialization,
+selection/generation cancellation, PNG publication and Workspace order remain
+contracts. Shared Satellite admission now adapts its configured ceiling to host
+total/available memory; other Satellite source-cache policies are unchanged.
+
+All ten integrated real-source quality cases match the full-native RGBA
+references exactly. Two service-path cases confirm versioned publication,
+native center tiles, expected empty markers and artifact reuse without source
+downloads. Full validation passed **676 Python tests plus 42 subtests**, **54
+Node tests** and scoped Ruff, with 52 existing dependency deprecation warnings.
+The final six timing samples show visible-z8 median 2.461 s against 4.147 s
+native control (40.7% less elapsed time, 77.5% less maximum sampled RSS). Limb
+median is 4.318 s against 4.200 s (2.8% slower). These are later three-sample
+candidate comparisons against prior controls, not p95 or browser proof.
+
+At this integration checkpoint the timing allocation reached **108/108**, with about 1.39 GiB isolated
+scratch. Do not restart that allowance or acquire the five missing source cells
+implicitly. The next action at that checkpoint was the documented restarted-dashboard
+owner smoke, first M12 Satellite/Workspace with the usual OBS/browser/document
+workload and a quick shared-budget regression on another satellite. The agent
+did not launch the dashboard or fetch more sources. Real Safari/M1, Chromium/
+Gecko versions, secondary Windows hardware, fixed history, and remaining
+Radar/MRMS/RTMA alternatives are still open. No commit/push or Greenfield work is
+authorized. Earlier first-batch/prototype statements above retain their dated scope.
+
+**First owner smoke report:** M12 visible at z4 took approximately 2–3 minutes
+to fill. [The attachment/filesystem assessment](perf/2026-09-06-rendering-audit/owner-smoke-first-frame.md)
+records 40 successful tile responses and corresponding source/tile output
+timestamps spanning 127.541 seconds from first source-file completion to last
+tile output, including 52.221 seconds between tile outputs. The browser requests
+individual tiles (`render_neighbors=0`), unlike the 3x3 pilot canvases. Repeated
+full-native fallback for limb/off-disk tiles and full-bundle acquisition now need
+separate investigation. This is an open first-frame latency issue, not owner
+acceptance or a new controlled benchmark; OBS activity remains unconfirmed.
+
+**Owner-authorized first-frame correction:** the owner requested correcting this
+delay before continuing. [The correction and bounded evidence](perf/2026-09-06-rendering-audit/fci-limb-correction.md)
+replace repeated full-grid reads with conservative native limb windows and a
+no-radiance-read path for proven off-disk rectangles. Output stays in
+`products-fci6`: all 40 tiles from the actual 23:30Z frame and the prior ten
+native-quality cases match exact RGBA. The five empty tiles skip source-array
+loading; the five partial-limb tiles no longer take a whole-grid fallback.
+
+One separately allocated pre-correction/candidate pair used the same pinned
+frame and 40 individual service calls: 56.969 versus 20.522 seconds, sampled
+peak RSS 1,502 versus 571 MiB. Both passed exact-output checks. This is a single
+local-source diagnosis with uncontrolled desktop/OS-cache conditions (focused
+tests overlapped part of the control), not HTTP/browser, OBS, p95 or hardware
+acceptance. The extra **2/2** samples used 81.75 seconds combined child execution
+within the recorded 240-second bound; the original **108/108** remains consumed.
+No provider downloads, live-cache writes, server restart or warmer run occurred.
+The correction gate passed **694 Python tests plus 42 subtests** and scoped Ruff.
+The unchanged frontend retains its prior 54-test Node gate.
+
+At that correction checkpoint, the next action was an owner restart and targeted
+M12 smoke on an uncached frame or view; cached tiles already look identical and
+do not exercise this correction. The restarted smoke below supersedes that action.
+Do not clear source caches. Full-bundle acquisition still precedes native tile
+rendering; the earlier 72.7-second source-file completion interval is unresolved
+as a first-fill cost. The rendering bottleneck is corrected in the working tree,
+but end-to-end owner acceptance remains open before continuing other slices.
+
+**Restarted owner smoke:** the owner reports approximately 115 seconds for M12
+Channel02 after server restart and hard refresh. [Retained Chrome timings and
+matching artifacts](perf/2026-09-06-rendering-audit/owner-smoke-restart-0015.md)
+identify the 00:15Z frame at z4 and separate 5.382 seconds for catalog, 61.317
+seconds from first tile HTTP dispatch to source completion, and 19.550 seconds
+from source completion to last tile response. The browser selection-to-last-response
+interval is 86.254 seconds; the difference from the owner's full-display interval
+is not localized to a stage. The rendering correction is supported by live
+behavior, while first-fill acceptance remains open. No repeated test was started.
+
+The next proposed bounded slice targets first-use acquisition/scheduling: the
+current provider waits for all 40 bundled source files before any native tile
+can render. Header-only tracing of the existing pinned fixture identifies 28
+files needed by this viewport, but trustworthy partial-source geometry/identity
+and complete-window coverage must be designed before changing that contract.
+Keep the 108+2 timing allocation exhausted; review a concrete allocation before
+new live/timed work. Preserve exact native pixels, cancellation and memory bounds;
+do not resume Radar/MRMS/RTMA implementation on the assumption this smoke passed.
+
+##### M12 first-use acquisition and scheduling — proposed slice for review
+
+**Status, 2026-09-06 local / 2026-09-07 UTC:** design only, based on the retained
+smoke/dependency evidence and current working-tree source. HEAD remains
+`215729e`; all existing uncommitted integration, correction and evidence files
+are retained. This proposal does not authorize downloads, timing repetitions,
+runtime edits, a dashboard restart or another owner smoke. The original
+**108/108** and correction **2/2** timing allocations remain exhausted.
+
+**Recommendation:** first prove an offline source-readiness and scheduling
+contract, then review application integration. Aim to make complete native
+windows available before the whole bundle, while scheduling the selected
+viewport ahead of unused strips and history. Measure first useful tile and
+first complete viewport separately in any later approved campaign. Neither the
+28-of-40-file trace nor the 115-second observation establishes a speedup target
+in seconds; the roughly 29-second stopwatch/response difference remains unlocalized.
+
+| Candidate | Expected effect and limit | Decision |
+| --- | --- | --- |
+| Keep the complete bundle; reuse worker-owned HTTP connections | Could reduce connection setup; all 40 files still precede rendering. Current `_authorized_get` calls `requests.get` directly. | Small independent transport candidate; do not combine it with the first scheduling comparison or raise concurrency. |
+| Release complete windows for tiles already received by the server | Could shorten the initial six requests and release browser request slots earlier. The server cannot prioritize the 34 browser-queued requests it has not received. | Model as the smallest backend candidate; call it tile-prioritized, not whole-viewport scheduling. |
+| Announce the selected viewport, then release its complete native windows | Makes all visible dependencies known before the tile burst; permits selected-viewport priority and readiness-driven rendering. Requires a small client/API scheduling contract as well as source readiness. | Preferred integration direction if the offline geometry and ownership gates pass; frontend changes remain a separate reviewed implementation slice. |
+
+**Verified seams and proposed source contract**
+
+- `providers.download_product_source_frames` holds a per-cache/platform/sector/
+  frame lock across the provider call. `_download_fci_chunks` submits all missing
+  entries to a per-call pool and returns only after writing `manifest.json`.
+  The four-worker limit is per acquisition call today; simultaneous frames can
+  create separate pools. The proposed M12 scheduler must enforce the configured
+  ceiling, at most four active body transfers, across its foreground and warming
+  jobs in the single application process.
+- Preserve the complete-manifest fast path and its meaning. Introduce a separate
+  versioned acquisition record with immutable expected inventory and distinct
+  per-file states: absent, transferring, validated, failed. A partially populated
+  directory is never a complete manifest. The expected inventory comes from the
+  exact collection/product feature's `sip-entries`; do not hardcode 40 entries,
+  infer completeness from file count, or mix products sharing a frame timestamp.
+  Validate unique safe basenames, product/frame membership and supported layout.
+- Key acquisition by resolved cache root, platform/sector, collection, provider
+  product ID, frame and expected-inventory revision. Keep expiring transport URLs
+  and credentials out of persistent identity/logs. A transfer becomes available
+  only after completion, available length/checksum checks, readable required
+  headers and atomic publication. Hash bytes during transfer for stable local
+  identity; a local hash alone does not prove provider authenticity or completeness.
+  Reuse validated completed files; keep interrupted-transfer resume deferred.
+- Existing whole-bundle callers, including prefetch and full-native fallback,
+  continue to request complete readiness. In eventual integration they must join
+  the same M12 acquisition job as window callers, so warming cannot duplicate a
+  transfer or bypass its budget. Other platforms keep their current provider path.
+
+**Cold geometry and complete-window gate**
+
+1. Freeze the exact expected entry inventory before planning. Prototype discovery
+   from the first and last expected body files, downloading whole files only in
+   a separately authorized future live trial. These are grid-endpoint candidates,
+   not a claim that a small HTTP header/range contains NetCDF metadata. Their
+   headers must agree on projection, axes, channel dimensions and endpoint extent;
+   lexical filename order alone is not authoritative strip geometry.
+2. The current `Frame.grids_for(complete=True)` reads every body header and checks
+   contiguous rows and matching axes. Endpoint dimensions alone cannot replace
+   that validation. Cold partial readiness requires a trustworthy mapping from
+   **every expected entry** to each requested physical channel's row/column
+   footprint: current-product metadata or a separately verified format rule with
+   validation against arriving headers. A previous frame's layout and the pinned
+   all-header dependency trace are planning hints, not current-frame authority.
+   Provider support for such an index or bounded header discovery is unverified.
+3. The offline experiment must keep its all-header reference index separate from
+   what the simulated cold client actually knows. If no trustworthy complete
+   mapping is available, report that cold early rendering is blocked and retain
+   whole-bundle acquisition. Do not conceal this by giving the candidate metadata
+   from files it has not received. HTTP Range/HEAD support is not assumed; a live
+   discovery probe needs its own reviewed request/byte/time allocation.
+4. Use the corrected native window and its existing sampling halo. For every
+   physical channel, translate the window into raw strip rows and require exact,
+   contiguous, non-overlapping coverage of the entire window and halo. Composite
+   readiness is the union of dependencies at each channel's native resolution;
+   aliases share dependencies. Validate arrived headers against the expected map.
+   Missing strips mean **pending**, never NaN-filled success or an empty marker.
+5. Proven off-disk output may skip radiance only after trustworthy geometry and
+   product identity are established, retaining exact RGBA beneath alpha zero.
+   Ambiguous geometry waits for a validated complete bundle and the existing
+   full-native fallback. Invalid/gapped/overlapping sources fail explicitly;
+   fallback cannot turn malformed data into valid imagery. Insufficient memory
+   defers native-quality work through an explicit pending state.
+
+**Immutable render snapshots and publication**
+
+The renderer currently enumerates body files in the source directory, uses all
+their path/size/mtime values as frame identity and indexes all headers. Simply
+returning early from the downloader would violate those assumptions. A partial
+path must pass an explicit immutable snapshot: bundle revision, trusted geometry
+revision, native windows, exact dependency paths/content identities and validated
+coverage. No directory enumeration may silently enlarge that snapshot.
+
+Keep an arrival counter separate from source identity. An unrelated validated
+strip arriving during a render does not cancel it or evict unchanged windows.
+A dependency replacement, geometry/inventory change or lost request ownership
+does reject publication. Check the snapshot after native reading and again at
+atomic PNG/negative-marker publication, including the gap after the renderer
+returns. File references stay pinned until readers release them; the scheduler
+does not overwrite a file being read. Missing-input states never populate the
+negative cache. Keep one M12 native render owner and serialized NetCDF access;
+metadata validation must use that same native-access lock.
+
+Array/plan reuse keys include stable bundle/geometry and dependency identities,
+physical channel and window, not the growing list of unrelated arrived files.
+Late replacement of a provider product must not reuse an immutable derived tile:
+the integration proposal must carry a stable source revision through artifact
+keys and client URLs before permitting replacement. Ordinary chunk arrival must
+not change URLs or force repeat rendering. The offline candidate writes only
+to its isolated output directory; the running `products-fci6` namespace and its
+accepted complete-source artifacts remain intact.
+
+**Scheduling, cancellation and browser contract**
+
+- Use one bounded M12 acquisition dispatcher, separate from render workers.
+  Register source demand without holding a native lock, render owner or byte
+  reservation while waiting for network data. Only dependency-ready work enters
+  the render queue. Do not submit every missing file in advance: choose each next
+  transfer after completion so a new selection can change pending priorities.
+- Schedule required discovery files first, then dependencies for the selected
+  center tile, remaining selected viewport tiles, explicitly requested adjacent/
+  history frames, and optional complete-bundle warming. Deduplicate physical
+  files across products/clients; prefer files serving multiple visible tiles
+  within a priority tier. Use age and round-robin selection between active clients
+  so one continuously moving viewport cannot starve another. Reduce speculative
+  work under pressure without dropping requested history or changing its order.
+- Proposed offline scheduler caps: four active bundle records, one current
+  viewport of at most 64 tile demands per client (bounded batches for larger
+  views), at most 256 admitted tile demands process-wide, and no more than the
+  configured 1–4 active transfers. Keep overflow pending with explicit backpressure;
+  coalesce superseded generations before admission. These are prototype bounds,
+  not certified production defaults. The existing four-frame/eight-plan metadata
+  reuse and adaptive array/render byte budgets remain ceilings, not permission
+  to retain duplicate native arrays in the acquisition job.
+- Reserve bounded stream buffers and metadata in addition to render/cache costs;
+  stream to disk, never collect whole bodies in RAM. Keep the configured transfer
+  cap independent of host size. Unknown/pressured hosts start with one transfer
+  and no speculative work; additional transfers require headroom for buffers plus
+  the next native render. Pressure backs off concurrency/residency first. Preserve
+  current adaptive render admission, available-memory headroom and final quality.
+- Demand ownership includes client, selection, frame generation and a separate
+  viewport revision for pan/zoom. Releasing one client removes only its demand;
+  another client or an active requested-history lease may still need the file.
+  Drop queued work with no owners. Check owners between streamed blocks and retry
+  waits; an in-progress socket read remains bounded by its read timeout, so do
+  not promise instantaneous network cancellation. Keep completed reusable files,
+  discard only the abandoned transfer's own temporary file, and never interrupt
+  another owner's transfer. Check ownership again before rendering/publication.
+- For eventual viewport integration, propose an M12-only short demand registration
+  call carrying selection/frame/generation, zoom, ordered visible coordinates and
+  viewport revision before mounting the incoming tile layer. Acknowledge queue
+  acceptance promptly; registration must not wait for acquisition. Coalesce pan/
+  zoom updates and preserve the existing 160-ms scrub debounce. The exact route,
+  validation and backpressure payload follow in the integration review.
+- Initially keep normal PNG tile requests waiting for genuine readiness, with
+  cancellable service waits that do not occupy render workers. This may shorten
+  initial HTTP occupancy but does not eliminate browser queuing. A separate
+  pending/status protocol is required before returning early for missing sources:
+  the current route can return a successful transparent PNG for transient states,
+  and the animator counts `tileload` toward readiness. Do not use that response
+  as a partial-source placeholder or silently introduce 202/retry polling.
+  Preserve mounted ready layers, incoming-frame readiness and no-flash promotion;
+  the previous frame remains visible until the replacement is ready. Workspace
+  pane order, including MRMS/SPC below Satellite, stays unchanged.
+
+**Next execution slice to approve: offline contract prototype only**
+
+Work in a new isolated audit prototype/harness, with no edits to imported runtime
+modules, routes, frontend, dependencies or configuration. Use read-only pinned
+`20260906T233000Z` sources from the correction fixture, the 40 owner-viewport
+native references and the ten retained integrated quality cases. Verify required
+files/references first; a missing fixture is a gap, never a provider fallback.
+Use virtual arrival events rather than real sleeps/transfers; never hide, rename
+or remove files in the pinned source directory to simulate absence.
+
+Proposed allocation after review: **zero provider requests/download bytes, zero
+timing samples**, at most **15 minutes combined child execution**, **2 GiB new
+scratch**, **6 GiB sampled child RSS**, and at least **max(4 GiB, one eighth of
+host RAM) available host memory**. Count hashing, metadata, correctness renders
+and test children toward execution limits. Run one child at a time alongside
+the untouched dashboard; stop on a bound, quality mismatch, native failure,
+sustained paging or responsiveness concern. Preserve failures and return for
+review before rerunning a failed expensive check. Resource readings enforce the
+bound; they are not a speed comparison or a new benchmark allowance.
+
+Start with small synthetic metadata and deterministic events: ordered/reversed/
+out-of-order arrivals, a withheld required strip, gap/overlap/wrong projection,
+missing composite input, duplicate request, arrival during read/publication,
+dependency replacement, corrupt/truncated transfer, restart with an incomplete
+record, same-frame source revision, two clients, pan/zoom, rapid scrub, history,
+selection release and memory pressure. Require no publication before complete
+coverage, no premature negative cache, no stale promotion, no duplicate transfer,
+no render reservation during source waits, bounded queues/cache and continued
+service to the surviving owner. Assert that unrelated arrival preserves a ready
+snapshot while dependency mutation invalidates it.
+
+Only after those checks pass, run one correctness pass over the 40 viewport
+outputs and ten retained quality cases, including IR/composite/mixed-grid/limb
+coverage, using staged availability and exact whole-RGBA comparisons. Reuse
+existing references; do not regenerate controls or repeat cases for timing.
+Compare the whole-bundle and candidate scheduling traces on the same logical
+arrivals, recording ready dependencies, scheduled order and bytes required before
+first tile/full viewport. Label those counts and event ordering as simulation,
+not network latency or OBS/browser evidence. Include the cold-metadata-unavailable
+case, which must remain pending until complete acquisition permits validation.
+
+Return the cold-geometry feasibility result, contract/quality outcomes, bounded
+resource ledger and exact proposed integration file list for review. Expected
+integration seams are `provider_eumetsat.py`, `providers.py`, `fci_windows.py`,
+`renderer.py`, `tiler.py`, `service.py` and M12 prefetch; viewport registration
+would additionally touch the satellite route/shared animator and focused tests.
+No other rendering family is part of this slice. Do not integrate unless cold
+readiness is supportable, or explicitly narrow the recommendation to complete-
+bundle transport/scheduling improvements. Any live discovery/download or timed
+comparison returns with named sources and separate request/byte/time/run caps.
+Broader owner/OBS/browser/hardware acceptance remains open; no repeat merely to
+reconfirm the delay, cache clearing, commit, push or Greenfield work is included.
 
 **Recommended order:** resolve source-detail and resource-accounting questions
 first, capture a small baseline second, then select at most two architecture
@@ -913,9 +1340,9 @@ platform, product, zoom, cache state, browser, and machine into a benchmark.
 | --- | --- | --- |
 | Satellite request policy | `max_native_zoom_for_product` in `config/satellite_v2_config.py` uses sector only: Full Disk/Global z8; Meso z9; other sectors, including RSS/Japan/Target, z9. The channel argument does not affect the result. | Where do these limits discard visible source detail, and where do they request larger images without additional information? |
 | Satellite floors and views | `frontend/pages/satellite/satellite-anim.js` uses Full Disk floor z1, Global z2, RSS/Target z4, and z5 otherwise; 256-pixel tiles can be displayed through z19. Standalone presets include GMGSI z2, GK2A z3, M12/RSS z4, M9 z5, Japan z6, and dynamic Meso/Target bounds. Workspace reuses the animator but has its own curated selections and map view. | Check actual opening zoom after container sizing, sector aliases, bounds fitting, fractional zoom, and DPR. Warming zooms, catalog availability, request floors, and displayed zoom are different controls. |
-| Satellite loading and warping | `satellite_v2/renderer.py` applies 2048/4096 source caps at z1–4/z5–6 and platform caps at z7+. ABI decimation applies to Full Disk; AHI/AMI/FCI enforce caps in their loaders. SEVIRI/GMGSI retain their separate native paths. Scalar channels use bilinear warp, categorical ADP uses nearest; composites combine warped channels. Live misses normally produce a 3x3 supertile. | Measure sampling loss/aliasing before warp, duplicate decode across zoom-cap keys, and the useful fraction of neighbor tiles. Does selective window reading or a reusable native grid beat repeated decode without changing output? |
-| FCI detail and admission estimate | FCI defaults to a 10848 grid cap and chooses a power-of-two stride. An input with 11136 columns would therefore retain 5568 even at z7+. The admission estimator assumes an FCI side no larger than 5568; native access is serialized inside each process. | Verify actual channel dimensions in the selected `EO:EUM:DAT:0662` files. Check visible/NIR loss and whether higher configured caps make the estimator undercount. Full chunk reads precede the current stride; retained-array bytes are not peak decode memory. This is a conditional code finding, not a newly reproduced image defect. |
-| Backend and browser budgets | Defaults include 16 GiB Satellite in-flight admission, 4 GiB source-raster cache, ten live tile request workers, two Meteosat warming processes, and up to 72 retained Satellite layers. Oversized Satellite admissions can run alone. Radar/MRMS/RTMA heavy work uses a separate semaphore. | Count parent/child caches, transient native arrays, renderer references, GDAL buffers, other families, decoded images and GPU allocations together. Neither an admission estimate nor a frame-count limit establishes a whole-machine memory bound. Verify effective settings rather than assuming defaults are active. |
+| Satellite loading and warping | M12 now selects native windows through `satellite_v2/fci_windows.py`, with full-native fallback for ambiguous geometry. Other capped loaders retain the 2048/4096 z1–4/z5–6 policy and platform caps at z7+; ABI decimation applies to Full Disk and AHI/AMI enforce their caps. SEVIRI/GMGSI retain separate native paths. Scalar bilinear/categorical nearest sampling and composite recipes are retained. | Complete native-detail/zoom and useful-neighbor evidence across the other platforms. Validate integrated M12 navigation and browser behavior; selected backend quality parity is not full UI acceptance. |
+| FCI detail and admission estimate | The delivered normal FDHSI fixture has visible `vis_06` at 11136 square and IR `ir_105` at 5568 square. The former 10848 rendering cap strided visible data to 5568; integrated M12 windows now keep native samples. Admission uses actual window/header dimensions plus transient/output/cache allowances, with serialized native access and explicit source identity. | Owner smoke, source validity inside the limb, geographic overlays, other delivered grids and lower-resource behavior remain open. Legacy whole-grid/bounds helpers retain their explicit cap, while native window rendering is independent of it. |
+| Backend and browser budgets | Satellite admission now caps at the smallest of configured 16-GiB-default ceiling, total RAM / 4 and available RAM / 2. M12 has adaptive retained arrays (256-MiB configured ceiling), one render owner and inline bounded warming. Other Satellite source caches retain their 4-GiB default and M9/M11 retain configured pools. Browser layers remain capped at 72; Radar/MRMS/RTMA use their separate semaphore. | Validate host pressure and browser residency on actual secondary hardware. Other source caches, native allocations, browser images and GPU memory still need whole-workload accounting; the queue/cache estimates are not a whole-machine memory guarantee. |
 | Radar | `radar/webgl_artifact.py` supports `L2_REF`, `L2_VEL`, `L2_SRV`, `L3_N0B`, and `L3_N0G`; configuration defaults their acceleration switches off. PNG rendering precedes optional artifact publication. Current thresholds are prefetch z10/activation z11, four textures/two loads; canvas DPR is capped at 2. | Compare full PNG plus artifact cost with alternatives, including upload and first display. Trace actual ray/gate geometry, encoding precision, masks, and palette behavior for all 19 configured products. A nominal PNG dimension does not prove native polar detail is retained. |
 | MRMS | `mrms/mrms_tiles.py` already writes a tiled float32 GeoTIFF and warps source bands to 256-pixel PNG tiles with nearest sampling. Tiles start at z7; RotationTrack/AzShear cap at z8 and other products at z7. The whole-overlay fallback is capped at 4096 pixels. | Establish high-zoom tile/fallback detail, repeated preparation cost, source reuse, and whether any scalar GPU path would repay its extra preparation and transfer. The tiled source is not yet evidence that a COG conversion would help. |
 | MRMS first display | Workspace calls `loadLatest` before starting history. Standalone calls `loadFrames` first and uses `loadLatest` when no frames return. | Measure each page's response-to-display path. This call order does not establish that standalone waits for the entire history to render. Trace coordinator work and PNG/native-tile promotion separately. |
@@ -992,7 +1419,7 @@ edge scene for coverage; reuse files across products where possible.
 
 ##### C. Measurement protocol and stopping limits
 
-After owner review, the first measurement pass would use existing renderers
+The approved first measurement pass uses existing renderers
 and existing instrumentation. Review `satellite_v2/bench.py`,
 `satellite_v2/_bench_timing.py`, `radar/bench.py`, tile response headers and
 coordinator metrics before adding instrumentation. Satellite's CLI can purge
@@ -1043,6 +1470,47 @@ owner caches, historical goldens, listeners and optional-warmer settings.
    order and variability reported. Estimate interaction tails from many events
    within the fixed trace, labeled separately from frame-load sample counts.
 
+**Owner workload clarification — OBS, browser and a document:** retain an
+isolated dashboard condition to identify rendering cost, then repeat selected
+anchors with the owner's realistic application mix. The owner normally runs
+OBS and a browser while streaming, sometimes with a word-processing document.
+Closing unrelated applications is useful for the isolated condition only;
+quiet-machine results alone cannot establish suitability for streaming.
+
+- Use three labeled conditions: dashboard alone; OBS recording a fixed replay
+  of equivalent visual content plus a sample document with the live dashboard
+  stopped; and OBS capturing the live dashboard plus that same document. Match
+  scene composition, output settings and duration, and describe the replay
+  control's media-decoding cost rather than treating it as an exact subtraction.
+  Hold other background activity constant. A document stays open for the run,
+  with a brief repeatable scroll/edit action during interaction checks.
+- Prefer the owner's actual OBS settings when available. Otherwise use a
+  provisional local-recording profile: 1920x1080 at 60 fps, H.264 hardware
+  encoding when available, fixed 6 Mb/s target, a captured browser window and
+  a simple fixed overlay. Record the exact OBS build, encoder/preset/rate
+  control, scene sources, preview state, browser viewport/DPR and storage path
+  before a run. Software encoding or a more elaborate scene is a different
+  workload, not an interchangeable result. The owner has specified the app mix,
+  not those provisional encoder settings.
+- Local recording exercises scene composition, capture and encoding without a
+  public broadcast; it adds disk I/O and does not certify streaming network or
+  service behavior. Reproduce streaming encoder settings deliberately rather
+  than assuming an arbitrary recording preset has the same cost. OBS documents
+  [offline recording](https://obsproject.com/kb/standard-recording-output-guide)
+  and [GPU/scene contention](https://obsproject.com/kb/encoding-performance-troubleshooting).
+- Measure dashboard input/frame latency and backend queues alongside OBS
+  output FPS, render time, frames missed due to rendering lag, frames skipped
+  due to encoding lag, CPU, GPU engine activity, memory and recording I/O.
+  Record counts and denominators after a fixed settling period. Network dropped
+  frames are not measured by a local-only recording. Evaluate both applications;
+  a faster dashboard that starves OBS is not a successful replacement.
+- Start with one demanding M12/Workspace sequence and an existing Radar WebGL
+  sequence. Fit these repetitions inside the existing first-host 20-minute
+  browser trace limit; do not multiply all 12 backend cells or every browser/PC
+  by the three conditions. If the limit leaves coverage unfinished, record the
+  gap for the next batch. Keep source frames and final imagery quality fixed;
+  compressed OBS recordings are not the native-pixel quality reference.
+
 Produce a new dated `docs/perf/` evidence record only when measurements exist:
 manifest, commands/configuration, source hashes, raw timings/resource samples,
 quality comparisons, browser/OS/GPU identities, unavailable metrics and the
@@ -1082,10 +1550,28 @@ Use separate backend and per-client budgets, with an aggregate cap when they
 share a host. Proposed hardware targets are an 8 GiB, 2–4 effective-core
 integrated-GPU machine; a 16 GiB, 4–8 effective-core ordinary machine; and the
 owner's high-end machine. These are measurement profiles, not certified minimum
-requirements. Include an 8 GiB Apple Silicon Mac for real WebKit evidence if
-available. Record storage, GPU/driver, power mode, free memory, viewport/DPR and
+requirements. Use the owner's 16 GiB M1 MacBook Pro for real WebKit evidence;
+it does not cover an 8 GiB memory target. Record storage, GPU/driver, power mode,
+free memory, viewport/DPR and
 network topology. Start on an ordinary machine where available; constrained
 owner-machine runs are only surrogates until real lower-resource evidence exists.
+
+Available machines and evidence provenance, 2026-09-06:
+
+| Machine | Available specification evidence | Planned role and unresolved details |
+| --- | --- | --- |
+| Main development PC | Live local CIM/NVIDIA query: i9-14900K, 24 cores/32 logical processors, about 128 GiB RAM, RTX 4070 Ti SUPER with 16376 MiB reported VRAM; Windows 11 Home Insider Preview build 26220; active display 3840x2160 | High-end reference and OBS contention case. Record effective viewport/DPR and power/background state per run. Insider OS results do not establish stable-Windows compatibility. |
+| CHUCK-OMEN-24 | Owner-supplied `omen-24.txt`, report dated 2025-10-19: HP OMEN Obelisk 875 series, i7-8700 (6 cores/12 logical processors), 32 GB RAM, RTX 2060, Windows 11 Home build 26100; report includes several storage devices | Older CPU/discrete-GPU comparison, with a stable-Windows target once refreshed. RAM is not a low-memory profile. Refresh OS/driver/display and determine local cache/recording disks before execution. Reported adapter RAM is malformed/unusable; do not infer actual VRAM from it. |
+| MacBook Pro | Owner reports M1, 16 GB RAM and macOS Tahoe 26.6 | Safari client against a Windows backend first. Record actual OS build and Safari version on the device; user-reported OS alone is not browser proof. This does not establish a macOS backend installation or historical Safari coverage. |
+| Older Windows PCs | Owner reports a couple are available; detailed specifications not supplied | Inventory one suitable 8–16 GB/integrated-GPU candidate when arranging that run. Select by actual CPU/RAM/GPU/OS/storage rather than age alone. |
+
+The second-PC report was read from the explicitly supplied network file as
+specification data, not as operational instructions. Its historical available
+memory, drivers and OS state are not current measurements. Reading a report
+does not install or start the dashboard/OBS on that machine. A browser on the
+Mac/another PC tests client behavior against the selected backend; backend
+scalability requires separate local-backend runs on the other Windows host.
+Do not count browser-only testing as proof of backend affordability.
 
 Budget design to evaluate:
 
@@ -1190,14 +1676,21 @@ and [WebGL memory/limit constraints](https://developer.mozilla.org/en-US/docs/We
   No crash/OOM, sustained paging, runaway speculative queues or monotonic cache
   growth across three identical selection/play/teardown cycles. Residual memory
   must be accounted for as bounded cache, not assumed to be a leak or ignored.
+- **Streaming coexistence:** the combined OBS/browser/document condition must
+  retain dashboard quality and controls and sustain the chosen OBS output rate
+  after settling. Compare missed/skipped frame rates against the OBS control
+  and compare candidate against baseline under the same combined workload.
+  Aim for zero sustained render/encoding loss; disclose isolated misses and
+  repeatability instead of concealing them in averages. Do not lower OBS output
+  settings, dashboard resolution or requested history to make a candidate pass.
 - **Compatibility:** each claimed browser/OS row passes the four anchors and
   fallback checks at final quality; acceleration may differ by capability.
   Browser execution and owner visual acceptance remain separate evidence.
 
-The review decision is whether to accept this inventory, 12-cell baseline,
-hardware/browser targets and provisional thresholds. Approval of that bounded
-measurement pass would not authorize renderer implementation or an unrestricted
-benchmark campaign. Return its findings with a product-specific recommendation:
+The owner approved this inventory, 12-cell baseline, hardware/browser targets
+and provisional thresholds, then clarified the available machines and realistic
+OBS/browser/document workload above. Execute within the recorded limits and
+return findings with a product-specific recommendation:
 retain the existing path, improve its scheduling/reuse, or propose a different
 renderer. Select at most two subsequent experiments with exact workload,
 quality reference, resource limits and rollback scope for another review.
@@ -1459,11 +1952,15 @@ developer, repository, user, and selected-skill instructions.
 
 ## 10. Choosing the next slice
 
-Cleanup Waves A through E are complete. The accepted functional/docs baseline
-is `e200f74` plus `5096e74`. The owner has supplied the expanded rendering-audit
-brief in section 4.8; turn it into the bounded execution/measurement plan for
-review. Do not ask the owner to select the product families again or start
-renderer changes from the ledger order.
+Cleanup Waves A through E are complete. Runtime checkpoint `e200f74` and docs
+checkpoint `5096e74` are followed by the audit-plan commit `215729e`. The owner
+approved the bounded audit in section 4.8 and clarified its OBS/browser/document
+workload and available machines. The first seven-cell/48-sample backend batch
+is recorded in the dated findings. Continue the remaining source/detail,
+browser/OBS and secondary-machine evidence; preserve existing runs instead of
+repeating them without a new measurement question. Do not ask the owner to
+reapprove the audit or select the product
+families again; renderer changes follow findings and a selected work slice.
 
 The post-cleanup Satellite cross-page blocking prerequisite is complete. A
 separate bounded Meteosat latency family was selected; its Phase 0/1 baseline,
@@ -1491,7 +1988,7 @@ Radar WebGL remains listed first without priority. Section 4.7 retains one
 future unified cross-page Archive family, not an independently selectable
 Surface-only completion.
 
-Before the audit, confirm current Git status and agree its bounded evidence and
-measurement scope. Implementation, validation gates, and rollback/fallback
+Before each audit batch, confirm current Git status and the approved evidence
+and measurement limits. Implementation, validation gates, and rollback/fallback
 decisions follow the findings and a separately selected work slice. Preserve
 unrelated work throughout.

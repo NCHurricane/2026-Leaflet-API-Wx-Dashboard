@@ -313,6 +313,21 @@ def _render_tile_with_budget(
 ):
     from app_core.render_budget import satellite_render_slot
 
+    if str(render_kwargs.get("sat_id") or "").strip().lower() == "meteosat12":
+        from satellite_v2.fci_windows import FciRenderCancelled, render_context
+
+        # The lazy renderer reserves actual native window/transient bytes once
+        # source metadata and the canvas are known. Do not nest reservations.
+        try:
+            with render_context(render_should_continue) as state:
+                if render_should_continue is not None and not render_should_continue():
+                    raise _TileRenderCancelled("Satellite tile render ownership ended.")
+                path, stats = render_frame_tile(**render_kwargs)
+                stats["estimated_memory_bytes"] = state["estimated_memory_bytes"]
+                return path, stats
+        except FciRenderCancelled as exc:
+            raise _TileRenderCancelled(str(exc)) from exc
+
     estimated_bytes = estimate_source_grid_bytes(
         str(render_kwargs.get("sat_id") or ""),
         str(render_kwargs.get("channel_key") or ""),
@@ -456,6 +471,19 @@ def _run_selected_satellite_accelerator(
             return combined
 
         from app_core.render_budget import satellite_render_slot
+
+        if sat_id == "meteosat12":
+            # M12 warms small canvases inline, sharing native-window admission
+            # and cache ownership with live requests in this process.
+            tile_stats = run_selected_meteosat_tile_warmer(
+                sat_id=sat_id, sector=sector, channel=channel,
+                should_continue=should_continue,
+                wait_until_ready=lambda: _wait_for_live_tile_idle(
+                    timeout_seconds=0.0, should_continue=should_continue),
+            )
+            combined.update({f"tile_{key}": int(value or 0) for key, value in tile_stats.items()})
+            combined["cancelled"] = int(tile_stats.get("cancelled") or 0)
+            return combined
 
         configured_zooms = (
             SATELLITE_V2_METEOSAT_RSS_TILE_WARM_ZOOMS

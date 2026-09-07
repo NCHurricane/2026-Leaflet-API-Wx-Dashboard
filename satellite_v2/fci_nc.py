@@ -181,7 +181,14 @@ def _load_fci_rasters_serialized(
                         f"FCI chunk width mismatch ({end_col} vs {state.full_cols}): {path}"
                     )
                 state.full_rows = max(state.full_rows, end_row)
+                if state.projection_attrs is not None and state.projection_attrs != projection_attrs:
+                    raise ValueError("FCI source strips disagree on projection")
                 state.projection_attrs = projection_attrs
+                if state.x_attrs is not None:
+                    for axis, expected in (("x", state.x_attrs), ("y", state.y_attrs)):
+                        variable = measured.variables[axis]
+                        if any(getattr(variable, key) != expected[key] for key in ("scale_factor", "add_offset")):
+                            raise ValueError("FCI source strips disagree on native axes")
                 if state.x_attrs is None:
                     x_var = measured.variables["x"]
                     y_var = measured.variables["y"]
@@ -235,8 +242,14 @@ def _load_fci_rasters_serialized(
         values_raw = np.full(
             (out_rows, state.out_cols), np.nan, dtype=np.float32
         )
-        for out_row0, strip in state.strips:
+        next_row = 0
+        for out_row0, strip in sorted(state.strips, key=lambda item: item[0]):
+            if out_row0 != next_row:
+                raise ValueError("FCI source strips contain a gap or overlap")
             values_raw[out_row0 : out_row0 + strip.shape[0], :] = strip
+            next_row += strip.shape[0]
+        if next_row != out_rows:
+            raise ValueError("FCI source strips do not cover the native grid")
 
         values = values_raw[::-1, :]
         projection_attrs = state.projection_attrs

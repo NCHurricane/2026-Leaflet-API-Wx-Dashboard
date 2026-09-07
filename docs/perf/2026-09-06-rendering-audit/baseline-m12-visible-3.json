@@ -1,0 +1,545 @@
+{
+  "case": "m12-visible",
+  "iteration": 3,
+  "settings": {
+    "SATELLITE_V2_AHI_MAX_GRID": 10848,
+    "SATELLITE_V2_AMI_MAX_GRID": 10848,
+    "SATELLITE_V2_FCI_MAX_GRID": 10848,
+    "SATELLITE_V2_GOES_FULLDISK_MAX_GRID": 10848,
+    "SATELLITE_V2_LIVE_TILE_RENDER_WORKERS": 10,
+    "SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS": 2,
+    "SATELLITE_V2_NETCDF_CACHE_SIZE": 16,
+    "SATELLITE_V2_RAPID_WORKER_FRAMES": 12,
+    "SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS": 225,
+    "SATELLITE_V2_RAPID_WORKER_HOURS": 2,
+    "SATELLITE_V2_RAPID_WORKER_MAX_FRAMES": 120,
+    "SATELLITE_V2_RAPID_WORKER_TILE_BUFFER": 1,
+    "SATELLITE_V2_RAPID_WORKER_TILE_WORKERS": 2,
+    "SATELLITE_V2_RENDERER_CACHE_SIZE": 8,
+    "SATELLITE_V2_SOURCE_RASTER_CACHE_MB": 4096,
+    "radar_webgl": {
+      "enabled": true,
+      "animation_enabled": true,
+      "product": "L2_REF",
+      "products": [
+        "L2_REF"
+      ],
+      "animation_products": [
+        "L2_REF"
+      ],
+      "artifact_version": 2,
+      "prefetch_zoom": 10,
+      "activate_zoom": 11,
+      "release_grace_ms": 1500,
+      "texture_budget": 4,
+      "min_forward_textures": 2,
+      "max_concurrent_loads": 2
+    },
+    "radar_figure_size_inches": 12,
+    "radar_dpi": 200,
+    "satellite_context": {
+      "sat_id": "meteosat12",
+      "sector": "FULLDISK",
+      "product": "Channel02",
+      "frame_key": "20260906T120000Z",
+      "z": 8,
+      "x": 128,
+      "y": 124,
+      "tiles": "3x3"
+    },
+    "satellite_native_timings": [
+      {
+        "cache_status": "miss",
+        "composite_ms": 17.222,
+        "download_ms": 0.651,
+        "encode_ms": 19.412,
+        "frame_key": "20260906T120000Z",
+        "iteration": 1,
+        "parse_ms{Channel02}": 3718.659,
+        "pid": 28164,
+        "product": "Channel02",
+        "run_id": "audit-m12-visible-3",
+        "sat_id": "meteosat12",
+        "scenario": "source_local_fresh_process_no_artifact",
+        "sector": "FULLDISK",
+        "total_ms": 3894.655,
+        "validate_ms": 57.989,
+        "warp_ms{Channel02}": 63.015,
+        "write_ms": 1.937,
+        "x": 128,
+        "y": 124,
+        "z": 8
+      }
+    ]
+  },
+  "rows": [
+    {
+      "state": "source_local_fresh_process_no_artifact",
+      "wall_seconds": 3.902905399998417,
+      "cpu_seconds": 4.109375,
+      "rss_peak_sampled": 415113216,
+      "private_peak_sampled": 2013368320,
+      "rss_after": 389918720,
+      "io_delta": {
+        "read_count": 74535,
+        "write_count": 44,
+        "read_bytes": 311268966,
+        "write_bytes": 800181,
+        "other_count": 1460,
+        "other_bytes": 588254
+      },
+      "samples": [
+        {
+          "seconds": 0.0003657999914139509,
+          "rss": 213852160,
+          "private": 1721679872,
+          "threads": 54,
+          "host_available": 106141110272
+        },
+        {
+          "seconds": 0.05669479999050964,
+          "rss": 222978048,
+          "private": 1732829184,
+          "threads": 54,
+          "host_available": 106120941568
+        },
+        {
+          "seconds": 0.12147019999974873,
+          "rss": 299503616,
+          "private": 1805324288,
+          "threads": 54,
+          "host_available": 106047463424
+        },
+        {
+          "seconds": 0.18161119999422226,
+          "rss": 267264000,
+          "private": 1772560384,
+          "threads": 54,
+          "host_available": 106079277056
+        },
+        {
+          "seconds": 0.23943919999874197,
+          "rss": 265510912,
+          "private": 1772331008,
+          "threads": 54,
+          "host_available": 106093416448
+        },
+        {
+          "seconds": 0.30262129999755416,
+          "rss": 293494784,
+          "private": 1811783680,
+          "threads": 54,
+          "host_available": 106056237056
+        },
+        {
+          "seconds": 0.3705722999875434,
+          "rss": 278659072,
+          "private": 1796870144,
+          "threads": 54,
+          "host_available": 106082279424
+        },
+        {
+          "seconds": 0.4286634000018239,
+          "rss": 275570688,
+          "private": 1781350400,
+          "threads": 54,
+          "host_available": 106085023744
+        },
+        {
+          "seconds": 0.48812249999900814,
+          "rss": 305848320,
+          "private": 1815695360,
+          "threads": 54,
+          "host_available": 106042826752
+        },
+        {
+          "seconds": 0.5490320999961114,
+          "rss": 284418048,
+          "private": 1804537856,
+          "threads": 54,
+          "host_available": 106065854464
+        },
+        {
+          "seconds": 0.6068841999949655,
+          "rss": 279736320,
+          "private": 1785417728,
+          "threads": 54,
+          "host_available": 106066825216
+        },
+        {
+          "seconds": 0.6730206999927759,
+          "rss": 288231424,
+          "private": 1794383872,
+          "threads": 54,
+          "host_available": 106089349120
+        },
+        {
+          "seconds": 0.7371282999956748,
+          "rss": 309952512,
+          "private": 1816256512,
+          "threads": 54,
+          "host_available": 106051768320
+        },
+        {
+          "seconds": 0.7964364999934332,
+          "rss": 290144256,
+          "private": 1796255744,
+          "threads": 54,
+          "host_available": 106072403968
+        },
+        {
+          "seconds": 0.8549568000016734,
+          "rss": 304246784,
+          "private": 1810542592,
+          "threads": 54,
+          "host_available": 106041585664
+        },
+        {
+          "seconds": 0.9161640999955125,
+          "rss": 300240896,
+          "private": 1821122560,
+          "threads": 54,
+          "host_available": 106008080384
+        },
+        {
+          "seconds": 0.9816941999888513,
+          "rss": 296927232,
+          "private": 1802465280,
+          "threads": 54,
+          "host_available": 106040426496
+        },
+        {
+          "seconds": 1.0392827999894507,
+          "rss": 322633728,
+          "private": 1838444544,
+          "threads": 54,
+          "host_available": 106003824640
+        },
+        {
+          "seconds": 1.0960410999978194,
+          "rss": 300597248,
+          "private": 1806192640,
+          "threads": 54,
+          "host_available": 105989341184
+        },
+        {
+          "seconds": 1.1705258000001777,
+          "rss": 300908544,
+          "private": 1805750272,
+          "threads": 54,
+          "host_available": 106009100288
+        },
+        {
+          "seconds": 1.2491800999996485,
+          "rss": 307200000,
+          "private": 1812418560,
+          "threads": 54,
+          "host_available": 105948184576
+        },
+        {
+          "seconds": 1.3173182999889832,
+          "rss": 323620864,
+          "private": 1831473152,
+          "threads": 54,
+          "host_available": 105919332352
+        },
+        {
+          "seconds": 1.3845876999985194,
+          "rss": 309723136,
+          "private": 1815130112,
+          "threads": 54,
+          "host_available": 105929588736
+        },
+        {
+          "seconds": 1.4484639000002062,
+          "rss": 314966016,
+          "private": 1820184576,
+          "threads": 54,
+          "host_available": 105932374016
+        },
+        {
+          "seconds": 1.520101899994188,
+          "rss": 329691136,
+          "private": 1835876352,
+          "threads": 54,
+          "host_available": 105849872384
+        },
+        {
+          "seconds": 1.5768067999888444,
+          "rss": 316350464,
+          "private": 1822687232,
+          "threads": 54,
+          "host_available": 105864232960
+        },
+        {
+          "seconds": 1.6370107999973698,
+          "rss": 337117184,
+          "private": 1855684608,
+          "threads": 54,
+          "host_available": 105975857152
+        },
+        {
+          "seconds": 1.7058598000003258,
+          "rss": 327487488,
+          "private": 1849446400,
+          "threads": 54,
+          "host_available": 106037809152
+        },
+        {
+          "seconds": 1.7720659999904456,
+          "rss": 322904064,
+          "private": 1829167104,
+          "threads": 54,
+          "host_available": 106046500864
+        },
+        {
+          "seconds": 1.8402692999952706,
+          "rss": 316280832,
+          "private": 1821655040,
+          "threads": 54,
+          "host_available": 106043179008
+        },
+        {
+          "seconds": 1.898839899993618,
+          "rss": 354226176,
+          "private": 1861447680,
+          "threads": 54,
+          "host_available": 105992900608
+        },
+        {
+          "seconds": 1.9720808999991277,
+          "rss": 334733312,
+          "private": 1855320064,
+          "threads": 54,
+          "host_available": 105999069184
+        },
+        {
+          "seconds": 2.033602700001211,
+          "rss": 333230080,
+          "private": 1839099904,
+          "threads": 54,
+          "host_available": 106006921216
+        },
+        {
+          "seconds": 2.102591199989547,
+          "rss": 337420288,
+          "private": 1843945472,
+          "threads": 54,
+          "host_available": 106016960512
+        },
+        {
+          "seconds": 2.1696702999906847,
+          "rss": 358965248,
+          "private": 1871708160,
+          "threads": 54,
+          "host_available": 105989021696
+        },
+        {
+          "seconds": 2.2284835999889765,
+          "rss": 339664896,
+          "private": 1846386688,
+          "threads": 54,
+          "host_available": 106010349568
+        },
+        {
+          "seconds": 2.2882648999948287,
+          "rss": 342020096,
+          "private": 1848508416,
+          "threads": 54,
+          "host_available": 106006597632
+        },
+        {
+          "seconds": 2.3535033999942243,
+          "rss": 389038080,
+          "private": 1896701952,
+          "threads": 54,
+          "host_available": 105960607744
+        },
+        {
+          "seconds": 2.4195954999886453,
+          "rss": 351993856,
+          "private": 1872887808,
+          "threads": 54,
+          "host_available": 105992982528
+        },
+        {
+          "seconds": 2.4876956999942195,
+          "rss": 349835264,
+          "private": 1855922176,
+          "threads": 54,
+          "host_available": 105994489856
+        },
+        {
+          "seconds": 2.5542221999930916,
+          "rss": 353533952,
+          "private": 1859366912,
+          "threads": 54,
+          "host_available": 105983897600
+        },
+        {
+          "seconds": 2.6142759999929694,
+          "rss": 362385408,
+          "private": 1883463680,
+          "threads": 54,
+          "host_available": 105966809088
+        },
+        {
+          "seconds": 2.673303899995517,
+          "rss": 355344384,
+          "private": 1860599808,
+          "threads": 54,
+          "host_available": 105967624192
+        },
+        {
+          "seconds": 2.735789400001522,
+          "rss": 385449984,
+          "private": 1898418176,
+          "threads": 54,
+          "host_available": 105934987264
+        },
+        {
+          "seconds": 2.8057123999897158,
+          "rss": 368046080,
+          "private": 1885855744,
+          "threads": 54,
+          "host_available": 105952096256
+        },
+        {
+          "seconds": 2.8712241999892285,
+          "rss": 361320448,
+          "private": 1866858496,
+          "threads": 54,
+          "host_available": 105959636992
+        },
+        {
+          "seconds": 2.936246500001289,
+          "rss": 360648704,
+          "private": 1866059776,
+          "threads": 54,
+          "host_available": 105956245504
+        },
+        {
+          "seconds": 3.0040842999878805,
+          "rss": 365387776,
+          "private": 1871360000,
+          "threads": 54,
+          "host_available": 105949085696
+        },
+        {
+          "seconds": 3.0728295000008075,
+          "rss": 401477632,
+          "private": 1919541248,
+          "threads": 54,
+          "host_available": 105904287744
+        },
+        {
+          "seconds": 3.1369392999913543,
+          "rss": 376053760,
+          "private": 1895718912,
+          "threads": 54,
+          "host_available": 105937874944
+        },
+        {
+          "seconds": 3.205417299992405,
+          "rss": 375607296,
+          "private": 1881624576,
+          "threads": 54,
+          "host_available": 105937494016
+        },
+        {
+          "seconds": 3.270865099999355,
+          "rss": 374542336,
+          "private": 1880297472,
+          "threads": 54,
+          "host_available": 105933103104
+        },
+        {
+          "seconds": 3.3377750999934506,
+          "rss": 389304320,
+          "private": 1897594880,
+          "threads": 54,
+          "host_available": 105920122880
+        },
+        {
+          "seconds": 3.404070499993395,
+          "rss": 395616256,
+          "private": 1907658752,
+          "threads": 54,
+          "host_available": 105923489792
+        },
+        {
+          "seconds": 3.4717240999889327,
+          "rss": 384851968,
+          "private": 1890779136,
+          "threads": 54,
+          "host_available": 105934487552
+        },
+        {
+          "seconds": 3.5402027999953134,
+          "rss": 384937984,
+          "private": 1890508800,
+          "threads": 54,
+          "host_available": 105931583488
+        },
+        {
+          "seconds": 3.6029886999895098,
+          "rss": 391716864,
+          "private": 1896808448,
+          "threads": 54,
+          "host_available": 105927729152
+        },
+        {
+          "seconds": 3.6719288999884157,
+          "rss": 415113216,
+          "private": 1933385728,
+          "threads": 54,
+          "host_available": 105898348544
+        },
+        {
+          "seconds": 3.7418877000018256,
+          "rss": 386715648,
+          "private": 2013368320,
+          "threads": 54,
+          "host_available": 105906622464
+        },
+        {
+          "seconds": 3.805972899994231,
+          "rss": 403320832,
+          "private": 1905991680,
+          "threads": 54,
+          "host_available": 105921261568
+        },
+        {
+          "seconds": 3.87180319998879,
+          "rss": 391294976,
+          "private": 1891840000,
+          "threads": 54,
+          "host_available": 105931595776
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-fci5/meteosat12/FULLDISK/Channel02/20260906T120000Z/8/128/124.png",
+        "bytes": 87341,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "1fd13965cb344e5ef64008a6e8a9c75f74bbff65edaba30e3af6ab29d084745c",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    }
+  ],
+  "logical_cpus": 32,
+  "host_memory_bytes": 137107320832,
+  "limitations": [
+    "No browser/OBS or concurrent request test; ambient desktop load was not controlled.",
+    "50 ms process RSS/private sampling can miss transient peaks; no GPU residency or paging telemetry.",
+    "Process CPU includes sampler; startup/import time excluded from per-state measurements.",
+    "Fresh process does not mean cold operating-system file cache.",
+    "RTMA warm state retains parsed datasets; lazy field arrays can still decode on access."
+  ]
+}

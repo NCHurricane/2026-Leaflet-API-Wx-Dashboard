@@ -1,0 +1,1354 @@
+{
+  "case": "rtma-winds",
+  "iteration": 1,
+  "settings": {
+    "SATELLITE_V2_AHI_MAX_GRID": 10848,
+    "SATELLITE_V2_AMI_MAX_GRID": 10848,
+    "SATELLITE_V2_FCI_MAX_GRID": 10848,
+    "SATELLITE_V2_GOES_FULLDISK_MAX_GRID": 10848,
+    "SATELLITE_V2_LIVE_TILE_RENDER_WORKERS": 10,
+    "SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS": 2,
+    "SATELLITE_V2_NETCDF_CACHE_SIZE": 16,
+    "SATELLITE_V2_RAPID_WORKER_FRAMES": 12,
+    "SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS": 225,
+    "SATELLITE_V2_RAPID_WORKER_HOURS": 2,
+    "SATELLITE_V2_RAPID_WORKER_MAX_FRAMES": 120,
+    "SATELLITE_V2_RAPID_WORKER_TILE_BUFFER": 1,
+    "SATELLITE_V2_RAPID_WORKER_TILE_WORKERS": 2,
+    "SATELLITE_V2_RENDERER_CACHE_SIZE": 8,
+    "SATELLITE_V2_SOURCE_RASTER_CACHE_MB": 4096,
+    "radar_webgl": {
+      "enabled": true,
+      "animation_enabled": true,
+      "product": "L2_REF",
+      "products": [
+        "L2_REF"
+      ],
+      "animation_products": [
+        "L2_REF"
+      ],
+      "artifact_version": 2,
+      "prefetch_zoom": 10,
+      "activate_zoom": 11,
+      "release_grace_ms": 1500,
+      "texture_budget": 4,
+      "min_forward_textures": 2,
+      "max_concurrent_loads": 2
+    },
+    "radar_figure_size_inches": 12,
+    "radar_dpi": 200
+  },
+  "rows": [
+    {
+      "state": "source_local_fresh_process_no_artifact",
+      "wall_seconds": 3.605896200009738,
+      "cpu_seconds": 9.515625,
+      "rss_peak_sampled": 1565425664,
+      "private_peak_sampled": 3072172032,
+      "rss_after": 543277056,
+      "io_delta": {
+        "read_count": 3811,
+        "write_count": 214,
+        "read_bytes": 1294657049,
+        "write_bytes": 7010721,
+        "other_count": 8949,
+        "other_bytes": 1772734
+      },
+      "samples": [
+        {
+          "seconds": 0.00031450000824406743,
+          "rss": 202194944,
+          "private": 1714937856,
+          "threads": 54,
+          "host_available": 106521550848
+        },
+        {
+          "seconds": 0.07086180000624154,
+          "rss": 222691328,
+          "private": 1732657152,
+          "threads": 54,
+          "host_available": 106498887680
+        },
+        {
+          "seconds": 0.13677820000157226,
+          "rss": 217989120,
+          "private": 1727873024,
+          "threads": 54,
+          "host_available": 106503757824
+        },
+        {
+          "seconds": 0.226413100011996,
+          "rss": 226115584,
+          "private": 1732431872,
+          "threads": 54,
+          "host_available": 106497990656
+        },
+        {
+          "seconds": 0.28574140000273474,
+          "rss": 240173056,
+          "private": 1746644992,
+          "threads": 54,
+          "host_available": 106483003392
+        },
+        {
+          "seconds": 0.35524300001270603,
+          "rss": 243073024,
+          "private": 1748070400,
+          "threads": 54,
+          "host_available": 106480488448
+        },
+        {
+          "seconds": 0.4217349000100512,
+          "rss": 271994880,
+          "private": 1776885760,
+          "threads": 54,
+          "host_available": 106452672512
+        },
+        {
+          "seconds": 0.4839161999989301,
+          "rss": 304967680,
+          "private": 1875869696,
+          "threads": 54,
+          "host_available": 106417889280
+        },
+        {
+          "seconds": 0.540829700010363,
+          "rss": 338620416,
+          "private": 1876824064,
+          "threads": 54,
+          "host_available": 106385215488
+        },
+        {
+          "seconds": 0.604501200010418,
+          "rss": 325103616,
+          "private": 1906847744,
+          "threads": 54,
+          "host_available": 106400342016
+        },
+        {
+          "seconds": 0.6710061000048881,
+          "rss": 365342720,
+          "private": 1906847744,
+          "threads": 54,
+          "host_available": 106361270272
+        },
+        {
+          "seconds": 0.7539842000114731,
+          "rss": 327979008,
+          "private": 1832873984,
+          "threads": 54,
+          "host_available": 106398904320
+        },
+        {
+          "seconds": 0.8194906999997329,
+          "rss": 341319680,
+          "private": 1847902208,
+          "threads": 54,
+          "host_available": 106385395712
+        },
+        {
+          "seconds": 0.8875885000015842,
+          "rss": 339886080,
+          "private": 1847451648,
+          "threads": 54,
+          "host_available": 106387267584
+        },
+        {
+          "seconds": 0.9539669000077993,
+          "rss": 343461888,
+          "private": 1848393728,
+          "threads": 54,
+          "host_available": 106381008896
+        },
+        {
+          "seconds": 1.0194189000030747,
+          "rss": 346288128,
+          "private": 1851211776,
+          "threads": 54,
+          "host_available": 106378620928
+        },
+        {
+          "seconds": 1.0860035000077914,
+          "rss": 346603520,
+          "private": 1851486208,
+          "threads": 54,
+          "host_available": 106378428416
+        },
+        {
+          "seconds": 1.1542832000122871,
+          "rss": 332615680,
+          "private": 1837416448,
+          "threads": 54,
+          "host_available": 106402787328
+        },
+        {
+          "seconds": 1.221323100005975,
+          "rss": 348938240,
+          "private": 1859010560,
+          "threads": 54,
+          "host_available": 106386767872
+        },
+        {
+          "seconds": 1.2885390000010375,
+          "rss": 341327872,
+          "private": 1852440576,
+          "threads": 54,
+          "host_available": 106387083264
+        },
+        {
+          "seconds": 1.3502833000093233,
+          "rss": 339230720,
+          "private": 1843990528,
+          "threads": 54,
+          "host_available": 106394411008
+        },
+        {
+          "seconds": 1.406562300006044,
+          "rss": 343924736,
+          "private": 1848684544,
+          "threads": 54,
+          "host_available": 106390347776
+        },
+        {
+          "seconds": 1.4710347000072943,
+          "rss": 349478912,
+          "private": 1856192512,
+          "threads": 54,
+          "host_available": 106388795392
+        },
+        {
+          "seconds": 1.5366813000000548,
+          "rss": 347914240,
+          "private": 1860882432,
+          "threads": 54,
+          "host_available": 106385313792
+        },
+        {
+          "seconds": 1.595032600002014,
+          "rss": 394158080,
+          "private": 1901207552,
+          "threads": 54,
+          "host_available": 106337894400
+        },
+        {
+          "seconds": 1.6546856000059051,
+          "rss": 489136128,
+          "private": 2021289984,
+          "threads": 54,
+          "host_available": 106222845952
+        },
+        {
+          "seconds": 1.7198514000046998,
+          "rss": 485498880,
+          "private": 1991270400,
+          "threads": 54,
+          "host_available": 106251763712
+        },
+        {
+          "seconds": 1.785449900009553,
+          "rss": 458924032,
+          "private": 1965010944,
+          "threads": 54,
+          "host_available": 106276962304
+        },
+        {
+          "seconds": 1.8529861000133678,
+          "rss": 575295488,
+          "private": 2081349632,
+          "threads": 54,
+          "host_available": 106164760576
+        },
+        {
+          "seconds": 1.920036399998935,
+          "rss": 611278848,
+          "private": 2145144832,
+          "threads": 54,
+          "host_available": 106105970688
+        },
+        {
+          "seconds": 1.9881059000035748,
+          "rss": 611360768,
+          "private": 2142789632,
+          "threads": 54,
+          "host_available": 106103156736
+        },
+        {
+          "seconds": 2.054068500001449,
+          "rss": 777031680,
+          "private": 2306662400,
+          "threads": 54,
+          "host_available": 105944174592
+        },
+        {
+          "seconds": 2.1197744000091916,
+          "rss": 801259520,
+          "private": 2306662400,
+          "threads": 54,
+          "host_available": 105944002560
+        },
+        {
+          "seconds": 2.177084900002228,
+          "rss": 826900480,
+          "private": 2332315648,
+          "threads": 54,
+          "host_available": 105917898752
+        },
+        {
+          "seconds": 2.2365729000011925,
+          "rss": 833671168,
+          "private": 2343325696,
+          "threads": 54,
+          "host_available": 105911742464
+        },
+        {
+          "seconds": 2.303720500000054,
+          "rss": 839667712,
+          "private": 2352783360,
+          "threads": 54,
+          "host_available": 105906106368
+        },
+        {
+          "seconds": 2.369656599999871,
+          "rss": 845697024,
+          "private": 2352783360,
+          "threads": 54,
+          "host_available": 105899884544
+        },
+        {
+          "seconds": 2.435807100002421,
+          "rss": 850378752,
+          "private": 2371694592,
+          "threads": 54,
+          "host_available": 105895165952
+        },
+        {
+          "seconds": 2.5034375000104774,
+          "rss": 856276992,
+          "private": 2371694592,
+          "threads": 54,
+          "host_available": 105889861632
+        },
+        {
+          "seconds": 2.5696641000104137,
+          "rss": 862502912,
+          "private": 2371694592,
+          "threads": 54,
+          "host_available": 105885745152
+        },
+        {
+          "seconds": 2.637734800009639,
+          "rss": 933089280,
+          "private": 2662154240,
+          "threads": 70,
+          "host_available": 105813557248
+        },
+        {
+          "seconds": 2.7072060000064084,
+          "rss": 1011331072,
+          "private": 2663628800,
+          "threads": 86,
+          "host_available": 105727516672
+        },
+        {
+          "seconds": 2.772350200000801,
+          "rss": 1093230592,
+          "private": 2664525824,
+          "threads": 84,
+          "host_available": 105644421120
+        },
+        {
+          "seconds": 2.839196200002334,
+          "rss": 1135755264,
+          "private": 2663657472,
+          "threads": 67,
+          "host_available": 105608970240
+        },
+        {
+          "seconds": 2.9027590000041528,
+          "rss": 1152258048,
+          "private": 2663170048,
+          "threads": 57,
+          "host_available": 105596121088
+        },
+        {
+          "seconds": 2.9612938000063878,
+          "rss": 1155489792,
+          "private": 2663071744,
+          "threads": 55,
+          "host_available": 105593303040
+        },
+        {
+          "seconds": 3.0213447000132874,
+          "rss": 1167728640,
+          "private": 2778882048,
+          "threads": 54,
+          "host_available": 105555685376
+        },
+        {
+          "seconds": 3.0869994000095176,
+          "rss": 1498222592,
+          "private": 3014234112,
+          "threads": 54,
+          "host_available": 105236078592
+        },
+        {
+          "seconds": 3.1593936999997823,
+          "rss": 1565425664,
+          "private": 3072172032,
+          "threads": 54,
+          "host_available": 105178664960
+        },
+        {
+          "seconds": 3.2209934999991674,
+          "rss": 608579584,
+          "private": 2113413120,
+          "threads": 54,
+          "host_available": 106128531456
+        },
+        {
+          "seconds": 3.287292500011972,
+          "rss": 617668608,
+          "private": 2118754304,
+          "threads": 54,
+          "host_available": 106123845632
+        },
+        {
+          "seconds": 3.354762600007234,
+          "rss": 640471040,
+          "private": 2145038336,
+          "threads": 54,
+          "host_available": 106100256768
+        },
+        {
+          "seconds": 3.419990599999437,
+          "rss": 734412800,
+          "private": 2229915648,
+          "threads": 54,
+          "host_available": 106012909568
+        },
+        {
+          "seconds": 3.484775000004447,
+          "rss": 775315456,
+          "private": 2281463808,
+          "threads": 54,
+          "host_available": 105957240832
+        },
+        {
+          "seconds": 3.5513465000112774,
+          "rss": 772194304,
+          "private": 2267365376,
+          "threads": 54,
+          "host_available": 105966911488
+        }
+      ],
+      "result": {
+        "stages_seconds": {
+          "_extract_dataset": 1.88961479999125,
+          "_crop_grid": 0.07320900000922848,
+          "_warp_to_latlon_grid": 1.2322990999964532,
+          "warp_array_to_mercator": 0.21210059999430086
+        },
+        "bounds": [
+          -137.81436435308635,
+          -59.52210760445449,
+          19.206258169129253,
+          56.031952632622136
+        ],
+        "metadata": {
+          "full_name": "Wind Speed",
+          "units": "mph",
+          "vmin": 0,
+          "vmax": 80,
+          "legend": {
+            "kind": "scale",
+            "title": "Wind Speed",
+            "units": "mph",
+            "display_units": "mph",
+            "vmin": 0,
+            "vmax": 80,
+            "anchors": [
+              {
+                "value": 0.0,
+                "label": "0",
+                "color": "#b0d4f0"
+              },
+              {
+                "value": 10.0,
+                "label": "10",
+                "color": "#70b0e0"
+              },
+              {
+                "value": 20.0,
+                "label": "20",
+                "color": "#3090d0"
+              },
+              {
+                "value": 30.0,
+                "label": "30",
+                "color": "#f5dd72"
+              },
+              {
+                "value": 45.0,
+                "label": "45",
+                "color": "#ff9d2e"
+              },
+              {
+                "value": 60.0,
+                "label": "60",
+                "color": "#ff4f4f"
+              },
+              {
+                "value": 90.0,
+                "label": "90",
+                "color": "#b91c1c"
+              }
+            ],
+            "cmap": "wx_wind_speed"
+          },
+          "timestamp": "2026-09-05T22:45:00+00:00"
+        }
+      },
+      "png": {
+        "path": "cache/rendering-audit-20260906/baseline/audit-rtma-winds-1/winds-0.png",
+        "bytes": 3644411,
+        "shape": [
+          2387,
+          1475
+        ],
+        "rgba_sha256": "5e9148657b719172cb6fedc5491529951790f4939884f413036475c0c3de6681",
+        "alpha_extrema": [
+          0,
+          255
+        ]
+      }
+    },
+    {
+      "state": "parsed_dataset_cache_warm_no_artifact",
+      "wall_seconds": 1.6569107999966945,
+      "cpu_seconds": 7.34375,
+      "rss_peak_sampled": 1595191296,
+      "private_peak_sampled": 3096387584,
+      "rss_after": 547332096,
+      "io_delta": {
+        "read_count": 9,
+        "write_count": 115,
+        "read_bytes": 5617636,
+        "write_bytes": 3645115,
+        "other_count": 80,
+        "other_bytes": 712
+      },
+      "samples": [
+        {
+          "seconds": 0.00030479999259114265,
+          "rss": 544407552,
+          "private": 2038927360,
+          "threads": 54,
+          "host_available": 106187223040
+        },
+        {
+          "seconds": 0.06879169998865109,
+          "rss": 660172800,
+          "private": 2166566912,
+          "threads": 54,
+          "host_available": 106067906560
+        },
+        {
+          "seconds": 0.13542719998804387,
+          "rss": 637546496,
+          "private": 2135244800,
+          "threads": 54,
+          "host_available": 106094579712
+        },
+        {
+          "seconds": 0.2030394999892451,
+          "rss": 807518208,
+          "private": 2302427136,
+          "threads": 54,
+          "host_available": 105933242368
+        },
+        {
+          "seconds": 0.26945559999148827,
+          "rss": 833126400,
+          "private": 2328084480,
+          "threads": 54,
+          "host_available": 105916182528
+        },
+        {
+          "seconds": 0.3343317999970168,
+          "rss": 858734592,
+          "private": 2353737728,
+          "threads": 54,
+          "host_available": 105890881536
+        },
+        {
+          "seconds": 0.4005701999994926,
+          "rss": 863719424,
+          "private": 2362236928,
+          "threads": 54,
+          "host_available": 105884479488
+        },
+        {
+          "seconds": 0.46781909999845084,
+          "rss": 869441536,
+          "private": 2371694592,
+          "threads": 54,
+          "host_available": 105878900736
+        },
+        {
+          "seconds": 0.5357135999947786,
+          "rss": 875470848,
+          "private": 2371694592,
+          "threads": 54,
+          "host_available": 105872576512
+        },
+        {
+          "seconds": 0.6025187999912305,
+          "rss": 880263168,
+          "private": 2390601728,
+          "threads": 54,
+          "host_available": 105867399168
+        },
+        {
+          "seconds": 0.6685146999952849,
+          "rss": 886095872,
+          "private": 2390601728,
+          "threads": 54,
+          "host_available": 105861697536
+        },
+        {
+          "seconds": 0.7357294999965234,
+          "rss": 892780544,
+          "private": 2390601728,
+          "threads": 54,
+          "host_available": 105855885312
+        },
+        {
+          "seconds": 0.8014121000014711,
+          "rss": 966983680,
+          "private": 2684788736,
+          "threads": 75,
+          "host_available": 105770364928
+        },
+        {
+          "seconds": 0.8721781999920495,
+          "rss": 1050857472,
+          "private": 2688811008,
+          "threads": 86,
+          "host_available": 105687105536
+        },
+        {
+          "seconds": 0.9366988999972818,
+          "rss": 1129353216,
+          "private": 2688565248,
+          "threads": 81,
+          "host_available": 105613795328
+        },
+        {
+          "seconds": 1.003934099993785,
+          "rss": 1163030528,
+          "private": 2687823872,
+          "threads": 66,
+          "host_available": 105564868608
+        },
+        {
+          "seconds": 1.0705398999998579,
+          "rss": 1182240768,
+          "private": 2687430656,
+          "threads": 58,
+          "host_available": 105550139392
+        },
+        {
+          "seconds": 1.1361802999890642,
+          "rss": 1185185792,
+          "private": 2687287296,
+          "threads": 55,
+          "host_available": 105542475776
+        },
+        {
+          "seconds": 1.2031898999994155,
+          "rss": 1200443392,
+          "private": 2803101696,
+          "threads": 54,
+          "host_available": 105502244864
+        },
+        {
+          "seconds": 1.2679260000004433,
+          "rss": 1527681024,
+          "private": 3038449664,
+          "threads": 54,
+          "host_available": 105201561600
+        },
+        {
+          "seconds": 1.3357544999889797,
+          "rss": 1595191296,
+          "private": 3096387584,
+          "threads": 54,
+          "host_available": 105134755840
+        },
+        {
+          "seconds": 1.408759599988116,
+          "rss": 638312448,
+          "private": 2137628672,
+          "threads": 54,
+          "host_available": 106091786240
+        },
+        {
+          "seconds": 1.4700226999993902,
+          "rss": 739057664,
+          "private": 2237894656,
+          "threads": 54,
+          "host_available": 105987895296
+        },
+        {
+          "seconds": 1.5368107999966014,
+          "rss": 767950848,
+          "private": 2288492544,
+          "threads": 54,
+          "host_available": 105937330176
+        },
+        {
+          "seconds": 1.6000818999891635,
+          "rss": 776273920,
+          "private": 2274385920,
+          "threads": 54,
+          "host_available": 105950179328
+        }
+      ],
+      "result": {
+        "stages_seconds": {
+          "_extract_dataset": 0.03646709999884479,
+          "_crop_grid": 0.07674829999450594,
+          "_warp_to_latlon_grid": 1.2725710999948205,
+          "warp_array_to_mercator": 0.08186109999951441
+        },
+        "bounds": [
+          -137.81436435308635,
+          -59.52210760445449,
+          19.206258169129253,
+          56.031952632622136
+        ],
+        "metadata": {
+          "full_name": "Wind Speed",
+          "units": "mph",
+          "vmin": 0,
+          "vmax": 80,
+          "legend": {
+            "kind": "scale",
+            "title": "Wind Speed",
+            "units": "mph",
+            "display_units": "mph",
+            "vmin": 0,
+            "vmax": 80,
+            "anchors": [
+              {
+                "value": 0.0,
+                "label": "0",
+                "color": "#b0d4f0"
+              },
+              {
+                "value": 10.0,
+                "label": "10",
+                "color": "#70b0e0"
+              },
+              {
+                "value": 20.0,
+                "label": "20",
+                "color": "#3090d0"
+              },
+              {
+                "value": 30.0,
+                "label": "30",
+                "color": "#f5dd72"
+              },
+              {
+                "value": 45.0,
+                "label": "45",
+                "color": "#ff9d2e"
+              },
+              {
+                "value": 60.0,
+                "label": "60",
+                "color": "#ff4f4f"
+              },
+              {
+                "value": 90.0,
+                "label": "90",
+                "color": "#b91c1c"
+              }
+            ],
+            "cmap": "wx_wind_speed"
+          },
+          "timestamp": "2026-09-05T22:45:00+00:00"
+        }
+      },
+      "png": {
+        "path": "cache/rendering-audit-20260906/baseline/audit-rtma-winds-1/winds-1.png",
+        "bytes": 3644411,
+        "shape": [
+          2387,
+          1475
+        ],
+        "rgba_sha256": "5e9148657b719172cb6fedc5491529951790f4939884f413036475c0c3de6681",
+        "alpha_extrema": [
+          0,
+          255
+        ]
+      }
+    },
+    {
+      "state": "parsed_dataset_cache_warm_no_artifact",
+      "wall_seconds": 1.6112312999903224,
+      "cpu_seconds": 7.625,
+      "rss_peak_sampled": 1595789312,
+      "private_peak_sampled": 3093798912,
+      "rss_after": 546951168,
+      "io_delta": {
+        "read_count": 9,
+        "write_count": 115,
+        "read_bytes": 5617636,
+        "write_bytes": 3645115,
+        "other_count": 80,
+        "other_bytes": 712
+      },
+      "samples": [
+        {
+          "seconds": 0.000331000002915971,
+          "rss": 546230272,
+          "private": 2041720832,
+          "threads": 54,
+          "host_available": 106177286144
+        },
+        {
+          "seconds": 0.055514299994683824,
+          "rss": 608120832,
+          "private": 2109317120,
+          "threads": 54,
+          "host_available": 106110812160
+        },
+        {
+          "seconds": 0.1196641999995336,
+          "rss": 740478976,
+          "private": 2237726720,
+          "threads": 54,
+          "host_available": 105969602560
+        },
+        {
+          "seconds": 0.18641219999699388,
+          "rss": 772227072,
+          "private": 2279559168,
+          "threads": 54,
+          "host_available": 105928609792
+        },
+        {
+          "seconds": 0.25390119999065064,
+          "rss": 835014656,
+          "private": 2330877952,
+          "threads": 54,
+          "host_available": 105876389888
+        },
+        {
+          "seconds": 0.31982289999723434,
+          "rss": 860622848,
+          "private": 2356535296,
+          "threads": 54,
+          "host_available": 105850654720
+        },
+        {
+          "seconds": 0.38558079999347683,
+          "rss": 866103296,
+          "private": 2366377984,
+          "threads": 54,
+          "host_available": 105844428800
+        },
+        {
+          "seconds": 0.4421175999887055,
+          "rss": 870821888,
+          "private": 2375835648,
+          "threads": 54,
+          "host_available": 105840250880
+        },
+        {
+          "seconds": 0.5029149999900255,
+          "rss": 876003328,
+          "private": 2375835648,
+          "threads": 54,
+          "host_available": 105835200512
+        },
+        {
+          "seconds": 0.5697151999920607,
+          "rss": 880689152,
+          "private": 2394746880,
+          "threads": 54,
+          "host_available": 105832521728
+        },
+        {
+          "seconds": 0.6386911000008695,
+          "rss": 887373824,
+          "private": 2394746880,
+          "threads": 54,
+          "host_available": 105826058240
+        },
+        {
+          "seconds": 0.7034255999897141,
+          "rss": 893337600,
+          "private": 2394746880,
+          "threads": 54,
+          "host_available": 105820155904
+        },
+        {
+          "seconds": 0.770288999992772,
+          "rss": 921886720,
+          "private": 2452680704,
+          "threads": 54,
+          "host_available": 105755729920
+        },
+        {
+          "seconds": 0.8398856999992859,
+          "rss": 1013436416,
+          "private": 2689658880,
+          "threads": 86,
+          "host_available": 105698975744
+        },
+        {
+          "seconds": 0.9090658999921288,
+          "rss": 1098821632,
+          "private": 2689658880,
+          "threads": 86,
+          "host_available": 105614340096
+        },
+        {
+          "seconds": 0.9721070999949006,
+          "rss": 1151447040,
+          "private": 2687332352,
+          "threads": 69,
+          "host_available": 105567285248
+        },
+        {
+          "seconds": 1.0361716999905184,
+          "rss": 1175592960,
+          "private": 2687184896,
+          "threads": 66,
+          "host_available": 105543110656
+        },
+        {
+          "seconds": 1.101860199996736,
+          "rss": 1184899072,
+          "private": 2684739584,
+          "threads": 56,
+          "host_available": 105536679936
+        },
+        {
+          "seconds": 1.1695015000004787,
+          "rss": 1190252544,
+          "private": 2800504832,
+          "threads": 54,
+          "host_available": 105514569728
+        },
+        {
+          "seconds": 1.2377730000007432,
+          "rss": 1511260160,
+          "private": 3035856896,
+          "threads": 54,
+          "host_available": 105191800832
+        },
+        {
+          "seconds": 1.302220199999283,
+          "rss": 1595789312,
+          "private": 3093798912,
+          "threads": 54,
+          "host_available": 105133195264
+        },
+        {
+          "seconds": 1.3696808999957284,
+          "rss": 638910464,
+          "private": 2135019520,
+          "threads": 54,
+          "host_available": 106093592576
+        },
+        {
+          "seconds": 1.437598299991805,
+          "rss": 739356672,
+          "private": 2235289600,
+          "threads": 54,
+          "host_available": 105991503872
+        },
+        {
+          "seconds": 1.5052580999908969,
+          "rss": 769863680,
+          "private": 2363482112,
+          "threads": 54,
+          "host_available": 105928089600
+        },
+        {
+          "seconds": 1.570633600000292,
+          "rss": 775839744,
+          "private": 2271768576,
+          "threads": 54,
+          "host_available": 105953976320
+        }
+      ],
+      "result": {
+        "stages_seconds": {
+          "_extract_dataset": 0.03655319999961648,
+          "_crop_grid": 0.08806219999678433,
+          "_warp_to_latlon_grid": 1.2243536000023596,
+          "warp_array_to_mercator": 0.08241329999873415
+        },
+        "bounds": [
+          -137.81436435308635,
+          -59.52210760445449,
+          19.206258169129253,
+          56.031952632622136
+        ],
+        "metadata": {
+          "full_name": "Wind Speed",
+          "units": "mph",
+          "vmin": 0,
+          "vmax": 80,
+          "legend": {
+            "kind": "scale",
+            "title": "Wind Speed",
+            "units": "mph",
+            "display_units": "mph",
+            "vmin": 0,
+            "vmax": 80,
+            "anchors": [
+              {
+                "value": 0.0,
+                "label": "0",
+                "color": "#b0d4f0"
+              },
+              {
+                "value": 10.0,
+                "label": "10",
+                "color": "#70b0e0"
+              },
+              {
+                "value": 20.0,
+                "label": "20",
+                "color": "#3090d0"
+              },
+              {
+                "value": 30.0,
+                "label": "30",
+                "color": "#f5dd72"
+              },
+              {
+                "value": 45.0,
+                "label": "45",
+                "color": "#ff9d2e"
+              },
+              {
+                "value": 60.0,
+                "label": "60",
+                "color": "#ff4f4f"
+              },
+              {
+                "value": 90.0,
+                "label": "90",
+                "color": "#b91c1c"
+              }
+            ],
+            "cmap": "wx_wind_speed"
+          },
+          "timestamp": "2026-09-05T22:45:00+00:00"
+        }
+      },
+      "png": {
+        "path": "cache/rendering-audit-20260906/baseline/audit-rtma-winds-1/winds-2.png",
+        "bytes": 3644411,
+        "shape": [
+          2387,
+          1475
+        ],
+        "rgba_sha256": "5e9148657b719172cb6fedc5491529951790f4939884f413036475c0c3de6681",
+        "alpha_extrema": [
+          0,
+          255
+        ]
+      }
+    },
+    {
+      "state": "parsed_dataset_cache_warm_no_artifact",
+      "wall_seconds": 1.6325995000079274,
+      "cpu_seconds": 7.53125,
+      "rss_peak_sampled": 1524105216,
+      "private_peak_sampled": 3037413376,
+      "rss_after": 547807232,
+      "io_delta": {
+        "read_count": 9,
+        "write_count": 115,
+        "read_bytes": 5617636,
+        "write_bytes": 3645115,
+        "other_count": 80,
+        "other_bytes": 712
+      },
+      "samples": [
+        {
+          "seconds": 0.00033260000054724514,
+          "rss": 545677312,
+          "private": 2040619008,
+          "threads": 54,
+          "host_available": 106181152768
+        },
+        {
+          "seconds": 0.06706310001027305,
+          "rss": 656347136,
+          "private": 2169438208,
+          "threads": 54,
+          "host_available": 106056499200
+        },
+        {
+          "seconds": 0.13642540000728332,
+          "rss": 639299584,
+          "private": 2138107904,
+          "threads": 54,
+          "host_available": 106083819520
+        },
+        {
+          "seconds": 0.20067270001163706,
+          "rss": 860823552,
+          "private": 2356629504,
+          "threads": 54,
+          "host_available": 105864429568
+        },
+        {
+          "seconds": 0.26756659999955446,
+          "rss": 835215360,
+          "private": 2330976256,
+          "threads": 54,
+          "host_available": 105889787904
+        },
+        {
+          "seconds": 0.3336864000011701,
+          "rss": 861069312,
+          "private": 2356887552,
+          "threads": 54,
+          "host_available": 105863491584
+        },
+        {
+          "seconds": 0.39904080000997055,
+          "rss": 867282944,
+          "private": 2366345216,
+          "threads": 54,
+          "host_available": 105857605632
+        },
+        {
+          "seconds": 0.46911330000148155,
+          "rss": 872947712,
+          "private": 2375802880,
+          "threads": 54,
+          "host_available": 105852362752
+        },
+        {
+          "seconds": 0.535042000003159,
+          "rss": 879108096,
+          "private": 2375802880,
+          "threads": 54,
+          "host_available": 105846079488
+        },
+        {
+          "seconds": 0.6032852000062121,
+          "rss": 884031488,
+          "private": 2394718208,
+          "threads": 54,
+          "host_available": 105841065984
+        },
+        {
+          "seconds": 0.6679686000134097,
+          "rss": 889536512,
+          "private": 2394718208,
+          "threads": 54,
+          "host_available": 105836412928
+        },
+        {
+          "seconds": 0.7342143999994732,
+          "rss": 896155648,
+          "private": 2394718208,
+          "threads": 54,
+          "host_available": 105830166528
+        },
+        {
+          "seconds": 0.8011540000006789,
+          "rss": 967143424,
+          "private": 2686771200,
+          "threads": 73,
+          "host_available": 105754963968
+        },
+        {
+          "seconds": 0.8722103000036441,
+          "rss": 1051222016,
+          "private": 2687533056,
+          "threads": 86,
+          "host_available": 105666142208
+        },
+        {
+          "seconds": 0.9337871000025189,
+          "rss": 1126739968,
+          "private": 2687385600,
+          "threads": 83,
+          "host_available": 105597087744
+        },
+        {
+          "seconds": 1.0019462000054773,
+          "rss": 1165946880,
+          "private": 2686595072,
+          "threads": 67,
+          "host_available": 105562427392
+        },
+        {
+          "seconds": 1.0684209000028204,
+          "rss": 1182715904,
+          "private": 2686394368,
+          "threads": 58,
+          "host_available": 105545220096
+        },
+        {
+          "seconds": 1.1328118000092218,
+          "rss": 1187672064,
+          "private": 2686246912,
+          "threads": 55,
+          "host_available": 105541525504
+        },
+        {
+          "seconds": 1.2013222000095993,
+          "rss": 1283608576,
+          "private": 2802061312,
+          "threads": 54,
+          "host_available": 105424936960
+        },
+        {
+          "seconds": 1.2675084000075003,
+          "rss": 1452548096,
+          "private": 2950516736,
+          "threads": 54,
+          "host_available": 105276547072
+        },
+        {
+          "seconds": 1.33487750000495,
+          "rss": 1524105216,
+          "private": 3037413376,
+          "threads": 54,
+          "host_available": 105189609472
+        },
+        {
+          "seconds": 1.393405900002108,
+          "rss": 653766656,
+          "private": 2154680320,
+          "threads": 54,
+          "host_available": 106070884352
+        },
+        {
+          "seconds": 1.453516200010199,
+          "rss": 740335616,
+          "private": 2236846080,
+          "threads": 54,
+          "host_available": 105990873088
+        },
+        {
+          "seconds": 1.5159542000037618,
+          "rss": 759484416,
+          "private": 2287435776,
+          "threads": 54,
+          "host_available": 105940049920
+        },
+        {
+          "seconds": 1.5855661000096006,
+          "rss": 776753152,
+          "private": 2273325056,
+          "threads": 54,
+          "host_available": 105953488896
+        }
+      ],
+      "result": {
+        "stages_seconds": {
+          "_extract_dataset": 0.036728899998706765,
+          "_crop_grid": 0.07755170000018552,
+          "_warp_to_latlon_grid": 1.2473796999984188,
+          "warp_array_to_mercator": 0.09131530000013299
+        },
+        "bounds": [
+          -137.81436435308635,
+          -59.52210760445449,
+          19.206258169129253,
+          56.031952632622136
+        ],
+        "metadata": {
+          "full_name": "Wind Speed",
+          "units": "mph",
+          "vmin": 0,
+          "vmax": 80,
+          "legend": {
+            "kind": "scale",
+            "title": "Wind Speed",
+            "units": "mph",
+            "display_units": "mph",
+            "vmin": 0,
+            "vmax": 80,
+            "anchors": [
+              {
+                "value": 0.0,
+                "label": "0",
+                "color": "#b0d4f0"
+              },
+              {
+                "value": 10.0,
+                "label": "10",
+                "color": "#70b0e0"
+              },
+              {
+                "value": 20.0,
+                "label": "20",
+                "color": "#3090d0"
+              },
+              {
+                "value": 30.0,
+                "label": "30",
+                "color": "#f5dd72"
+              },
+              {
+                "value": 45.0,
+                "label": "45",
+                "color": "#ff9d2e"
+              },
+              {
+                "value": 60.0,
+                "label": "60",
+                "color": "#ff4f4f"
+              },
+              {
+                "value": 90.0,
+                "label": "90",
+                "color": "#b91c1c"
+              }
+            ],
+            "cmap": "wx_wind_speed"
+          },
+          "timestamp": "2026-09-05T22:45:00+00:00"
+        }
+      },
+      "png": {
+        "path": "cache/rendering-audit-20260906/baseline/audit-rtma-winds-1/winds-3.png",
+        "bytes": 3644411,
+        "shape": [
+          2387,
+          1475
+        ],
+        "rgba_sha256": "5e9148657b719172cb6fedc5491529951790f4939884f413036475c0c3de6681",
+        "alpha_extrema": [
+          0,
+          255
+        ]
+      }
+    }
+  ],
+  "logical_cpus": 32,
+  "host_memory_bytes": 137107320832,
+  "limitations": [
+    "No browser/OBS or concurrent request test; ambient desktop load was not controlled.",
+    "50 ms process RSS/private sampling can miss transient peaks; no GPU residency or paging telemetry.",
+    "Process CPU includes sampler; startup/import time excluded from per-state measurements.",
+    "Fresh process does not mean cold operating-system file cache.",
+    "RTMA warm state retains parsed datasets; lazy field arrays can still decode on access."
+  ]
+}

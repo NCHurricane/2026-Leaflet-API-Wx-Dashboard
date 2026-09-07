@@ -1,0 +1,292 @@
+{
+  "category": "bounded_fixture_acquisition_not_renderer_or_production_transfer_benchmark",
+  "finished_utc": "2026-09-06T20:42:05.777049+00:00",
+  "frames": [
+    {
+      "advertised_product_size": 1024947.0,
+      "collection": "EO:EUM:DAT:0662",
+      "entry_count": 40,
+      "frame_key": "20260906T120000Z",
+      "product_id": "W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--x-x---x_C_EUMT_20260906120318_IDPFI_OPE_20260906120007_20260906120935_N__O_0073_0000",
+      "sat": "meteosat12",
+      "sector": "FULLDISK",
+      "source_date": "2026-09-06T12:00:07Z/2026-09-06T12:09:35Z",
+      "status": "download_complete_pending_native_validation"
+    },
+    {
+      "advertised_product_size": 53463,
+      "collection": "EO:EUM:DAT:MSG:MSG15-RSS",
+      "entry_count": 1,
+      "frame_key": "20260906T120000Z",
+      "product_id": "MSG4-SEVI-MSG15-0100-NA-20260906120417.174000000Z-NA",
+      "sat": "meteosat11",
+      "sector": "RSS",
+      "source_date": "2026-09-06T12:00:09.989Z/2026-09-06T12:04:17.174Z",
+      "status": "download_complete_pending_native_validation"
+    }
+  ],
+  "limits": {
+    "bytes": 2147483648,
+    "concurrency": 1,
+    "requests": 100,
+    "retries": 0,
+    "seconds": 600
+  },
+  "received_body_bytes": 1246146067,
+  "requests": 44,
+  "search_window": [
+    "2026-09-06T12:00:00Z",
+    "2026-09-06T12:30:00Z"
+  ],
+  "started_utc": "2026-09-06T20:41:12.655885+00:00",
+  "status": "complete",
+  "transfers": [
+    {
+      "bytes": 4746255,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120439_IDPFI_OPE_20260906120007_20260906120024_N__O_0073_0001.nc",
+      "sha256": "bd11b354f1a463a7b28a0b42d1ef6830ee732fbb5240b256329ee0b7a5fcc1a4",
+      "wall_seconds": 1.0940000000118744
+    },
+    {
+      "bytes": 12378987,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120447_IDPFI_OPE_20260906120007_20260906120031_N__O_0073_0002.nc",
+      "sha256": "1b996a7ac4269cf5d34a99fa6c96919fc6fce0ddd64954656e3a5b163bb1f813",
+      "wall_seconds": 0.8279999999940628
+    },
+    {
+      "bytes": 17250281,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120501_IDPFI_OPE_20260906120018_20260906120045_N__O_0073_0003.nc",
+      "sha256": "ef96e03624c5bd072068866d7e0c70b8e35e3c5dd87b88fbe5edbc4afb3ed44e",
+      "wall_seconds": 0.8910000000032596
+    },
+    {
+      "bytes": 20965914,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120511_IDPFI_OPE_20260906120024_20260906120100_N__O_0073_0004.nc",
+      "sha256": "4fdb785f13a2a06a781f8384f08e51f9a8bbae0f8415a6cafcf550a203325dd8",
+      "wall_seconds": 1.0
+    },
+    {
+      "bytes": 24192233,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120527_IDPFI_OPE_20260906120038_20260906120115_N__O_0073_0005.nc",
+      "sha256": "6363890427055d25f250985ef45b1ccf4354c7ad9e01e9f0032ae726e327d4b2",
+      "wall_seconds": 1.25
+    },
+    {
+      "bytes": 26371308,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120530_IDPFI_OPE_20260906120045_20260906120124_N__O_0073_0006.nc",
+      "sha256": "20766cdf15953dfad60583b0b4c7bd7702af03d003d31d7c0ede4520fa7584f4",
+      "wall_seconds": 0.9219999999913853
+    },
+    {
+      "bytes": 28368747,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120542_IDPFI_OPE_20260906120100_20260906120141_N__O_0073_0007.nc",
+      "sha256": "a01debbb482000ffb30f408d7f39fb4fe6f91a0562f879a35962084ae112f45f",
+      "wall_seconds": 1.2340000000112923
+    },
+    {
+      "bytes": 29288696,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120547_IDPFI_OPE_20260906120107_20260906120149_N__O_0073_0008.nc",
+      "sha256": "0bf341b67f1191e6104034c4f01a92f66469e2e06d6d6ce31c0c9b78f06212d8",
+      "wall_seconds": 1.812999999994645
+    },
+    {
+      "bytes": 30404635,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120553_IDPFI_OPE_20260906120124_20260906120207_N__O_0073_0009.nc",
+      "sha256": "76089b0a7fd37804479e4b510ce02901867a0f627dff6599c0b8317c40288ce6",
+      "wall_seconds": 1.4060000000026776
+    },
+    {
+      "bytes": 31943340,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120606_IDPFI_OPE_20260906120141_20260906120225_N__O_0073_0010.nc",
+      "sha256": "f7ec54b85712fc5804ec1ff466988ebddf3d565598b889b93e120245c5e0f318",
+      "wall_seconds": 1.1869999999908032
+    },
+    {
+      "bytes": 32171257,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120614_IDPFI_OPE_20260906120158_20260906120235_N__O_0073_0011.nc",
+      "sha256": "2e77793a11c261d6780473ce4c0906bfec5d030ba8e94e374c4af9b38337e056",
+      "wall_seconds": 1.360000000000582
+    },
+    {
+      "bytes": 32270477,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120623_IDPFI_OPE_20260906120207_20260906120254_N__O_0073_0012.nc",
+      "sha256": "afc7704a199f7829dfde0a1da525bd5d7d2f1ae74b89fe325bb5148a26856a54",
+      "wall_seconds": 1.375
+    },
+    {
+      "bytes": 33274820,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120624_IDPFI_OPE_20260906120225_20260906120303_N__O_0073_0013.nc",
+      "sha256": "c59c9f8be5d4486dd669bea6ec0ba0269f10de7c098cfc2f959d9b1a6e4f84cb",
+      "wall_seconds": 1.562000000005355
+    },
+    {
+      "bytes": 34286437,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120641_IDPFI_OPE_20260906120244_20260906120322_N__O_0073_0014.nc",
+      "sha256": "a0b378905a0957585b26859f1f70267fe5b756144c7f1dcc661c3f8de6a3132e",
+      "wall_seconds": 1.625
+    },
+    {
+      "bytes": 34665989,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120642_IDPFI_OPE_20260906120303_20260906120342_N__O_0073_0015.nc",
+      "sha256": "7b48adae3e354b2ebd519088fda7f1f9897c4ac5371f9e0375854b6a5b36f0f3",
+      "wall_seconds": 1.5779999999940628
+    },
+    {
+      "bytes": 35269497,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120656_IDPFI_OPE_20260906120332_20260906120411_N__O_0073_0017.nc",
+      "sha256": "ce5030bbaeea1e22c68af03af35b0e15cc042ad7a0106875e876ee58cd18c00e",
+      "wall_seconds": 1.625
+    },
+    {
+      "bytes": 35054917,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120657_IDPFI_OPE_20260906120322_20260906120352_N__O_0073_0016.nc",
+      "sha256": "dd8162f06bac5f494163c835bec0456a78d59428a7db22df39b8ee2607da6fa0",
+      "wall_seconds": 1.1720000000059372
+    },
+    {
+      "bytes": 35312797,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120702_IDPFI_OPE_20260906120352_20260906120421_N__O_0073_0018.nc",
+      "sha256": "b4badd334a5b6b763bc6f31b572c4250a19fd61c0f8bc5f4907372f5e89b0e49",
+      "wall_seconds": 3.0939999999973224
+    },
+    {
+      "bytes": 35484931,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120719_IDPFI_OPE_20260906120411_20260906120451_N__O_0073_0019.nc",
+      "sha256": "a91bd0cfd1bfe0bcac82a463ba690da90b0b5b941625a26788247cdf359367e9",
+      "wall_seconds": 1.9220000000059372
+    },
+    {
+      "bytes": 35943173,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120721_IDPFI_OPE_20260906120421_20260906120501_N__O_0073_0020.nc",
+      "sha256": "15af9d74487b17c96a2f5fab4a462aa77dfc3f39ee5990c710864c03deb8da9d",
+      "wall_seconds": 1.75
+    },
+    {
+      "bytes": 36740122,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120736_IDPFI_OPE_20260906120441_20260906120521_N__O_0073_0021.nc",
+      "sha256": "39f53677e2916f3c2de15e04d95cb56c546a031599387e519668c8db8cea656d",
+      "wall_seconds": 1.4219999999913853
+    },
+    {
+      "bytes": 37480461,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120748_IDPFI_OPE_20260906120501_20260906120540_N__O_0073_0022.nc",
+      "sha256": "ed6c987a7c7c11b1899e0f33639186fb409ef52e4884197cbe33bff7abdddc47",
+      "wall_seconds": 1.3430000000080327
+    },
+    {
+      "bytes": 38189062,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120814_IDPFI_OPE_20260906120511_20260906120600_N__O_0073_0023.nc",
+      "sha256": "0e4c78485a1446c988d9ea295f8628a4e349b8458f7080a9c4742a31a330dd99",
+      "wall_seconds": 1.235000000000582
+    },
+    {
+      "bytes": 37282962,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120827_IDPFI_OPE_20260906120530_20260906120619_N__O_0073_0024.nc",
+      "sha256": "b84819e2db49162c8dd7990791b7dfa8e8be7efe54371b772c38af652b5fa26f",
+      "wall_seconds": 1.5779999999940628
+    },
+    {
+      "bytes": 36383391,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120835_IDPFI_OPE_20260906120540_20260906120629_N__O_0073_0025.nc",
+      "sha256": "f4a5964713453534399887fab0850e0b81f1efd87ab47ee57a80b755377de3e9",
+      "wall_seconds": 1.0780000000086147
+    },
+    {
+      "bytes": 37693054,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120854_IDPFI_OPE_20260906120600_20260906120648_N__O_0073_0026.nc",
+      "sha256": "568fdd78e84fce6b789cf848aaff9aba0c5ba329435cd9dc4a6d433f3e6f9ab6",
+      "wall_seconds": 1.1409999999887077
+    },
+    {
+      "bytes": 35827307,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120901_IDPFI_OPE_20260906120619_20260906120707_N__O_0073_0027.nc",
+      "sha256": "5ae6ef31585c36caa9f7ae2a8562e70d9c99c95b67f18ca460aad2a3a5622578",
+      "wall_seconds": 1.2810000000026776
+    },
+    {
+      "bytes": 33937582,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120918_IDPFI_OPE_20260906120629_20260906120726_N__O_0073_0028.nc",
+      "sha256": "613c4b2d609a680ea9e296b1654a4ca12362a1220b75117fe3a6a135cbf293db",
+      "wall_seconds": 1.5
+    },
+    {
+      "bytes": 31234983,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120940_IDPFI_OPE_20260906120648_20260906120744_N__O_0073_0029.nc",
+      "sha256": "33eb0102149f22487aa29ee9a1df54299dc56b9e3a86b7f6eb0b952659ceb43c",
+      "wall_seconds": 1.0310000000026776
+    },
+    {
+      "bytes": 29637700,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906120958_IDPFI_OPE_20260906120707_20260906120801_N__O_0073_0030.nc",
+      "sha256": "3f53f4f7880192d9e8b1fc183a42c3d10b3f605f1269041461ec10b71187784a",
+      "wall_seconds": 0.9379999999946449
+    },
+    {
+      "bytes": 29040603,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906121001_IDPFI_OPE_20260906120716_20260906120810_N__O_0073_0031.nc",
+      "sha256": "015fa89361cf42691cd5aea9bbd1cd3acb64970f35bef322fe61081fa88ddc55",
+      "wall_seconds": 0.9220000000059372
+    },
+    {
+      "bytes": 27534496,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906121011_IDPFI_OPE_20260906120735_20260906120826_N__O_0073_0032.nc",
+      "sha256": "e3103ebb2e8ebc1916787b60256c0dce2e976e7b2508af0c54efac9f809f4e86",
+      "wall_seconds": 0.9060000000026776
+    },
+    {
+      "bytes": 27509357,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906121017_IDPFI_OPE_20260906120744_20260906120834_N__O_0073_0033.nc",
+      "sha256": "66b95be850ee5e64af1b26f1d6fa6528ca7cfe8ef9a0326328938e11b717d58d",
+      "wall_seconds": 0.7969999999913853
+    },
+    {
+      "bytes": 26074015,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906121041_IDPFI_OPE_20260906120801_20260906120850_N__O_0073_0034.nc",
+      "sha256": "7a3de4ac918dbed8826861d19d16793a96076e23d8b39b581c9149de7174ca16",
+      "wall_seconds": 0.9220000000059372
+    },
+    {
+      "bytes": 25484768,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906121042_IDPFI_OPE_20260906120810_20260906120904_N__O_0073_0035.nc",
+      "sha256": "af0d9d4ed7c915df9d3dc3875b93a52f75b7c725e34480cfbdd09f1ba2e97c8a",
+      "wall_seconds": 0.7810000000026776
+    },
+    {
+      "bytes": 24624632,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906121047_IDPFI_OPE_20260906120826_20260906120911_N__O_0073_0036.nc",
+      "sha256": "8d0642488fd0981fdec4badc3ef20e2140186843930b8077e503d48aa7826a10",
+      "wall_seconds": 0.9219999999913853
+    },
+    {
+      "bytes": 22327908,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906121050_IDPFI_OPE_20260906120842_20260906120924_N__O_0073_0037.nc",
+      "sha256": "2abc1d08ff1fe45d16b40bf04c85ea47126ffa5190bebfd01b5b736c86224795",
+      "wall_seconds": 0.9530000000086147
+    },
+    {
+      "bytes": 18433884,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906121055_IDPFI_OPE_20260906120857_20260906120929_N__O_0073_0038.nc",
+      "sha256": "3b711f1c8c40e69ba1255a73ddff46fc41ff602968c43d43622835edd04150f7",
+      "wall_seconds": 0.7810000000026776
+    },
+    {
+      "bytes": 13650685,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906121059_IDPFI_OPE_20260906120904_20260906120935_N__O_0073_0039.nc",
+      "sha256": "f3f3f8176b5e65ba60d27d7274225eb069536f3cd72a80cdb5b04cd88dd124ae",
+      "wall_seconds": 0.6409999999887077
+    },
+    {
+      "bytes": 5030929,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat12/FULLDISK/FCI/20260906T120000Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260906121059_IDPFI_OPE_20260906120917_20260906120935_N__O_0073_0040.nc",
+      "sha256": "1b1ac0911ffe8fcb46b590877b350d8ee73b1f7a840866ede6fe1a9c8ba72108",
+      "wall_seconds": 0.5780000000086147
+    },
+    {
+      "bytes": 102210123,
+      "path": "cache/rendering-audit-20260906/satellite/source/meteosat11/RSS/SEVIRI/20260906T120000Z/MSG4-SEVI-MSG15-0100-NA-20260906120417.174000000Z-NA.nat",
+      "sha256": "f836a367b2a76b7098eabaee3ed034412c3474ae7b213fa7390a2037ea3cf2c0",
+      "wall_seconds": 2.139999999999418
+    }
+  ],
+  "wall_seconds": 53.125
+}

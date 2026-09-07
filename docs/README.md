@@ -35,10 +35,38 @@ high-cost rendering-workflow audit of Satellite (especially Meteosat), Radar
 accepted baseline is committed as `e200f74` plus docs checkpoint `5096e74`.
 The expanded brief covers alternative architectures, source-resolution/zoom
 correctness, hardware-adaptive budgets, and Blink/Chromium, WebKit, and Gecko
-compatibility extending at least a couple of years. Section 4.8 of the superfile
-records the brief and proposed support criteria; the execution plan is next for
-review. Renderer changes remain deferred. Closed-gate references are in
-section 9.2. Other enhancement families and Greenfield remain deferred.
+compatibility extending at least a couple of years. The owner committed the
+bounded plan in `215729e` and approved audit execution. Section 4.8 records the
+limits, available hardware and separate isolated/OBS/browser/document workload
+conditions. The [first backend evidence](perf/2026-09-06-rendering-audit/findings.md)
+now records 48 samples across seven available timing cells and confirms M12
+visible-source decimation. Five timing cells still lack sources; browser/OBS
+and secondary-machine validation remain open.
+The owner subsequently authorized [M12 native-window integration](perf/2026-09-06-rendering-audit/fci-integration-findings.md).
+It is implemented in the working tree. The first owner smoke exposed a 2–3-minute
+z4 fill; the [first-frame correction](perf/2026-09-06-rendering-audit/fci-limb-correction.md)
+now removes repeated full-grid reads for limb/off-disk tiles. All 40 owner-frame
+tiles and ten prior native-quality cases match exactly. One local-source diagnostic
+pair fell from 57.0 to 20.5 seconds and sampled peak RSS from 1,502 to 571 MiB.
+The [restarted owner smoke](perf/2026-09-06-rendering-audit/owner-smoke-restart-0015.md)
+still took about 115 seconds to display fully. Retained browser/filesystem evidence
+separates 5.4 seconds of catalog work, 61.3 seconds on source acquisition and 19.5
+seconds after sources arrive; response completion does not explain the full
+stopwatch/paint interval. The [concrete first-use acquisition/scheduling
+proposal](dashboard-change-and-enhancement-superfile.md#m12-first-use-acquisition-and-scheduling--proposed-slice-for-review)
+is now ready for review in section 4.8. It recommends a bounded offline contract
+prototype with zero downloads/timing samples before runtime integration, and
+requires trustworthy cold geometry and complete native-window coverage before
+partial-source rendering. Owner acceptance remains open; this design does not
+authorize a new campaign or a change to the running dashboard.
+M12 uses `products-fci6`, adaptive byte-limited reuse and actual-window admission;
+Satellite's shared admission ceiling now responds to available host memory.
+The original 108 timing samples and the correction's separate two-run allocation
+are used. The correction gate passed 694 Python tests plus 42 subtests and scoped
+Ruff; the unchanged frontend retains its prior 54-test Node gate. Browser/OBS and
+secondary-machine acceptance are still pending.
+Further rendering slices follow the remaining evidence. Closed-gate references
+are in section 9.2. Other enhancement families and Greenfield remain deferred.
 
 ## Historical records
 

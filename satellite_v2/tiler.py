@@ -305,6 +305,12 @@ def _render_warm_zoom_canvas_task(task: dict[str, Any]) -> dict[str, int]:
             tile_size=tile_size,
         )
     except Exception as exc:
+        if sat_id == "meteosat12":
+            from satellite_v2.fci_windows import FciRenderCancelled
+
+            if isinstance(exc, FciRenderCancelled):
+                stats["cancelled"] = 1
+                return stats
         _LOGGER.warning(
             "Satellite canvas warm failed for %s/%s/%s/%s/z%s (%s)",
             sat_id,
@@ -436,13 +442,36 @@ def warm_frame_tiles_from_canvas(
         for zoom, coords in pending_coords.items()
     ]
 
+    if sat_key == "meteosat12":
+        # Keep native-window planning/output bounded and give live work a
+        # scheduling boundary between canvases. Reuse the process-local cache.
+        bounded_tasks = []
+        for task in tasks:
+            blocks: dict[tuple[int, int], list[tuple[int, int]]] = {}
+            for x, y in task["coords"]:
+                blocks.setdefault((x // 3, y // 3), []).append((x, y))
+            bounded_tasks.extend({**task, "coords": coords} for coords in blocks.values())
+        tasks = bounded_tasks
+        pool = None
+        render_workers = 1
+
     worker_count = max(1, min(int(render_workers or 1), len(tasks)))
     if pool is None and worker_count <= 1:
         for task in tasks:
             if not ready_for_more_work():
                 stats["cancelled"] = 1
                 break
-            _merge_tile_stats(stats, _render_warm_zoom_canvas_task(task))
+            if sat_key == "meteosat12":
+                from satellite_v2.fci_windows import render_context
+
+                with render_context(should_continue):
+                    part = _render_warm_zoom_canvas_task(task)
+            else:
+                part = _render_warm_zoom_canvas_task(task)
+            _merge_tile_stats(stats, part)
+            if part.get("cancelled"):
+                stats["cancelled"] = 1
+                break
         return stats
 
     def collect(executor: ProcessPoolExecutor) -> None:

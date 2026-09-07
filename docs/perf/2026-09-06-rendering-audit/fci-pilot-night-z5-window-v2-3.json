@@ -1,0 +1,643 @@
+{
+  "case": "night-z5",
+  "variant": "window-v2",
+  "iteration": 3,
+  "target": [
+    5,
+    15,
+    14,
+    17,
+    16
+  ],
+  "product": "NighttimeMicrophysics",
+  "rows": [
+    {
+      "wall_seconds": 3.2904464000021107,
+      "cpu_seconds": 2.984375,
+      "peak_rss_sampled": 340873216,
+      "peak_private_sampled": 1843064832,
+      "rss_after": 308469760,
+      "io_delta": {
+        "read_count": 103635,
+        "write_count": 51,
+        "read_bytes": 321176864,
+        "write_bytes": 1092784,
+        "other_count": 2573,
+        "other_bytes": 1246008
+      },
+      "samples": [
+        {
+          "rss": 217423872,
+          "private": 1724141568,
+          "host_available": 103551021056
+        },
+        {
+          "rss": 247783424,
+          "private": 1753640960,
+          "host_available": 103519727616
+        },
+        {
+          "rss": 242982912,
+          "private": 1747165184,
+          "host_available": 103522009088
+        },
+        {
+          "rss": 258535424,
+          "private": 1763557376,
+          "host_available": 103516405760
+        },
+        {
+          "rss": 258744320,
+          "private": 1763819520,
+          "host_available": 103515140096
+        },
+        {
+          "rss": 257589248,
+          "private": 1762131968,
+          "host_available": 103512813568
+        },
+        {
+          "rss": 254967808,
+          "private": 1760743424,
+          "host_available": 103508434944
+        },
+        {
+          "rss": 259895296,
+          "private": 1763856384,
+          "host_available": 103510056960
+        },
+        {
+          "rss": 259395584,
+          "private": 1764356096,
+          "host_available": 103508324352
+        },
+        {
+          "rss": 253558784,
+          "private": 1759387648,
+          "host_available": 103506255872
+        },
+        {
+          "rss": 260812800,
+          "private": 1765273600,
+          "host_available": 103505362944
+        },
+        {
+          "rss": 260513792,
+          "private": 1764564992,
+          "host_available": 103503900672
+        },
+        {
+          "rss": 258682880,
+          "private": 1763065856,
+          "host_available": 103501619200
+        },
+        {
+          "rss": 258248704,
+          "private": 1768730624,
+          "host_available": 103496818688
+        },
+        {
+          "rss": 261210112,
+          "private": 1766330368,
+          "host_available": 103529267200
+        },
+        {
+          "rss": 260202496,
+          "private": 1765105664,
+          "host_available": 103529193472
+        },
+        {
+          "rss": 256577536,
+          "private": 1763495936,
+          "host_available": 103527919616
+        },
+        {
+          "rss": 260481024,
+          "private": 1765277696,
+          "host_available": 103527686144
+        },
+        {
+          "rss": 260186112,
+          "private": 1765138432,
+          "host_available": 103527079936
+        },
+        {
+          "rss": 256184320,
+          "private": 1764208640,
+          "host_available": 103525945344
+        },
+        {
+          "rss": 261640192,
+          "private": 1766191104,
+          "host_available": 103525126144
+        },
+        {
+          "rss": 260943872,
+          "private": 1765646336,
+          "host_available": 103524249600
+        },
+        {
+          "rss": 258535424,
+          "private": 1764134912,
+          "host_available": 103523012608
+        },
+        {
+          "rss": 254173184,
+          "private": 1764589568,
+          "host_available": 103523794944
+        },
+        {
+          "rss": 261349376,
+          "private": 1766146048,
+          "host_available": 103521943552
+        },
+        {
+          "rss": 260898816,
+          "private": 1765007360,
+          "host_available": 103520178176
+        },
+        {
+          "rss": 255545344,
+          "private": 1762533376,
+          "host_available": 103519518720
+        },
+        {
+          "rss": 262533120,
+          "private": 1767354368,
+          "host_available": 103518515200
+        },
+        {
+          "rss": 261640192,
+          "private": 1766404096,
+          "host_available": 103517319168
+        },
+        {
+          "rss": 258891776,
+          "private": 1764806656,
+          "host_available": 103517048832
+        },
+        {
+          "rss": 258449408,
+          "private": 1766330368,
+          "host_available": 103514845184
+        },
+        {
+          "rss": 262008832,
+          "private": 1766735872,
+          "host_available": 103515885568
+        },
+        {
+          "rss": 261455872,
+          "private": 1766203392,
+          "host_available": 103514963968
+        },
+        {
+          "rss": 256929792,
+          "private": 1764208640,
+          "host_available": 103514124288
+        },
+        {
+          "rss": 262856704,
+          "private": 1767034880,
+          "host_available": 103513006080
+        },
+        {
+          "rss": 262692864,
+          "private": 1766920192,
+          "host_available": 103512080384
+        },
+        {
+          "rss": 262139904,
+          "private": 1766203392,
+          "host_available": 103510503424
+        },
+        {
+          "rss": 256479232,
+          "private": 1764560896,
+          "host_available": 103509815296
+        },
+        {
+          "rss": 263151616,
+          "private": 1766965248,
+          "host_available": 103509155840
+        },
+        {
+          "rss": 262549504,
+          "private": 1766637568,
+          "host_available": 103508148224
+        },
+        {
+          "rss": 258076672,
+          "private": 1764585472,
+          "host_available": 103507218432
+        },
+        {
+          "rss": 263745536,
+          "private": 1768497152,
+          "host_available": 103506268160
+        },
+        {
+          "rss": 262942720,
+          "private": 1767510016,
+          "host_available": 103505465344
+        },
+        {
+          "rss": 259584000,
+          "private": 1767256064,
+          "host_available": 103503978496
+        },
+        {
+          "rss": 264265728,
+          "private": 1768431616,
+          "host_available": 103504506880
+        },
+        {
+          "rss": 263430144,
+          "private": 1767972864,
+          "host_available": 103502589952
+        },
+        {
+          "rss": 261083136,
+          "private": 1766776832,
+          "host_available": 103501553664
+        },
+        {
+          "rss": 261767168,
+          "private": 1771966464,
+          "host_available": 103496949760
+        },
+        {
+          "rss": 263950336,
+          "private": 1768493056,
+          "host_available": 103499837440
+        },
+        {
+          "rss": 259198976,
+          "private": 1766907904,
+          "host_available": 103499157504
+        },
+        {
+          "rss": 264753152,
+          "private": 1768873984,
+          "host_available": 103498530816
+        },
+        {
+          "rss": 263553024,
+          "private": 1767215104,
+          "host_available": 103497404416
+        },
+        {
+          "rss": 256831488,
+          "private": 1764802560,
+          "host_available": 103497568256
+        },
+        {
+          "rss": 264466432,
+          "private": 1769533440,
+          "host_available": 103495647232
+        },
+        {
+          "rss": 263815168,
+          "private": 1769115648,
+          "host_available": 103494119424
+        },
+        {
+          "rss": 261054464,
+          "private": 1767702528,
+          "host_available": 103493263360
+        },
+        {
+          "rss": 264880128,
+          "private": 1769504768,
+          "host_available": 103492841472
+        },
+        {
+          "rss": 264052736,
+          "private": 1768542208,
+          "host_available": 103491604480
+        },
+        {
+          "rss": 264040448,
+          "private": 1769136128,
+          "host_available": 103523409920
+        },
+        {
+          "rss": 258547712,
+          "private": 1764220928,
+          "host_available": 103529541632
+        },
+        {
+          "rss": 265580544,
+          "private": 1769734144,
+          "host_available": 103528026112
+        },
+        {
+          "rss": 277356544,
+          "private": 1783681024,
+          "host_available": 103511920640
+        },
+        {
+          "rss": 277356544,
+          "private": 1783681024,
+          "host_available": 103511904256
+        },
+        {
+          "rss": 281411584,
+          "private": 1789353984,
+          "host_available": 103509078016
+        },
+        {
+          "rss": 314888192,
+          "private": 1819144192,
+          "host_available": 103487381504
+        },
+        {
+          "rss": 325402624,
+          "private": 1829556224,
+          "host_available": 103479431168
+        },
+        {
+          "rss": 316358656,
+          "private": 1820884992,
+          "host_available": 103490830336
+        },
+        {
+          "rss": 324833280,
+          "private": 1828564992,
+          "host_available": 103483961344
+        },
+        {
+          "rss": 315277312,
+          "private": 1819254784,
+          "host_available": 103489986560
+        },
+        {
+          "rss": 325681152,
+          "private": 1832943616,
+          "host_available": 103479369728
+        },
+        {
+          "rss": 316583936,
+          "private": 1821782016,
+          "host_available": 103486963712
+        },
+        {
+          "rss": 326647808,
+          "private": 1831243776,
+          "host_available": 103475535872
+        },
+        {
+          "rss": 316375040,
+          "private": 1820471296,
+          "host_available": 103485288448
+        },
+        {
+          "rss": 326225920,
+          "private": 1830146048,
+          "host_available": 103475429376
+        },
+        {
+          "rss": 316350464,
+          "private": 1821048832,
+          "host_available": 103483125760
+        },
+        {
+          "rss": 324853760,
+          "private": 1831014400,
+          "host_available": 103473889280
+        },
+        {
+          "rss": 316575744,
+          "private": 1821409280,
+          "host_available": 103481241600
+        },
+        {
+          "rss": 325636096,
+          "private": 1830772736,
+          "host_available": 103470583808
+        },
+        {
+          "rss": 316641280,
+          "private": 1822138368,
+          "host_available": 103478091776
+        },
+        {
+          "rss": 324939776,
+          "private": 1830461440,
+          "host_available": 103471951872
+        },
+        {
+          "rss": 316690432,
+          "private": 1821458432,
+          "host_available": 103476596736
+        },
+        {
+          "rss": 324112384,
+          "private": 1829437440,
+          "host_available": 103470837760
+        },
+        {
+          "rss": 312627200,
+          "private": 1817427968,
+          "host_available": 103475015680
+        },
+        {
+          "rss": 323293184,
+          "private": 1828642816,
+          "host_available": 103468040192
+        },
+        {
+          "rss": 311554048,
+          "private": 1816375296,
+          "host_available": 103473422336
+        },
+        {
+          "rss": 321642496,
+          "private": 1827135488,
+          "host_available": 103467876352
+        },
+        {
+          "rss": 308473856,
+          "private": 1814388736,
+          "host_available": 103470186496
+        },
+        {
+          "rss": 318390272,
+          "private": 1822605312,
+          "host_available": 103468429312
+        },
+        {
+          "rss": 327143424,
+          "private": 1831374848,
+          "host_available": 103461056512
+        },
+        {
+          "rss": 317878272,
+          "private": 1822859264,
+          "host_available": 103468527616
+        },
+        {
+          "rss": 328548352,
+          "private": 1833603072,
+          "host_available": 103458463744
+        },
+        {
+          "rss": 317562880,
+          "private": 1821765632,
+          "host_available": 103467008000
+        },
+        {
+          "rss": 324354048,
+          "private": 1828102144,
+          "host_available": 103460745216
+        },
+        {
+          "rss": 335826944,
+          "private": 1838075904,
+          "host_available": 103441534976
+        },
+        {
+          "rss": 336027648,
+          "private": 1838329856,
+          "host_available": 103441510400
+        },
+        {
+          "rss": 336027648,
+          "private": 1838329856,
+          "host_available": 103441510400
+        },
+        {
+          "rss": 325181440,
+          "private": 1827344384,
+          "host_available": 103452188672
+        },
+        {
+          "rss": 338509824,
+          "private": 1840697344,
+          "host_available": 103439409152
+        },
+        {
+          "rss": 338509824,
+          "private": 1840697344,
+          "host_available": 103439212544
+        },
+        {
+          "rss": 325406720,
+          "private": 1829711872,
+          "host_available": 103451742208
+        },
+        {
+          "rss": 340873216,
+          "private": 1843064832,
+          "host_available": 103437062144
+        },
+        {
+          "rss": 340873216,
+          "private": 1843064832,
+          "host_available": 103437066240
+        },
+        {
+          "rss": 324911104,
+          "private": 1826422784,
+          "host_available": 103482195968
+        },
+        {
+          "rss": 310808576,
+          "private": 1811861504,
+          "host_available": 103495639040
+        },
+        {
+          "rss": 310812672,
+          "private": 1811861504,
+          "host_available": 103498752000
+        },
+        {
+          "rss": 310816768,
+          "private": 1811865600,
+          "host_available": 103498428416
+        }
+      ],
+      "result": {
+        "loading_seconds": 2.8861345000041183,
+        "rendering_seconds": 0.32108449999941513,
+        "publication_seconds": 0.08116999999037944,
+        "rgba_sha256": "602635ed2e10e47339ef94af52c6a138380f13eaa0732670cb7bc299bca71813",
+        "publication_statuses": [
+          "rendered",
+          "rendered",
+          "rendered",
+          "rendered",
+          "rendered",
+          "rendered",
+          "rendered",
+          "rendered",
+          "rendered"
+        ],
+        "loader": {
+          "channels": [
+            {
+              "native_channel": "ir_38",
+              "window": [
+                2152,
+                1604,
+                3999,
+                3408
+              ],
+              "mode": "window",
+              "halo": 12,
+              "full_array_bytes": 124010496,
+              "selected_array_bytes": 13327952,
+              "cache_hit": false,
+              "strips_read": 14,
+              "decompressed_storage_bytes_estimate": 23385600
+            },
+            {
+              "native_channel": "ir_105",
+              "window": [
+                2152,
+                1604,
+                3999,
+                3408
+              ],
+              "mode": "window",
+              "halo": 12,
+              "full_array_bytes": 124010496,
+              "selected_array_bytes": 13327952,
+              "cache_hit": false,
+              "strips_read": 14,
+              "decompressed_storage_bytes_estimate": 23385600
+            },
+            {
+              "native_channel": "ir_123",
+              "window": [
+                2152,
+                1604,
+                3999,
+                3408
+              ],
+              "mode": "window",
+              "halo": 12,
+              "full_array_bytes": 124010496,
+              "selected_array_bytes": 13327952,
+              "cache_hit": false,
+              "strips_read": 14,
+              "decompressed_storage_bytes_estimate": 23385600
+            }
+          ],
+          "cache_bytes": 39983856,
+          "cache_limit": 67108864,
+          "plan_cache_hit": false,
+          "index_seconds": 1.8619251000054646
+        }
+      },
+      "state": "source_local_fresh_process"
+    }
+  ],
+  "scope": "full native source loading plus same 3x3 canvas and normal nine-tile publication",
+  "limitations": [
+    "Three repetitions are a pilot, not p95 or production acceptance.",
+    "20ms sampled memory can miss peaks; native library and process startup excluded from state wall time.",
+    "Warm tests only cover visible z8 and NighttimeMicrophysics z5; larger windows/fallbacks exceed the 64MiB prototype cache.",
+    "Cold means fresh process with local source, not cold OS file cache."
+  ]
+}

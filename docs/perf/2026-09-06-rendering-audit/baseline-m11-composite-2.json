@@ -1,0 +1,192 @@
+{
+  "case": "m11-composite",
+  "iteration": 2,
+  "settings": {
+    "SATELLITE_V2_AHI_MAX_GRID": 10848,
+    "SATELLITE_V2_AMI_MAX_GRID": 10848,
+    "SATELLITE_V2_FCI_MAX_GRID": 10848,
+    "SATELLITE_V2_GOES_FULLDISK_MAX_GRID": 10848,
+    "SATELLITE_V2_LIVE_TILE_RENDER_WORKERS": 10,
+    "SATELLITE_V2_METEOSAT_TILE_WARM_WORKERS": 2,
+    "SATELLITE_V2_NETCDF_CACHE_SIZE": 16,
+    "SATELLITE_V2_RAPID_WORKER_FRAMES": 12,
+    "SATELLITE_V2_RAPID_WORKER_FRESH_WINDOW_SECONDS": 225,
+    "SATELLITE_V2_RAPID_WORKER_HOURS": 2,
+    "SATELLITE_V2_RAPID_WORKER_MAX_FRAMES": 120,
+    "SATELLITE_V2_RAPID_WORKER_TILE_BUFFER": 1,
+    "SATELLITE_V2_RAPID_WORKER_TILE_WORKERS": 2,
+    "SATELLITE_V2_RENDERER_CACHE_SIZE": 8,
+    "SATELLITE_V2_SOURCE_RASTER_CACHE_MB": 4096,
+    "radar_webgl": {
+      "enabled": true,
+      "animation_enabled": true,
+      "product": "L2_REF",
+      "products": [
+        "L2_REF"
+      ],
+      "animation_products": [
+        "L2_REF"
+      ],
+      "artifact_version": 2,
+      "prefetch_zoom": 10,
+      "activate_zoom": 11,
+      "release_grace_ms": 1500,
+      "texture_budget": 4,
+      "min_forward_textures": 2,
+      "max_concurrent_loads": 2
+    },
+    "radar_figure_size_inches": 12,
+    "radar_dpi": 200,
+    "satellite_context": {
+      "sat_id": "meteosat11",
+      "sector": "RSS",
+      "product": "NighttimeMicrophysics",
+      "frame_key": "20260906T120000Z",
+      "z": 5,
+      "x": 16,
+      "y": 12,
+      "tiles": "3x3"
+    },
+    "satellite_native_timings": [
+      {
+        "cache_status": "miss",
+        "composite_ms": 22.196,
+        "download_ms": 0.132,
+        "encode_ms": 26.021,
+        "frame_key": "20260906T120000Z",
+        "iteration": 1,
+        "parse_ms{Channel07}": 88.307,
+        "parse_ms{Channel13}": 90.234,
+        "parse_ms{Channel15}": 93.749,
+        "pid": 44044,
+        "product": "NighttimeMicrophysics",
+        "run_id": "audit-m11-composite-2",
+        "sat_id": "meteosat11",
+        "scenario": "source_local_fresh_process_no_artifact",
+        "sector": "RSS",
+        "total_ms": 588.192,
+        "validate_ms": 74.2,
+        "warp_ms{Channel07}": 65.3,
+        "warp_ms{Channel13}": 55.577,
+        "warp_ms{Channel15}": 53.753,
+        "write_ms": 2.119,
+        "x": 16,
+        "y": 12,
+        "z": 5
+      }
+    ]
+  },
+  "rows": [
+    {
+      "state": "source_local_fresh_process_no_artifact",
+      "wall_seconds": 0.5966439999901922,
+      "cpu_seconds": 0.59375,
+      "rss_peak_sampled": 323272704,
+      "private_peak_sampled": 1842139136,
+      "rss_after": 292446208,
+      "io_delta": {
+        "read_count": 504,
+        "write_count": 56,
+        "read_bytes": 4178458,
+        "write_bytes": 1300042,
+        "other_count": 827,
+        "other_bytes": 34316
+      },
+      "samples": [
+        {
+          "seconds": 0.0003823000006377697,
+          "rss": 214228992,
+          "private": 1722060800,
+          "threads": 54,
+          "host_available": 106024972288
+        },
+        {
+          "seconds": 0.057532299993908964,
+          "rss": 286957568,
+          "private": 1800716288,
+          "threads": 54,
+          "host_available": 105946255360
+        },
+        {
+          "seconds": 0.11475069999869447,
+          "rss": 275734528,
+          "private": 1772425216,
+          "threads": 54,
+          "host_available": 105959882752
+        },
+        {
+          "seconds": 0.18729799998982344,
+          "rss": 257253376,
+          "private": 1764462592,
+          "threads": 54,
+          "host_available": 105962029056
+        },
+        {
+          "seconds": 0.2528059000032954,
+          "rss": 314441728,
+          "private": 1842139136,
+          "threads": 54,
+          "host_available": 105885646848
+        },
+        {
+          "seconds": 0.3211243999976432,
+          "rss": 317444096,
+          "private": 1819795456,
+          "threads": 54,
+          "host_available": 105900638208
+        },
+        {
+          "seconds": 0.38816339999902993,
+          "rss": 320905216,
+          "private": 1823129600,
+          "threads": 54,
+          "host_available": 105913917440
+        },
+        {
+          "seconds": 0.4543317999923602,
+          "rss": 323272704,
+          "private": 1825497088,
+          "threads": 54,
+          "host_available": 105912766464
+        },
+        {
+          "seconds": 0.5194462999934331,
+          "rss": 294789120,
+          "private": 1797705728,
+          "threads": 54,
+          "host_available": 105920581632
+        },
+        {
+          "seconds": 0.5863252999988617,
+          "rss": 294797312,
+          "private": 1797705728,
+          "threads": 54,
+          "host_available": 105874866176
+        }
+      ],
+      "result": null,
+      "png": {
+        "path": "cache/rendering-audit-20260906/satellite/tiles/products-v9/meteosat11/RSS/NighttimeMicrophysics/20260906T120000Z/5/16/12.png",
+        "bytes": 136579,
+        "shape": [
+          256,
+          256
+        ],
+        "rgba_sha256": "17a2dd7b14df61f00b4dd44711e2e6ef74bb9e64217d8b48110335bd08377523",
+        "alpha_extrema": [
+          255,
+          255
+        ]
+      }
+    }
+  ],
+  "logical_cpus": 32,
+  "host_memory_bytes": 137107320832,
+  "limitations": [
+    "No browser/OBS or concurrent request test; ambient desktop load was not controlled.",
+    "50 ms process RSS/private sampling can miss transient peaks; no GPU residency or paging telemetry.",
+    "Process CPU includes sampler; startup/import time excluded from per-state measurements.",
+    "Fresh process does not mean cold operating-system file cache.",
+    "RTMA warm state retains parsed datasets; lazy field arrays can still decode on access."
+  ]
+}

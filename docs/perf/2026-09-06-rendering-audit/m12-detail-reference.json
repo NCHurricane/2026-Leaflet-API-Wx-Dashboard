@@ -1,0 +1,614 @@
+{
+  "category": "quality_reference_not_equal_quality_performance_comparison",
+  "source_frame": {
+    "advertised_product_size": 1024947.0,
+    "collection": "EO:EUM:DAT:0662",
+    "entry_count": 40,
+    "frame_key": "20260906T120000Z",
+    "product_id": "W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--x-x---x_C_EUMT_20260906120318_IDPFI_OPE_20260906120007_20260906120935_N__O_0073_0000",
+    "sat": "meteosat12",
+    "sector": "FULLDISK",
+    "source_date": "2026-09-06T12:00:07Z/2026-09-06T12:09:35Z",
+    "status": "download_complete_pending_native_validation"
+  },
+  "baseline_control_center_hash_matches": true,
+  "variants": {
+    "current": {
+      "max_grid": 10848,
+      "shape": [
+        5568,
+        5568
+      ],
+      "retained_array_bytes": 124010496,
+      "source_transform": [
+        1999.9999994794362,
+        0.0,
+        -5567499.998550883,
+        0.0,
+        -1999.9999994794362,
+        5568499.998550618,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "canvases": {
+        "interior": {
+          "path": "cache/rendering-audit-20260906/m12-detail-reference/interior-current.png",
+          "z": 8,
+          "x": 128,
+          "y": 124,
+          "rgba_sha256": "70ddb9bc69675ca967283bb9c497075fb39cbc87e5e1fd2eedb92885fb196516"
+        },
+        "equatorial-chunk-boundary": {
+          "path": "cache/rendering-audit-20260906/m12-detail-reference/equatorial-chunk-boundary-current.png",
+          "z": 8,
+          "x": 128,
+          "y": 128,
+          "rgba_sha256": "0110a5d1089e416de8e9adbb4efca36398b8f730730d6aa6c5d12a621a081bb6"
+        },
+        "east-limb": {
+          "path": "cache/rendering-audit-20260906/m12-detail-reference/east-limb-current.png",
+          "z": 8,
+          "x": 184,
+          "y": 128,
+          "rgba_sha256": "fb96ddfa9d13d2fcd6b51c5f27df037a40b44571e1b2e08ab65acce23b073741"
+        }
+      }
+    },
+    "native": {
+      "max_grid": 11136,
+      "shape": [
+        11136,
+        11136
+      ],
+      "retained_array_bytes": 496041984,
+      "source_transform": [
+        999.9999997397181,
+        0.0,
+        -5567999.998550752,
+        0.0,
+        -999.9999997397181,
+        5567999.998550748,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "canvases": {
+        "interior": {
+          "path": "cache/rendering-audit-20260906/m12-detail-reference/interior-native.png",
+          "z": 8,
+          "x": 128,
+          "y": 124,
+          "rgba_sha256": "2e3607b4e5439265017d4a57f1022236e3336947d39f063b889a358eb258ba77"
+        },
+        "equatorial-chunk-boundary": {
+          "path": "cache/rendering-audit-20260906/m12-detail-reference/equatorial-chunk-boundary-native.png",
+          "z": 8,
+          "x": 128,
+          "y": 128,
+          "rgba_sha256": "9678685baebc96886e985c38086b480c5cef14f1b2e62985bb14d495846e576e"
+        },
+        "east-limb": {
+          "path": "cache/rendering-audit-20260906/m12-detail-reference/east-limb-native.png",
+          "z": 8,
+          "x": 184,
+          "y": 128,
+          "rgba_sha256": "7ab1c7029574dae394d91b2d45e823cf120eadad5c3b62a9ee92c1e867c6dda7"
+        }
+      }
+    }
+  },
+  "differences": {
+    "interior": {
+      "mutually_opaque_pixels": 589824,
+      "rgb_absolute_difference_mean": 2.2185601128472223,
+      "pixel_max_rgb_difference_p95": 8.0,
+      "pixel_max_rgb_difference_max": 44,
+      "fraction_mutually_opaque_pixels_difference_gt_1": 0.4316355387369792,
+      "fraction_mutually_opaque_pixels_difference_gt_8": 0.04664272732204861,
+      "alpha_mismatch_pixels": 0
+    },
+    "equatorial-chunk-boundary": {
+      "mutually_opaque_pixels": 589824,
+      "rgb_absolute_difference_mean": 1.5075954861111112,
+      "pixel_max_rgb_difference_p95": 6.0,
+      "pixel_max_rgb_difference_max": 39,
+      "fraction_mutually_opaque_pixels_difference_gt_1": 0.2915005154079861,
+      "fraction_mutually_opaque_pixels_difference_gt_8": 0.026019626193576388,
+      "alpha_mismatch_pixels": 0
+    },
+    "east-limb": {
+      "mutually_opaque_pixels": 296888,
+      "rgb_absolute_difference_mean": 0.4661589555657352,
+      "pixel_max_rgb_difference_p95": 2.0,
+      "pixel_max_rgb_difference_max": 15,
+      "fraction_mutually_opaque_pixels_difference_gt_1": 0.0745601034733637,
+      "fraction_mutually_opaque_pixels_difference_gt_8": 0.0005321872221174315,
+      "alpha_mismatch_pixels": 47697
+    }
+  },
+  "resources": [
+    {
+      "seconds": 0.11000000000058208,
+      "rss": 267321344,
+      "private": 1774292992,
+      "host_available": 105360920576
+    },
+    {
+      "seconds": 0.20299999999406282,
+      "rss": 272670720,
+      "private": 1779458048,
+      "host_available": 105348775936
+    },
+    {
+      "seconds": 0.3129999999946449,
+      "rss": 273031168,
+      "private": 1779421184,
+      "host_available": 105350500352
+    },
+    {
+      "seconds": 0.4220000000059372,
+      "rss": 293613568,
+      "private": 1803857920,
+      "host_available": 105332858880
+    },
+    {
+      "seconds": 0.5310000000026776,
+      "rss": 313044992,
+      "private": 1819484160,
+      "host_available": 105315037184
+    },
+    {
+      "seconds": 0.6410000000032596,
+      "rss": 283598848,
+      "private": 1789902848,
+      "host_available": 105338527744
+    },
+    {
+      "seconds": 0.7350000000005821,
+      "rss": 290463744,
+      "private": 1796964352,
+      "host_available": 105336967168
+    },
+    {
+      "seconds": 0.8439999999973224,
+      "rss": 299663360,
+      "private": 1818587136,
+      "host_available": 105327329280
+    },
+    {
+      "seconds": 0.9379999999946449,
+      "rss": 313982976,
+      "private": 1832374272,
+      "host_available": 105312985088
+    },
+    {
+      "seconds": 1.062999999994645,
+      "rss": 292343808,
+      "private": 1797705728,
+      "host_available": 105323343872
+    },
+    {
+      "seconds": 1.1720000000059372,
+      "rss": 307027968,
+      "private": 1813274624,
+      "host_available": 105318617088
+    },
+    {
+      "seconds": 1.2660000000032596,
+      "rss": 317059072,
+      "private": 1835905024,
+      "host_available": 105310027776
+    },
+    {
+      "seconds": 1.3910000000032596,
+      "rss": 323919872,
+      "private": 1830662144,
+      "host_available": 105315205120
+    },
+    {
+      "seconds": 1.485000000000582,
+      "rss": 313454592,
+      "private": 1819000832,
+      "host_available": 105318256640
+    },
+    {
+      "seconds": 1.610000000000582,
+      "rss": 327598080,
+      "private": 1849597952,
+      "host_available": 105311072256
+    },
+    {
+      "seconds": 1.7029999999940628,
+      "rss": 340283392,
+      "private": 1852350464,
+      "host_available": 105298075648
+    },
+    {
+      "seconds": 1.812999999994645,
+      "rss": 336662528,
+      "private": 1843179520,
+      "host_available": 105302605824
+    },
+    {
+      "seconds": 1.9220000000059372,
+      "rss": 335532032,
+      "private": 1841471488,
+      "host_available": 105301004288
+    },
+    {
+      "seconds": 2.0160000000032596,
+      "rss": 339337216,
+      "private": 1846353920,
+      "host_available": 105297231872
+    },
+    {
+      "seconds": 2.125,
+      "rss": 351924224,
+      "private": 1872441344,
+      "host_available": 105285472256
+    },
+    {
+      "seconds": 2.2189999999973224,
+      "rss": 379465728,
+      "private": 1886167040,
+      "host_available": 105257508864
+    },
+    {
+      "seconds": 2.327999999994063,
+      "rss": 360534016,
+      "private": 1867436032,
+      "host_available": 105272651776
+    },
+    {
+      "seconds": 2.422000000005937,
+      "rss": 352989184,
+      "private": 1859948544,
+      "host_available": 105273135104
+    },
+    {
+      "seconds": 2.547000000005937,
+      "rss": 360222720,
+      "private": 1866145792,
+      "host_available": 105269796864
+    },
+    {
+      "seconds": 2.6410000000032596,
+      "rss": 381980672,
+      "private": 1888825344,
+      "host_available": 105249050624
+    },
+    {
+      "seconds": 2.75,
+      "rss": 363728896,
+      "private": 1869115392,
+      "host_available": 105267810304
+    },
+    {
+      "seconds": 2.860000000000582,
+      "rss": 371920896,
+      "private": 1878073344,
+      "host_available": 105261912064
+    },
+    {
+      "seconds": 2.9689999999973224,
+      "rss": 395247616,
+      "private": 1913655296,
+      "host_available": 105239617536
+    },
+    {
+      "seconds": 3.077999999994063,
+      "rss": 377901056,
+      "private": 1883619328,
+      "host_available": 105250988032
+    },
+    {
+      "seconds": 3.187999999994645,
+      "rss": 390565888,
+      "private": 1912295424,
+      "host_available": 105242181632
+    },
+    {
+      "seconds": 3.297000000005937,
+      "rss": 435167232,
+      "private": 1941798912,
+      "host_available": 105198927872
+    },
+    {
+      "seconds": 3.3910000000032596,
+      "rss": 423862272,
+      "private": 2019700736,
+      "host_available": 105202814976
+    },
+    {
+      "seconds": 3.5,
+      "rss": 388640768,
+      "private": 1889415168,
+      "host_available": 105237889024
+    },
+    {
+      "seconds": 3.610000000000582,
+      "rss": 390471680,
+      "private": 1891270656,
+      "host_available": 105236094976
+    },
+    {
+      "seconds": 3.7189999999973224,
+      "rss": 517132288,
+      "private": 2018152448,
+      "host_available": 105113894912
+    },
+    {
+      "seconds": 3.827999999994063,
+      "rss": 517132288,
+      "private": 2018152448,
+      "host_available": 105113894912
+    },
+    {
+      "seconds": 3.937999999994645,
+      "rss": 264376320,
+      "private": 1764900864,
+      "host_available": 105357361152
+    },
+    {
+      "seconds": 4.0310000000026776,
+      "rss": 294354944,
+      "private": 1795059712,
+      "host_available": 105329876992
+    },
+    {
+      "seconds": 4.14100000000326,
+      "rss": 307519488,
+      "private": 1807937536,
+      "host_available": 105312129024
+    },
+    {
+      "seconds": 4.25,
+      "rss": 344797184,
+      "private": 1855717376,
+      "host_available": 105285574656
+    },
+    {
+      "seconds": 4.360000000000582,
+      "rss": 353288192,
+      "private": 1853927424,
+      "host_available": 105276674048
+    },
+    {
+      "seconds": 4.452999999994063,
+      "rss": 359743488,
+      "private": 1860464640,
+      "host_available": 105268887552
+    },
+    {
+      "seconds": 4.562999999994645,
+      "rss": 372490240,
+      "private": 1873149952,
+      "host_available": 105255714816
+    },
+    {
+      "seconds": 4.672000000005937,
+      "rss": 390258688,
+      "private": 1907912704,
+      "host_available": 105237676032
+    },
+    {
+      "seconds": 4.76600000000326,
+      "rss": 414609408,
+      "private": 1916108800,
+      "host_available": 105212542976
+    },
+    {
+      "seconds": 4.875,
+      "rss": 448073728,
+      "private": 1953382400,
+      "host_available": 105179869184
+    },
+    {
+      "seconds": 4.9689999999973224,
+      "rss": 428150784,
+      "private": 1928794112,
+      "host_available": 105189289984
+    },
+    {
+      "seconds": 5.0939999999973224,
+      "rss": 444416000,
+      "private": 1945444352,
+      "host_available": 105171038208
+    },
+    {
+      "seconds": 5.187999999994645,
+      "rss": 457322496,
+      "private": 1958215680,
+      "host_available": 105157742592
+    },
+    {
+      "seconds": 5.297000000005937,
+      "rss": 470056960,
+      "private": 1970716672,
+      "host_available": 105145389056
+    },
+    {
+      "seconds": 5.4060000000026776,
+      "rss": 487374848,
+      "private": 2002980864,
+      "host_available": 105127649280
+    },
+    {
+      "seconds": 5.5,
+      "rss": 501006336,
+      "private": 2014441472,
+      "host_available": 105122476032
+    },
+    {
+      "seconds": 5.610000000000582,
+      "rss": 526118912,
+      "private": 2030411776,
+      "host_available": 105098059776
+    },
+    {
+      "seconds": 5.7189999999973224,
+      "rss": 547819520,
+      "private": 2049757184,
+      "host_available": 105076789248
+    },
+    {
+      "seconds": 5.827999999994063,
+      "rss": 544894976,
+      "private": 2046156800,
+      "host_available": 105076781056
+    },
+    {
+      "seconds": 5.922000000005937,
+      "rss": 557535232,
+      "private": 2058571776,
+      "host_available": 105067241472
+    },
+    {
+      "seconds": 6.0310000000026776,
+      "rss": 579305472,
+      "private": 2094116864,
+      "host_available": 105045741568
+    },
+    {
+      "seconds": 6.14100000000326,
+      "rss": 612335616,
+      "private": 2115321856,
+      "host_available": 105013829632
+    },
+    {
+      "seconds": 6.25,
+      "rss": 609943552,
+      "private": 2110939136,
+      "host_available": 105015554048
+    },
+    {
+      "seconds": 6.360000000000582,
+      "rss": 622026752,
+      "private": 2123030528,
+      "host_available": 105001181184
+    },
+    {
+      "seconds": 6.4689999999973224,
+      "rss": 639397888,
+      "private": 2155495424,
+      "host_available": 104985550848
+    },
+    {
+      "seconds": 6.577999999994063,
+      "rss": 660987904,
+      "private": 2177765376,
+      "host_available": 104964423680
+    },
+    {
+      "seconds": 6.672000000005937,
+      "rss": 665063424,
+      "private": 2166300672,
+      "host_available": 104960598016
+    },
+    {
+      "seconds": 6.76600000000326,
+      "rss": 688410624,
+      "private": 2191142912,
+      "host_available": 104936505344
+    },
+    {
+      "seconds": 6.89100000000326,
+      "rss": 695300096,
+      "private": 2196627456,
+      "host_available": 104937529344
+    },
+    {
+      "seconds": 7.0,
+      "rss": 754786304,
+      "private": 2256162816,
+      "host_available": 104866631680
+    },
+    {
+      "seconds": 7.110000000000582,
+      "rss": 748482560,
+      "private": 2249859072,
+      "host_available": 104875479040
+    },
+    {
+      "seconds": 7.2189999999973224,
+      "rss": 743727104,
+      "private": 2245066752,
+      "host_available": 104877338624
+    },
+    {
+      "seconds": 7.327999999994063,
+      "rss": 759635968,
+      "private": 2273730560,
+      "host_available": 104862609408
+    },
+    {
+      "seconds": 7.422000000005937,
+      "rss": 817033216,
+      "private": 2319163392,
+      "host_available": 104806490112
+    },
+    {
+      "seconds": 7.51600000000326,
+      "rss": 1248059392,
+      "private": 2771070976,
+      "host_available": 104375160832
+    },
+    {
+      "seconds": 7.64100000000326,
+      "rss": 1136410624,
+      "private": 2761658368,
+      "host_available": 104499322880
+    },
+    {
+      "seconds": 7.735000000000582,
+      "rss": 764985344,
+      "private": 2266632192,
+      "host_available": 104859881472
+    },
+    {
+      "seconds": 7.8439999999973224,
+      "rss": 1191559168,
+      "private": 2764824576,
+      "host_available": 104439156736
+    },
+    {
+      "seconds": 7.952999999994063,
+      "rss": 818311168,
+      "private": 2765127680,
+      "host_available": 104808505344
+    },
+    {
+      "seconds": 8.062999999994645,
+      "rss": 1265291264,
+      "private": 2767503360,
+      "host_available": 104359129088
+    },
+    {
+      "seconds": 8.172000000005937,
+      "rss": 1265291264,
+      "private": 2767503360,
+      "host_available": 104364371968
+    },
+    {
+      "seconds": 8.312999999994645,
+      "rss": 268472320,
+      "private": 1768726528,
+      "host_available": 105361330176
+    }
+  ],
+  "wall_seconds_after_source_hashing": 8.437999999994645,
+  "limits": {
+    "seconds_after_hashing": 180,
+    "rss_bytes": 6442450944,
+    "minimum_host_available_bytes": 4294967296,
+    "canvases": 6
+  },
+  "limitations": [
+    "Full-resolution reference shares the current calibration and warp; it is not an independent geolocation reference.",
+    "Pixel differences measure output impact, not a perceptual score or accepted tolerance.",
+    "Three scenes at z8 do not validate all products, zoom transitions, seasons, or limbs.",
+    "Reference array loading bypasses runtime admission; production cap and memory policy were not changed.",
+    "No browser, OBS, new download or architecture performance experiment."
+  ]
+}

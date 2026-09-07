@@ -564,7 +564,7 @@ SATELLITE_V2_RENDER_VERSION = "products-v9"
 SATELLITE_V2_RENDER_VERSION_GK2A = "products-ami3"
 SATELLITE_V2_RENDER_VERSION_GMGSI = "products-gmgsi2"
 SATELLITE_V2_RENDER_VERSION_HIMAWARI = "products-ahi5"
-SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci5"
+SATELLITE_V2_RENDER_VERSION_METEOSAT12 = "products-fci6"
 SATELLITE_V2_TILE_SIZE = 256
 SATELLITE_V2_CATALOG_MAX_AGE_SECONDS = 20 * 60
 
@@ -734,6 +734,9 @@ SATELLITE_V2_RENDERER_CACHE_SIZE = _env_int(
 SATELLITE_V2_SOURCE_RASTER_CACHE_MB = _env_int(
     "WX_SATELLITE_V2_SOURCE_RASTER_CACHE_MB", 4096, 0, 131072
 )
+SATELLITE_V2_FCI_WINDOW_CACHE_MB = _env_int(
+    "WX_SATELLITE_V2_FCI_WINDOW_CACHE_MB", 256, 0, 4096
+)
 
 # Full-disk source grids are capped before reprojection to keep high-resolution
 # channels usable on live tile requests. Raise provider caps independently.
@@ -749,6 +752,8 @@ SATELLITE_V2_AMI_MAX_GRID = _env_int(
 SATELLITE_V2_FCI_MAX_GRID = _env_int(
     "WX_SATELLITE_V2_FCI_MAX_GRID", 10848, 1024, 22272
 )
+# FCI_MAX_GRID remains for legacy full-grid/reference and bounds discovery.
+# Live M12 rendering uses native windows and byte/memory limits instead.
 
 SATELLITE_V2_SECTOR_BOUNDS = {
     "CONUS": {"west": -140.0, "south": 20.0, "east": -55.0, "north": 55.0},

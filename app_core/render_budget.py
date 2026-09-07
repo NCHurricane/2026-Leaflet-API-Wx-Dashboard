@@ -6,6 +6,8 @@ import os
 import threading
 from typing import Callable, Iterator
 
+import psutil
+
 
 def _configured_slots(name: str, default: int = 1) -> int:
     try:
@@ -24,14 +26,17 @@ def _configured_megabytes(name: str, default: int) -> int:
 class _ByteBudget:
     """Fair admission queue bounded by estimated in-flight bytes."""
 
-    def __init__(self, capacity_bytes: int):
+    def __init__(self, capacity_bytes: int, capacity_provider=None):
         self.capacity_bytes = max(1, int(capacity_bytes))
+        self._capacity_provider = capacity_provider
         self._condition = threading.Condition()
         self._in_flight_bytes = 0
         self._active = 0
         self._queue: deque[tuple[object, int]] = deque()
 
     def _can_admit(self, weight: int) -> bool:
+        if self._capacity_provider is not None:
+            self.capacity_bytes = max(1, int(self._capacity_provider()))
         if self._active == 0:
             # A render larger than the configured budget must still make
             # progress, but it owns the budget exclusively while it runs.
@@ -91,10 +96,14 @@ _HEAVY_RENDER_SLOTS = threading.BoundedSemaphore(
 _SURFACE_GRADIENT_SLOTS = threading.BoundedSemaphore(
     _configured_slots("WX_SURFACE_GRADIENT_SLOTS")
 )
+def _satellite_capacity_bytes() -> int:
+    memory = psutil.virtual_memory()
+    ceiling = _configured_megabytes("WX_SATELLITE_RENDER_BUDGET_MB", 16 * 1024) * 1024**2
+    return max(1, min(ceiling, memory.total // 4, memory.available // 2))
+
+
 _SATELLITE_RENDER_BUDGET = _ByteBudget(
-    _configured_megabytes("WX_SATELLITE_RENDER_BUDGET_MB", 16 * 1024)
-    * 1024
-    * 1024
+    _satellite_capacity_bytes(), capacity_provider=_satellite_capacity_bytes
 )
 
 

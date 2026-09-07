@@ -3,8 +3,16 @@
 Use this as the bounded handoff for the next dashboard session. It summarizes
 current operating truth; archived plans are evidence, not authorization.
 
-Updated 2026-09-06 after owner decisions and checkpoint validation; expanded
-with the subsequent resource-adaptation and browser-support audit brief.
+Updated 2026-09-06 local / 2026-09-07 UTC after tracing first-use acquisition.
+The rendering correction is supported; the concrete acquisition/scheduling
+proposal in superfile section 4.8 awaits review before execution.
+
+Session-close Git check: `main` remains at `215729e`. The M12 integration,
+limb correction, tests and audit evidence are still uncommitted. Preserve the
+entire working tree, including untracked `satellite_v2/fci_windows.py`,
+`tests/test_fci_windows.py` and `docs/perf/2026-09-06-rendering-audit/`.
+Do not reset to a historical checkpoint or start from a clean checkout that
+omits this work. No commit or push was performed for this handoff.
 
 ## 1. Orient before editing
 
@@ -19,7 +27,10 @@ with the subsequent resource-adaptation and browser-support audit brief.
    Satellite (especially Meteosat), Radar with product-specific WebGL evaluation,
    MRMS, and RTMA. The owner broadened architectural scope and requested
    adaptation to different machines and all three major browser engines.
-   Develop the bounded audit plan for review; do not start renderer changes.
+   The bounded audit/measurement plan is approved and committed in `215729e`.
+   The owner subsequently selected and authorized M12 integration. That runtime
+   slice and its first-frame correction are in the working tree. Re-smoke still
+   reports slow first fill; other renderer changes follow this remaining issue.
 
 ## 2. Current checkpoint
 
@@ -51,6 +62,12 @@ rendering benchmark was performed during this reconciliation.
 Documentation checkpoint `5096e74` records that acceptance and initial audit
 handoff. Subsequent planning edits broaden the brief in superfile section 4.8;
 they do not change or newly benchmark the `e200f74` runtime.
+
+`215729e` commits the expanded brief and bounded audit plan. The owner then
+approved execution and specified OBS plus a browser, sometimes a document, as
+the representative streaming workload. Preparation verified local hardware and
+read the supplied second-PC report. The first available-input backend batch is
+now recorded separately in `docs/perf/2026-09-06-rendering-audit/findings.md`.
 
 Earlier completed checkpoints remain evidence:
 
@@ -106,8 +123,11 @@ expanded brief and proposed resource/browser criteria. Audit questions include
 stage costs, source-resolution/zoom correctness, first-frame/history behavior,
 cache reuse, resource/queue ownership, and standalone/Workspace presentation.
 Evaluate alternative architectures; old rendering exclusions do not constrain
-recommendations. Exact evidence collection and measurement scope remain to be
-agreed; no new bottleneck or performance result is claimed yet.
+recommendations. Section 4.8 now defines the approved 12-cell baseline,
+45-minute/10-GiB backend limits, and 20-minute initial browser trace limit.
+The first backend batch measured seven available timing cells, with five exact
+source gaps remaining. Compare an isolated dashboard condition with the documented
+OBS/browser/document condition without expanding the first batch's limits.
 
 The previously named Radar WebGL candidates are `L2_RHO`, `L3_N0C`, `L3_DPR`,
 `L3_DAA`, and `L3_DTA`. Evaluate other products for measured benefit too; native
@@ -122,8 +142,12 @@ hints as approximate; do not size every installation for the owner's rig.
 Browser targets cover Blink/Chromium, WebKit, and Gecko. The proposed policy is a
 rolling 30-month release-compatibility window plus a Baseline Widely available
 feature floor, with optional acceleration and quality-equivalent fallbacks.
-Pin the exact browser/OS/hardware matrix in the execution plan; see section 4.8
-for sources and the distinction between feature maturity and tested releases.
+Pin actual browser/OS builds in the execution manifest. Available hardware is
+the verified high-end i9/128-GiB/4070 Ti SUPER host, an older i7-8700/32-GB/RTX
+2060 OMEN described by an October 2025 report, an owner-reported M1 MacBook Pro
+with 16 GB and Tahoe 26.6, and older Windows PCs awaiting inventory. Refresh
+remote-machine details before testing; a Mac browser run against Windows does
+not test a Mac backend or an 8-GB host. See section 4.8 for sources and gaps.
 
 `docs/nch-weather-studio-greenfield-plan.md` is a separate parked design, not a
 dashboard phase. Its documented comparison was refreshed on 2026-09-06; exact
@@ -151,9 +175,83 @@ next focus.
 
 ## 6. Exact next action
 
-Confirm the committed baseline, then work with the owner to define the rendering
-audit plan for the already-selected four product families. Agree evidence and
-measurement scope before expensive live runs. Record findings in the superfile
-and dated evidence only when produced. Renderer changes follow an
-agreed implementation slice after the audit; do not reopen completed phases or
-start Greenfield from old handoff language.
+Confirm Git state and read the [restarted owner-smoke diagnosis and next bounded slice](perf/2026-09-06-rendering-audit/owner-smoke-restart-0015.md),
+then the [first-frame correction](perf/2026-09-06-rendering-audit/fci-limb-correction.md),
+then the [M12 integration findings and broader smoke checklist](perf/2026-09-06-rendering-audit/fci-integration-findings.md).
+The owner authorized integration after prototype review. The working tree now
+contains M12 native windows, source/cache invalidation, actual-allocation memory
+admission, adaptive retained-cache limits and `products-fci6` tile identity.
+M12 background warming shares the live process and yields between small canvases;
+M9/M11 retain their pools. Satellite's shared admission ceiling also responds to
+host available/total memory. `psutil` is now a runtime dependency (already present
+locally). No frontend renderer or Workspace ordering change was made.
+
+The owner completed the restart/hard-refresh smoke and reports approximately
+115 seconds for M12 Channel02. Read-only inspection of the existing Chrome tab
+and 00:15Z frame artifacts separates catalog (5.382 s), the acquisition path
+(61.317 s), and source-complete to last tile response (19.550 s). Browser response
+completion is 86.254 seconds after selection; it does not localize the difference
+from the owner's stopwatch/full-display observation. No repeat, navigation,
+reload or new provider download was initiated by the agent.
+
+The next action is review of [the concrete first-use acquisition/scheduling
+proposal](dashboard-change-and-enhancement-superfile.md#m12-first-use-acquisition-and-scheduling--proposed-slice-for-review)
+in section 4.8. It recommends an offline contract prototype before integration:
+explicit expected-file identity, trustworthy cold geometry, complete native-window
+coverage, immutable dependency snapshots, shared acquisition scheduling and
+per-client cancellation. Endpoint headers alone cannot replace an authoritative
+strip map. The prior all-header trace's 28 required files are an opportunity,
+not proof that cold partial ingestion is safe. The proposed prototype keeps
+unknown geometry on the complete-bundle path.
+
+The proposal distinguishes the first six server-visible tile requests from the
+whole viewport queued in the browser. A later viewport-registration contract
+could prioritize all visible dependencies, but neither that frontend/API work
+nor renderer integration is authorized yet. The next offline allocation proposed
+for review is zero provider requests/bytes and zero timing samples, 15 minutes
+combined child execution, 2 GiB scratch, 6 GiB sampled child RSS and at least
+max(4 GiB, host RAM / 8) available memory. No prototype or new validation campaign
+was run while preparing the design. The 108+2 timing allocation stays exhausted.
+Preserve caches and the current owner session. Broader M12 IR/composite,
+playback/scrub, Workspace and other-satellite smoke remain open; another owner
+repeat is not needed merely to reconfirm the delay.
+
+The earlier, pre-correction smoke reported a 2–3-minute M12 visible first frame.
+Read the [first-frame evidence](perf/2026-09-06-rendering-audit/owner-smoke-first-frame.md)
+before proceeding: source-file completions span 72.7 seconds, followed by a
+52.2-second tile-output span. This browser requests individual tiles rather than
+the pilot's 3x3 canvases. The authorized correction now uses conservative native
+limb windows and skips radiance reads for proven empty tiles. All 40 exact
+owner-frame outputs match full-native references. Full-bundle acquisition remains
+a separate first-fill cost; owner smoke is not accepted. OBS condition and other
+smoke observations are still pending. Any further restart remains owner-controlled.
+
+The correction gate passed **694 Python tests plus 42 subtests** and scoped Ruff;
+the unchanged frontend retains its prior **54 Node tests**. Python reported 52
+existing dependency deprecation warnings. All ten
+integrated native-quality references match exact whole RGBA, and two service
+cases verify center/neighbor publication and cache hits without source downloads.
+These are automated/backend results, not owner, HTTP/browser or OBS acceptance.
+
+The final six samples measured integrated visible-z8 at 2.461 s versus a 4.147 s
+native control (40.7% less elapsed time, 77.5% lower maximum sampled RSS). Limb
+was 4.318 s versus 4.200 s, a 2.8% slowdown. The **108/108** timing allowance is
+used. The correction's additional **2/2** viewport samples are also consumed:
+the same 40 individual local-source service calls took 56.969 seconds before
+and 20.522 seconds after, with sampled peak RSS 1,502 versus 571 MiB. This single
+pair has uncontrolled desktop/OS-cache conditions, including focused tests
+overlapping the control; it is not browser/OBS or cross-machine acceptance.
+Its 81.75 seconds of combined child execution stayed inside the new 240-second
+bound. Further campaigns need a recorded allocation. Preserve the original 48
+baseline samples, 54 prototype samples, final six integration samples, both
+prototype revisions, correction control and pinned sources. Earlier candidates used prior controls;
+three samples do not establish p95 or cross-machine speed claims.
+
+Remaining gaps include source validity inside the limb, geographic overlay
+alignment, multi-frame history/navigation, browser/OBS and secondary machines,
+five exact missing source cells, and Radar/MRMS/RTMA alternatives. The proposed
+Chromium/WebKit/Gecko policy still requires real Safari on the M1 and dated
+browser/OS builds. Record isolated and realistic workload conditions separately;
+OBS settings remain provisional until captured. Do not silently expand source
+acquisition or reopen completed phases. Greenfield remains deferred, and no
+commit/push is authorized.

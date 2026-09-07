@@ -1,0 +1,303 @@
+{
+  "active_child_seconds": 120.70705280001857,
+  "runs": [
+    {
+      "case": "radar-ref",
+      "iteration": 1,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "radar-ref",
+        "--iteration",
+        "1"
+      ],
+      "wall_seconds": 7.101313899998786,
+      "exit_code": 0
+    },
+    {
+      "case": "radar-ref",
+      "iteration": 2,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "radar-ref",
+        "--iteration",
+        "2"
+      ],
+      "wall_seconds": 7.124714999998105,
+      "exit_code": 0
+    },
+    {
+      "case": "radar-ref",
+      "iteration": 3,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "radar-ref",
+        "--iteration",
+        "3"
+      ],
+      "wall_seconds": 7.143621800001711,
+      "exit_code": 0
+    },
+    {
+      "case": "radar-rho",
+      "iteration": 1,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "radar-rho",
+        "--iteration",
+        "1"
+      ],
+      "wall_seconds": 7.0834994000033475,
+      "exit_code": 0
+    },
+    {
+      "case": "radar-rho",
+      "iteration": 2,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "radar-rho",
+        "--iteration",
+        "2"
+      ],
+      "wall_seconds": 7.04441560000123,
+      "exit_code": 0
+    },
+    {
+      "case": "radar-rho",
+      "iteration": 3,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "radar-rho",
+        "--iteration",
+        "3"
+      ],
+      "wall_seconds": 7.01636170000711,
+      "exit_code": 0
+    },
+    {
+      "case": "rtma-winds",
+      "iteration": 1,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "rtma-winds",
+        "--iteration",
+        "1"
+      ],
+      "wall_seconds": 10.46734099999594,
+      "exit_code": 0
+    },
+    {
+      "case": "rtma-winds",
+      "iteration": 2,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "rtma-winds",
+        "--iteration",
+        "2"
+      ],
+      "wall_seconds": 5.456205099995714,
+      "exit_code": 0
+    },
+    {
+      "case": "rtma-winds",
+      "iteration": 3,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "rtma-winds",
+        "--iteration",
+        "3"
+      ],
+      "wall_seconds": 5.423918600004981,
+      "exit_code": 0
+    },
+    {
+      "case": "m12-ir",
+      "iteration": 1,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m12-ir",
+        "--iteration",
+        "1"
+      ],
+      "wall_seconds": 4.895606800011592,
+      "exit_code": 0
+    },
+    {
+      "case": "m12-ir",
+      "iteration": 2,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m12-ir",
+        "--iteration",
+        "2"
+      ],
+      "wall_seconds": 4.4435235999990255,
+      "exit_code": 0
+    },
+    {
+      "case": "m12-ir",
+      "iteration": 3,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m12-ir",
+        "--iteration",
+        "3"
+      ],
+      "wall_seconds": 4.593613400007598,
+      "exit_code": 0
+    },
+    {
+      "case": "m12-visible",
+      "iteration": 1,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m12-visible",
+        "--iteration",
+        "1"
+      ],
+      "wall_seconds": 6.185503600005177,
+      "exit_code": 0
+    },
+    {
+      "case": "m12-visible",
+      "iteration": 2,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m12-visible",
+        "--iteration",
+        "2"
+      ],
+      "wall_seconds": 5.7326411999965785,
+      "exit_code": 0
+    },
+    {
+      "case": "m12-visible",
+      "iteration": 3,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m12-visible",
+        "--iteration",
+        "3"
+      ],
+      "wall_seconds": 5.739341399996192,
+      "exit_code": 0
+    },
+    {
+      "case": "m12-composite",
+      "iteration": 1,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m12-composite",
+        "--iteration",
+        "1"
+      ],
+      "wall_seconds": 6.2747830000007525,
+      "exit_code": 0
+    },
+    {
+      "case": "m12-composite",
+      "iteration": 2,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m12-composite",
+        "--iteration",
+        "2"
+      ],
+      "wall_seconds": 5.429638400004478,
+      "exit_code": 0
+    },
+    {
+      "case": "m12-composite",
+      "iteration": 3,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m12-composite",
+        "--iteration",
+        "3"
+      ],
+      "wall_seconds": 5.342111699996167,
+      "exit_code": 0
+    },
+    {
+      "case": "m11-composite",
+      "iteration": 1,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m11-composite",
+        "--iteration",
+        "1"
+      ],
+      "wall_seconds": 3.3628670999896713,
+      "exit_code": 0
+    },
+    {
+      "case": "m11-composite",
+      "iteration": 2,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m11-composite",
+        "--iteration",
+        "2"
+      ],
+      "wall_seconds": 2.403196700004628,
+      "exit_code": 0
+    },
+    {
+      "case": "m11-composite",
+      "iteration": 3,
+      "command": [
+        "F:\\Python\\dashboard_2026\\.venv\\Scripts\\python.exe",
+        "F:\\Python\\dashboard_2026\\docs\\perf\\2026-09-06-rendering-audit\\baseline.py",
+        "--child",
+        "m11-composite",
+        "--iteration",
+        "3"
+      ],
+      "wall_seconds": 2.4428337999997893,
+      "exit_code": 0
+    }
+  ],
+  "limits": {
+    "seconds": 2700,
+    "scratch_bytes": 10737418240
+  }
+}

@@ -1,0 +1,563 @@
+{
+  "category": "owner_smoke_attachment_and_read_only_filesystem_evidence_not_controlled_benchmark",
+  "attachment_sha256": "92ccac5c412a4b58beee1e2bbf03b0e0ed54d40e8b4f2c01951e74c7f73d964a",
+  "selection": {
+    "satellite": "meteosat12",
+    "product": "Channel02",
+    "zoom": 4,
+    "frame_key": "20260906T233000Z",
+    "render_version": "products-fci6",
+    "render_neighbors": false,
+    "frame_generation": 1
+  },
+  "tile_http_200_responses": 40,
+  "unique_tile_requests": 40,
+  "png_files": 35,
+  "negative_markers": 5,
+  "output_publication_span_seconds": 52.22089767456055,
+  "first_output_utc": "2026-09-06T23:52:21.745966+00:00",
+  "last_output_utc": "2026-09-06T23:53:13.966864+00:00",
+  "limitations": [
+    "Access log has no timestamps or elapsed duration.",
+    "Filesystem times show corresponding output publication span; they do not identify request start, source download time, cache hits, queue duration or browser paint.",
+    "Prior pilot used 3x3 canvases; this browser requests individual tiles. No whole-frame speedup can be inferred.",
+    "Owner estimates 2-3 minutes to fill; this is approximate, not instrumented browser timing. OBS status is not confirmed."
+  ],
+  "files": [
+    {
+      "response_order": 1,
+      "xyz": [
+        4,
+        8,
+        7
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/8/7.png",
+      "bytes": 71844,
+      "mtime_utc": "2026-09-06T23:52:21.745966+00:00",
+      "mtime_unix": 1788738741.7459664
+    },
+    {
+      "response_order": 2,
+      "xyz": [
+        4,
+        8,
+        6
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/8/6.png",
+      "bytes": 79345,
+      "mtime_utc": "2026-09-06T23:52:22.312881+00:00",
+      "mtime_unix": 1788738742.3128805
+    },
+    {
+      "response_order": 3,
+      "xyz": [
+        4,
+        9,
+        7
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/9/7.png",
+      "bytes": 74890,
+      "mtime_utc": "2026-09-06T23:52:23.013177+00:00",
+      "mtime_unix": 1788738743.013177
+    },
+    {
+      "response_order": 4,
+      "xyz": [
+        4,
+        9,
+        5
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/9/5.png",
+      "bytes": 80229,
+      "mtime_utc": "2026-09-06T23:52:23.375135+00:00",
+      "mtime_unix": 1788738743.3751347
+    },
+    {
+      "response_order": 5,
+      "xyz": [
+        4,
+        9,
+        6
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/9/6.png",
+      "bytes": 79244,
+      "mtime_utc": "2026-09-06T23:52:23.966745+00:00",
+      "mtime_unix": 1788738743.966745
+    },
+    {
+      "response_order": 6,
+      "xyz": [
+        4,
+        8,
+        5
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/8/5.png",
+      "bytes": 82721,
+      "mtime_utc": "2026-09-06T23:52:24.308664+00:00",
+      "mtime_unix": 1788738744.308664
+    },
+    {
+      "response_order": 7,
+      "xyz": [
+        4,
+        9,
+        4
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/9/4.png",
+      "bytes": 81061,
+      "mtime_utc": "2026-09-06T23:52:24.529147+00:00",
+      "mtime_unix": 1788738744.529147
+    },
+    {
+      "response_order": 8,
+      "xyz": [
+        4,
+        10,
+        5
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/10/5.png",
+      "bytes": 69330,
+      "mtime_utc": "2026-09-06T23:52:24.862179+00:00",
+      "mtime_unix": 1788738744.8621793
+    },
+    {
+      "response_order": 9,
+      "xyz": [
+        4,
+        8,
+        8
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/8/8.png",
+      "bytes": 69057,
+      "mtime_utc": "2026-09-06T23:52:25.591206+00:00",
+      "mtime_unix": 1788738745.5912058
+    },
+    {
+      "response_order": 10,
+      "xyz": [
+        4,
+        7,
+        7
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/7/7.png",
+      "bytes": 72299,
+      "mtime_utc": "2026-09-06T23:52:26.316425+00:00",
+      "mtime_unix": 1788738746.3164253
+    },
+    {
+      "response_order": 11,
+      "xyz": [
+        4,
+        9,
+        8
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/9/8.png",
+      "bytes": 74881,
+      "mtime_utc": "2026-09-06T23:52:27.076224+00:00",
+      "mtime_unix": 1788738747.0762236
+    },
+    {
+      "response_order": 12,
+      "xyz": [
+        4,
+        10,
+        6
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/10/6.png",
+      "bytes": 70850,
+      "mtime_utc": "2026-09-06T23:52:27.582706+00:00",
+      "mtime_unix": 1788738747.5827062
+    },
+    {
+      "response_order": 13,
+      "xyz": [
+        4,
+        8,
+        4
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/8/4.png",
+      "bytes": 84341,
+      "mtime_utc": "2026-09-06T23:52:27.746786+00:00",
+      "mtime_unix": 1788738747.746786
+    },
+    {
+      "response_order": 14,
+      "xyz": [
+        4,
+        7,
+        6
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/7/6.png",
+      "bytes": 78951,
+      "mtime_utc": "2026-09-06T23:52:28.430721+00:00",
+      "mtime_unix": 1788738748.430721
+    },
+    {
+      "response_order": 15,
+      "xyz": [
+        4,
+        7,
+        5
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/7/5.png",
+      "bytes": 83001,
+      "mtime_utc": "2026-09-06T23:52:28.775743+00:00",
+      "mtime_unix": 1788738748.7757435
+    },
+    {
+      "response_order": 16,
+      "xyz": [
+        4,
+        10,
+        7
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/10/7.png",
+      "bytes": 75465,
+      "mtime_utc": "2026-09-06T23:52:29.394501+00:00",
+      "mtime_unix": 1788738749.3945012
+    },
+    {
+      "response_order": 17,
+      "xyz": [
+        4,
+        7,
+        4
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/7/4.png",
+      "bytes": 82701,
+      "mtime_utc": "2026-09-06T23:52:29.568864+00:00",
+      "mtime_unix": 1788738749.5688643
+    },
+    {
+      "response_order": 18,
+      "xyz": [
+        4,
+        10,
+        4
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/10/4.png",
+      "bytes": 69289,
+      "mtime_utc": "2026-09-06T23:52:29.799520+00:00",
+      "mtime_unix": 1788738749.7995203
+    },
+    {
+      "response_order": 19,
+      "xyz": [
+        4,
+        6,
+        6
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/6/6.png",
+      "bytes": 77229,
+      "mtime_utc": "2026-09-06T23:52:30.381298+00:00",
+      "mtime_unix": 1788738750.3812976
+    },
+    {
+      "response_order": 20,
+      "xyz": [
+        4,
+        11,
+        6
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/11/6.png",
+      "bytes": 30108,
+      "mtime_utc": "2026-09-06T23:52:34.061470+00:00",
+      "mtime_unix": 1788738754.06147
+    },
+    {
+      "response_order": 21,
+      "xyz": [
+        4,
+        7,
+        8
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/7/8.png",
+      "bytes": 51929,
+      "mtime_utc": "2026-09-06T23:52:34.760938+00:00",
+      "mtime_unix": 1788738754.760938
+    },
+    {
+      "response_order": 22,
+      "xyz": [
+        4,
+        10,
+        8
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/10/8.png",
+      "bytes": 76388,
+      "mtime_utc": "2026-09-06T23:52:35.454086+00:00",
+      "mtime_unix": 1788738755.4540863
+    },
+    {
+      "response_order": 23,
+      "xyz": [
+        4,
+        6,
+        5
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/6/5.png",
+      "bytes": 81245,
+      "mtime_utc": "2026-09-06T23:52:35.829775+00:00",
+      "mtime_unix": 1788738755.8297749
+    },
+    {
+      "response_order": 24,
+      "xyz": [
+        4,
+        11,
+        5
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/11/5.png",
+      "bytes": 23432,
+      "mtime_utc": "2026-09-06T23:52:39.524557+00:00",
+      "mtime_unix": 1788738759.524557
+    },
+    {
+      "response_order": 25,
+      "xyz": [
+        4,
+        6,
+        7
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/6/7.png",
+      "bytes": 72893,
+      "mtime_utc": "2026-09-06T23:52:40.247408+00:00",
+      "mtime_unix": 1788738760.2474084
+    },
+    {
+      "response_order": 26,
+      "xyz": [
+        4,
+        11,
+        7
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/11/7.png",
+      "bytes": 38443,
+      "mtime_utc": "2026-09-06T23:52:44.043534+00:00",
+      "mtime_unix": 1788738764.0435343
+    },
+    {
+      "response_order": 27,
+      "xyz": [
+        4,
+        6,
+        4
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/6/4.png",
+      "bytes": 81515,
+      "mtime_utc": "2026-09-06T23:52:44.278279+00:00",
+      "mtime_unix": 1788738764.278279
+    },
+    {
+      "response_order": 28,
+      "xyz": [
+        4,
+        11,
+        4
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/11/4.png",
+      "bytes": 8469,
+      "mtime_utc": "2026-09-06T23:52:48.062899+00:00",
+      "mtime_unix": 1788738768.0628994
+    },
+    {
+      "response_order": 29,
+      "xyz": [
+        4,
+        6,
+        8
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/6/8.png",
+      "bytes": 53751,
+      "mtime_utc": "2026-09-06T23:52:48.728565+00:00",
+      "mtime_unix": 1788738768.7285647
+    },
+    {
+      "response_order": 30,
+      "xyz": [
+        4,
+        11,
+        8
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/11/8.png",
+      "bytes": 38285,
+      "mtime_utc": "2026-09-06T23:52:52.477125+00:00",
+      "mtime_unix": 1788738772.4771247
+    },
+    {
+      "response_order": 31,
+      "xyz": [
+        4,
+        5,
+        6
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/5/6.png",
+      "bytes": 64941,
+      "mtime_utc": "2026-09-06T23:52:52.968701+00:00",
+      "mtime_unix": 1788738772.9687006
+    },
+    {
+      "response_order": 32,
+      "xyz": [
+        4,
+        12,
+        6
+      ],
+      "type": "negative_marker",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/12/6.png.empty.json",
+      "bytes": 47,
+      "mtime_utc": "2026-09-06T23:52:56.689530+00:00",
+      "mtime_unix": 1788738776.6895301
+    },
+    {
+      "response_order": 33,
+      "xyz": [
+        4,
+        5,
+        5
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/5/5.png",
+      "bytes": 60855,
+      "mtime_utc": "2026-09-06T23:52:57.023371+00:00",
+      "mtime_unix": 1788738777.0233707
+    },
+    {
+      "response_order": 34,
+      "xyz": [
+        4,
+        12,
+        5
+      ],
+      "type": "negative_marker",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/12/5.png.empty.json",
+      "bytes": 47,
+      "mtime_utc": "2026-09-06T23:53:00.732872+00:00",
+      "mtime_unix": 1788738780.7328715
+    },
+    {
+      "response_order": 35,
+      "xyz": [
+        4,
+        5,
+        7
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/5/7.png",
+      "bytes": 75021,
+      "mtime_utc": "2026-09-06T23:53:01.340031+00:00",
+      "mtime_unix": 1788738781.3400307
+    },
+    {
+      "response_order": 36,
+      "xyz": [
+        4,
+        12,
+        7
+      ],
+      "type": "negative_marker",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/12/7.png.empty.json",
+      "bytes": 47,
+      "mtime_utc": "2026-09-06T23:53:05.269775+00:00",
+      "mtime_unix": 1788738785.2697754
+    },
+    {
+      "response_order": 37,
+      "xyz": [
+        4,
+        5,
+        4
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/5/4.png",
+      "bytes": 68961,
+      "mtime_utc": "2026-09-06T23:53:05.522840+00:00",
+      "mtime_unix": 1788738785.5228398
+    },
+    {
+      "response_order": 38,
+      "xyz": [
+        4,
+        12,
+        4
+      ],
+      "type": "negative_marker",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/12/4.png.empty.json",
+      "bytes": 47,
+      "mtime_utc": "2026-09-06T23:53:09.466587+00:00",
+      "mtime_unix": 1788738789.4665866
+    },
+    {
+      "response_order": 39,
+      "xyz": [
+        4,
+        5,
+        8
+      ],
+      "type": "png",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/5/8.png",
+      "bytes": 51038,
+      "mtime_utc": "2026-09-06T23:53:10.156762+00:00",
+      "mtime_unix": 1788738790.1567621
+    },
+    {
+      "response_order": 40,
+      "xyz": [
+        4,
+        12,
+        8
+      ],
+      "type": "negative_marker",
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260906T233000Z/4/12/8.png.empty.json",
+      "bytes": 47,
+      "mtime_utc": "2026-09-06T23:53:13.966864+00:00",
+      "mtime_unix": 1788738793.966864
+    }
+  ],
+  "owner_reported_fill_seconds_approximate": [
+    120,
+    180
+  ],
+  "obs_active": "not confirmed",
+  "source_files_snapshot": {
+    "count": 40,
+    "total_bytes": 571931767,
+    "first_write_utc": "2026-09-06T23:51:06.425681+00:00",
+    "last_write_utc": "2026-09-06T23:52:19.122230+00:00",
+    "write_span_seconds": 72.69654870033264,
+    "earliest_source_write_to_last_tile_write_seconds": 127.54118299484253,
+    "limitation": "Completion timestamps only; source transfer starts and actual browser display were not logged.",
+    "manifest_mtime_utc": "2026-09-06T23:52:19.122230+00:00"
+  }
+}

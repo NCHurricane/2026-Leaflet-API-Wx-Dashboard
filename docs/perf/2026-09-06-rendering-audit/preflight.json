@@ -1,0 +1,387 @@
+{
+  "captured_utc": "2026-09-06T20:23:44.551898+00:00",
+  "evidence_category": "read_only_file_inventory_and_dependency_metadata",
+  "command": ".venv/Scripts/python.exe docs/perf/2026-09-06-rendering-audit/preflight.py",
+  "git_head": "215729e9fce39431857a8d494b11cf72a7535059",
+  "git_status": [
+    " M docs/README.md",
+    " M docs/dashboard-change-and-enhancement-superfile.md",
+    " M docs/next-session-startup-prompt.md"
+  ],
+  "radar_configured_products": [
+    "L2_REF",
+    "L2_VEL",
+    "L2_SRV",
+    "L2_SW",
+    "L2_ZDR",
+    "L2_RHO",
+    "L2_PHI",
+    "L3_N0B",
+    "L3_N0G",
+    "L3_N0S",
+    "L3_N0X",
+    "L3_N0C",
+    "L3_N0K",
+    "L3_N0H",
+    "L3_DPR",
+    "L3_DAA",
+    "L3_DTA",
+    "L3_EET",
+    "L3_DVL"
+  ],
+  "satellite_sources": {
+    "goes19/CONUS/Channel02": {
+      "file_count": 28,
+      "total_bytes": 1795126213,
+      "sample": [
+        {
+          "path": "cache/satellite/source/goes19/CONUS/Channel02/20260904T224117Z/OR_ABI-L2-CMIPC-M6C02_G19_s20262472241174_e20262472243547_c20262472243593.nc",
+          "bytes": 60651554,
+          "mtime_ns": 1788562124393979900
+        },
+        {
+          "path": "cache/satellite/source/goes19/CONUS/Channel02/20260904T225117Z/OR_ABI-L2-CMIPC-M6C02_G19_s20262472251174_e20262472253547_c20262472253591.nc",
+          "bytes": 58909643,
+          "mtime_ns": 1788562466720890400
+        },
+        {
+          "path": "cache/satellite/source/goes19/CONUS/Channel02/20260904T225617Z/OR_ABI-L2-CMIPC-M6C02_G19_s20262472256174_e20262472258547_c20262472258590.nc",
+          "bytes": 57893519,
+          "mtime_ns": 1788562812637908300
+        }
+      ]
+    },
+    "goes19/MESO1/Channel02": {
+      "file_count": 60,
+      "total_bytes": 252788305,
+      "sample": [
+        {
+          "path": "cache/satellite/source/goes19/MESO1/Channel02/20260904T213125Z/OR_ABI-L2-CMIPM1-M6C02_G19_s20262472131252_e20262472131310_c20262472131344.nc",
+          "bytes": 4129161,
+          "mtime_ns": 1788557660620782200
+        },
+        {
+          "path": "cache/satellite/source/goes19/MESO1/Channel02/20260904T213225Z/OR_ABI-L2-CMIPM1-M6C02_G19_s20262472132252_e20262472132310_c20262472132354.nc",
+          "bytes": 4126627,
+          "mtime_ns": 1788557658343583400
+        },
+        {
+          "path": "cache/satellite/source/goes19/MESO1/Channel02/20260904T213325Z/OR_ABI-L2-CMIPM1-M6C02_G19_s20262472133252_e20262472133310_c20262472133348.nc",
+          "bytes": 4122982,
+          "mtime_ns": 1788557650952360800
+        }
+      ]
+    },
+    "goes19/MESO1/Channel13": {
+      "file_count": 58,
+      "total_bytes": 18681130,
+      "sample": [
+        {
+          "path": "cache/satellite/source/goes19/MESO1/Channel13/20260906T005425Z/OR_ABI-L2-CMIPM1-M6C13_G19_s20262490054253_e20262490054322_c20262490054382.nc",
+          "bytes": 321161,
+          "mtime_ns": 1788656243761687000
+        },
+        {
+          "path": "cache/satellite/source/goes19/MESO1/Channel13/20260906T005525Z/OR_ABI-L2-CMIPM1-M6C13_G19_s20262490055253_e20262490055323_c20262490055385.nc",
+          "bytes": 321229,
+          "mtime_ns": 1788656241508664600
+        },
+        {
+          "path": "cache/satellite/source/goes19/MESO1/Channel13/20260906T005625Z/OR_ABI-L2-CMIPM1-M6C13_G19_s20262490056253_e20262490056323_c20262490056377.nc",
+          "bytes": 321142,
+          "mtime_ns": 1788656229034622300
+        }
+      ]
+    },
+    "goes19/MESO2/Channel13": {
+      "file_count": 2,
+      "total_bytes": 667569,
+      "sample": [
+        {
+          "path": "cache/satellite/source/goes19/MESO2/Channel13/20260904T213255Z/OR_ABI-L2-CMIPM2-M6C13_G19_s20262472132552_e20262472133021_c20262472133079.nc",
+          "bytes": 337638,
+          "mtime_ns": 1788557642268329100
+        },
+        {
+          "path": "cache/satellite/source/goes19/MESO2/Channel13/20260906T005555Z/OR_ABI-L2-CMIPM2-M6C13_G19_s20262490055553_e20262490056022_c20262490056070.nc",
+          "bytes": 329931,
+          "mtime_ns": 1788656226317912800
+        }
+      ]
+    }
+  },
+  "radar_level2_sources": {
+    "KDFX": {
+      "file_count": 13,
+      "total_bytes": 93716436,
+      "sample": [
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/KDFX/KDFX20260905_024309_V06",
+          "bytes": 7710978,
+          "mtime_ns": 1788576917172113800
+        },
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/KDFX/KDFX20260905_024731_V06",
+          "bytes": 7750268,
+          "mtime_ns": 1788576910138607500
+        },
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/KDFX/KDFX20260905_025153_V06",
+          "bytes": 7840814,
+          "mtime_ns": 1788577008268488000
+        }
+      ]
+    },
+    "KMHX": {
+      "file_count": 13,
+      "total_bytes": 140794085,
+      "sample": [
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/KMHX/KMHX20260905_022847_V06",
+          "bytes": 10669502,
+          "mtime_ns": 1788576076568492500
+        },
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/KMHX/KMHX20260905_023305_V06",
+          "bytes": 10650675,
+          "mtime_ns": 1788576065189074400
+        },
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/KMHX/KMHX20260905_023747_V06",
+          "bytes": 10586058,
+          "mtime_ns": 1788576205775892100
+        }
+      ]
+    },
+    "KRAX": {
+      "file_count": 16,
+      "total_bytes": 273970746,
+      "sample": [
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/KRAX/KRAX20260906_004200_V06",
+          "bytes": 19844409,
+          "mtime_ns": 1788655652298114500
+        },
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/KRAX/KRAX20260906_004718_V06",
+          "bytes": 20054915,
+          "mtime_ns": 1788656204986034300
+        },
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/KRAX/KRAX20260906_005236_V06",
+          "bytes": 20231333,
+          "mtime_ns": 1788656324434765100
+        }
+      ]
+    },
+    "TJUA": {
+      "file_count": 12,
+      "total_bytes": 39165726,
+      "sample": [
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/TJUA/TJUA20260905_023911_V06",
+          "bytes": 3207872,
+          "mtime_ns": 1788576987850801100
+        },
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/TJUA/TJUA20260905_024353_V06",
+          "bytes": 3192682,
+          "mtime_ns": 1788576982207948800
+        },
+        {
+          "path": "cache/radar/live/radar_level2_downloads/_VOLUME/TJUA/TJUA20260905_024835_V06",
+          "bytes": 3180593,
+          "mtime_ns": 1788576976710156300
+        }
+      ]
+    }
+  },
+  "mrms_sources": {
+    "Refl_BaseQC": {
+      "file_count": 124,
+      "total_bytes": 158759381,
+      "sample": [
+        {
+          "path": "cache/mrms/Refl_BaseQC/MRMS_MergedBaseReflectivityQC_00.50_20260906-004621.grib2.gz",
+          "bytes": 1172687,
+          "mtime_ns": 1788655767524903200
+        },
+        {
+          "path": "cache/mrms/Refl_BaseQC/MRMS_MergedBaseReflectivityQC_00.50_20260906-004817.grib2",
+          "bytes": 1220788,
+          "mtime_ns": 1788655765605226200
+        },
+        {
+          "path": "cache/mrms/Refl_BaseQC/MRMS_MergedBaseReflectivityQC_00.50_20260906-004817.grib2.gz",
+          "bytes": 1173598,
+          "mtime_ns": 1788655765585381200
+        }
+      ]
+    },
+    "Refl_HSR": {
+      "file_count": 241,
+      "total_bytes": 283864565,
+      "sample": [
+        {
+          "path": "cache/mrms/Refl_HSR/MRMS_SeamlessHSR_00.00_20260906-005200.grib2.gz",
+          "bytes": 996477,
+          "mtime_ns": 1788656309745350300
+        },
+        {
+          "path": "cache/mrms/Refl_HSR/MRMS_SeamlessHSR_00.00_20260906-005400.grib2",
+          "bytes": 1037068,
+          "mtime_ns": 1788656307828770800
+        },
+        {
+          "path": "cache/mrms/Refl_HSR/MRMS_SeamlessHSR_00.00_20260906-005400.grib2.gz",
+          "bytes": 990638,
+          "mtime_ns": 1788656307815768100
+        }
+      ]
+    }
+  },
+  "rtma_sources": {
+    "rapid_by_filename": {
+      "file_count": 23,
+      "total_bytes": 1954928105,
+      "sample": [
+        {
+          "path": "cache/rtma/grib/f237d2719c8db804_rtma2p5_ru.t2330z.2dvaranl_ndfd.grb2",
+          "bytes": 84732284,
+          "mtime_ns": 1788656166970805900
+        },
+        {
+          "path": "cache/rtma/grib/f42bd495195827f2_rtma2p5_ru.t1945z.2dvaranl_ndfd.grb2",
+          "bytes": 85200405,
+          "mtime_ns": 1788656241403030700
+        },
+        {
+          "path": "cache/rtma/grib/f4c12bfe2ea45433_rtma2p5_ru.t2245z.2dvaranl_ndfd.grb2",
+          "bytes": 84732284,
+          "mtime_ns": 1788656181571108200
+        }
+      ]
+    },
+    "hourly_candidates_by_filename": {
+      "file_count": 0,
+      "total_bytes": 0,
+      "sample": []
+    }
+  },
+  "planned_timing_cells": [
+    {
+      "case": "M12 Channel13 z5",
+      "candidate_files": 0,
+      "status": "missing_local_source"
+    },
+    {
+      "case": "M12 Channel02 z8",
+      "candidate_files": 0,
+      "status": "missing_local_source"
+    },
+    {
+      "case": "M12 NighttimeMicrophysics z5",
+      "candidate_files": 0,
+      "status": "missing_local_source"
+    },
+    {
+      "case": "M11 RSS non-rapid composite z5",
+      "candidate_files": 0,
+      "status": "missing_local_source"
+    },
+    {
+      "case": "GOES Full Disk Channel02 z8",
+      "candidate_files": 0,
+      "status": "missing_local_source"
+    },
+    {
+      "case": "GMGSI Channel13 z3",
+      "candidate_files": 0,
+      "status": "missing_local_source"
+    },
+    {
+      "case": "Radar L2_REF z11",
+      "candidate_files": 13,
+      "site": "KMHX",
+      "status": "candidate_needs_content_validation"
+    },
+    {
+      "case": "Radar L2_RHO z11",
+      "candidate_files": 13,
+      "site": "KMHX",
+      "status": "candidate_needs_content_validation"
+    },
+    {
+      "case": "MRMS MESH z7",
+      "candidate_files": 0,
+      "status": "missing_local_source"
+    },
+    {
+      "case": "MRMS RotationTrack z8",
+      "candidate_files": 0,
+      "status": "missing_local_source"
+    },
+    {
+      "case": "RTMA CONUS hourly temperature",
+      "candidate_files": 0,
+      "status": "missing_local_source"
+    },
+    {
+      "case": "RTMA rapid-update Winds",
+      "candidate_files": 23,
+      "status": "candidate_needs_content_validation"
+    }
+  ],
+  "historical_radar_inputs": [
+    {
+      "path": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L2\\KFCX\\KFCX20260725_235726_V06",
+      "exists": false
+    },
+    {
+      "path": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L2\\KGSP\\KGSP20260725_235847_V06",
+      "exists": false
+    },
+    {
+      "path": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KFCX\\DPR\\FCX_DPR_2026_07_25_23_57_26",
+      "exists": false
+    },
+    {
+      "path": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0B\\GSP_N0B_2026_07_25_23_58_47",
+      "exists": false
+    },
+    {
+      "path": "F:\\Python\\dashboard_2026\\cache\\radar\\.bench\\phase0-pinned-inputs\\L3\\KGSP\\N0G\\GSP_N0G_2026_07_25_23_58_47",
+      "exists": false
+    }
+  ],
+  "selected_input_candidates": [
+    {
+      "path": "cache/radar/live/radar_level2_downloads/_VOLUME/KMHX/KMHX20260905_023747_V06",
+      "bytes": 10586058,
+      "mtime_ns": 1788576205775892100,
+      "sha256": "681971c595b13a93d704d589a1587d44633316c668d1730e8016d1ca66856f86"
+    },
+    {
+      "path": "cache/rtma/grib/f4c12bfe2ea45433_rtma2p5_ru.t2245z.2dvaranl_ndfd.grb2",
+      "bytes": 84732284,
+      "mtime_ns": 1788656181571108200,
+      "sha256": "2ed8f0223d1c9f4a5db016c2f1bcc51020a897444ffb5235f38bc0de29696089"
+    }
+  ],
+  "package_versions": {
+    "numpy": "2.5.0",
+    "rasterio": "1.5.0",
+    "netCDF4": "1.7.4",
+    "xarray": "2026.4.0",
+    "Pillow": "12.2.0",
+    "pyproj": "3.7.2",
+    "arm_pyart": "2.2.2",
+    "psutil": "7.2.2"
+  },
+  "limitations": [
+    "Filenames, existence and byte sizes do not validate complete source contents or weather variables.",
+    "No renderer imported; no native data decode, provider request, benchmark, or browser execution.",
+    "RTMA hourly versus rapid grouping is filename-based; grid, time and variables still need header checks.",
+    "Source caches were only read; no application/cache settings changed."
+  ]
+}

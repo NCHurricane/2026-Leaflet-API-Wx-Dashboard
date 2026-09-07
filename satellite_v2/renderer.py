@@ -140,6 +140,10 @@ class SatelliteTileRenderer:
         instrument = SATELLITE_PLATFORMS.get(str(sat_id or "").strip().lower(), {}).get(
             "instrument"
         )
+        if instrument == "FCI":
+            # Native window planning/admission needs the actual canvas. Keep
+            # this handle free of decoded arrays and out of the renderer LRU.
+            return cls(product, {}, {ch: Path(source_files[ch]) for ch in required}, instrument)
         return _get_cached_renderer(
             cls,
             product,
@@ -175,6 +179,11 @@ class SatelliteTileRenderer:
         x_min, y_min, x_max, y_max = int(x_min), int(y_min), int(x_max), int(y_max)
         if x_max < x_min or y_max < y_min:
             raise ValueError("Invalid zoom canvas bounds.")
+
+        if self.instrument == "FCI" and not self.source_rasters:
+            from satellite_v2.fci_windows import render_native_canvas
+
+            return render_native_canvas(self, (z, x_min, y_min, x_max, y_max), tile_size)
 
         canvas_w = (x_max - x_min + 1) * tile_size
         canvas_h = (y_max - y_min + 1) * tile_size
@@ -331,7 +340,12 @@ def estimate_source_grid_bytes(
     channel_count = max(1, len(sources))
 
     if instrument == "FCI":
-        platform_side = min(5568, SATELLITE_V2_FCI_MAX_GRID)
+        # Coarse planning only; native-window admission uses actual headers.
+        # Normal FDHSI visible/NIR channels have twice the IR side length.
+        from config.satellite_v2_config import fci_channel_for_source_channel
+
+        natives = {fci_channel_for_source_channel(ch) for ch in sources}
+        return sum((11136 if ch.startswith(("vis_", "nir_")) else 5568) ** 2 * 4 for ch in natives)
     elif instrument == "SEVIRI":
         platform_side = 3712
     elif instrument == "AHI":
@@ -341,10 +355,10 @@ def estimate_source_grid_bytes(
     else:
         platform_side = SATELLITE_V2_GOES_FULLDISK_MAX_GRID
 
-    # AHI, AMI, and FCI enforce the requested cap for every source. ABI only
+    # AHI and AMI enforce the requested cap for every source. ABI only
     # applies it to Full Disk scenes, so retaining the platform cap here avoids
     # underestimating higher-resolution CONUS source grids.
-    if instrument in {"AHI", "AMI", "FCI"}:
+    if instrument in {"AHI", "AMI"}:
         zoom_cap = _zoom_derived_grid_cap(destination_zoom)
         if zoom_cap:
             platform_side = min(platform_side, zoom_cap)

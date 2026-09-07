@@ -1,0 +1,761 @@
+{
+  "category": "owner_resmoke_with_retained_browser_timing_and_filesystem_evidence",
+  "owner_report": {
+    "restart": true,
+    "hard_refresh": true,
+    "satellite": "meteosat12",
+    "product": "Channel02",
+    "full_display_seconds_approximate": 115,
+    "obs": "not confirmed"
+  },
+  "frame": "20260907T001500Z",
+  "browser": {
+    "time_origin_epoch_ms": 1788741445227.2,
+    "navigation_response_end_ms": 9.3,
+    "dom_content_loaded_end_ms": 21.3,
+    "load_event_end_ms": 48.5,
+    "catalog_start_ms": 5033.9,
+    "catalog_http_request_start_ms": 5036.9,
+    "catalog_response_end_ms": 10415.6,
+    "catalog_duration_ms": 5381.7,
+    "tile_initiation_first_ms": 10418.9,
+    "tile_http_request_first_ms": 10420.6,
+    "tile_response_first_ms": 74073.0,
+    "tile_response_last_ms": 91287.9,
+    "selection_to_last_tile_response_ms": 86254.0,
+    "tile_count": 40,
+    "initial_tile_requests_sent": 6,
+    "remaining_requests_with_browser_queue_over_1s": 34,
+    "maximum_browser_request_queue_ms": 78320.4,
+    "tile_transfer_bytes_including_overhead": 1458507,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+    "observed_current_viewport": {
+      "width": 2195,
+      "height": 1010,
+      "dpr": 1.75
+    },
+    "collection": "Retained Resource Timing entries read through CDP in the existing owner tab; no navigation, reload or new test requests."
+  },
+  "catalog": {
+    "path": "cache/satellite/catalog/meteosat12/FULLDISK/Channel02.json",
+    "bytes": 8952,
+    "mtime_epoch": 1788742048.6451993,
+    "mtime_utc": "2026-09-07T00:47:28.645199+00:00",
+    "generated_at": "2026-09-07T00:47:25Z"
+  },
+  "source_files": [
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002444_IDPFI_OPE_20260907002007_20260907002031_N__O_0003_0002.nc",
+      "bytes": 7519976,
+      "mtime_epoch": 1788741458.7344825,
+      "mtime_utc": "2026-09-07T00:37:38.734483+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002428_IDPFI_OPE_20260907002007_20260907002018_N__O_0003_0001.nc",
+      "bytes": 3579628,
+      "mtime_epoch": 1788741459.8451288,
+      "mtime_utc": "2026-09-07T00:37:39.845129+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002519_IDPFI_OPE_20260907002031_20260907002107_N__O_0003_0005.nc",
+      "bytes": 12253887,
+      "mtime_epoch": 1788741462.290284,
+      "mtime_utc": "2026-09-07T00:37:42.290284+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002506_IDPFI_OPE_20260907002018_20260907002052_N__O_0003_0004.nc",
+      "bytes": 11049780,
+      "mtime_epoch": 1788741462.3959026,
+      "mtime_utc": "2026-09-07T00:37:42.395903+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002530_IDPFI_OPE_20260907002038_20260907002124_N__O_0003_0006.nc",
+      "bytes": 13277815,
+      "mtime_epoch": 1788741463.7561557,
+      "mtime_utc": "2026-09-07T00:37:43.756156+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002559_IDPFI_OPE_20260907002115_20260907002207_N__O_0003_0009.nc",
+      "bytes": 15214629,
+      "mtime_epoch": 1788741467.3555393,
+      "mtime_utc": "2026-09-07T00:37:47.355539+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002457_IDPFI_OPE_20260907002013_20260907002045_N__O_0003_0003.nc",
+      "bytes": 9663777,
+      "mtime_epoch": 1788741467.4260473,
+      "mtime_utc": "2026-09-07T00:37:47.426047+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002536_IDPFI_OPE_20260907002052_20260907002132_N__O_0003_0007.nc",
+      "bytes": 13757535,
+      "mtime_epoch": 1788741467.7057073,
+      "mtime_utc": "2026-09-07T00:37:47.705707+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002609_IDPFI_OPE_20260907002132_20260907002216_N__O_0003_0010.nc",
+      "bytes": 15551230,
+      "mtime_epoch": 1788741471.0353098,
+      "mtime_utc": "2026-09-07T00:37:51.035310+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002548_IDPFI_OPE_20260907002107_20260907002149_N__O_0003_0008.nc",
+      "bytes": 14461645,
+      "mtime_epoch": 1788741472.566074,
+      "mtime_utc": "2026-09-07T00:37:52.566074+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002633_IDPFI_OPE_20260907002225_20260907002303_N__O_0003_0013.nc",
+      "bytes": 16227476,
+      "mtime_epoch": 1788741475.5840943,
+      "mtime_utc": "2026-09-07T00:37:55.584094+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002637_IDPFI_OPE_20260907002235_20260907002313_N__O_0003_0014.nc",
+      "bytes": 16343734,
+      "mtime_epoch": 1788741476.4463081,
+      "mtime_utc": "2026-09-07T00:37:56.446308+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002617_IDPFI_OPE_20260907002149_20260907002235_N__O_0003_0011.nc",
+      "bytes": 15737641,
+      "mtime_epoch": 1788741477.8996875,
+      "mtime_utc": "2026-09-07T00:37:57.899688+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002626_IDPFI_OPE_20260907002207_20260907002254_N__O_0003_0012.nc",
+      "bytes": 15774975,
+      "mtime_epoch": 1788741478.1296513,
+      "mtime_utc": "2026-09-07T00:37:58.129651+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002700_IDPFI_OPE_20260907002313_20260907002352_N__O_0003_0016.nc",
+      "bytes": 16708099,
+      "mtime_epoch": 1788741480.8948417,
+      "mtime_utc": "2026-09-07T00:38:00.894842+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002645_IDPFI_OPE_20260907002254_20260907002332_N__O_0003_0015.nc",
+      "bytes": 16600000,
+      "mtime_epoch": 1788741481.6719592,
+      "mtime_utc": "2026-09-07T00:38:01.671959+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002707_IDPFI_OPE_20260907002332_20260907002411_N__O_0003_0017.nc",
+      "bytes": 16563254,
+      "mtime_epoch": 1788741482.0086553,
+      "mtime_utc": "2026-09-07T00:38:02.008655+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002717_IDPFI_OPE_20260907002352_20260907002421_N__O_0003_0018.nc",
+      "bytes": 16753394,
+      "mtime_epoch": 1788741485.82314,
+      "mtime_utc": "2026-09-07T00:38:05.823140+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002734_IDPFI_OPE_20260907002421_20260907002501_N__O_0003_0020.nc",
+      "bytes": 17148255,
+      "mtime_epoch": 1788741486.1080477,
+      "mtime_utc": "2026-09-07T00:38:06.108048+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002742_IDPFI_OPE_20260907002441_20260907002521_N__O_0003_0021.nc",
+      "bytes": 17062192,
+      "mtime_epoch": 1788741486.3695912,
+      "mtime_utc": "2026-09-07T00:38:06.369591+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002807_IDPFI_OPE_20260907002511_20260907002550_N__O_0003_0023.nc",
+      "bytes": 17513612,
+      "mtime_epoch": 1788741490.4926553,
+      "mtime_utc": "2026-09-07T00:38:10.492655+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002723_IDPFI_OPE_20260907002402_20260907002441_N__O_0003_0019.nc",
+      "bytes": 16983715,
+      "mtime_epoch": 1788741490.663084,
+      "mtime_utc": "2026-09-07T00:38:10.663084+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002822_IDPFI_OPE_20260907002521_20260907002610_N__O_0003_0024.nc",
+      "bytes": 17622217,
+      "mtime_epoch": 1788741492.562039,
+      "mtime_utc": "2026-09-07T00:38:12.562039+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002903_IDPFI_OPE_20260907002550_20260907002648_N__O_0003_0026.nc",
+      "bytes": 18510113,
+      "mtime_epoch": 1788741493.8433754,
+      "mtime_utc": "2026-09-07T00:38:13.843375+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002747_IDPFI_OPE_20260907002451_20260907002530_N__O_0003_0022.nc",
+      "bytes": 17482475,
+      "mtime_epoch": 1788741495.9121706,
+      "mtime_utc": "2026-09-07T00:38:15.912171+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002851_IDPFI_OPE_20260907002540_20260907002629_N__O_0003_0025.nc",
+      "bytes": 17357666,
+      "mtime_epoch": 1788741495.9345882,
+      "mtime_utc": "2026-09-07T00:38:15.934588+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002930_IDPFI_OPE_20260907002629_20260907002726_N__O_0003_0028.nc",
+      "bytes": 18870435,
+      "mtime_epoch": 1788741498.68613,
+      "mtime_utc": "2026-09-07T00:38:18.686130+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002958_IDPFI_OPE_20260907002658_20260907002752_N__O_0003_0030.nc",
+      "bytes": 17590014,
+      "mtime_epoch": 1788741499.541137,
+      "mtime_utc": "2026-09-07T00:38:19.541137+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907003008_IDPFI_OPE_20260907002716_20260907002810_N__O_0003_0031.nc",
+      "bytes": 17353613,
+      "mtime_epoch": 1788741502.7123175,
+      "mtime_utc": "2026-09-07T00:38:22.712317+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907003014_IDPFI_OPE_20260907002726_20260907002818_N__O_0003_0032.nc",
+      "bytes": 16403537,
+      "mtime_epoch": 1788741504.782447,
+      "mtime_utc": "2026-09-07T00:38:24.782447+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002910_IDPFI_OPE_20260907002610_20260907002707_N__O_0003_0027.nc",
+      "bytes": 18162941,
+      "mtime_epoch": 1788741505.6689389,
+      "mtime_utc": "2026-09-07T00:38:25.668939+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907003035_IDPFI_OPE_20260907002752_20260907002842_N__O_0003_0034.nc",
+      "bytes": 16117959,
+      "mtime_epoch": 1788741508.0314224,
+      "mtime_utc": "2026-09-07T00:38:28.031422+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907003024_IDPFI_OPE_20260907002744_20260907002834_N__O_0003_0033.nc",
+      "bytes": 16756712,
+      "mtime_epoch": 1788741510.102199,
+      "mtime_utc": "2026-09-07T00:38:30.102199+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907002932_IDPFI_OPE_20260907002639_20260907002735_N__O_0003_0029.nc",
+      "bytes": 18292645,
+      "mtime_epoch": 1788741510.348046,
+      "mtime_utc": "2026-09-07T00:38:30.348046+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907003100_IDPFI_OPE_20260907002826_20260907002911_N__O_0003_0036.nc",
+      "bytes": 13153978,
+      "mtime_epoch": 1788741512.3218071,
+      "mtime_utc": "2026-09-07T00:38:32.321807+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907003105_IDPFI_OPE_20260907002850_20260907002929_N__O_0003_0038.nc",
+      "bytes": 9836900,
+      "mtime_epoch": 1788741514.2018785,
+      "mtime_utc": "2026-09-07T00:38:34.201879+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907003053_IDPFI_OPE_20260907002810_20260907002857_N__O_0003_0035.nc",
+      "bytes": 14895916,
+      "mtime_epoch": 1788741514.8660462,
+      "mtime_utc": "2026-09-07T00:38:34.866046+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907003101_IDPFI_OPE_20260907002834_20260907002917_N__O_0003_0037.nc",
+      "bytes": 11489915,
+      "mtime_epoch": 1788741515.2934005,
+      "mtime_utc": "2026-09-07T00:38:35.293401+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907003108_IDPFI_OPE_20260907002917_20260907002935_N__O_0003_0040.nc",
+      "bytes": 3898214,
+      "mtime_epoch": 1788741516.7115192,
+      "mtime_utc": "2026-09-07T00:38:36.711519+00:00"
+    },
+    {
+      "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20260907003105_IDPFI_OPE_20260907002904_20260907002929_N__O_0003_0039.nc",
+      "bytes": 7661546,
+      "mtime_epoch": 1788741516.9641943,
+      "mtime_utc": "2026-09-07T00:38:36.964194+00:00"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/9/5.png",
+      "bytes": 45776,
+      "mtime_epoch": 1788741519.2921276,
+      "mtime_utc": "2026-09-07T00:38:39.292128+00:00",
+      "xyz": [
+        4,
+        9,
+        5
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/8/5.png",
+      "bytes": 33397,
+      "mtime_epoch": 1788741519.6302388,
+      "mtime_utc": "2026-09-07T00:38:39.630239+00:00",
+      "xyz": [
+        4,
+        8,
+        5
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/8/6.png",
+      "bytes": 24611,
+      "mtime_epoch": 1788741520.1813312,
+      "mtime_utc": "2026-09-07T00:38:40.181331+00:00",
+      "xyz": [
+        4,
+        8,
+        6
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/9/6.png",
+      "bytes": 37356,
+      "mtime_epoch": 1788741520.7252927,
+      "mtime_utc": "2026-09-07T00:38:40.725293+00:00",
+      "xyz": [
+        4,
+        9,
+        6
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/9/7.png",
+      "bytes": 21991,
+      "mtime_epoch": 1788741521.391476,
+      "mtime_utc": "2026-09-07T00:38:41.391476+00:00",
+      "xyz": [
+        4,
+        9,
+        7
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/8/7.png",
+      "bytes": 30122,
+      "mtime_epoch": 1788741522.0914178,
+      "mtime_utc": "2026-09-07T00:38:42.091418+00:00",
+      "xyz": [
+        4,
+        8,
+        7
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/7/5.png",
+      "bytes": 25608,
+      "mtime_epoch": 1788741522.4235985,
+      "mtime_utc": "2026-09-07T00:38:42.423599+00:00",
+      "xyz": [
+        4,
+        7,
+        5
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/6/8.png",
+      "bytes": 74373,
+      "mtime_epoch": 1788741523.1273284,
+      "mtime_utc": "2026-09-07T00:38:43.127328+00:00",
+      "xyz": [
+        4,
+        6,
+        8
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/11/6.png",
+      "bytes": 16882,
+      "mtime_epoch": 1788741523.6334362,
+      "mtime_utc": "2026-09-07T00:38:43.633436+00:00",
+      "xyz": [
+        4,
+        11,
+        6
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/7/8.png",
+      "bytes": 71426,
+      "mtime_epoch": 1788741524.3815107,
+      "mtime_utc": "2026-09-07T00:38:44.381511+00:00",
+      "xyz": [
+        4,
+        7,
+        8
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/6/7.png",
+      "bytes": 64667,
+      "mtime_epoch": 1788741525.072965,
+      "mtime_utc": "2026-09-07T00:38:45.072965+00:00",
+      "xyz": [
+        4,
+        6,
+        7
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/12/4.png.empty.json",
+      "bytes": 47,
+      "mtime_epoch": 1788741525.0865805,
+      "mtime_utc": "2026-09-07T00:38:45.086581+00:00",
+      "xyz": [
+        4,
+        12,
+        4
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/10/4.png",
+      "bytes": 34752,
+      "mtime_epoch": 1788741525.32727,
+      "mtime_utc": "2026-09-07T00:38:45.327270+00:00",
+      "xyz": [
+        4,
+        10,
+        4
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/5/5.png",
+      "bytes": 29296,
+      "mtime_epoch": 1788741525.6297846,
+      "mtime_utc": "2026-09-07T00:38:45.629785+00:00",
+      "xyz": [
+        4,
+        5,
+        5
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/10/6.png",
+      "bytes": 29032,
+      "mtime_epoch": 1788741526.2141871,
+      "mtime_utc": "2026-09-07T00:38:46.214187+00:00",
+      "xyz": [
+        4,
+        10,
+        6
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/8/8.png",
+      "bytes": 72594,
+      "mtime_epoch": 1788741526.9658873,
+      "mtime_utc": "2026-09-07T00:38:46.965887+00:00",
+      "xyz": [
+        4,
+        8,
+        8
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/6/5.png",
+      "bytes": 32369,
+      "mtime_epoch": 1788741527.3154874,
+      "mtime_utc": "2026-09-07T00:38:47.315487+00:00",
+      "xyz": [
+        4,
+        6,
+        5
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/5/8.png",
+      "bytes": 75797,
+      "mtime_epoch": 1788741527.9692178,
+      "mtime_utc": "2026-09-07T00:38:47.969218+00:00",
+      "xyz": [
+        4,
+        5,
+        8
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/10/8.png",
+      "bytes": 76107,
+      "mtime_epoch": 1788741528.6449165,
+      "mtime_utc": "2026-09-07T00:38:48.644917+00:00",
+      "xyz": [
+        4,
+        10,
+        8
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/12/6.png.empty.json",
+      "bytes": 47,
+      "mtime_epoch": 1788741528.658021,
+      "mtime_utc": "2026-09-07T00:38:48.658021+00:00",
+      "xyz": [
+        4,
+        12,
+        6
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/11/4.png",
+      "bytes": 10440,
+      "mtime_epoch": 1788741528.9221742,
+      "mtime_utc": "2026-09-07T00:38:48.922174+00:00",
+      "xyz": [
+        4,
+        11,
+        4
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/10/5.png",
+      "bytes": 33372,
+      "mtime_epoch": 1788741529.2283278,
+      "mtime_utc": "2026-09-07T00:38:49.228328+00:00",
+      "xyz": [
+        4,
+        10,
+        5
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/8/4.png",
+      "bytes": 43854,
+      "mtime_epoch": 1788741529.3878458,
+      "mtime_utc": "2026-09-07T00:38:49.387846+00:00",
+      "xyz": [
+        4,
+        8,
+        4
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/12/7.png.empty.json",
+      "bytes": 47,
+      "mtime_epoch": 1788741529.4004877,
+      "mtime_utc": "2026-09-07T00:38:49.400488+00:00",
+      "xyz": [
+        4,
+        12,
+        7
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/12/8.png.empty.json",
+      "bytes": 47,
+      "mtime_epoch": 1788741529.4144886,
+      "mtime_utc": "2026-09-07T00:38:49.414489+00:00",
+      "xyz": [
+        4,
+        12,
+        8
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/5/7.png",
+      "bytes": 71790,
+      "mtime_epoch": 1788741530.038725,
+      "mtime_utc": "2026-09-07T00:38:50.038725+00:00",
+      "xyz": [
+        4,
+        5,
+        7
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/11/8.png",
+      "bytes": 38293,
+      "mtime_epoch": 1788741530.680269,
+      "mtime_utc": "2026-09-07T00:38:50.680269+00:00",
+      "xyz": [
+        4,
+        11,
+        8
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/11/5.png",
+      "bytes": 17612,
+      "mtime_epoch": 1788741531.072666,
+      "mtime_utc": "2026-09-07T00:38:51.072666+00:00",
+      "xyz": [
+        4,
+        11,
+        5
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/7/7.png",
+      "bytes": 58693,
+      "mtime_epoch": 1788741531.8127809,
+      "mtime_utc": "2026-09-07T00:38:51.812781+00:00",
+      "xyz": [
+        4,
+        7,
+        7
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/9/4.png",
+      "bytes": 52800,
+      "mtime_epoch": 1788741532.033943,
+      "mtime_utc": "2026-09-07T00:38:52.033943+00:00",
+      "xyz": [
+        4,
+        9,
+        4
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/6/4.png",
+      "bytes": 39525,
+      "mtime_epoch": 1788741532.2546828,
+      "mtime_utc": "2026-09-07T00:38:52.254683+00:00",
+      "xyz": [
+        4,
+        6,
+        4
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/6/6.png",
+      "bytes": 29670,
+      "mtime_epoch": 1788741532.7976892,
+      "mtime_utc": "2026-09-07T00:38:52.797689+00:00",
+      "xyz": [
+        4,
+        6,
+        6
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/7/6.png",
+      "bytes": 21108,
+      "mtime_epoch": 1788741533.3273642,
+      "mtime_utc": "2026-09-07T00:38:53.327364+00:00",
+      "xyz": [
+        4,
+        7,
+        6
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/11/7.png",
+      "bytes": 17726,
+      "mtime_epoch": 1788741533.9569473,
+      "mtime_utc": "2026-09-07T00:38:53.956947+00:00",
+      "xyz": [
+        4,
+        11,
+        7
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/10/7.png",
+      "bytes": 25570,
+      "mtime_epoch": 1788741534.551617,
+      "mtime_utc": "2026-09-07T00:38:54.551617+00:00",
+      "xyz": [
+        4,
+        10,
+        7
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/5/6.png",
+      "bytes": 36172,
+      "mtime_epoch": 1788741535.24572,
+      "mtime_utc": "2026-09-07T00:38:55.245720+00:00",
+      "xyz": [
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/12/5.png.empty.json",
+      "bytes": 47,
+      "mtime_epoch": 1788741535.2597194,
+      "mtime_utc": "2026-09-07T00:38:55.259719+00:00",
+      "xyz": [
+        4,
+        12,
+        5
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/5/4.png",
+      "bytes": 34628,
+      "mtime_epoch": 1788741535.4834034,
+      "mtime_utc": "2026-09-07T00:38:55.483403+00:00",
+      "xyz": [
+        4,
+        5,
+        4
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/7/4.png",
+      "bytes": 45836,
+      "mtime_epoch": 1788741535.6387732,
+      "mtime_utc": "2026-09-07T00:38:55.638773+00:00",
+      "xyz": [
+        4,
+        7,
+        4
+      ]
+    },
+    {
+      "path": "cache/satellite/tiles/products-fci6/meteosat12/FULLDISK/Channel02/20260907T001500Z/4/9/8.png",
+      "bytes": 72927,
+      "mtime_epoch": 1788741536.505223,
+      "mtime_utc": "2026-09-07T00:38:56.505223+00:00",
+      "xyz": [
+        4,
+        9,
+        8
+      ]
+    }
+  ],
+  "source_manifest": {
+    "path": "cache/satellite/source/meteosat12/FULLDISK/FCI/20260907T001500Z/manifest.json",
+    "bytes": 6709,
+    "mtime_epoch": 1788741516.9651942,
+    "mtime_utc": "2026-09-07T00:38:36.965194+00:00"
+  },
+  "runtime_sha256": {
+    "satellite_v2/fci_windows.py": "72e11b4522f6d254bdaaa0e152cd37d33a5925ca567ccaef16f9748115547824",
+    "satellite_v2/fci_nc.py": "1fa78241ed5b97b52da0a0c9a1999a219d701cba85d93f267eb2c4a4395c3169",
+    "satellite_v2/renderer.py": "0979ece6771f770a31d986629dac3f23a09b41518543b6d56f2ce95465852e0b",
+    "satellite_v2/tiler.py": "2d2a6a2d777ff5770cdbe4fdae41409618bebee8e89cdd523fe205acf1170139",
+    "satellite_v2/service.py": "3fa2751ead28a1f0367630c22aeb9b5c6b78cd1dddf64726102dee369ecefa10",
+    "app_core/render_budget.py": "580737e5250ff64234f0a85a4f1d4f5a1984e92e15384a20b9e080b5e8fb19a4",
+    "config/satellite_v2_config.py": "1fab0dcc19d0c3897166f2256eb3932f3c114d2d3f1e7d9c7e40fa93a60addee",
+    "satellite_v2/meteosat_tile_worker.py": "edc2e9c6df54bdb0b604b327de434a7bd7a607e62931cb32a2bc7216bc14a4ae"
+  },
+  "runtime_hashes_match_validated_correction": true,
+  "limitations": [
+    "Owner stopwatch/full-visible interval and retained browser request interval are distinct observations; the roughly 29-second difference is not localized.",
+    "Resource Timing response completion does not measure decoded image paint or compositor readiness.",
+    "Source manifest completion bounds the first request acquisition path; file timestamps alone do not measure each upstream stream.",
+    "The snapshot includes only the owner viewport. Later application warming added other zooms/coordinates independently.",
+    "No controlled repeat, new acquisition, frontend change or server restart was performed by the agent. Header-only dependency tracing used a separate already pinned earlier frame."
+  ],
+  "stages_seconds": {
+    "catalog_request": 5.3817,
+    "first_http_tile_request_to_source_manifest": 61.3173942565918,
+    "source_manifest_to_last_tile_response": 19.54990553855896,
+    "first_to_last_source_file_completion": 58.22971177101135,
+    "first_to_last_tile_output": 17.21309542655945
+  }
+}

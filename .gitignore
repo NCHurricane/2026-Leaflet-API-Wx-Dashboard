@@ -65,6 +65,11 @@ perf/
 tests/
 !docs/perf/
 docs/perf/*
+!docs/perf/2026-09-06-rendering-audit/
+docs/perf/2026-09-06-rendering-audit/*
+!docs/perf/2026-09-06-rendering-audit/*.md
+!docs/perf/2026-09-06-rendering-audit/*.json
+!docs/perf/2026-09-06-rendering-audit/*.py
 !docs/perf/2026-08-26-meteosat-phase5/
 !docs/perf/2026-08-26-meteosat-phase5/**
 !docs/perf/2026-07-26-radar-phase3/
