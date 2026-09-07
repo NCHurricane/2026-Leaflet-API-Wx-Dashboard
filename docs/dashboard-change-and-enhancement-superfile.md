@@ -61,8 +61,9 @@ measurement pass and then the selected M12 native-window integration. Section 4.
 records the backend/prototype/integration evidence and OBS workload/hardware
 clarification. M12's rendering correction is validated in the working tree, but
 the restarted owner smoke still took about 115 seconds. The concrete first-use
-acquisition/scheduling design in section 4.8 awaits review; other renderer slices
-follow this open first-fill issue.
+acquisition/scheduling design in section 4.8 was approved for an offline prototype
+after checkpoint `649c5e1`. Its 50 native-quality cases pass, but trustworthy cold
+geometry remains unproven; other renderer slices follow this open first-fill issue.
 
 ## 2. Current truth and invariants
 
@@ -816,7 +817,7 @@ bounded older-observation strategy because AWC's practical 24-hour window
 cannot satisfy older targets and IEM access must avoid unbounded
 per-state/per-frame request multiplication.
 
-### 4.8 High-cost rendering-workflow audit — M12 first-use design for review
+### 4.8 High-cost rendering-workflow audit — M12 offline first-use evidence
 
 Owner decisions, 2026-09-06: audit Satellite (especially Meteosat), Radar, MRMS,
 and RTMA for efficient modern rendering, including approaches that replace the
@@ -1276,7 +1277,7 @@ accepted complete-source artifacts remain intact.
   the previous frame remains visible until the replacement is ready. Workspace
   pane order, including MRMS/SPC below Satellite, stays unchanged.
 
-**Next execution slice to approve: offline contract prototype only**
+**Reviewed execution slice: offline contract prototype only**
 
 Work in a new isolated audit prototype/harness, with no edits to imported runtime
 modules, routes, frontend, dependencies or configuration. Use read-only pinned
@@ -1328,6 +1329,31 @@ bundle transport/scheduling improvements. Any live discovery/download or timed
 comparison returns with named sources and separate request/byte/time/run caps.
 Broader owner/OBS/browser/hardware acceptance remains open; no repeat merely to
 reconfirm the delay, cache clearing, commit, push or Greenfield work is included.
+
+**Offline execution result, 2026-09-07 UTC:** the owner requested committing all
+existing work and continuing the reviewed prototype. `649c5e1` is the complete
+M12/correction/design checkpoint; nothing was pushed. The [first-use contract
+findings](perf/2026-09-06-rendering-audit/fci-first-use-findings.md) record 14 passing
+synthetic tests and exact whole-RGBA matches for all 40 owner tiles plus ten
+earlier native cases, each using its original pinned frame (23:30Z and 12:00Z
+respectively). Both source sets were verified; no control was regenerated.
+
+The guarded attempts consumed 37.921/900 child seconds, peaked at 534 MiB sampled
+child RSS and stayed below the scratch/headroom limits. An initial null-device
+guard failure stopped before source work; its trace and consumed time are retained.
+No provider requests, downloads, timing samples or runtime changes occurred.
+The 108+2 timing allowance remains exhausted. This is model/native-quality
+evidence, not production acquisition, browser, OBS or hardware acceptance.
+
+An explicit all-header oracle permits early complete-window readiness, with
+unchanged native output and safe dependency snapshots. The simulated cold path
+cannot obtain a trustworthy strip index from endpoint headers alone and correctly
+waits for the whole bundle. Therefore **do not activate partial-source rendering**
+from this evidence. The next review should select authoritative cold-discovery
+investigation or narrow to complete-bundle connection reuse/shared scheduling
+with cancellable demand and unchanged rendering. The findings identify candidate
+file seams; runtime integration and any live/timed allocation remain separate
+decisions. Preserve the owner's running session and caches.
 
 **Recommended order:** resolve source-detail and resource-accounting questions
 first, capture a small baseline second, then select at most two architecture

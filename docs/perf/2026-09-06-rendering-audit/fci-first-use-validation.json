@@ -1,0 +1,24 @@
+{
+  "category": "final_static_preservation_and_allocation_checks_not_benchmark",
+  "head": "649c5e1a79716b5f47144f96ddd2ce1deec026e7",
+  "ruff_passed": true,
+  "local_markdown_links": 45,
+  "diff_whitespace_passed": true,
+  "executed_scripts_unchanged": true,
+  "runtime_hashes_unchanged": 8,
+  "contract_tests_passed": 14,
+  "native_rgba_cases_exact": 50,
+  "scratch_directories_final_bytes": {
+    "fci-first-use-contract-001": 145669,
+    "fci-first-use-contract-002": 5653907
+  },
+  "scratch_total_bytes": 5799576,
+  "guarded_child_seconds_including_failed_preflight": 37.921000000002095,
+  "initial_scoped_ruff_tool_seconds": 0.11,
+  "final_validation_seconds_including_ruff": 0.10899999999674037,
+  "conservative_total_execution_seconds": 38.139999999998835,
+  "source_downloads": 0,
+  "new_timing_samples": 0,
+  "runtime_implementation": false,
+  "cold_partial_readiness_proven": false
+}

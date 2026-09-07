@@ -3,16 +3,15 @@
 Use this as the bounded handoff for the next dashboard session. It summarizes
 current operating truth; archived plans are evidence, not authorization.
 
-Updated 2026-09-06 local / 2026-09-07 UTC after tracing first-use acquisition.
-The rendering correction is supported; the concrete acquisition/scheduling
-proposal in superfile section 4.8 awaits review before execution.
+Updated 2026-09-07 UTC after the approved offline first-use contract prototype.
+The rendering correction and 50 prototype native-quality cases pass; cold source
+discovery remains unproven and first-fill owner acceptance remains open.
 
-Session-close Git check: `main` remains at `215729e`. The M12 integration,
-limb correction, tests and audit evidence are still uncommitted. Preserve the
-entire working tree, including untracked `satellite_v2/fci_windows.py`,
-`tests/test_fci_windows.py` and `docs/perf/2026-09-06-rendering-audit/`.
-Do not reset to a historical checkpoint or start from a clean checkout that
-omits this work. No commit or push was performed for this handoff.
+The owner requested committing all prior work and continuing. `main` is now at
+`649c5e1`, containing the M12 integration, limb correction, tests, prior audit
+evidence and first-use design. The subsequent offline prototype/findings and
+handoff edits remain uncommitted. Preserve the entire tree and all pinned sources;
+do not reset to an earlier checkpoint. Nothing was pushed.
 
 ## 1. Orient before editing
 
@@ -175,6 +174,13 @@ next focus.
 
 ## 6. Exact next action
 
+Read the [offline first-use findings](perf/2026-09-06-rendering-audit/fci-first-use-findings.md)
+and review the next scope: authoritative cold-discovery investigation or the
+narrower complete-bundle transport/shared-scheduling candidate. Partial-source
+runtime integration is not supported by the available cold metadata. The
+prototype is isolated audit code, not an application implementation. No new
+provider/timing allocation or another owner repeat is implied.
+
 Confirm Git state and read the [restarted owner-smoke diagnosis and next bounded slice](perf/2026-09-06-rendering-audit/owner-smoke-restart-0015.md),
 then the [first-frame correction](perf/2026-09-06-rendering-audit/fci-limb-correction.md),
 then the [M12 integration findings and broader smoke checklist](perf/2026-09-06-rendering-audit/fci-integration-findings.md).
@@ -194,9 +200,9 @@ completion is 86.254 seconds after selection; it does not localize the differenc
 from the owner's stopwatch/full-display observation. No repeat, navigation,
 reload or new provider download was initiated by the agent.
 
-The next action is review of [the concrete first-use acquisition/scheduling
+The owner approved the [concrete first-use acquisition/scheduling
 proposal](dashboard-change-and-enhancement-superfile.md#m12-first-use-acquisition-and-scheduling--proposed-slice-for-review)
-in section 4.8. It recommends an offline contract prototype before integration:
+in section 4.8 for an offline contract prototype before integration:
 explicit expected-file identity, trustworthy cold geometry, complete native-window
 coverage, immutable dependency snapshots, shared acquisition scheduling and
 per-client cancellation. Endpoint headers alone cannot replace an authoritative
@@ -207,11 +213,17 @@ unknown geometry on the complete-bundle path.
 The proposal distinguishes the first six server-visible tile requests from the
 whole viewport queued in the browser. A later viewport-registration contract
 could prioritize all visible dependencies, but neither that frontend/API work
-nor renderer integration is authorized yet. The next offline allocation proposed
-for review is zero provider requests/bytes and zero timing samples, 15 minutes
+nor renderer integration is authorized yet. The approved offline allocation is
+zero provider requests/bytes and zero timing samples, 15 minutes
 combined child execution, 2 GiB scratch, 6 GiB sampled child RSS and at least
-max(4 GiB, host RAM / 8) available memory. No prototype or new validation campaign
-was run while preparing the design. The 108+2 timing allocation stays exhausted.
+max(4 GiB, host RAM / 8) available memory. The completed prototype passed 14 small
+contract tests and all 50 native-quality cases, consuming 37.921/900 combined
+child seconds and peaking at 534 MiB sampled RSS. An initial Windows null-device
+guard failure occurred before source work and remains recorded. The 40 owner
+references use 23:30Z; the ten earlier references use their original 12:00Z
+sources. No new downloads or timing samples were used. The 108+2 timing allocation
+stays exhausted. Cold mode correctly waits for the complete bundle; the early
+window mode uses an explicitly labeled all-header oracle, not proven live discovery.
 Preserve caches and the current owner session. Broader M12 IR/composite,
 playback/scrub, Workspace and other-satellite smoke remain open; another owner
 repeat is not needed merely to reconfirm the delay.
@@ -253,5 +265,5 @@ five exact missing source cells, and Radar/MRMS/RTMA alternatives. The proposed
 Chromium/WebKit/Gecko policy still requires real Safari on the M1 and dated
 browser/OS builds. Record isolated and realistic workload conditions separately;
 OBS settings remain provisional until captured. Do not silently expand source
-acquisition or reopen completed phases. Greenfield remains deferred, and no
-commit/push is authorized.
+acquisition or reopen completed phases. Greenfield remains deferred; the requested
+checkpoint commit is complete and no push is authorized.

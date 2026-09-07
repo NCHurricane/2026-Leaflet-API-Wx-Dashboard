@@ -54,11 +54,14 @@ separates 5.4 seconds of catalog work, 61.3 seconds on source acquisition and 19
 seconds after sources arrive; response completion does not explain the full
 stopwatch/paint interval. The [concrete first-use acquisition/scheduling
 proposal](dashboard-change-and-enhancement-superfile.md#m12-first-use-acquisition-and-scheduling--proposed-slice-for-review)
-is now ready for review in section 4.8. It recommends a bounded offline contract
-prototype with zero downloads/timing samples before runtime integration, and
-requires trustworthy cold geometry and complete native-window coverage before
-partial-source rendering. Owner acceptance remains open; this design does not
-authorize a new campaign or a change to the running dashboard.
+in section 4.8 was approved for a bounded offline prototype after the owner-requested
+checkpoint commit `649c5e1`. The [first-use findings](perf/2026-09-06-rendering-audit/fci-first-use-findings.md)
+record 14 passing contract tests and 50 exact native-quality cases, with zero
+downloads/timing samples. Early readiness needs an authoritative strip index;
+the simulated cold path correctly waits for complete acquisition. Partial-source
+runtime integration remains gated. Review cold-discovery investigation or the
+narrower complete-bundle transport/scheduling candidate next. Owner acceptance
+remains open and the running dashboard is unchanged. Nothing was pushed.
 M12 uses `products-fci6`, adaptive byte-limited reuse and actual-window admission;
 Satellite's shared admission ceiling now responds to available host memory.
 The original 108 timing samples and the correction's separate two-run allocation

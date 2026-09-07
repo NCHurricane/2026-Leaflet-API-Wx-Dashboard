@@ -1,0 +1,48 @@
+{
+  "category": "bounded_offline_contract_execution_not_benchmark",
+  "phases": [
+    {
+      "phase": "contracts",
+      "exit_code": 0,
+      "stop_reason": null,
+      "child_seconds": 0.125,
+      "peak_sampled_child_rss": 24428544,
+      "minimum_sampled_host_available": 100638769152,
+      "scratch_bytes": 0,
+      "log": "cache/rendering-audit-20260906/fci-first-use-contract-001/contracts.log"
+    },
+    {
+      "phase": "quality",
+      "exit_code": 1,
+      "stop_reason": null,
+      "child_seconds": 1.2179999999934807,
+      "peak_sampled_child_rss": 95879168,
+      "minimum_sampled_host_available": 100579762176,
+      "scratch_bytes": 145669,
+      "log": "cache/rendering-audit-20260906/fci-first-use-contract-001/quality.log"
+    }
+  ],
+  "approved_limits": {
+    "combined_child_seconds": 900,
+    "scratch_bytes": 2147483648,
+    "child_rss_bytes": 6442450944,
+    "minimum_host_available": "max(4 GiB, total/8)",
+    "provider_requests": 0,
+    "download_bytes": 0,
+    "timing_samples": 0
+  },
+  "head": "649c5e1a79716b5f47144f96ddd2ce1deec026e7",
+  "script_sha256": {
+    "check_fci_first_use.py": "f05ec032779ce512c2e994cc6cf9c982d7a2f1cd3ec879355020ca99f216666a",
+    "fci_first_use_contract.py": "823004db5a4ab7549b364c195b3a3f342a7977f7cb4d211a64d3c002899a1f3c",
+    "test_fci_first_use_contract.py": "f465eb652f628fb6acb918f3f4fe0151baa92423f37a55b545fe5dd79b2d10d2"
+  },
+  "status": "failed-or-stopped",
+  "combined_child_seconds": 1.3429999999934807,
+  "contracts": {
+    "tests": 14,
+    "passed": true,
+    "failures": 0,
+    "errors": 0
+  }
+}
